@@ -99,7 +99,16 @@ export function TransactionList({
         const response = await fetch(`/api/transfers/exchange-rate?from=${fromAccount.currency}&to=${toAccount.currency}`)
         const data = await response.json()
         if (data.rate) {
-          const roundedRate = Math.round(data.rate)
+          // If rate rounds to 0 with 2 decimals, keep more precision
+          let roundedRate = Math.round(data.rate * 100) / 100
+          if (roundedRate === 0 && data.rate > 0) {
+            // Find minimum decimals needed to show non-zero value
+            for (let decimals = 3; decimals <= 8; decimals++) {
+              const factor = Math.pow(10, decimals)
+              roundedRate = Math.round(data.rate * factor) / factor
+              if (roundedRate > 0) break
+            }
+          }
           setSuggestedRate(roundedRate)
           setExchangeRate(roundedRate)
         }
@@ -122,10 +131,10 @@ export function TransactionList({
     const isDifferentCurrency = fromAccount && toAccount && fromAccount.currency !== toAccount.currency
 
     if (isDifferentCurrency && formData.amount && exchangeRate) {
-      const calculated = Math.round(parseFloat(formData.amount) * exchangeRate)
-      setFormData(prev => ({ ...prev, amount_to: calculated.toString() }))
+      const calculated = parseFloat(formData.amount) * exchangeRate
+      setFormData(prev => ({ ...prev, amount_to: calculated.toFixed(2) }))
     } else if (!isDifferentCurrency && formData.amount) {
-      setFormData(prev => ({ ...prev, amount_to: Math.round(parseFloat(formData.amount)).toString() }))
+      setFormData(prev => ({ ...prev, amount_to: formData.amount }))
     }
   }, [formData.amount, exchangeRate, formData.type, formData.account_id, formData.to_account_id, accounts])
 
@@ -456,17 +465,17 @@ export function TransactionList({
                     <Input 
                       id="transfer_amount" 
                       type="number" 
-                      step="1" 
-                      min="1"
+                      step="0.01" 
+                      min="0.01"
                       value={formData.amount} 
                       onChange={e => {
                         const value = e.target.value
-                        // Allow empty or whole numbers only
-                        if (value === '' || /^\d+$/.test(value)) {
+                        // Allow empty or valid number with max 2 decimals
+                        if (value === '' || /^\d*\.?\d{0,2}$/.test(value)) {
                           setFormData({...formData, amount: value})
                         }
                       }} 
-                      placeholder="0" 
+                      placeholder="0.00" 
                       required 
                     />
                   </div>
@@ -477,17 +486,17 @@ export function TransactionList({
                     <Input 
                       id="transfer_amount_to" 
                       type="number" 
-                      step="1" 
-                      min="1"
+                      step="0.01" 
+                      min="0.01"
                       value={formData.amount_to} 
                       onChange={e => {
                         const value = e.target.value
-                        // Allow empty or whole numbers only
-                        if (value === '' || /^\d+$/.test(value)) {
+                        // Allow empty or valid number with max 2 decimals
+                        if (value === '' || /^\d*\.?\d{0,2}$/.test(value)) {
                           setFormData({...formData, amount_to: value})
                         }
                       }} 
-                      placeholder="0" 
+                      placeholder="0.00" 
                       required
                       disabled={!fromAccount || !toAccount || fromAccount.currency === toAccount.currency}
                     />
@@ -506,22 +515,22 @@ export function TransactionList({
                       <>
                         {suggestedRate && (
                           <p className="text-xs text-muted-foreground">
-                            Suggested: 1 {fromAccount.currency} = {Math.round(suggestedRate)} {toAccount.currency}
+                            Suggested: 1 {fromAccount.currency} = {suggestedRate < 0.01 ? suggestedRate.toFixed(8).replace(/\.?0+$/, '') : suggestedRate.toFixed(2)} {toAccount.currency}
                           </p>
                         )}
                         <Input 
                           id="exchange_rate"
                           type="number" 
-                          step="1" 
-                          min="1"
-                          value={exchangeRate ? Math.round(exchangeRate) : ''} 
+                          step="any"
+                          min="0.00000001"
+                          value={exchangeRate || ''} 
                           onChange={e => {
                             const value = e.target.value
                             if (value === '') {
                               setExchangeRate(null)
                               return
                             }
-                            const rate = parseInt(value)
+                            const rate = parseFloat(value)
                             if (!isNaN(rate) && rate > 0) {
                               setExchangeRate(rate)
                             }
@@ -531,7 +540,7 @@ export function TransactionList({
                         />
                         {exchangeRate && formData.amount && (
                           <p className="text-xs text-muted-foreground">
-                            {Math.round(parseFloat(formData.amount))} {fromAccount.currency} = {Math.round(parseFloat(formData.amount) * exchangeRate)} {toAccount.currency}
+                            {parseFloat(formData.amount).toFixed(2)} {fromAccount.currency} = {(parseFloat(formData.amount) * exchangeRate).toFixed(2)} {toAccount.currency}
                           </p>
                         )}
                       </>
@@ -548,17 +557,17 @@ export function TransactionList({
                     <Input 
                       id="transfer_fee" 
                       type="number" 
-                      step="1" 
+                      step="0.01" 
                       min="0"
                       value={formData.fee} 
                       onChange={e => {
                         const value = e.target.value
-                        // Allow empty or whole numbers only
-                        if (value === '' || /^\d+$/.test(value)) {
+                        // Allow empty or valid number with max 2 decimals
+                        if (value === '' || /^\d*\.?\d{0,2}$/.test(value)) {
                           setFormData({...formData, fee: value})
                         }
                       }} 
-                      placeholder="0" 
+                      placeholder="0.00" 
                     />
                   </div>
                   <div className="space-y-2">
@@ -589,16 +598,16 @@ export function TransactionList({
                     <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Preview</p>
                     <div className="flex items-center justify-between text-sm">
                       <span>{fromAccount.name}</span>
-                      <span className="text-destructive font-medium">-{Math.round(totalDeduction).toLocaleString('hu-HU')} {fromAccount.currency}</span>
+                      <span className="text-destructive font-medium">-{totalDeduction.toLocaleString('hu-HU', {minimumFractionDigits: 2, maximumFractionDigits: 2})} {fromAccount.currency}</span>
                     </div>
                     <div className="flex items-center justify-between text-sm">
                       <span>{toAccount.name}</span>
-                      <span className="text-success font-medium">+{Math.round(parseFloat(formData.amount_to) || transferAmount).toLocaleString('hu-HU')} {toAccount.currency}</span>
+                      <span className="text-success font-medium">+{(parseFloat(formData.amount_to) || transferAmount).toLocaleString('hu-HU', {minimumFractionDigits: 2, maximumFractionDigits: 2})} {toAccount.currency}</span>
                     </div>
                     {transferFee > 0 && (
                       <div className="flex items-center justify-between text-xs text-muted-foreground pt-1 border-t border-border/50">
                         <span className="flex items-center gap-1"><Coins className="h-3 w-3" /> Fee</span>
-                        <span>{Math.round(transferFee).toLocaleString('hu-HU')} {fromAccount.currency}</span>
+                        <span>{transferFee.toLocaleString('hu-HU', {minimumFractionDigits: 2, maximumFractionDigits: 2})} {fromAccount.currency}</span>
                       </div>
                     )}
                   </div>
