@@ -339,6 +339,11 @@ export function TransactionList({
     return acc ? acc.name : 'Unknown'
   }
 
+  const getAccountCurrency = (id: string) => {
+    const acc = accounts.find(a => a.id === id)
+    return acc ? acc.currency : 'HUF'
+  }
+
   // For transfer preview
   const fromAccount = accounts.find(a => a.id === formData.account_id)
   const toAccount = accounts.find(a => a.id === formData.to_account_id)
@@ -747,7 +752,7 @@ export function TransactionList({
                     <div className="flex items-center gap-2">
                       <div className={`font-bold text-sm ${tx.amount >= 0 ? 'text-success' : 'text-destructive'}`}>
                         {tx.amount >= 0 ? '+' : '-'}
-                        {Math.abs(tx.amount).toLocaleString('hu-HU')} Ft
+                        {Math.abs(tx.amount).toLocaleString('hu-HU', {minimumFractionDigits: 2, maximumFractionDigits: 2})} {getAccountCurrency(tx.account_id)}
                       </div>
                       <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                         <Button 
