@@ -68,6 +68,7 @@ export function TransactionList({
   const [exchangeRate, setExchangeRate] = useState<number | null>(null)
   const [suggestedRate, setSuggestedRate] = useState<number | null>(null)
   const [isLoadingRate, setIsLoadingRate] = useState(false)
+  const [skipAutoCalc, setSkipAutoCalc] = useState(false)
 
   useEffect(() => {
     fetch('/api/categories')
@@ -115,19 +116,26 @@ export function TransactionList({
 
   // Auto-calculate amount_to when amount or rate changes
   useEffect(() => {
-    if (formData.type !== 'transfer') return
+    if (formData.type !== 'transfer' || skipAutoCalc) return
 
     const fromAccount = accounts.find(a => a.id === formData.account_id)
     const toAccount = accounts.find(a => a.id === formData.to_account_id)
     const isDifferentCurrency = fromAccount && toAccount && fromAccount.currency !== toAccount.currency
 
     if (isDifferentCurrency && formData.amount && exchangeRate) {
-      const calculated = parseFloat(formData.amount) * exchangeRate
-      setFormData(prev => ({ ...prev, amount_to: calculated.toFixed(2) }))
+      // Different currency: amount_to = (amount_from - fee) × exchange_rate
+      const amountFrom = parseFloat(formData.amount) || 0
+      const fee = parseFloat(formData.fee) || 0
+      const calculated = (amountFrom - fee) * exchangeRate
+      setFormData(prev => ({ ...prev, amount_to: calculated.toString() }))
     } else if (!isDifferentCurrency && formData.amount) {
-      setFormData(prev => ({ ...prev, amount_to: formData.amount }))
+      // Same currency: amount_to = amount_from - fee
+      const amountFrom = parseFloat(formData.amount) || 0
+      const fee = parseFloat(formData.fee) || 0
+      const amountTo = Math.max(0, amountFrom - fee)
+      setFormData(prev => ({ ...prev, amount_to: amountTo.toString() }))
     }
-  }, [formData.amount, exchangeRate, formData.type, formData.account_id, formData.to_account_id, accounts])
+  }, [formData.amount, formData.fee, exchangeRate, formData.type, formData.account_id, formData.to_account_id, accounts, skipAutoCalc])
 
   // Load saved defaults when opening the form
   const loadSavedDefaults = (type: 'expense' | 'income' | 'transfer') => {
@@ -340,7 +348,9 @@ export function TransactionList({
   const toAccount = accounts.find(a => a.id === formData.to_account_id)
   const transferAmount = parseFloat(formData.amount) || 0
   const transferFee = parseFloat(formData.fee) || 0
-  const totalDeduction = transferAmount + transferFee
+  
+  // Fee is always the difference between amount_from and amount_to, so total deduction is always just amount_from
+  const totalDeduction = transferAmount
 
   // Group transactions by date
   const groupedTransactions = transactions.reduce((groups, tx) => {
@@ -461,16 +471,10 @@ export function TransactionList({
                     <Input 
                       id="transfer_amount" 
                       type="number" 
-                      step="0.01" 
-                      min="0.01"
+                      step="any" 
+                      min="0.00000001"
                       value={formData.amount} 
-                      onChange={e => {
-                        const value = e.target.value
-                        // Allow empty or valid number with max 2 decimals
-                        if (value === '' || /^\d*\.?\d{0,2}$/.test(value)) {
-                          setFormData({...formData, amount: value})
-                        }
-                      }} 
+                      onChange={e => setFormData({...formData, amount: e.target.value})} 
                       placeholder="0.00" 
                       required 
                     />
@@ -482,19 +486,39 @@ export function TransactionList({
                     <Input 
                       id="transfer_amount_to" 
                       type="number" 
-                      step="0.01" 
-                      min="0.01"
+                      step="any" 
+                      min="0.00000001"
                       value={formData.amount_to} 
                       onChange={e => {
                         const value = e.target.value
-                        // Allow empty or valid number with max 2 decimals
-                        if (value === '' || /^\d*\.?\d{0,2}$/.test(value)) {
-                          setFormData({...formData, amount_to: value})
+                        setSkipAutoCalc(true)
+                        setFormData({...formData, amount_to: value})
+                        
+                        // Calculate behavior based on currency match
+                        if (fromAccount && toAccount && formData.amount && value) {
+                          const amountFrom = parseFloat(formData.amount) || 0
+                          const amountTo = parseFloat(value) || 0
+                          
+                          if (fromAccount.currency === toAccount.currency) {
+                            // Same currency: fee is simply the difference
+                            const calculatedFee = Math.max(0, amountFrom - amountTo)
+                            setFormData(prev => ({...prev, amount_to: value, fee: calculatedFee.toString()}))
+                          } else {
+                            // Different currency: recalculate exchange rate
+                            // Formula: amount_to = (amount_from - fee) × rate
+                            // So: rate = amount_to / (amount_from - fee)
+                            const fee = parseFloat(formData.fee) || 0
+                            const amountAfterFee = amountFrom - fee
+                            if (amountAfterFee > 0 && amountTo > 0) {
+                              const newRate = amountTo / amountAfterFee
+                              setExchangeRate(newRate)
+                            }
+                          }
                         }
-                      }} 
+                      }}
+                      onBlur={() => setSkipAutoCalc(false)}
                       placeholder="0.00" 
                       required
-                      disabled={!fromAccount || !toAccount || fromAccount.currency === toAccount.currency}
                     />
                   </div>
                 </div>
@@ -532,11 +556,11 @@ export function TransactionList({
                             }
                           }} 
                           placeholder="Enter custom rate"
-                          className="bg-white dark:bg-background"
+                          className="bg-background"
                         />
                         {exchangeRate && formData.amount && (
                           <p className="text-xs text-muted-foreground">
-                            {parseFloat(formData.amount).toFixed(2)} {fromAccount.currency} = {(parseFloat(formData.amount) * exchangeRate).toFixed(2)} {toAccount.currency}
+                            {parseFloat(formData.amount)} {fromAccount.currency} = {parseFloat(formData.amount) * exchangeRate} {toAccount.currency}
                           </p>
                         )}
                       </>
@@ -553,16 +577,10 @@ export function TransactionList({
                     <Input 
                       id="transfer_fee" 
                       type="number" 
-                      step="0.01" 
+                      step="any" 
                       min="0"
                       value={formData.fee} 
-                      onChange={e => {
-                        const value = e.target.value
-                        // Allow empty or valid number with max 2 decimals
-                        if (value === '' || /^\d*\.?\d{0,2}$/.test(value)) {
-                          setFormData({...formData, fee: value})
-                        }
-                      }} 
+                      onChange={e => setFormData({...formData, fee: e.target.value})} 
                       placeholder="0.00" 
                     />
                   </div>
@@ -594,16 +612,16 @@ export function TransactionList({
                     <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Preview</p>
                     <div className="flex items-center justify-between text-sm">
                       <span>{fromAccount.name}</span>
-                      <span className="text-destructive font-medium">-{totalDeduction.toLocaleString('hu-HU', {minimumFractionDigits: 2, maximumFractionDigits: 2})} {fromAccount.currency}</span>
+                      <span className="text-destructive font-medium">-{totalDeduction} {fromAccount.currency}</span>
                     </div>
                     <div className="flex items-center justify-between text-sm">
                       <span>{toAccount.name}</span>
-                      <span className="text-success font-medium">+{(parseFloat(formData.amount_to) || transferAmount).toLocaleString('hu-HU', {minimumFractionDigits: 2, maximumFractionDigits: 2})} {toAccount.currency}</span>
+                      <span className="text-success font-medium">+{parseFloat(formData.amount_to) || transferAmount} {toAccount.currency}</span>
                     </div>
                     {transferFee > 0 && (
                       <div className="flex items-center justify-between text-xs text-muted-foreground pt-1 border-t border-border/50">
-                        <span className="flex items-center gap-1"><Coins className="h-3 w-3" /> Fee</span>
-                        <span>{transferFee.toLocaleString('hu-HU', {minimumFractionDigits: 2, maximumFractionDigits: 2})} {fromAccount.currency}</span>
+                        <span className="flex items-center gap-1"><Coins className="h-3 w-3" /> Lost to fee</span>
+                        <span>{transferFee} {fromAccount.currency}</span>
                       </div>
                     )}
                   </div>
