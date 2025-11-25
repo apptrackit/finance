@@ -4,6 +4,8 @@ import { TransactionList } from './components/TransactionList'
 import { Analytics } from './components/Analytics'
 import { Wallet, TrendingUp, TrendingDown, Activity, BarChart3, List } from 'lucide-react'
 
+const APP_VERSION = '0.1'
+
 type Account = {
   id: string
   name: string
@@ -199,6 +201,11 @@ function App() {
             <Analytics transactions={transactions} categories={categories} accounts={accounts} />
           )}
         </main>
+
+        {/* Version Footer */}
+        <footer className="mt-auto py-4 text-center">
+          <span className="text-xs text-muted-foreground">v{APP_VERSION}</span>
+        </footer>
       </div>
     </div>
   )
