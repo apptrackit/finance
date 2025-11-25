@@ -729,7 +729,7 @@ export function TransactionList({
                 <div className="flex-1 h-px bg-border" />
               </div>
               <div className="space-y-1">
-                {groupedTransactions[date].map(tx => (
+                {groupedTransactions[date].reverse().map(tx => (
                   <div 
                     key={tx.id} 
                     className="group flex items-center justify-between p-3 rounded-xl hover:bg-secondary/30 transition-all duration-200"
