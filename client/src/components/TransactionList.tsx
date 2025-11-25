@@ -99,18 +99,9 @@ export function TransactionList({
         const response = await fetch(`/api/transfers/exchange-rate?from=${fromAccount.currency}&to=${toAccount.currency}`)
         const data = await response.json()
         if (data.rate) {
-          // If rate rounds to 0 with 2 decimals, keep more precision
-          let roundedRate = Math.round(data.rate * 100) / 100
-          if (roundedRate === 0 && data.rate > 0) {
-            // Find minimum decimals needed to show non-zero value
-            for (let decimals = 3; decimals <= 8; decimals++) {
-              const factor = Math.pow(10, decimals)
-              roundedRate = Math.round(data.rate * factor) / factor
-              if (roundedRate > 0) break
-            }
-          }
-          setSuggestedRate(roundedRate)
-          setExchangeRate(roundedRate)
+          // Keep the full rate without any rounding
+          setSuggestedRate(data.rate)
+          setExchangeRate(data.rate)
         }
       } catch (error) {
         console.error('Failed to fetch exchange rate:', error)
@@ -520,7 +511,7 @@ export function TransactionList({
                       <>
                         {suggestedRate && (
                           <p className="text-xs text-muted-foreground">
-                            Suggested: 1 {fromAccount.currency} = {suggestedRate < 0.01 ? suggestedRate.toFixed(8).replace(/\.?0+$/, '') : suggestedRate.toFixed(2)} {toAccount.currency}
+                            Suggested: 1 {fromAccount.currency} = {suggestedRate} {toAccount.currency}
                           </p>
                         )}
                         <Input 
