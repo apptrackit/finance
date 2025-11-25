@@ -367,46 +367,49 @@ app.post('/transfers', async (c) => {
 // --- Dashboard ---
 
 app.get('/dashboard/net-worth', async (c) => {
+  // Get master currency from query param, default to HUF
+  const masterCurrency = c.req.query('currency') || 'HUF'
+  
   // Get all accounts
   const { results: accounts } = await c.env.DB.prepare('SELECT id, balance, currency FROM accounts').all<Account>()
   
   if (!accounts || accounts.length === 0) {
-    return c.json({ net_worth: 0, currency: 'HUF', accounts: [] })
+    return c.json({ net_worth: 0, currency: masterCurrency, accounts: [] })
   }
   
-  // Fetch exchange rates from HUF
-  const rates = await getExchangeRates('HUF')
+  // Fetch exchange rates from master currency
+  const rates = await getExchangeRates(masterCurrency)
   
-  let totalNetWorthHUF = 0
+  let totalNetWorth = 0
   const accountDetails = []
   
   for (const account of accounts) {
-    let balanceInHUF = account.balance
+    let balanceInMasterCurrency = account.balance
     
-    // Convert to HUF if account is in a different currency
-    if (account.currency !== 'HUF') {
+    // Convert to master currency if account is in a different currency
+    if (account.currency !== masterCurrency) {
       const rate = rates[account.currency]
       if (rate) {
-        // Convert: HUF -> account.currency rate, so reverse to get HUF
-        balanceInHUF = account.balance / rate
+        // Convert: masterCurrency -> account.currency rate, so reverse to get master currency
+        balanceInMasterCurrency = account.balance / rate
       } else {
         console.warn(`Exchange rate not available for ${account.currency}, using original value`)
       }
     }
     
-    totalNetWorthHUF += balanceInHUF
+    totalNetWorth += balanceInMasterCurrency
     
     accountDetails.push({
       id: account.id,
       balance: account.balance,
       currency: account.currency,
-      balance_in_huf: balanceInHUF
+      balance_in_master: balanceInMasterCurrency
     })
   }
   
   return c.json({ 
-    net_worth: totalNetWorthHUF,
-    currency: 'HUF',
+    net_worth: totalNetWorth,
+    currency: masterCurrency,
     accounts: accountDetails,
     rates_fetched: Object.keys(rates).length > 0
   })
