@@ -139,6 +139,53 @@ export default function Settings() {
     }
   }
 
+  const handleExportJSON = async () => {
+    setIsExporting(true)
+    try {
+      // Fetch all data
+      const [accountsRes, transactionsRes, categoriesRes] = await Promise.all([
+        fetch('/api/accounts'),
+        fetch('/api/transactions'),
+        fetch('/api/categories')
+      ])
+
+      const accounts: Account[] = await accountsRes.json()
+      const transactions: Transaction[] = await transactionsRes.json()
+      const categories: Category[] = await categoriesRes.json()
+
+      // Build JSON structure
+      const exportData = {
+        version: '1.0',
+        exportDate: new Date().toISOString(),
+        accounts,
+        transactions,
+        categories,
+        settings: {
+          masterCurrency: getMasterCurrency()
+        }
+      }
+
+      // Create download
+      const jsonContent = JSON.stringify(exportData, null, 2)
+      const blob = new Blob([jsonContent], { type: 'application/json;charset=utf-8;' })
+      const link = document.createElement('a')
+      const url = URL.createObjectURL(blob)
+      
+      link.setAttribute('href', url)
+      link.setAttribute('download', `finance-export-${new Date().toISOString().split('T')[0]}.json`)
+      link.style.visibility = 'hidden'
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      URL.revokeObjectURL(url)
+    } catch (error) {
+      console.error('Failed to export JSON:', error)
+      alert('Failed to export data. Please try again.')
+    } finally {
+      setIsExporting(false)
+    }
+  }
+
   return (
     <div className="max-w-2xl mx-auto space-y-6">
       <Card>
@@ -204,20 +251,34 @@ export default function Settings() {
         <CardContent className="space-y-4">
           <div className="space-y-2">
             <p className="text-sm text-muted-foreground">
-              Export all your transactions, accounts, and categories to a CSV file. 
-              This file can be opened in Excel, Google Sheets, or any spreadsheet application.
+              Export all your transactions, accounts, and categories in your preferred format.
             </p>
           </div>
 
-          <Button 
-            onClick={handleExportCSV} 
-            className="w-full"
-            variant="outline"
-            disabled={isExporting}
-          >
-            <Download className="h-4 w-4 mr-2" />
-            {isExporting ? 'Exporting...' : 'Export to CSV'}
-          </Button>
+          <div className="grid grid-cols-2 gap-3">
+            <Button 
+              onClick={handleExportCSV} 
+              variant="outline"
+              disabled={isExporting}
+            >
+              <Download className="h-4 w-4 mr-2" />
+              {isExporting ? 'Exporting...' : 'CSV'}
+            </Button>
+            
+            <Button 
+              onClick={handleExportJSON} 
+              variant="outline"
+              disabled={isExporting}
+            >
+              <Download className="h-4 w-4 mr-2" />
+              {isExporting ? 'Exporting...' : 'JSON'}
+            </Button>
+          </div>
+          
+          <div className="text-xs text-muted-foreground space-y-1">
+            <p><strong>CSV:</strong> Best for Excel, Google Sheets, and data analysis</p>
+            <p><strong>JSON:</strong> Complete backup with all data and settings</p>
+          </div>
         </CardContent>
       </Card>
     </div>
