@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useRef, useEffect } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card'
 import { 
   BarChart3, 
@@ -7,7 +7,9 @@ import {
   TrendingDown,
   Calendar,
   ArrowUpRight,
-  ArrowDownRight
+  ArrowDownRight,
+  ChevronDown,
+  Check
 } from 'lucide-react'
 import {
   AreaChart,
@@ -23,7 +25,75 @@ import {
   BarChart,
   Bar
 } from 'recharts'
-import { format, subMonths, startOfMonth, endOfMonth, isWithinInterval, subYears, startOfYear, endOfYear, isThisMonth, isThisYear } from 'date-fns'
+import { format, subMonths, startOfMonth, endOfMonth, isWithinInterval, subYears, startOfYear, endOfYear, isThisMonth, isThisYear, startOfWeek, endOfWeek, addWeeks } from 'date-fns'
+
+// Custom Dropdown Component
+function CustomSelect({ 
+  value, 
+  onChange, 
+  options,
+  variant = 'default'
+}: { 
+  value: string
+  onChange: (value: string) => void
+  options: { value: string; label: string; icon?: string }[]
+  variant?: 'default' | 'success' | 'destructive'
+}) {
+  const [isOpen, setIsOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+  
+  const selectedOption = options.find(o => o.value === value)
+  
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (ref.current && !ref.current.contains(event.target as Node)) {
+        setIsOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
+  const variantStyles = {
+    default: 'hover:bg-secondary/80 focus:ring-primary/50',
+    success: 'hover:bg-success/10 focus:ring-success/50',
+    destructive: 'hover:bg-destructive/10 focus:ring-destructive/50'
+  }
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className={`flex items-center gap-2 text-xs bg-secondary/50 border border-border rounded-lg px-3 py-1.5 text-foreground cursor-pointer transition-colors focus:outline-none focus:ring-2 ${variantStyles[variant]}`}
+      >
+        {selectedOption?.icon && <span>{selectedOption.icon}</span>}
+        <span>{selectedOption?.label}</span>
+        <ChevronDown className={`h-3 w-3 text-muted-foreground transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+      </button>
+      
+      {isOpen && (
+        <div className="absolute right-0 top-full mt-1 z-50 min-w-[140px] bg-card border border-border rounded-lg shadow-xl py-1 animate-in fade-in-0 zoom-in-95">
+          {options.map((option) => (
+            <button
+              key={option.value}
+              onClick={() => {
+                onChange(option.value)
+                setIsOpen(false)
+              }}
+              className={`w-full flex items-center gap-2 px-3 py-1.5 text-xs text-left hover:bg-secondary/50 transition-colors ${
+                value === option.value ? 'text-foreground bg-secondary/30' : 'text-muted-foreground'
+              }`}
+            >
+              {option.icon && <span>{option.icon}</span>}
+              <span className="flex-1">{option.label}</span>
+              {value === option.value && <Check className="h-3 w-3" />}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
 
 type Transaction = {
   id: string
@@ -53,14 +123,21 @@ type Account = {
 type TimePeriod = 'thisMonth' | 'lastMonth' | 'thisYear' | 'lastYear' | 'allTime'
 
 const COLORS = [
-  'hsl(var(--primary))',
-  'hsl(var(--success))',
-  'hsl(var(--destructive))',
-  '#8b5cf6',
-  '#f59e0b',
-  '#06b6d4',
-  '#ec4899',
-  '#84cc16',
+  '#8b5cf6', // violet
+  '#f59e0b', // amber
+  '#06b6d4', // cyan
+  '#ec4899', // pink
+  '#84cc16', // lime
+  '#ef4444', // red
+  '#3b82f6', // blue
+  '#14b8a6', // teal
+  '#f97316', // orange
+  '#a855f7', // purple
+  '#22c55e', // green
+  '#eab308', // yellow
+  '#0ea5e9', // sky
+  '#d946ef', // fuchsia
+  '#64748b', // slate
 ]
 
 export function Analytics({ 
@@ -73,6 +150,8 @@ export function Analytics({
   accounts: Account[]
 }) {
   const [period, setPeriod] = useState<TimePeriod>('thisMonth')
+  const [selectedExpenseCategory, setSelectedExpenseCategory] = useState<string>('all')
+  const [selectedIncomeCategory, setSelectedIncomeCategory] = useState<string>('all')
 
   // Filter transactions by period
   const filteredTransactions = useMemo(() => {
@@ -273,38 +352,205 @@ export function Analytics({
     })
   }, [accounts, transactions, period])
 
-  // Income vs Expenses bar chart data
-  const incomeExpenseBarData = useMemo(() => {
-    const periodData: Record<string, { income: number; expenses: number }> = {}
-    
-    filteredTransactions.forEach(tx => {
-      // Group by week or month depending on period
-      const dateKey = period === 'allTime' || period === 'thisYear' || period === 'lastYear'
-        ? format(new Date(tx.date), 'yyyy-MM')
-        : format(new Date(tx.date), 'yyyy-MM-dd')
-      
-      if (!periodData[dateKey]) {
-        periodData[dateKey] = { income: 0, expenses: 0 }
-      }
-      if (tx.amount > 0) {
-        periodData[dateKey].income += tx.amount
-      } else {
-        periodData[dateKey].expenses += Math.abs(tx.amount)
-      }
-    })
+  // Get expense categories for filter
+  const expenseCategories = useMemo(() => {
+    return categories.filter(c => c.type === 'expense')
+  }, [categories])
 
-    return Object.entries(periodData)
-      .map(([key, data]) => ({
-        key,
-        label: period === 'allTime' || period === 'thisYear' || period === 'lastYear'
-          ? format(new Date(key + '-01'), 'MMM yy')
-          : format(new Date(key), 'MMM d'),
-        income: data.income,
-        expenses: data.expenses
-      }))
-      .sort((a, b) => a.key.localeCompare(b.key))
-      .slice(-12) // Last 12 periods
-  }, [filteredTransactions, period])
+  // Get income categories for filter
+  const incomeCategories = useMemo(() => {
+    return categories.filter(c => c.type === 'income')
+  }, [categories])
+
+  // Income comparison data - weeks for month view, months for year/all view
+  const incomeChartData = useMemo(() => {
+    const data: { key: string; label: string; amount: number }[] = []
+    const now = new Date()
+    
+    // For thisMonth or lastMonth, show weeks
+    if (period === 'thisMonth' || period === 'lastMonth') {
+      const targetMonth = period === 'thisMonth' ? now : subMonths(now, 1)
+      const monthStart = startOfMonth(targetMonth)
+      const monthEnd = endOfMonth(targetMonth)
+      
+      // Generate weeks for the month
+      let weekStart = startOfWeek(monthStart, { weekStartsOn: 1 })
+      let weekNum = 1
+      
+      while (weekStart <= monthEnd) {
+        const weekEnd = endOfWeek(weekStart, { weekStartsOn: 1 })
+        const weekKey = format(weekStart, 'yyyy-MM-dd')
+        
+        const weekIncome = transactions
+          .filter(tx => {
+            const txDate = new Date(tx.date)
+            const inDateRange = tx.amount > 0 && isWithinInterval(txDate, { 
+              start: weekStart < monthStart ? monthStart : weekStart, 
+              end: weekEnd > monthEnd ? monthEnd : weekEnd 
+            })
+            if (!inDateRange) return false
+            if (selectedIncomeCategory === 'all') return true
+            return tx.category_id === selectedIncomeCategory
+          })
+          .reduce((sum, tx) => sum + tx.amount, 0)
+        
+        data.push({
+          key: weekKey,
+          label: `Week ${weekNum}`,
+          amount: weekIncome
+        })
+        
+        weekStart = addWeeks(weekStart, 1)
+        weekNum++
+      }
+    } else {
+      // For year views or all time, show months
+      const maxMonths = period === 'allTime' ? 100 : 12
+      
+      // Find the earliest transaction date
+      const incomeTransactions = transactions.filter(tx => {
+        if (tx.amount <= 0) return false
+        if (selectedIncomeCategory === 'all') return true
+        return tx.category_id === selectedIncomeCategory
+      })
+      
+      if (incomeTransactions.length === 0) return data
+      
+      const earliestDate = incomeTransactions.reduce((earliest, tx) => {
+        const txDate = new Date(tx.date)
+        return txDate < earliest ? txDate : earliest
+      }, new Date())
+      
+      const monthsToShow = Math.min(
+        maxMonths,
+        Math.ceil((now.getTime() - earliestDate.getTime()) / (1000 * 60 * 60 * 24 * 30)) + 1
+      )
+      
+      for (let i = monthsToShow - 1; i >= 0; i--) {
+        const monthDate = subMonths(now, i)
+        const monthStart = startOfMonth(monthDate)
+        const monthEnd = endOfMonth(monthDate)
+        const monthKey = format(monthDate, 'yyyy-MM')
+        
+        // Filter by year if needed
+        if (period === 'thisYear' && !isThisYear(monthDate)) continue
+        if (period === 'lastYear' && monthDate.getFullYear() !== now.getFullYear() - 1) continue
+        
+        const monthIncome = transactions
+          .filter(tx => {
+            const txDate = new Date(tx.date)
+            const inDateRange = tx.amount > 0 && isWithinInterval(txDate, { start: monthStart, end: monthEnd })
+            if (!inDateRange) return false
+            if (selectedIncomeCategory === 'all') return true
+            return tx.category_id === selectedIncomeCategory
+          })
+          .reduce((sum, tx) => sum + tx.amount, 0)
+        
+        data.push({
+          key: monthKey,
+          label: format(monthDate, 'MMM'),
+          amount: monthIncome
+        })
+      }
+    }
+    
+    return data
+  }, [transactions, selectedIncomeCategory, period])
+
+  // Expenses comparison data - weeks for month view, months for year/all view
+  const expensesChartData = useMemo(() => {
+    const data: { key: string; label: string; amount: number }[] = []
+    const now = new Date()
+    
+    // For thisMonth or lastMonth, show weeks
+    if (period === 'thisMonth' || period === 'lastMonth') {
+      const targetMonth = period === 'thisMonth' ? now : subMonths(now, 1)
+      const monthStart = startOfMonth(targetMonth)
+      const monthEnd = endOfMonth(targetMonth)
+      
+      // Generate weeks for the month
+      let weekStart = startOfWeek(monthStart, { weekStartsOn: 1 })
+      let weekNum = 1
+      
+      while (weekStart <= monthEnd) {
+        const weekEnd = endOfWeek(weekStart, { weekStartsOn: 1 })
+        const weekKey = format(weekStart, 'yyyy-MM-dd')
+        
+        const weekExpenses = transactions
+          .filter(tx => {
+            const txDate = new Date(tx.date)
+            const inDateRange = tx.amount < 0 && isWithinInterval(txDate, { 
+              start: weekStart < monthStart ? monthStart : weekStart, 
+              end: weekEnd > monthEnd ? monthEnd : weekEnd 
+            })
+            if (!inDateRange) return false
+            if (selectedExpenseCategory === 'all') return true
+            return tx.category_id === selectedExpenseCategory
+          })
+          .reduce((sum, tx) => sum + Math.abs(tx.amount), 0)
+        
+        data.push({
+          key: weekKey,
+          label: `Week ${weekNum}`,
+          amount: weekExpenses
+        })
+        
+        weekStart = addWeeks(weekStart, 1)
+        weekNum++
+      }
+    } else {
+      // For year views or all time, show months
+      const maxMonths = period === 'allTime' ? 100 : 12
+      
+      // Find the earliest transaction date
+      const expenseTransactions = transactions.filter(tx => {
+        if (tx.amount >= 0) return false
+        if (selectedExpenseCategory === 'all') return true
+        return tx.category_id === selectedExpenseCategory
+      })
+      
+      if (expenseTransactions.length === 0) return data
+      
+      const earliestDate = expenseTransactions.reduce((earliest, tx) => {
+        const txDate = new Date(tx.date)
+        return txDate < earliest ? txDate : earliest
+      }, new Date())
+      
+      const monthsToShow = Math.min(
+        maxMonths,
+        Math.ceil((now.getTime() - earliestDate.getTime()) / (1000 * 60 * 60 * 24 * 30)) + 1
+      )
+      
+      for (let i = monthsToShow - 1; i >= 0; i--) {
+        const monthDate = subMonths(now, i)
+        const monthStart = startOfMonth(monthDate)
+        const monthEnd = endOfMonth(monthDate)
+        const monthKey = format(monthDate, 'yyyy-MM')
+        
+        // Filter by year if needed
+        if (period === 'thisYear' && !isThisYear(monthDate)) continue
+        if (period === 'lastYear' && monthDate.getFullYear() !== now.getFullYear() - 1) continue
+        
+        const monthExpenses = transactions
+          .filter(tx => {
+            const txDate = new Date(tx.date)
+            const inDateRange = tx.amount < 0 && isWithinInterval(txDate, { start: monthStart, end: monthEnd })
+            if (!inDateRange) return false
+            if (selectedExpenseCategory === 'all') return true
+            return tx.category_id === selectedExpenseCategory
+          })
+          .reduce((sum, tx) => sum + Math.abs(tx.amount), 0)
+        
+        data.push({
+          key: monthKey,
+          label: format(monthDate, 'MMM'),
+          amount: monthExpenses
+        })
+      }
+    }
+    
+    return data
+  }, [transactions, selectedExpenseCategory, period])
 
   // Period labels
   const periodLabels: Record<TimePeriod, string> = {
@@ -482,19 +728,34 @@ export function Analytics({
               </CardContent>
             </Card>
 
-            {/* Income Bar Chart */}
+            {/* Monthly Income Comparison */}
             <Card>
               <CardHeader className="pb-2">
-                <div className="flex items-center gap-2">
-                  <TrendingUp className="h-4 w-4 text-success" />
-                  <CardTitle className="text-base">Income</CardTitle>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <TrendingUp className="h-4 w-4 text-success" />
+                    <CardTitle className="text-base">Income by Month</CardTitle>
+                  </div>
+                  <CustomSelect
+                    value={selectedIncomeCategory}
+                    onChange={setSelectedIncomeCategory}
+                    variant="success"
+                    options={[
+                      { value: 'all', label: 'All Income', icon: '📊' },
+                      ...incomeCategories.map(cat => ({
+                        value: cat.id,
+                        label: cat.name,
+                        icon: cat.icon
+                      }))
+                    ]}
+                  />
                 </div>
               </CardHeader>
               <CardContent>
-                {incomeExpenseBarData.some(d => d.income > 0) ? (
+                {incomeChartData.some(d => d.amount > 0) ? (
                   <div className="h-48">
                     <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={incomeExpenseBarData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                      <BarChart data={incomeChartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
                         <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.5} />
                         <XAxis 
                           dataKey="label" 
@@ -511,21 +772,36 @@ export function Analytics({
                           tickFormatter={(value) => `${(value / 1000).toFixed(0)}k`}
                         />
                         <Tooltip 
+                          cursor={{ fill: 'hsl(var(--muted))', opacity: 0.3 }}
                           content={({ active, payload, label }) => {
                             if (active && payload && payload.length) {
+                              const currentIndex = incomeChartData.findIndex(d => d.label === label)
+                              const prevPeriod = currentIndex > 0 ? incomeChartData[currentIndex - 1] : null
+                              const currentAmount = payload[0].value as number
+                              const diff = prevPeriod ? currentAmount - prevPeriod.amount : 0
+                              const diffPercent = prevPeriod && prevPeriod.amount > 0 
+                                ? ((currentAmount - prevPeriod.amount) / prevPeriod.amount * 100).toFixed(1)
+                                : null
+                              
                               return (
                                 <div className="bg-card border border-border rounded-lg p-3 shadow-xl">
                                   <p className="text-xs text-muted-foreground mb-2">{label}</p>
                                   <p className="text-sm font-medium text-success">
-                                    +{(payload[0].value as number).toLocaleString('hu-HU')} Ft
+                                    +{currentAmount.toLocaleString('hu-HU')} Ft
                                   </p>
+                                  {prevPeriod && (
+                                    <p className={`text-xs mt-1 ${diff >= 0 ? 'text-success' : 'text-destructive'}`}>
+                                      {diff >= 0 ? '↑' : '↓'} {Math.abs(diff).toLocaleString('hu-HU')} Ft
+                                      {diffPercent && ` (${diff >= 0 ? '+' : ''}${diffPercent}%)`}
+                                    </p>
+                                  )}
                                 </div>
                               )
                             }
                             return null
                           }}
                         />
-                        <Bar dataKey="income" name="Income" fill="hsl(var(--success))" radius={[4, 4, 0, 0]} />
+                        <Bar dataKey="amount" name="Income" fill="hsl(var(--success))" radius={[4, 4, 0, 0]} />
                       </BarChart>
                     </ResponsiveContainer>
                   </div>
@@ -537,19 +813,34 @@ export function Analytics({
               </CardContent>
             </Card>
 
-            {/* Expenses Bar Chart */}
+            {/* Monthly Expenses Comparison with Category Filter */}
             <Card>
               <CardHeader className="pb-2">
-                <div className="flex items-center gap-2">
-                  <TrendingDown className="h-4 w-4 text-destructive" />
-                  <CardTitle className="text-base">Expenses</CardTitle>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <TrendingDown className="h-4 w-4 text-destructive" />
+                    <CardTitle className="text-base">Expenses by Month</CardTitle>
+                  </div>
+                  <CustomSelect
+                    value={selectedExpenseCategory}
+                    onChange={setSelectedExpenseCategory}
+                    variant="destructive"
+                    options={[
+                      { value: 'all', label: 'All Expenses', icon: '📊' },
+                      ...expenseCategories.map(cat => ({
+                        value: cat.id,
+                        label: cat.name,
+                        icon: cat.icon
+                      }))
+                    ]}
+                  />
                 </div>
               </CardHeader>
               <CardContent>
-                {incomeExpenseBarData.some(d => d.expenses > 0) ? (
+                {expensesChartData.some(d => d.amount > 0) ? (
                   <div className="h-48">
                     <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={incomeExpenseBarData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                      <BarChart data={expensesChartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
                         <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.5} />
                         <XAxis 
                           dataKey="label" 
@@ -566,21 +857,39 @@ export function Analytics({
                           tickFormatter={(value) => `${(value / 1000).toFixed(0)}k`}
                         />
                         <Tooltip 
+                          cursor={{ fill: 'hsl(var(--muted))', opacity: 0.3 }}
                           content={({ active, payload, label }) => {
                             if (active && payload && payload.length) {
+                              const currentIndex = expensesChartData.findIndex(d => d.label === label)
+                              const prevPeriod = currentIndex > 0 ? expensesChartData[currentIndex - 1] : null
+                              const currentAmount = payload[0].value as number
+                              const diff = prevPeriod ? currentAmount - prevPeriod.amount : 0
+                              const diffPercent = prevPeriod && prevPeriod.amount > 0 
+                                ? ((currentAmount - prevPeriod.amount) / prevPeriod.amount * 100).toFixed(1)
+                                : null
+                              
                               return (
                                 <div className="bg-card border border-border rounded-lg p-3 shadow-xl">
                                   <p className="text-xs text-muted-foreground mb-2">{label}</p>
                                   <p className="text-sm font-medium text-destructive">
-                                    -{(payload[0].value as number).toLocaleString('hu-HU')} Ft
+                                    -{currentAmount.toLocaleString('hu-HU')} Ft
                                   </p>
+                                  {prevPeriod && (
+                                    <p className={`text-xs mt-1 ${diff <= 0 ? 'text-success' : 'text-destructive'}`}>
+                                      {diff > 0 ? '↑' : '↓'} {Math.abs(diff).toLocaleString('hu-HU')} Ft
+                                      {diffPercent && ` (${diff > 0 ? '+' : ''}${diffPercent}%)`}
+                                      <span className="text-muted-foreground ml-1">
+                                        {diff <= 0 ? '(spending less)' : '(spending more)'}
+                                      </span>
+                                    </p>
+                                  )}
                                 </div>
                               )
                             }
                             return null
                           }}
                         />
-                        <Bar dataKey="expenses" name="Expenses" fill="hsl(var(--destructive))" radius={[4, 4, 0, 0]} />
+                        <Bar dataKey="amount" name="Expenses" fill="hsl(var(--destructive))" radius={[4, 4, 0, 0]} />
                       </BarChart>
                     </ResponsiveContainer>
                   </div>
@@ -699,7 +1008,14 @@ export function Analytics({
                             contentStyle={{
                               backgroundColor: 'hsl(var(--card))',
                               border: '1px solid hsl(var(--border))',
-                              borderRadius: '8px'
+                              borderRadius: '8px',
+                              color: 'hsl(var(--foreground))'
+                            }}
+                            itemStyle={{
+                              color: 'hsl(var(--foreground))'
+                            }}
+                            labelStyle={{
+                              color: 'hsl(var(--foreground))'
                             }}
                           />
                         </PieChart>

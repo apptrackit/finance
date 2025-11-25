@@ -21,6 +21,7 @@ type Account = {
   id: string
   name: string
   balance: number
+  currency: string
 }
 
 type Category = {
@@ -57,12 +58,17 @@ export function TransactionList({
     to_account_id: '',
     category_id: '',
     amount: '',
+    amount_to: '',
     fee: '0',
     description: '',
     date: new Date().toISOString().split('T')[0],
     is_recurring: false,
     type: 'expense' as 'expense' | 'income' | 'transfer'
   })
+  const [exchangeRate, setExchangeRate] = useState<number | null>(null)
+  const [suggestedRate, setSuggestedRate] = useState<number | null>(null)
+  const [isLoadingRate, setIsLoadingRate] = useState(false)
+  const [skipAutoCalc, setSkipAutoCalc] = useState(false)
 
   useEffect(() => {
     fetch('/api/categories')
@@ -70,6 +76,66 @@ export function TransactionList({
       .then(data => setCategories(data))
       .catch(console.error)
   }, [])
+
+  // Fetch exchange rate when transfer accounts are selected
+  useEffect(() => {
+    if (formData.type !== 'transfer' || !formData.account_id || !formData.to_account_id) {
+      setSuggestedRate(null)
+      setExchangeRate(null)
+      return
+    }
+
+    const fromAccount = accounts.find(a => a.id === formData.account_id)
+    const toAccount = accounts.find(a => a.id === formData.to_account_id)
+    
+    if (!fromAccount || !toAccount || fromAccount.currency === toAccount.currency) {
+      setSuggestedRate(null)
+      setExchangeRate(null)
+      return
+    }
+
+    const fetchRate = async () => {
+      setIsLoadingRate(true)
+      try {
+        const response = await fetch(`/api/transfers/exchange-rate?from=${fromAccount.currency}&to=${toAccount.currency}`)
+        const data = await response.json()
+        if (data.rate) {
+          // Keep the full rate without any rounding
+          setSuggestedRate(data.rate)
+          setExchangeRate(data.rate)
+        }
+      } catch (error) {
+        console.error('Failed to fetch exchange rate:', error)
+      } finally {
+        setIsLoadingRate(false)
+      }
+    }
+
+    fetchRate()
+  }, [formData.account_id, formData.to_account_id, formData.type, accounts])
+
+  // Auto-calculate amount_to when amount or rate changes
+  useEffect(() => {
+    if (formData.type !== 'transfer' || skipAutoCalc) return
+
+    const fromAccount = accounts.find(a => a.id === formData.account_id)
+    const toAccount = accounts.find(a => a.id === formData.to_account_id)
+    const isDifferentCurrency = fromAccount && toAccount && fromAccount.currency !== toAccount.currency
+
+    if (isDifferentCurrency && formData.amount && exchangeRate) {
+      // Different currency: amount_to = (amount_from - fee) × exchange_rate
+      const amountFrom = parseFloat(formData.amount) || 0
+      const fee = parseFloat(formData.fee) || 0
+      const calculated = (amountFrom - fee) * exchangeRate
+      setFormData(prev => ({ ...prev, amount_to: calculated.toString() }))
+    } else if (!isDifferentCurrency && formData.amount) {
+      // Same currency: amount_to = amount_from - fee
+      const amountFrom = parseFloat(formData.amount) || 0
+      const fee = parseFloat(formData.fee) || 0
+      const amountTo = Math.max(0, amountFrom - fee)
+      setFormData(prev => ({ ...prev, amount_to: amountTo.toString() }))
+    }
+  }, [formData.amount, formData.fee, exchangeRate, formData.type, formData.account_id, formData.to_account_id, accounts, skipAutoCalc])
 
   // Load saved defaults when opening the form
   const loadSavedDefaults = (type: 'expense' | 'income' | 'transfer') => {
@@ -84,7 +150,7 @@ export function TransactionList({
     } else {
       const savedFrom = localStorage.getItem(STORAGE_KEYS.transferFrom) || ''
       const savedTo = localStorage.getItem(STORAGE_KEYS.transferTo) || ''
-      return { account_id: savedFrom, to_account_id: savedTo, category_id: '', fee: '0' }
+      return { account_id: savedFrom, to_account_id: savedTo, category_id: '', fee: '0', amount_to: '' }
     }
   }
 
@@ -109,12 +175,15 @@ export function TransactionList({
       to_account_id: '',
       category_id: defaults.category_id,
       amount: '',
+      amount_to: '',
       fee: '0',
       description: '',
       date: new Date().toISOString().split('T')[0],
       is_recurring: false,
       type: 'expense'
     })
+    setExchangeRate(null)
+    setSuggestedRate(null)
   }
 
   // When opening the Add form, load defaults
@@ -125,6 +194,7 @@ export function TransactionList({
       to_account_id: '',
       category_id: defaults.category_id,
       amount: '',
+      amount_to: '',
       fee: '0',
       description: '',
       date: new Date().toISOString().split('T')[0],
@@ -143,9 +213,12 @@ export function TransactionList({
       account_id: defaults.account_id,
       to_account_id: defaults.to_account_id,
       category_id: defaults.category_id,
+      amount_to: defaults.amount_to || '',
       fee: defaults.fee,
       is_recurring: newType === 'transfer' ? false : formData.is_recurring
     })
+    setExchangeRate(null)
+    setSuggestedRate(null)
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -156,14 +229,17 @@ export function TransactionList({
       if (formData.type === 'transfer') {
         // Handle transfer
         const fee = parseFloat(formData.fee) || 0
+        const amountTo = parseFloat(formData.amount_to) || amount
         await fetch('/api/transfers', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             from_account_id: formData.account_id,
             to_account_id: formData.to_account_id,
-            amount: amount,
+            amount_from: amount,
+            amount_to: amountTo,
             fee: fee,
+            exchange_rate: exchangeRate,
             description: formData.description,
             date: formData.date
           })
@@ -218,6 +294,7 @@ export function TransactionList({
       to_account_id: '',
       category_id: tx.category_id || '',
       amount: Math.abs(tx.amount).toString(),
+      amount_to: '',
       fee: '0',
       description: tx.description || '',
       date: tx.date,
@@ -261,12 +338,19 @@ export function TransactionList({
     return acc ? acc.name : 'Unknown'
   }
 
+  const getAccountCurrency = (id: string) => {
+    const acc = accounts.find(a => a.id === id)
+    return acc ? acc.currency : 'HUF'
+  }
+
   // For transfer preview
   const fromAccount = accounts.find(a => a.id === formData.account_id)
   const toAccount = accounts.find(a => a.id === formData.to_account_id)
   const transferAmount = parseFloat(formData.amount) || 0
   const transferFee = parseFloat(formData.fee) || 0
-  const totalDeduction = transferAmount + transferFee
+  
+  // Fee is always the difference between amount_from and amount_to, so total deduction is always just amount_from
+  const totalDeduction = transferAmount
 
   // Group transactions by date
   const groupedTransactions = transactions.reduce((groups, tx) => {
@@ -360,7 +444,7 @@ export function TransactionList({
                     >
                       <option value="">Select Account</option>
                       {accounts.map(acc => (
-                        <option key={acc.id} value={acc.id}>{acc.name} ({acc.balance.toLocaleString('hu-HU')} Ft)</option>
+                        <option key={acc.id} value={acc.id}>{acc.name} ({acc.balance.toLocaleString('hu-HU')} {acc.currency})</option>
                       ))}
                     </Select>
                   </div>
@@ -376,36 +460,128 @@ export function TransactionList({
                       {accounts
                         .filter(acc => acc.id !== formData.account_id)
                         .map(acc => (
-                        <option key={acc.id} value={acc.id}>{acc.name} ({acc.balance.toLocaleString('hu-HU')} Ft)</option>
+                        <option key={acc.id} value={acc.id}>{acc.name} ({acc.balance.toLocaleString('hu-HU')} {acc.currency})</option>
                       ))}
                     </Select>
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="transfer_amount">Amount</Label>
+                    <Label htmlFor="transfer_amount">
+                      Amount to Send {fromAccount && `(${fromAccount.currency})`}
+                    </Label>
                     <Input 
                       id="transfer_amount" 
                       type="number" 
-                      step="1" 
-                      min="1"
+                      step="any" 
+                      min="0.00000001"
                       value={formData.amount} 
                       onChange={e => setFormData({...formData, amount: e.target.value})} 
-                      placeholder="0" 
+                      placeholder="0.00" 
                       required 
                     />
                   </div>
                   <div className="space-y-2">
+                    <Label htmlFor="transfer_amount_to">
+                      Amount to Receive {toAccount && `(${toAccount.currency})`}
+                    </Label>
+                    <Input 
+                      id="transfer_amount_to" 
+                      type="number" 
+                      step="any" 
+                      min="0.00000001"
+                      value={formData.amount_to} 
+                      onChange={e => {
+                        const value = e.target.value
+                        setSkipAutoCalc(true)
+                        setFormData({...formData, amount_to: value})
+                        
+                        // Calculate behavior based on currency match
+                        if (fromAccount && toAccount && formData.amount && value) {
+                          const amountFrom = parseFloat(formData.amount) || 0
+                          const amountTo = parseFloat(value) || 0
+                          
+                          if (fromAccount.currency === toAccount.currency) {
+                            // Same currency: fee is simply the difference
+                            const calculatedFee = Math.max(0, amountFrom - amountTo)
+                            setFormData(prev => ({...prev, amount_to: value, fee: calculatedFee.toString()}))
+                          } else {
+                            // Different currency: recalculate exchange rate
+                            // Formula: amount_to = (amount_from - fee) × rate
+                            // So: rate = amount_to / (amount_from - fee)
+                            const fee = parseFloat(formData.fee) || 0
+                            const amountAfterFee = amountFrom - fee
+                            if (amountAfterFee > 0 && amountTo > 0) {
+                              const newRate = amountTo / amountAfterFee
+                              setExchangeRate(newRate)
+                            }
+                          }
+                        }
+                      }}
+                      onBlur={() => setSkipAutoCalc(false)}
+                      placeholder="0.00" 
+                      required
+                    />
+                  </div>
+                </div>
+
+                {/* Exchange Rate Section */}
+                {fromAccount && toAccount && fromAccount.currency !== toAccount.currency && (
+                  <div className="p-3 rounded-lg bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 space-y-2">
+                    <Label htmlFor="exchange_rate" className="text-xs font-medium text-blue-900 dark:text-blue-100">
+                      Exchange Rate
+                    </Label>
+                    {isLoadingRate ? (
+                      <p className="text-sm text-muted-foreground">Loading exchange rate...</p>
+                    ) : (
+                      <>
+                        {suggestedRate && (
+                          <p className="text-xs text-muted-foreground">
+                            Suggested: 1 {fromAccount.currency} = {suggestedRate} {toAccount.currency}
+                          </p>
+                        )}
+                        <Input 
+                          id="exchange_rate"
+                          type="number" 
+                          step="any"
+                          min="0.00000001"
+                          value={exchangeRate || ''} 
+                          onChange={e => {
+                            const value = e.target.value
+                            if (value === '') {
+                              setExchangeRate(null)
+                              return
+                            }
+                            const rate = parseFloat(value)
+                            if (!isNaN(rate) && rate > 0) {
+                              setExchangeRate(rate)
+                            }
+                          }} 
+                          placeholder="Enter custom rate"
+                          className="bg-background"
+                        />
+                        {exchangeRate && formData.amount && (
+                          <p className="text-xs text-muted-foreground">
+                            {parseFloat(formData.amount)} {fromAccount.currency} = {parseFloat(formData.amount) * exchangeRate} {toAccount.currency}
+                          </p>
+                        )}
+                      </>
+                    )}
+                  </div>
+                )}
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-2">
                     <Label htmlFor="transfer_fee" className="flex items-center gap-1">
                       <Coins className="h-3 w-3" />
-                      Transfer Fee
+                      Transfer Fee {fromAccount && `(${fromAccount.currency})`}
                     </Label>
                     <Input 
                       id="transfer_fee" 
                       type="number" 
-                      step="1" 
+                      step="any" 
                       min="0"
                       value={formData.fee} 
                       onChange={e => setFormData({...formData, fee: e.target.value})} 
-                      placeholder="0" 
+                      placeholder="0.00" 
                     />
                   </div>
                   <div className="space-y-2">
@@ -418,15 +594,16 @@ export function TransactionList({
                       required 
                     />
                   </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="transfer_description">Note (optional)</Label>
-                    <Input 
-                      id="transfer_description" 
-                      value={formData.description} 
-                      onChange={e => setFormData({...formData, description: e.target.value})} 
-                      placeholder="e.g. Monthly savings" 
-                    />
-                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="transfer_description">Note (optional)</Label>
+                  <Input 
+                    id="transfer_description" 
+                    value={formData.description} 
+                    onChange={e => setFormData({...formData, description: e.target.value})} 
+                    placeholder="e.g. Monthly savings" 
+                  />
                 </div>
 
                 {/* Transfer Preview */}
@@ -435,16 +612,16 @@ export function TransactionList({
                     <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Preview</p>
                     <div className="flex items-center justify-between text-sm">
                       <span>{fromAccount.name}</span>
-                      <span className="text-destructive font-medium">-{totalDeduction.toLocaleString('hu-HU')} Ft</span>
+                      <span className="text-destructive font-medium">-{totalDeduction} {fromAccount.currency}</span>
                     </div>
                     <div className="flex items-center justify-between text-sm">
                       <span>{toAccount.name}</span>
-                      <span className="text-success font-medium">+{transferAmount.toLocaleString('hu-HU')} Ft</span>
+                      <span className="text-success font-medium">+{parseFloat(formData.amount_to) || transferAmount} {toAccount.currency}</span>
                     </div>
                     {transferFee > 0 && (
                       <div className="flex items-center justify-between text-xs text-muted-foreground pt-1 border-t border-border/50">
-                        <span className="flex items-center gap-1"><Coins className="h-3 w-3" /> Fee</span>
-                        <span>{transferFee.toLocaleString('hu-HU')} Ft</span>
+                        <span className="flex items-center gap-1"><Coins className="h-3 w-3" /> Lost to fee</span>
+                        <span>{transferFee} {fromAccount.currency}</span>
                       </div>
                     )}
                   </div>
@@ -552,7 +729,7 @@ export function TransactionList({
                 <div className="flex-1 h-px bg-border" />
               </div>
               <div className="space-y-1">
-                {groupedTransactions[date].map(tx => (
+                {groupedTransactions[date].reverse().map(tx => (
                   <div 
                     key={tx.id} 
                     className="group flex items-center justify-between p-3 rounded-xl hover:bg-secondary/30 transition-all duration-200"
@@ -584,7 +761,7 @@ export function TransactionList({
                     <div className="flex items-center gap-2">
                       <div className={`font-bold text-sm ${tx.amount >= 0 ? 'text-success' : 'text-destructive'}`}>
                         {tx.amount >= 0 ? '+' : '-'}
-                        {Math.abs(tx.amount).toLocaleString('hu-HU')} Ft
+                        {Math.abs(tx.amount).toLocaleString('hu-HU', {minimumFractionDigits: 2, maximumFractionDigits: 2})} {getAccountCurrency(tx.account_id)}
                       </div>
                       <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                         <Button 

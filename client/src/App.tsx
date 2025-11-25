@@ -4,7 +4,7 @@ import { TransactionList } from './components/TransactionList'
 import { Analytics } from './components/Analytics'
 import { Wallet, TrendingUp, TrendingDown, Activity, BarChart3, List } from 'lucide-react'
 
-const APP_VERSION = '0.1'
+const APP_VERSION = '0.2'
 
 type Account = {
   id: string
