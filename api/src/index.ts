@@ -222,24 +222,63 @@ app.delete('/transactions/:id', async (c) => {
 
 // --- Transfers ---
 
+// Helper function to fetch exchange rates
+async function getExchangeRates(fromCurrency: string): Promise<Record<string, number>> {
+  try {
+    const response = await fetch(`https://open.er-api.com/v6/latest/${fromCurrency}`)
+    const data = await response.json()
+    if (data.result === 'success') {
+      return data.rates
+    }
+  } catch (error) {
+    console.error('Failed to fetch exchange rates:', error)
+  }
+  return {}
+}
+
+// Get suggested exchange rate for transfer
+app.get('/transfers/exchange-rate', async (c) => {
+  const fromCurrency = c.req.query('from')
+  const toCurrency = c.req.query('to')
+  
+  if (!fromCurrency || !toCurrency) {
+    return c.json({ error: 'Missing from or to currency' }, 400)
+  }
+  
+  if (fromCurrency === toCurrency) {
+    return c.json({ rate: 1, from: fromCurrency, to: toCurrency })
+  }
+  
+  const rates = await getExchangeRates(fromCurrency)
+  const rate = rates[toCurrency] || null
+  
+  if (!rate) {
+    return c.json({ error: 'Exchange rate not available' }, 404)
+  }
+  
+  return c.json({ rate, from: fromCurrency, to: toCurrency })
+})
+
 app.post('/transfers', async (c) => {
   const body = await c.req.json<{
     from_account_id: string
     to_account_id: string
-    amount: number
-    fee: number
+    amount_from: number // Amount deducted from source account (in source currency)
+    amount_to: number // Amount added to destination account (in destination currency)
+    fee: number // Fee in source currency
+    exchange_rate?: number // Optional: user-specified exchange rate
     description?: string
     date: string
   }>()
   
-  const { from_account_id, to_account_id, amount, fee, description, date } = body
+  const { from_account_id, to_account_id, amount_from, amount_to, fee, exchange_rate, description, date } = body
   
   if (from_account_id === to_account_id) {
     return c.json({ error: 'Cannot transfer to same account' }, 400)
   }
   
-  if (amount <= 0) {
-    return c.json({ error: 'Amount must be positive' }, 400)
+  if (amount_from <= 0 || amount_to <= 0) {
+    return c.json({ error: 'Amounts must be positive' }, 400)
   }
   
   if (fee < 0) {
@@ -254,35 +293,56 @@ app.post('/transfers', async (c) => {
     return c.json({ error: 'Account not found' }, 404)
   }
   
-  const totalDeduction = amount + fee
+  const totalDeduction = amount_from + fee
   const now = Date.now()
   const transferId = crypto.randomUUID()
+  
+  // Build description with exchange rate info if currencies differ
+  let outgoingDesc = `Transfer to ${toAccount.name}`
+  let incomingDesc = `Transfer from ${fromAccount.name}`
+  
+  if (fromAccount.currency !== toAccount.currency) {
+    const effectiveRate = amount_to / amount_from
+    outgoingDesc += ` (${amount_to.toFixed(2)} ${toAccount.currency} @ ${effectiveRate.toFixed(4)})`
+    incomingDesc += ` (${amount_from.toFixed(2)} ${fromAccount.currency} @ ${effectiveRate.toFixed(4)})`
+  }
+  
+  if (fee > 0) {
+    outgoingDesc += ` (fee: ${fee} ${fromAccount.currency})`
+  }
+  
+  if (description) {
+    outgoingDesc += ` - ${description}`
+    incomingDesc += ` - ${description}`
+  }
   
   // Create outgoing transaction (negative)
   const outgoingId = crypto.randomUUID()
   await c.env.DB.prepare(
     'INSERT INTO transactions (id, account_id, category_id, amount, description, date, is_recurring) VALUES (?, ?, ?, ?, ?, ?, ?)'
-  ).bind(outgoingId, from_account_id, null, -totalDeduction, `Transfer to ${toAccount.name}${fee > 0 ? ` (fee: ${fee} Ft)` : ''}${description ? ` - ${description}` : ''}`, date, 0).run()
+  ).bind(outgoingId, from_account_id, null, -totalDeduction, outgoingDesc, date, 0).run()
   
   // Create incoming transaction (positive)
   const incomingId = crypto.randomUUID()
   await c.env.DB.prepare(
     'INSERT INTO transactions (id, account_id, category_id, amount, description, date, is_recurring) VALUES (?, ?, ?, ?, ?, ?, ?)'
-  ).bind(incomingId, to_account_id, null, amount, `Transfer from ${fromAccount.name}${description ? ` - ${description}` : ''}`, date, 0).run()
+  ).bind(incomingId, to_account_id, null, amount_to, incomingDesc, date, 0).run()
   
   // Update account balances
   await c.env.DB.prepare('UPDATE accounts SET balance = balance - ?, updated_at = ? WHERE id = ?')
     .bind(totalDeduction, now, from_account_id).run()
   
   await c.env.DB.prepare('UPDATE accounts SET balance = balance + ?, updated_at = ? WHERE id = ?')
-    .bind(amount, now, to_account_id).run()
+    .bind(amount_to, now, to_account_id).run()
   
   return c.json({ 
     id: transferId,
     outgoing_transaction_id: outgoingId,
     incoming_transaction_id: incomingId,
-    amount,
+    amount_from,
+    amount_to,
     fee,
+    exchange_rate: amount_to / amount_from,
     from_account_id,
     to_account_id
   }, 201)
@@ -291,8 +351,49 @@ app.post('/transfers', async (c) => {
 // --- Dashboard ---
 
 app.get('/dashboard/net-worth', async (c) => {
-  const result = await c.env.DB.prepare('SELECT SUM(balance) as net_worth FROM accounts').first<{ net_worth: number }>()
-  return c.json({ net_worth: result?.net_worth || 0 })
+  // Get all accounts
+  const { results: accounts } = await c.env.DB.prepare('SELECT id, balance, currency FROM accounts').all<Account>()
+  
+  if (!accounts || accounts.length === 0) {
+    return c.json({ net_worth: 0, currency: 'HUF', accounts: [] })
+  }
+  
+  // Fetch exchange rates from HUF
+  const rates = await getExchangeRates('HUF')
+  
+  let totalNetWorthHUF = 0
+  const accountDetails = []
+  
+  for (const account of accounts) {
+    let balanceInHUF = account.balance
+    
+    // Convert to HUF if account is in a different currency
+    if (account.currency !== 'HUF') {
+      const rate = rates[account.currency]
+      if (rate) {
+        // Convert: HUF -> account.currency rate, so reverse to get HUF
+        balanceInHUF = account.balance / rate
+      } else {
+        console.warn(`Exchange rate not available for ${account.currency}, using original value`)
+      }
+    }
+    
+    totalNetWorthHUF += balanceInHUF
+    
+    accountDetails.push({
+      id: account.id,
+      balance: account.balance,
+      currency: account.currency,
+      balance_in_huf: balanceInHUF
+    })
+  }
+  
+  return c.json({ 
+    net_worth: totalNetWorthHUF,
+    currency: 'HUF',
+    accounts: accountDetails,
+    rates_fetched: Object.keys(rates).length > 0
+  })
 })
 
 export default {
