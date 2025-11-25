@@ -1,0 +1,10 @@
+name = "finance-api"
+compatibility_date = "2024-02-08"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "finance-db"
+database_id = "replace-with-your-db-id"
+
+[triggers]
+crons = ["0 0 1 * *"] # Run monthly on the 1st
