@@ -24,3 +24,11 @@ CREATE TABLE IF NOT EXISTS transactions (
   is_recurring BOOLEAN DEFAULT 0,
   FOREIGN KEY(account_id) REFERENCES accounts(id)
 );
+
+CREATE TABLE IF NOT EXISTS api_keys (
+  id TEXT PRIMARY KEY,
+  key_hash TEXT NOT NULL UNIQUE,
+  name TEXT,
+  created_at INTEGER NOT NULL,
+  last_used_at INTEGER
+);

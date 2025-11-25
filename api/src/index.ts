@@ -366,6 +366,105 @@ app.post('/transfers', async (c) => {
 
 // --- Dashboard ---
 
+// Helper function to hash API key
+async function hashApiKey(key: string): Promise<string> {
+  const encoder = new TextEncoder()
+  const data = encoder.encode(key)
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data)
+  const hashArray = Array.from(new Uint8Array(hashBuffer))
+  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('')
+}
+
+// Create or update API key
+app.post('/api-keys', async (c) => {
+  const body = await c.req.json<{ key: string; name?: string }>()
+  
+  if (!body.key || body.key.length < 16) {
+    return c.json({ error: 'API key must be at least 16 characters' }, 400)
+  }
+  
+  const keyHash = await hashApiKey(body.key)
+  const id = crypto.randomUUID()
+  const now = Date.now()
+  
+  // Check if a key already exists
+  const existing = await c.env.DB.prepare('SELECT id FROM api_keys LIMIT 1').first()
+  
+  if (existing) {
+    // Update existing key
+    await c.env.DB.prepare(
+      'UPDATE api_keys SET key_hash = ?, name = ?, created_at = ? WHERE id = ?'
+    ).bind(keyHash, body.name || 'API Key', now, existing.id).run()
+    
+    return c.json({ success: true, message: 'API key updated' })
+  } else {
+    // Create new key
+    await c.env.DB.prepare(
+      'INSERT INTO api_keys (id, key_hash, name, created_at, last_used_at) VALUES (?, ?, ?, ?, ?)'
+    ).bind(id, keyHash, body.name || 'API Key', now, null).run()
+    
+    return c.json({ success: true, message: 'API key created' })
+  }
+})
+
+// Get current API key info (without the actual key)
+app.get('/api-keys', async (c) => {
+  const { results } = await c.env.DB.prepare(
+    'SELECT id, name, created_at, last_used_at FROM api_keys'
+  ).all()
+  
+  return c.json(results)
+})
+
+// Delete API key
+app.delete('/api-keys/:id', async (c) => {
+  const id = c.req.param('id')
+  await c.env.DB.prepare('DELETE FROM api_keys WHERE id = ?').bind(id).run()
+  return c.json({ success: true })
+})
+
+// Export data endpoint with API key authentication
+app.get('/export', async (c) => {
+  const apiKey = c.req.header('X-API-Key') || c.req.query('api_key')
+  
+  if (!apiKey) {
+    return c.json({ error: 'API key required' }, 401)
+  }
+  
+  // Verify API key
+  const keyHash = await hashApiKey(apiKey)
+  const validKey = await c.env.DB.prepare(
+    'SELECT id FROM api_keys WHERE key_hash = ?'
+  ).bind(keyHash).first<{ id: string }>()
+  
+  if (!validKey) {
+    return c.json({ error: 'Invalid API key' }, 401)
+  }
+  
+  // Update last used timestamp
+  await c.env.DB.prepare(
+    'UPDATE api_keys SET last_used_at = ? WHERE id = ?'
+  ).bind(Date.now(), validKey.id).run()
+  
+  // Fetch all data
+  const [accountsResult, transactionsResult, categoriesResult] = await Promise.all([
+    c.env.DB.prepare('SELECT * FROM accounts').all<Account>(),
+    c.env.DB.prepare('SELECT * FROM transactions ORDER BY date DESC').all<Transaction>(),
+    c.env.DB.prepare('SELECT * FROM categories').all<Category>()
+  ])
+  
+  // Build export data
+  const exportData = {
+    version: '1.0',
+    exportDate: new Date().toISOString(),
+    accounts: accountsResult.results || [],
+    transactions: transactionsResult.results || [],
+    categories: categoriesResult.results || []
+  }
+  
+  return c.json(exportData)
+})
+
 app.get('/dashboard/net-worth', async (c) => {
   // Get master currency from query param, default to HUF
   const masterCurrency = c.req.query('currency') || 'HUF'
