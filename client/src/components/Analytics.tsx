@@ -53,14 +53,21 @@ type Account = {
 type TimePeriod = 'thisMonth' | 'lastMonth' | 'thisYear' | 'lastYear' | 'allTime'
 
 const COLORS = [
-  'hsl(var(--primary))',
-  'hsl(var(--success))',
-  'hsl(var(--destructive))',
-  '#8b5cf6',
-  '#f59e0b',
-  '#06b6d4',
-  '#ec4899',
-  '#84cc16',
+  '#8b5cf6', // violet
+  '#f59e0b', // amber
+  '#06b6d4', // cyan
+  '#ec4899', // pink
+  '#84cc16', // lime
+  '#ef4444', // red
+  '#3b82f6', // blue
+  '#14b8a6', // teal
+  '#f97316', // orange
+  '#a855f7', // purple
+  '#22c55e', // green
+  '#eab308', // yellow
+  '#0ea5e9', // sky
+  '#d946ef', // fuchsia
+  '#64748b', // slate
 ]
 
 export function Analytics({ 
@@ -511,6 +518,7 @@ export function Analytics({
                           tickFormatter={(value) => `${(value / 1000).toFixed(0)}k`}
                         />
                         <Tooltip 
+                          cursor={{ fill: 'hsl(var(--muted))', opacity: 0.3 }}
                           content={({ active, payload, label }) => {
                             if (active && payload && payload.length) {
                               return (
@@ -566,6 +574,7 @@ export function Analytics({
                           tickFormatter={(value) => `${(value / 1000).toFixed(0)}k`}
                         />
                         <Tooltip 
+                          cursor={{ fill: 'hsl(var(--muted))', opacity: 0.3 }}
                           content={({ active, payload, label }) => {
                             if (active && payload && payload.length) {
                               return (
@@ -699,7 +708,14 @@ export function Analytics({
                             contentStyle={{
                               backgroundColor: 'hsl(var(--card))',
                               border: '1px solid hsl(var(--border))',
-                              borderRadius: '8px'
+                              borderRadius: '8px',
+                              color: 'hsl(var(--foreground))'
+                            }}
+                            itemStyle={{
+                              color: 'hsl(var(--foreground))'
+                            }}
+                            labelStyle={{
+                              color: 'hsl(var(--foreground))'
                             }}
                           />
                         </PieChart>
