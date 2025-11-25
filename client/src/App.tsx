@@ -75,9 +75,42 @@ function App() {
     fetchData()
   }, [])
 
-  // Calculate stats
-  const totalIncome = transactions.filter(t => t.amount > 0).reduce((sum, t) => sum + t.amount, 0)
-  const totalExpenses = transactions.filter(t => t.amount < 0).reduce((sum, t) => sum + Math.abs(t.amount), 0)
+  // Fetch exchange rates for conversion
+  const [exchangeRates, setExchangeRates] = useState<Record<string, number>>({})
+  
+  useEffect(() => {
+    const fetchRates = async () => {
+      try {
+        const response = await fetch(`https://open.er-api.com/v6/latest/${masterCurrency}`)
+        const data = await response.json()
+        if (data.rates) {
+          setExchangeRates(data.rates)
+        }
+      } catch (error) {
+        console.error('Failed to fetch exchange rates:', error)
+      }
+    }
+    fetchRates()
+  }, [masterCurrency])
+
+  // Convert amount to master currency
+  const convertToMasterCurrency = (amount: number, accountId: string): number => {
+    const account = accounts.find(a => a.id === accountId)
+    if (!account || account.currency === masterCurrency) return amount
+    
+    const rate = exchangeRates[account.currency]
+    if (!rate) return amount // Fallback to original if rate unavailable
+    
+    return amount / rate
+  }
+
+  // Calculate stats in master currency
+  const totalIncome = transactions
+    .filter(t => t.amount > 0)
+    .reduce((sum, t) => sum + convertToMasterCurrency(t.amount, t.account_id), 0)
+  const totalExpenses = transactions
+    .filter(t => t.amount < 0)
+    .reduce((sum, t) => sum + Math.abs(convertToMasterCurrency(t.amount, t.account_id)), 0)
 
   return (
     <div className="min-h-screen bg-background">
@@ -180,7 +213,7 @@ function App() {
               </div>
               <div className="text-3xl font-bold tracking-tight text-success">
                 <span className="text-success/70 text-xl">+</span>
-                {totalIncome.toLocaleString('hu-HU')} Ft
+                {totalIncome.toLocaleString('hu-HU', {minimumFractionDigits: 2, maximumFractionDigits: 2})} {masterCurrency}
               </div>
               <p className="text-xs text-muted-foreground mt-2">This period</p>
             </div>
@@ -195,7 +228,7 @@ function App() {
               </div>
               <div className="text-3xl font-bold tracking-tight text-destructive">
                 <span className="text-destructive/70 text-xl">-</span>
-                {totalExpenses.toLocaleString('hu-HU')} Ft
+                {totalExpenses.toLocaleString('hu-HU', {minimumFractionDigits: 2, maximumFractionDigits: 2})} {masterCurrency}
               </div>
               <p className="text-xs text-muted-foreground mt-2">This period</p>
             </div>
@@ -217,7 +250,7 @@ function App() {
             </div>
           ) : view === 'analytics' ? (
             /* Analytics View */
-            <Analytics transactions={transactions} categories={categories} accounts={accounts} />
+            <Analytics transactions={transactions} categories={categories} accounts={accounts} masterCurrency={masterCurrency} />
           ) : (
             /* Settings View */
             <Settings />

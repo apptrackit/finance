@@ -143,15 +143,45 @@ const COLORS = [
 export function Analytics({ 
   transactions,
   categories,
-  accounts
+  accounts,
+  masterCurrency = 'HUF'
 }: { 
   transactions: Transaction[]
   categories: Category[]
   accounts: Account[]
+  masterCurrency?: string
 }) {
   const [period, setPeriod] = useState<TimePeriod>('thisMonth')
   const [selectedExpenseCategory, setSelectedExpenseCategory] = useState<string>('all')
   const [selectedIncomeCategory, setSelectedIncomeCategory] = useState<string>('all')
+  const [exchangeRates, setExchangeRates] = useState<Record<string, number>>({})
+
+  // Fetch exchange rates
+  useEffect(() => {
+    const fetchRates = async () => {
+      try {
+        const response = await fetch(`https://open.er-api.com/v6/latest/${masterCurrency}`)
+        const data = await response.json()
+        if (data.rates) {
+          setExchangeRates(data.rates)
+        }
+      } catch (error) {
+        console.error('Failed to fetch exchange rates:', error)
+      }
+    }
+    fetchRates()
+  }, [masterCurrency])
+
+  // Convert amount to master currency
+  const convertToMasterCurrency = (amount: number, accountId: string): number => {
+    const account = accounts.find(a => a.id === accountId)
+    if (!account || account.currency === masterCurrency) return amount
+    
+    const rate = exchangeRates[account.currency]
+    if (!rate) return amount // Fallback to original if rate unavailable
+    
+    return amount / rate
+  }
 
   // Filter transactions by period
   const filteredTransactions = useMemo(() => {
@@ -190,22 +220,22 @@ export function Analytics({
     })
   }, [transactions, period])
 
-  // Calculate totals
+  // Calculate totals in master currency
   const { totalIncome, totalExpenses, netFlow } = useMemo(() => {
     const income = filteredTransactions
       .filter(t => t.amount > 0)
-      .reduce((sum, t) => sum + t.amount, 0)
+      .reduce((sum, t) => sum + convertToMasterCurrency(t.amount, t.account_id), 0)
     const expenses = filteredTransactions
       .filter(t => t.amount < 0)
-      .reduce((sum, t) => sum + Math.abs(t.amount), 0)
+      .reduce((sum, t) => sum + Math.abs(convertToMasterCurrency(t.amount, t.account_id)), 0)
     return {
       totalIncome: income,
       totalExpenses: expenses,
       netFlow: income - expenses
     }
-  }, [filteredTransactions])
+  }, [filteredTransactions, exchangeRates, accounts, masterCurrency])
 
-  // Spending by category data
+  // Spending by category data in master currency
   const categoryData = useMemo(() => {
     const expensesByCategory: Record<string, number> = {}
     
@@ -213,7 +243,8 @@ export function Analytics({
       .filter(t => t.amount < 0)
       .forEach(t => {
         const categoryId = t.category_id || 'uncategorized'
-        expensesByCategory[categoryId] = (expensesByCategory[categoryId] || 0) + Math.abs(t.amount)
+        const convertedAmount = Math.abs(convertToMasterCurrency(t.amount, t.account_id))
+        expensesByCategory[categoryId] = (expensesByCategory[categoryId] || 0) + convertedAmount
       })
 
     return Object.entries(expensesByCategory)
@@ -227,22 +258,26 @@ export function Analytics({
         }
       })
       .sort((a, b) => b.value - a.value)
-  }, [filteredTransactions, categories, totalExpenses])
+  }, [filteredTransactions, categories, totalExpenses, exchangeRates, accounts, masterCurrency])
 
-  // Net Worth Trend data - shows total balance over time
+  // Net Worth Trend data - shows total balance over time in master currency
   const netWorthTrendData = useMemo(() => {
-    // Get current total balance
-    const currentTotalBalance = accounts.reduce((sum, acc) => sum + acc.balance, 0)
+    // Get current total balance in master currency
+    const currentTotalBalance = accounts.reduce((sum, acc) => {
+      const convertedBalance = convertToMasterCurrency(acc.balance, acc.id)
+      return sum + convertedBalance
+    }, 0)
     
     // Get all dates with transactions, sorted newest first
     const sortedTransactions = [...transactions].sort(
       (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
     )
     
-    // Group transactions by date and sum them
+    // Group transactions by date and sum them (converted)
     const transactionsByDate: Record<string, number> = {}
     sortedTransactions.forEach(tx => {
-      transactionsByDate[tx.date] = (transactionsByDate[tx.date] || 0) + tx.amount
+      const convertedAmount = convertToMasterCurrency(tx.amount, tx.account_id)
+      transactionsByDate[tx.date] = (transactionsByDate[tx.date] || 0) + convertedAmount
     })
     
     // Calculate balance at end of each date by working backwards
@@ -290,9 +325,9 @@ export function Analytics({
         }
       })
       .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
-  }, [transactions, accounts, period])
+  }, [transactions, accounts, period, exchangeRates, masterCurrency])
 
-  // Per-account Net Worth Trend data
+  // Per-account Net Worth Trend data in master currency
   const perAccountTrendData = useMemo(() => {
     return accounts.map(account => {
       const accountTransactions = transactions.filter(t => t.account_id === account.id)
@@ -303,7 +338,7 @@ export function Analytics({
         transactionsByDate[tx.date] = (transactionsByDate[tx.date] || 0) + tx.amount
       })
       
-      // Calculate balance at end of each date
+      // Calculate balance at end of each date (in account's currency, will convert later)
       const dateBalances: Record<string, number> = {}
       let runningBalance = account.balance
       
@@ -325,7 +360,7 @@ export function Analytics({
         .map(([date, balance]) => ({
           date,
           formattedDate: format(new Date(date), 'MMM d'),
-          balance
+          balance: convertToMasterCurrency(balance, account.id)
         }))
         .filter(d => {
           const txDate = new Date(d.date)
@@ -350,7 +385,7 @@ export function Analytics({
         data
       }
     })
-  }, [accounts, transactions, period])
+  }, [accounts, transactions, period, exchangeRates, masterCurrency])
 
   // Get expense categories for filter
   const expenseCategories = useMemo(() => {
@@ -392,7 +427,7 @@ export function Analytics({
             if (selectedIncomeCategory === 'all') return true
             return tx.category_id === selectedIncomeCategory
           })
-          .reduce((sum, tx) => sum + tx.amount, 0)
+          .reduce((sum, tx) => sum + convertToMasterCurrency(tx.amount, tx.account_id), 0)
         
         data.push({
           key: weekKey,
@@ -444,7 +479,7 @@ export function Analytics({
             if (selectedIncomeCategory === 'all') return true
             return tx.category_id === selectedIncomeCategory
           })
-          .reduce((sum, tx) => sum + tx.amount, 0)
+          .reduce((sum, tx) => sum + convertToMasterCurrency(tx.amount, tx.account_id), 0)
         
         data.push({
           key: monthKey,
@@ -487,7 +522,7 @@ export function Analytics({
             if (selectedExpenseCategory === 'all') return true
             return tx.category_id === selectedExpenseCategory
           })
-          .reduce((sum, tx) => sum + Math.abs(tx.amount), 0)
+          .reduce((sum, tx) => sum + Math.abs(convertToMasterCurrency(tx.amount, tx.account_id)), 0)
         
         data.push({
           key: weekKey,
@@ -539,7 +574,7 @@ export function Analytics({
             if (selectedExpenseCategory === 'all') return true
             return tx.category_id === selectedExpenseCategory
           })
-          .reduce((sum, tx) => sum + Math.abs(tx.amount), 0)
+          .reduce((sum, tx) => sum + Math.abs(convertToMasterCurrency(tx.amount, tx.account_id)), 0)
         
         data.push({
           key: monthKey,
@@ -610,7 +645,7 @@ export function Analytics({
                   <div>
                     <p className="text-sm text-muted-foreground">Income</p>
                     <p className="text-2xl font-bold text-success">
-                      +{totalIncome.toLocaleString('hu-HU')} Ft
+                      +{totalIncome.toLocaleString('hu-HU', {minimumFractionDigits: 2, maximumFractionDigits: 2})} {masterCurrency}
                     </p>
                   </div>
                   <div className="h-10 w-10 rounded-xl bg-success/10 flex items-center justify-center">
@@ -626,7 +661,7 @@ export function Analytics({
                   <div>
                     <p className="text-sm text-muted-foreground">Expenses</p>
                     <p className="text-2xl font-bold text-destructive">
-                      -{totalExpenses.toLocaleString('hu-HU')} Ft
+                      -{totalExpenses.toLocaleString('hu-HU', {minimumFractionDigits: 2, maximumFractionDigits: 2})} {masterCurrency}
                     </p>
                   </div>
                   <div className="h-10 w-10 rounded-xl bg-destructive/10 flex items-center justify-center">
@@ -642,7 +677,7 @@ export function Analytics({
                   <div>
                     <p className="text-sm text-muted-foreground">Net Flow</p>
                     <p className={`text-2xl font-bold ${netFlow >= 0 ? 'text-primary' : 'text-destructive'}`}>
-                      {netFlow >= 0 ? '+' : ''}{netFlow.toLocaleString('hu-HU')} Ft
+                      {netFlow >= 0 ? '+' : ''}{netFlow.toLocaleString('hu-HU', {minimumFractionDigits: 2, maximumFractionDigits: 2})} {masterCurrency}
                     </p>
                   </div>
                   <div className={`h-10 w-10 rounded-xl ${netFlow >= 0 ? 'bg-primary/10' : 'bg-destructive/10'} flex items-center justify-center`}>
@@ -700,7 +735,7 @@ export function Analytics({
                                 <div className="bg-card border border-border rounded-lg p-3 shadow-xl">
                                   <p className="text-xs text-muted-foreground mb-2">{label}</p>
                                   <p className="text-sm font-medium text-primary">
-                                    Balance: {(payload[0].value as number).toLocaleString('hu-HU')} Ft
+                                    Balance: {(payload[0].value as number).toLocaleString('hu-HU', {minimumFractionDigits: 2, maximumFractionDigits: 2})} {masterCurrency}
                                   </p>
                                 </div>
                               )
@@ -787,11 +822,11 @@ export function Analytics({
                                 <div className="bg-card border border-border rounded-lg p-3 shadow-xl">
                                   <p className="text-xs text-muted-foreground mb-2">{label}</p>
                                   <p className="text-sm font-medium text-success">
-                                    +{currentAmount.toLocaleString('hu-HU')} Ft
+                                    +{currentAmount.toLocaleString('hu-HU', {minimumFractionDigits: 2, maximumFractionDigits: 2})} {masterCurrency}
                                   </p>
                                   {prevPeriod && (
                                     <p className={`text-xs mt-1 ${diff >= 0 ? 'text-success' : 'text-destructive'}`}>
-                                      {diff >= 0 ? '↑' : '↓'} {Math.abs(diff).toLocaleString('hu-HU')} Ft
+                                      {diff >= 0 ? '↑' : '↓'} {Math.abs(diff).toLocaleString('hu-HU', {minimumFractionDigits: 2, maximumFractionDigits: 2})} {masterCurrency}
                                       {diffPercent && ` (${diff >= 0 ? '+' : ''}${diffPercent}%)`}
                                     </p>
                                   )}
@@ -872,11 +907,11 @@ export function Analytics({
                                 <div className="bg-card border border-border rounded-lg p-3 shadow-xl">
                                   <p className="text-xs text-muted-foreground mb-2">{label}</p>
                                   <p className="text-sm font-medium text-destructive">
-                                    -{currentAmount.toLocaleString('hu-HU')} Ft
+                                    -{currentAmount.toLocaleString('hu-HU', {minimumFractionDigits: 2, maximumFractionDigits: 2})} {masterCurrency}
                                   </p>
                                   {prevPeriod && (
                                     <p className={`text-xs mt-1 ${diff <= 0 ? 'text-success' : 'text-destructive'}`}>
-                                      {diff > 0 ? '↑' : '↓'} {Math.abs(diff).toLocaleString('hu-HU')} Ft
+                                      {diff > 0 ? '↑' : '↓'} {Math.abs(diff).toLocaleString('hu-HU', {minimumFractionDigits: 2, maximumFractionDigits: 2})} {masterCurrency}
                                       {diffPercent && ` (${diff > 0 ? '+' : ''}${diffPercent}%)`}
                                       <span className="text-muted-foreground ml-1">
                                         {diff <= 0 ? '(spending less)' : '(spending more)'}
@@ -909,7 +944,7 @@ export function Analytics({
                     <span className="text-lg">{account.icon || '💳'}</span>
                     <CardTitle className="text-base">{account.name}</CardTitle>
                     <span className="text-xs text-muted-foreground ml-auto">
-                      {account.balance.toLocaleString('hu-HU')} Ft
+                      {convertToMasterCurrency(account.balance, account.id).toLocaleString('hu-HU', {minimumFractionDigits: 2, maximumFractionDigits: 2})} {masterCurrency}
                     </span>
                   </div>
                 </CardHeader>
@@ -946,7 +981,7 @@ export function Analytics({
                                   <div className="bg-card border border-border rounded-lg p-3 shadow-xl">
                                     <p className="text-xs text-muted-foreground mb-2">{label}</p>
                                     <p className="text-sm font-medium" style={{ color: COLORS[index % COLORS.length] }}>
-                                      Balance: {(payload[0].value as number).toLocaleString('hu-HU')} Ft
+                                      Balance: {(payload[0].value as number).toLocaleString('hu-HU', {minimumFractionDigits: 2, maximumFractionDigits: 2})} {masterCurrency}
                                     </p>
                                   </div>
                                 )
@@ -1004,7 +1039,7 @@ export function Analytics({
                             ))}
                           </Pie>
                           <Tooltip 
-                            formatter={(value: number) => `${value.toLocaleString('hu-HU')} Ft`}
+                            formatter={(value: number) => `${value.toLocaleString('hu-HU', {minimumFractionDigits: 2, maximumFractionDigits: 2})} ${masterCurrency}`}
                             contentStyle={{
                               backgroundColor: 'hsl(var(--card))',
                               border: '1px solid hsl(var(--border))',
@@ -1033,7 +1068,7 @@ export function Analytics({
                             <div className="flex items-center justify-between">
                               <span className="text-sm font-medium">{cat.name}</span>
                               <span className="text-sm text-muted-foreground">
-                                {cat.value.toLocaleString('hu-HU')} Ft
+                                {cat.value.toLocaleString('hu-HU', {minimumFractionDigits: 2, maximumFractionDigits: 2})} {masterCurrency}
                               </span>
                             </div>
                             <div className="mt-1 h-1.5 rounded-full bg-secondary overflow-hidden">
@@ -1071,10 +1106,15 @@ export function Analytics({
               <div className="space-y-3">
                 {filteredTransactions
                   .filter(t => t.amount < 0)
-                  .sort((a, b) => a.amount - b.amount)
+                  .sort((a, b) => {
+                    const aConverted = Math.abs(convertToMasterCurrency(a.amount, a.account_id))
+                    const bConverted = Math.abs(convertToMasterCurrency(b.amount, b.account_id))
+                    return bConverted - aConverted
+                  })
                   .slice(0, 5)
                   .map((tx) => {
                     const category = categories.find(c => c.id === tx.category_id)
+                    const convertedAmount = Math.abs(convertToMasterCurrency(tx.amount, tx.account_id))
                     return (
                       <div 
                         key={tx.id} 
@@ -1092,7 +1132,7 @@ export function Analytics({
                           </p>
                         </div>
                         <div className="text-sm font-bold text-destructive">
-                          -{Math.abs(tx.amount).toLocaleString('hu-HU')} Ft
+                          -{convertedAmount.toLocaleString('hu-HU', {minimumFractionDigits: 2, maximumFractionDigits: 2})} {masterCurrency}
                         </div>
                       </div>
                     )
