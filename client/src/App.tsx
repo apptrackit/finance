@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react'
 import { AccountList } from './components/AccountList'
 import { TransactionList } from './components/TransactionList'
 import { Analytics } from './components/Analytics'
-import { Wallet, TrendingUp, TrendingDown, Activity, BarChart3, List } from 'lucide-react'
+import Settings, { getMasterCurrency } from './components/Settings'
+import { Wallet, TrendingUp, TrendingDown, Activity, BarChart3, List, Settings as SettingsIcon } from 'lucide-react'
 
 const APP_VERSION = '0.1'
 
@@ -32,7 +33,7 @@ type Category = {
   type: 'income' | 'expense'
 }
 
-type View = 'dashboard' | 'analytics'
+type View = 'dashboard' | 'analytics' | 'settings'
 
 function App() {
   const [netWorth, setNetWorth] = useState<number | null>(null)
@@ -40,9 +41,16 @@ function App() {
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [categories, setCategories] = useState<Category[]>([])
   const [view, setView] = useState<View>('dashboard')
+  const [masterCurrency, setMasterCurrency] = useState('HUF')
+
+  useEffect(() => {
+    setMasterCurrency(getMasterCurrency())
+  }, [])
 
   const fetchData = () => {
-    fetch('/api/dashboard/net-worth')
+    const currency = getMasterCurrency()
+    
+    fetch(`/api/dashboard/net-worth?currency=${currency}`)
       .then(res => res.json())
       .then(data => setNetWorth(data.net_worth))
       .catch(err => console.error(err))
@@ -114,6 +122,17 @@ function App() {
                     <BarChart3 className="h-3.5 w-3.5" />
                     Analytics
                   </button>
+                  <button
+                    onClick={() => setView('settings')}
+                    className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all flex items-center gap-1.5 ${
+                      view === 'settings'
+                        ? 'bg-primary text-primary-foreground shadow-sm'
+                        : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
+                    }`}
+                  >
+                    <SettingsIcon className="h-3.5 w-3.5" />
+                    Settings
+                  </button>
                 </div>
                 <div className="h-2 w-2 rounded-full bg-primary animate-pulse" />
                 <span className="text-xs text-muted-foreground">Synced</span>
@@ -138,8 +157,8 @@ function App() {
                 <div className="text-4xl font-bold tracking-tight text-foreground">
                   {netWorth !== null ? (
                     <>
-                      {netWorth.toLocaleString('hu-HU')}
-                      <span className="text-muted-foreground text-2xl ml-1">Ft</span>
+                      {netWorth.toLocaleString('hu-HU', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                      <span className="text-muted-foreground text-2xl ml-1">{masterCurrency}</span>
                     </>
                   ) : (
                     <div className="h-10 w-32 bg-muted animate-pulse rounded" />
@@ -196,9 +215,12 @@ function App() {
                 />
               </div>
             </div>
-          ) : (
+          ) : view === 'analytics' ? (
             /* Analytics View */
             <Analytics transactions={transactions} categories={categories} accounts={accounts} />
+          ) : (
+            /* Settings View */
+            <Settings />
           )}
         </main>
 
