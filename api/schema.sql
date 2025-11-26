@@ -9,7 +9,7 @@ CREATE TABLE IF NOT EXISTS accounts (
 
 CREATE TABLE IF NOT EXISTS categories (
   id TEXT PRIMARY KEY,
-  name TEXT NOT NULL,
+  name TEXT NOT NULL UNIQUE, -- Each category name must be unique
   icon TEXT, -- emoji or icon name
   type TEXT NOT NULL -- 'income', 'expense'
 );

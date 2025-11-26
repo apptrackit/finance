@@ -118,20 +118,36 @@ app.post('/categories', async (c) => {
     return c.json({ error: 'Type must be either "income" or "expense"' }, 400)
   }
   
-  const id = crypto.randomUUID()
+  // Check if category name already exists
+  const { results: existing } = await c.env.DB.prepare(
+    'SELECT * FROM categories WHERE name = ?'
+  ).bind(body.name).all<Category>()
   
-  await c.env.DB.prepare(
-    'INSERT INTO categories (id, name, type, icon) VALUES (?, ?, ?, ?)'
-  ).bind(id, body.name, body.type, body.icon || '📌').run()
-  
-  const newCategory: Category = {
-    id,
-    name: body.name,
-    type: body.type,
-    icon: body.icon || '📌'
+  if (existing.length > 0) {
+    return c.json({ error: 'A category with this name already exists' }, 409)
   }
   
-  return c.json(newCategory, 201)
+  const id = crypto.randomUUID()
+  
+  try {
+    await c.env.DB.prepare(
+      'INSERT INTO categories (id, name, type, icon) VALUES (?, ?, ?, ?)'
+    ).bind(id, body.name, body.type, body.icon || '📌').run()
+    
+    const newCategory: Category = {
+      id,
+      name: body.name,
+      type: body.type,
+      icon: body.icon || '📌'
+    }
+    
+    return c.json(newCategory, 201)
+  } catch (error: any) {
+    if (error.message?.includes('UNIQUE constraint failed')) {
+      return c.json({ error: 'A category with this name already exists' }, 409)
+    }
+    throw error
+  }
 })
 
 // Update a category
@@ -158,6 +174,17 @@ app.put('/categories/:id', async (c) => {
     return c.json({ error: 'Category not found' }, 404)
   }
   
+  // If updating name, check if new name already exists (excluding current category)
+  if (body.name) {
+    const { results: duplicate } = await c.env.DB.prepare(
+      'SELECT * FROM categories WHERE name = ? AND id != ?'
+    ).bind(body.name, id).all<Category>()
+    
+    if (duplicate.length > 0) {
+      return c.json({ error: 'A category with this name already exists' }, 409)
+    }
+  }
+  
   // Build update query dynamically
   const updates: string[] = []
   const values: any[] = []
@@ -177,16 +204,23 @@ app.put('/categories/:id', async (c) => {
   
   values.push(id)
   
-  await c.env.DB.prepare(
-    `UPDATE categories SET ${updates.join(', ')} WHERE id = ?`
-  ).bind(...values).run()
-  
-  // Fetch and return updated category
-  const { results: updated } = await c.env.DB.prepare(
-    'SELECT * FROM categories WHERE id = ?'
-  ).bind(id).all<Category>()
-  
-  return c.json(updated[0])
+  try {
+    await c.env.DB.prepare(
+      `UPDATE categories SET ${updates.join(', ')} WHERE id = ?`
+    ).bind(...values).run()
+    
+    // Fetch and return updated category
+    const { results: updated } = await c.env.DB.prepare(
+      'SELECT * FROM categories WHERE id = ?'
+    ).bind(id).all<Category>()
+    
+    return c.json(updated[0])
+  } catch (error: any) {
+    if (error.message?.includes('UNIQUE constraint failed')) {
+      return c.json({ error: 'A category with this name already exists' }, 409)
+    }
+    throw error
+  }
 })
 
 // Delete a category
