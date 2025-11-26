@@ -117,6 +117,7 @@ type Account = {
   name: string
   type: string
   balance: number
+  currency: string
   icon?: string
 }
 
