@@ -40,23 +40,44 @@ A secure, self-hosted personal finance app built with React and Cloudflare Worke
 git clone <your-repo-url>
 cd finance
 
-# Install all dependencies
-npm install
+# Run the setup script (recommended)
+./setup.sh
 ```
 
-### 2. Set Up Local Environment
+The setup script will:
+- Create all necessary config files from templates
+- Generate a secure API key
+- Install dependencies
+
+**Or manually set up:**
+
+### 2. Manual Configuration Setup
 
 ```bash
-# Copy the example config
+# Copy example configuration files
+cp api/wrangler.toml.example api/wrangler.toml
+cp api/.dev.vars.example api/.dev.vars
 cp .env.example client/.env.local
-
-# Edit with your values (for local dev, defaults work fine)
-nano client/.env.local
 ```
 
-For local development, set:
+**Important:** Each developer needs their own `wrangler.toml` with their unique database ID and domain. This file is gitignored to prevent conflicts.
+
+Edit `api/wrangler.toml`:
+```toml
+database_id = "your-d1-database-id-here"
+# Uncomment and set your custom domain if using one
+# routes = [{ pattern = "api.yourname.com", custom_domain = true }]
+```
+
+Edit `api/.dev.vars`:
 ```env
-VITE_API_KEY=your-secret-key-here
+API_SECRET=your-secret-api-key
+ALLOWED_ORIGINS=http://localhost:5173,http://localhost:3000
+```
+
+Edit `client/.env.local`:
+```env
+VITE_API_KEY=your-secret-api-key  # Same as API_SECRET above
 VITE_API_DOMAIN=localhost:8787
 ```
 
@@ -147,25 +168,34 @@ database_id = "YOUR-DATABASE-ID-HERE"  # <-- Replace this!
 # custom_domain = true
 ```
 
-#### `api/src/index.ts` - Update CORS origins
-Find the cors configuration and update:
-```typescript
-const corsOrigins = [
-  'http://localhost:5173',
-  'https://finance.yourdomain.com',  // <-- Your frontend domain
-  'https://your-project.pages.dev',  // <-- Your Cloudflare Pages URL
-];
+#### Configure Environment Variables
+
+**For local development**, edit `api/.dev.vars`:
+```env
+API_SECRET=your-secret-api-key
+ALLOWED_ORIGINS=http://localhost:5173,http://localhost:3000
+```
+
+**For production**, set secrets via Wrangler:
+```bash
+cd api
+
+# Set your API key
+echo "your-secret-api-key" | npx wrangler secret put API_SECRET
+
+# Set allowed CORS origins (comma-separated, supports wildcards like *.pages.dev)
+echo "https://finance.yourdomain.com,https://*.pages.dev" | npx wrangler secret put ALLOWED_ORIGINS
 ```
 
 #### `client/.env.local` (create this file)
 ```env
-VITE_API_KEY=generate-a-random-secret-key
+VITE_API_KEY=your-secret-api-key
 VITE_API_DOMAIN=your-api-name.your-subdomain.workers.dev
 ```
 
-**Generate a secure API key:**
+**💡 Tip:** Generate a secure API key with:
 ```bash
-openssl rand -base64 32
+openssl rand -base64 16
 ```
 
 ### Step 5: Apply Database Schema
@@ -175,26 +205,16 @@ cd api
 npx wrangler d1 execute finance-db --remote --file=schema.sql
 ```
 
-### Step 6: Set API Secret
-
-```bash
-cd api
-
-# Set the API key as a secret (same value as VITE_API_KEY)
-npx wrangler secret put API_SECRET
-# Paste your API key when prompted
-```
-
-### Step 7: Deploy API
+### Step 6: Deploy API
 
 ```bash
 cd api
 npm run deploy
 ```
 
-Note the URL (e.g., `finance-api.youraccount.workers.dev`)
+✅ Note the URL (e.g., `finance-api.youraccount.workers.dev`)
 
-### Step 8: Deploy Frontend
+### Step 7: Deploy Frontend
 
 ```bash
 cd client

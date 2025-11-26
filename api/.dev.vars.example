@@ -1,0 +1,13 @@
+# Development Environment Variables
+# Copy this file to .dev.vars and fill in your values
+
+# API Secret Key - Must match VITE_API_KEY in client/.env.local
+# Generate with: openssl rand -base64 32
+API_SECRET=your-secret-key-here
+
+# Allowed Origins for CORS (comma-separated)
+# For development: include localhost
+# For production: only include your domain
+# Examples:
+#   Development: http://localhost:5173,http://localhost:3000
+ALLOWED_ORIGINS=http://localhost:5173

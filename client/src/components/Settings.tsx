@@ -5,7 +5,7 @@ import { Select } from './ui/select'
 import { Input } from './ui/input'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card'
 import { Settings as SettingsIcon, Save, Download, Plus, Trash2, Tag, Pencil, Check, X } from 'lucide-react'
-import { apiFetch } from '../config'
+import { API_BASE_URL, apiFetch } from '../config'
 
 const CURRENCIES = [
   { code: 'HUF', name: 'Hungarian Forint', symbol: 'Ft' },
@@ -80,7 +80,7 @@ export default function Settings() {
   const loadCategories = async () => {
     try {
       setIsLoadingCategories(true)
-      const res = await apiFetch('/api/categories')
+      const res = await apiFetch(`${API_BASE_URL}/categories`)
       const data = await res.json()
       setCategories(data)
     } catch (error) {
@@ -124,7 +124,7 @@ export default function Settings() {
     
     setIsAddingCategory(true)
     try {
-      const res = await apiFetch('/api/categories', {
+      const res = await apiFetch(`${API_BASE_URL}/categories`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -160,7 +160,7 @@ export default function Settings() {
     }
     
     try {
-      const res = await apiFetch(`/api/categories/${id}`, {
+      const res = await apiFetch(`${API_BASE_URL}/categories/${id}`, {
         method: 'DELETE'
       })
       
@@ -198,7 +198,7 @@ export default function Settings() {
     
     setIsUpdatingCategory(true)
     try {
-      const res = await apiFetch(`/api/categories/${id}`, {
+      const res = await apiFetch(`${API_BASE_URL}/categories/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -243,9 +243,9 @@ export default function Settings() {
     try {
       // Fetch all data
       const [accountsRes, transactionsRes, categoriesRes] = await Promise.all([
-        fetch('/api/accounts'),
-        fetch('/api/transactions'),
-        fetch('/api/categories')
+        apiFetch(`${API_BASE_URL}/accounts`),
+        apiFetch(`${API_BASE_URL}/transactions`),
+        apiFetch(`${API_BASE_URL}/categories`)
       ])
 
       const accounts: Account[] = await accountsRes.json()
@@ -313,9 +313,9 @@ export default function Settings() {
     try {
       // Fetch all data
       const [accountsRes, transactionsRes, categoriesRes] = await Promise.all([
-        fetch('/api/accounts'),
-        fetch('/api/transactions'),
-        fetch('/api/categories')
+        apiFetch(`${API_BASE_URL}/accounts`),
+        apiFetch(`${API_BASE_URL}/transactions`),
+        apiFetch(`${API_BASE_URL}/categories`)
       ])
 
       const accounts: Account[] = await accountsRes.json()

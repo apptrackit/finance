@@ -22,7 +22,7 @@ const API_KEY = import.meta.env.VITE_API_KEY || ''
 export const apiFetch = (url: string, options: RequestInit = {}) => {
   return fetch(url, {
     ...options,
-    credentials: isDev ? 'same-origin' : 'include',
+    // No credentials needed since we use API key authentication
     headers: {
       'X-API-Key': API_KEY,
       ...options.headers,
