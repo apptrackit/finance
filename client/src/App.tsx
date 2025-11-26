@@ -5,7 +5,7 @@ import { Analytics } from './components/Analytics'
 import { Wallet, TrendingUp, TrendingDown, Activity, BarChart3, List } from 'lucide-react'
 import { API_BASE_URL, apiFetch } from './config'
 
-const APP_VERSION = '0.2'
+const APP_VERSION = '0.3'
 
 type Account = {
   id: string
