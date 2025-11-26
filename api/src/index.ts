@@ -89,6 +89,111 @@ app.get('/categories', async (c) => {
   return c.json(results)
 })
 
+// Create a new category
+app.post('/categories', async (c) => {
+  const body = await c.req.json<Omit<Category, 'id'>>()
+  
+  // Validate required fields
+  if (!body.name || !body.type) {
+    return c.json({ error: 'Name and type are required' }, 400)
+  }
+  
+  if (body.type !== 'income' && body.type !== 'expense') {
+    return c.json({ error: 'Type must be either "income" or "expense"' }, 400)
+  }
+  
+  const id = crypto.randomUUID()
+  
+  await c.env.DB.prepare(
+    'INSERT INTO categories (id, name, type, icon) VALUES (?, ?, ?, ?)'
+  ).bind(id, body.name, body.type, body.icon || '📌').run()
+  
+  const newCategory: Category = {
+    id,
+    name: body.name,
+    type: body.type,
+    icon: body.icon || '📌'
+  }
+  
+  return c.json(newCategory, 201)
+})
+
+// Update a category
+app.put('/categories/:id', async (c) => {
+  const id = c.req.param('id')
+  const body = await c.req.json<Partial<Omit<Category, 'id'>>>()
+  
+  // Validate at least one field is provided
+  if (!body.name && !body.type && !body.icon) {
+    return c.json({ error: 'At least one field (name, type, or icon) must be provided' }, 400)
+  }
+  
+  // Validate type if provided
+  if (body.type && body.type !== 'income' && body.type !== 'expense') {
+    return c.json({ error: 'Type must be either "income" or "expense"' }, 400)
+  }
+  
+  // Check if category exists
+  const { results: existing } = await c.env.DB.prepare(
+    'SELECT * FROM categories WHERE id = ?'
+  ).bind(id).all<Category>()
+  
+  if (existing.length === 0) {
+    return c.json({ error: 'Category not found' }, 404)
+  }
+  
+  // Build update query dynamically
+  const updates: string[] = []
+  const values: any[] = []
+  
+  if (body.name !== undefined) {
+    updates.push('name = ?')
+    values.push(body.name)
+  }
+  if (body.type !== undefined) {
+    updates.push('type = ?')
+    values.push(body.type)
+  }
+  if (body.icon !== undefined) {
+    updates.push('icon = ?')
+    values.push(body.icon)
+  }
+  
+  values.push(id)
+  
+  await c.env.DB.prepare(
+    `UPDATE categories SET ${updates.join(', ')} WHERE id = ?`
+  ).bind(...values).run()
+  
+  // Fetch and return updated category
+  const { results: updated } = await c.env.DB.prepare(
+    'SELECT * FROM categories WHERE id = ?'
+  ).bind(id).all<Category>()
+  
+  return c.json(updated[0])
+})
+
+// Delete a category
+app.delete('/categories/:id', async (c) => {
+  const id = c.req.param('id')
+  
+  // Check if category is being used by any transactions
+  const { results } = await c.env.DB.prepare(
+    'SELECT COUNT(*) as count FROM transactions WHERE category_id = ?'
+  ).bind(id).all<{ count: number }>()
+  
+  if (results[0]?.count > 0) {
+    return c.json({ 
+      error: 'Cannot delete category that is being used by transactions',
+      transactionCount: results[0].count 
+    }, 400)
+  }
+  
+  await c.env.DB.prepare('DELETE FROM categories WHERE id = ?').bind(id).run()
+  
+  return c.json({ message: 'Category deleted successfully' })
+})
+
 // Reset categories to defaults
 app.post('/categories/reset', async (c) => {
   // Delete all existing categories

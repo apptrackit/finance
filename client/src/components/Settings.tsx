@@ -2,8 +2,10 @@ import { useState, useEffect } from 'react'
 import { Button } from './ui/button'
 import { Label } from './ui/label'
 import { Select } from './ui/select'
+import { Input } from './ui/input'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card'
-import { Settings as SettingsIcon, Save, Download } from 'lucide-react'
+import { Settings as SettingsIcon, Save, Download, Plus, Trash2, Tag, Pencil, Check, X } from 'lucide-react'
+import { apiFetch } from '../config'
 
 const CURRENCIES = [
   { code: 'HUF', name: 'Hungarian Forint', symbol: 'Ft' },
@@ -48,6 +50,21 @@ export default function Settings() {
   const [masterCurrency, setMasterCurrency] = useState('HUF')
   const [isSaving, setIsSaving] = useState(false)
   const [isExporting, setIsExporting] = useState(false)
+  
+  // Category management state
+  const [categories, setCategories] = useState<Category[]>([])
+  const [isLoadingCategories, setIsLoadingCategories] = useState(true)
+  const [newCategoryName, setNewCategoryName] = useState('')
+  const [newCategoryType, setNewCategoryType] = useState<'income' | 'expense'>('expense')
+  const [newCategoryIcon, setNewCategoryIcon] = useState('📌')
+  const [isAddingCategory, setIsAddingCategory] = useState(false)
+  
+  // Edit category state
+  const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null)
+  const [editCategoryName, setEditCategoryName] = useState('')
+  const [editCategoryType, setEditCategoryType] = useState<'income' | 'expense'>('expense')
+  const [editCategoryIcon, setEditCategoryIcon] = useState('📌')
+  const [isUpdatingCategory, setIsUpdatingCategory] = useState(false)
 
   useEffect(() => {
     // Load saved currency from localStorage
@@ -55,7 +72,159 @@ export default function Settings() {
     if (saved) {
       setMasterCurrency(saved)
     }
+    
+    // Load categories
+    loadCategories()
   }, [])
+  
+  const loadCategories = async () => {
+    try {
+      setIsLoadingCategories(true)
+      const res = await apiFetch('/api/categories')
+      const data = await res.json()
+      setCategories(data)
+    } catch (error) {
+      console.error('Failed to load categories:', error)
+    } finally {
+      setIsLoadingCategories(false)
+    }
+  }
+  
+  // Helper function to extract only the first emoji from a string
+  const extractSingleEmoji = (str: string): string => {
+    // Match emoji unicode characters
+    const emojiRegex = /\p{Emoji_Presentation}|\p{Emoji}\uFE0F/gu
+    const matches = str.match(emojiRegex)
+    return matches ? matches[0] : '📌'
+  }
+  
+  // Handle emoji input for new category
+  const handleNewIconChange = (value: string) => {
+    if (value === '') {
+      setNewCategoryIcon('📌')
+    } else {
+      setNewCategoryIcon(extractSingleEmoji(value))
+    }
+  }
+  
+  // Handle emoji input for edit category
+  const handleEditIconChange = (value: string) => {
+    if (value === '') {
+      setEditCategoryIcon('📌')
+    } else {
+      setEditCategoryIcon(extractSingleEmoji(value))
+    }
+  }
+  
+  const handleAddCategory = async () => {
+    if (!newCategoryName.trim()) {
+      alert('Please enter a category name')
+      return
+    }
+    
+    setIsAddingCategory(true)
+    try {
+      const res = await apiFetch('/api/categories', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: newCategoryName.trim(),
+          type: newCategoryType,
+          icon: newCategoryIcon
+        })
+      })
+      
+      if (!res.ok) {
+        const error = await res.json()
+        throw new Error(error.error || 'Failed to create category')
+      }
+      
+      const newCategory = await res.json()
+      setCategories([...categories, newCategory])
+      
+      // Reset form
+      setNewCategoryName('')
+      setNewCategoryIcon('📌')
+      setNewCategoryType('expense')
+    } catch (error) {
+      console.error('Failed to add category:', error)
+      alert(error instanceof Error ? error.message : 'Failed to add category')
+    } finally {
+      setIsAddingCategory(false)
+    }
+  }
+  
+  const handleDeleteCategory = async (id: string, name: string) => {
+    if (!confirm(`Are you sure you want to delete "${name}"?`)) {
+      return
+    }
+    
+    try {
+      const res = await apiFetch(`/api/categories/${id}`, {
+        method: 'DELETE'
+      })
+      
+      if (!res.ok) {
+        const error = await res.json()
+        throw new Error(error.error || 'Failed to delete category')
+      }
+      
+      setCategories(categories.filter(c => c.id !== id))
+    } catch (error) {
+      console.error('Failed to delete category:', error)
+      alert(error instanceof Error ? error.message : 'Failed to delete category')
+    }
+  }
+  
+  const handleStartEdit = (category: Category) => {
+    setEditingCategoryId(category.id)
+    setEditCategoryName(category.name)
+    setEditCategoryType(category.type)
+    setEditCategoryIcon(category.icon || '📌')
+  }
+  
+  const handleCancelEdit = () => {
+    setEditingCategoryId(null)
+    setEditCategoryName('')
+    setEditCategoryType('expense')
+    setEditCategoryIcon('📌')
+  }
+  
+  const handleUpdateCategory = async (id: string) => {
+    if (!editCategoryName.trim()) {
+      alert('Please enter a category name')
+      return
+    }
+    
+    setIsUpdatingCategory(true)
+    try {
+      const res = await apiFetch(`/api/categories/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: editCategoryName.trim(),
+          type: editCategoryType,
+          icon: editCategoryIcon
+        })
+      })
+      
+      if (!res.ok) {
+        const error = await res.json()
+        throw new Error(error.error || 'Failed to update category')
+      }
+      
+      const updatedCategory = await res.json()
+      setCategories(categories.map(c => c.id === id ? updatedCategory : c))
+      
+      // Reset edit state
+      handleCancelEdit()
+    } catch (error) {
+      console.error('Failed to update category:', error)
+      alert(error instanceof Error ? error.message : 'Failed to update category')
+    } finally {
+      setIsUpdatingCategory(false)
+    }
+  }
 
   const handleSave = () => {
     setIsSaving(true)
@@ -186,8 +355,309 @@ export default function Settings() {
     }
   }
 
+  const incomeCategories = categories.filter(c => c.type === 'income')
+  const expenseCategories = categories.filter(c => c.type === 'expense')
+
   return (
     <div className="max-w-2xl mx-auto space-y-6">
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-3">
+            <div className="h-8 w-8 rounded-lg bg-secondary flex items-center justify-center">
+              <Tag className="h-4 w-4 text-muted-foreground" />
+            </div>
+            <div>
+              <CardTitle>Categories</CardTitle>
+              <CardDescription>Manage your income and expense categories</CardDescription>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          {/* Add New Category */}
+          <div className="space-y-4">
+            <h3 className="text-sm font-medium">Add New Category</h3>
+            <div className="grid grid-cols-[auto_1fr_auto_auto] gap-2 items-end">
+              <div className="space-y-2">
+                <Label htmlFor="category-icon">Icon</Label>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    const input = e.currentTarget.querySelector('input')
+                    if (input) {
+                      input.focus()
+                      input.click()
+                    }
+                  }}
+                  className="w-16 h-10 rounded-md border border-input bg-background text-center text-2xl hover:bg-accent cursor-pointer flex items-center justify-center"
+                >
+                  <Input
+                    id="category-icon"
+                    type="text"
+                    inputMode="none"
+                    value={newCategoryIcon}
+                    onChange={e => handleNewIconChange(e.target.value)}
+                    onFocus={e => {
+                      e.target.setAttribute('inputmode', 'text')
+                      // Trigger emoji picker on mobile
+                      if ('virtualKeyboard' in navigator) {
+                        (navigator as any).virtualKeyboard.show()
+                      }
+                    }}
+                    className="w-full h-full text-center text-2xl border-0 bg-transparent p-0 focus:ring-0 focus:outline-none cursor-pointer"
+                    style={{ caretColor: 'transparent' }}
+                  />
+                </button>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="category-name">Name</Label>
+                <Input
+                  id="category-name"
+                  type="text"
+                  placeholder="e.g., Dining Out"
+                  value={newCategoryName}
+                  onChange={e => setNewCategoryName(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && handleAddCategory()}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="category-type">Type</Label>
+                <Select
+                  id="category-type"
+                  value={newCategoryType}
+                  onChange={e => setNewCategoryType(e.target.value as 'income' | 'expense')}
+                >
+                  <option value="expense">Expense</option>
+                  <option value="income">Income</option>
+                </Select>
+              </div>
+              <Button 
+                onClick={handleAddCategory}
+                disabled={isAddingCategory || !newCategoryName.trim()}
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                Add
+              </Button>
+            </div>
+          </div>
+
+          {/* Income Categories */}
+          <div className="space-y-3">
+            <h3 className="text-sm font-medium text-green-600">Income Categories</h3>
+            {isLoadingCategories ? (
+              <p className="text-sm text-muted-foreground">Loading...</p>
+            ) : incomeCategories.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No income categories yet</p>
+            ) : (
+              <div className="space-y-2">
+                {incomeCategories.map(category => (
+                  editingCategoryId === category.id ? (
+                    // Edit mode
+                    <div
+                      key={category.id}
+                      className="grid grid-cols-[auto_1fr_auto_auto_auto] gap-2 items-center p-3 rounded-lg border bg-accent"
+                    >
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          const input = e.currentTarget.querySelector('input')
+                          if (input) {
+                            input.focus()
+                            input.click()
+                          }
+                        }}
+                        className="w-14 h-10 rounded-md border border-input bg-background text-center text-2xl hover:bg-accent cursor-pointer flex items-center justify-center"
+                      >
+                        <Input
+                          type="text"
+                          inputMode="none"
+                          value={editCategoryIcon}
+                          onChange={e => handleEditIconChange(e.target.value)}
+                          onFocus={e => {
+                            e.target.setAttribute('inputmode', 'text')
+                            if ('virtualKeyboard' in navigator) {
+                              (navigator as any).virtualKeyboard.show()
+                            }
+                          }}
+                          className="w-full h-full text-center text-2xl border-0 bg-transparent p-0 focus:ring-0 focus:outline-none cursor-pointer"
+                          style={{ caretColor: 'transparent' }}
+                        />
+                      </button>
+                      <Input
+                        type="text"
+                        value={editCategoryName}
+                        onChange={e => setEditCategoryName(e.target.value)}
+                        onKeyDown={e => e.key === 'Enter' && handleUpdateCategory(category.id)}
+                      />
+                      <Select
+                        value={editCategoryType}
+                        onChange={e => setEditCategoryType(e.target.value as 'income' | 'expense')}
+                      >
+                        <option value="expense">Expense</option>
+                        <option value="income">Income</option>
+                      </Select>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleUpdateCategory(category.id)}
+                        disabled={isUpdatingCategory}
+                        className="text-green-600 hover:text-green-700 hover:bg-green-50"
+                      >
+                        <Check className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={handleCancelEdit}
+                        disabled={isUpdatingCategory}
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ) : (
+                    // View mode
+                    <div
+                      key={category.id}
+                      className="flex items-center justify-between p-3 rounded-lg border bg-card hover:bg-accent/50 transition-colors"
+                    >
+                      <div className="flex items-center gap-3">
+                        <span className="text-xl">{category.icon}</span>
+                        <span className="font-medium">{category.name}</span>
+                      </div>
+                      <div className="flex gap-1">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleStartEdit(category)}
+                          className="hover:bg-accent"
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleDeleteCategory(category.id, category.name)}
+                          className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  )
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Expense Categories */}
+          <div className="space-y-3">
+            <h3 className="text-sm font-medium text-red-600">Expense Categories</h3>
+            {isLoadingCategories ? (
+              <p className="text-sm text-muted-foreground">Loading...</p>
+            ) : expenseCategories.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No expense categories yet</p>
+            ) : (
+              <div className="space-y-2">
+                {expenseCategories.map(category => (
+                  editingCategoryId === category.id ? (
+                    // Edit mode
+                    <div
+                      key={category.id}
+                      className="grid grid-cols-[auto_1fr_auto_auto_auto] gap-2 items-center p-3 rounded-lg border bg-accent"
+                    >
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          const input = e.currentTarget.querySelector('input')
+                          if (input) {
+                            input.focus()
+                            input.click()
+                          }
+                        }}
+                        className="w-14 h-10 rounded-md border border-input bg-background text-center text-2xl hover:bg-accent cursor-pointer flex items-center justify-center"
+                      >
+                        <Input
+                          type="text"
+                          inputMode="none"
+                          value={editCategoryIcon}
+                          onChange={e => handleEditIconChange(e.target.value)}
+                          onFocus={e => {
+                            e.target.setAttribute('inputmode', 'text')
+                            if ('virtualKeyboard' in navigator) {
+                              (navigator as any).virtualKeyboard.show()
+                            }
+                          }}
+                          className="w-full h-full text-center text-2xl border-0 bg-transparent p-0 focus:ring-0 focus:outline-none cursor-pointer"
+                          style={{ caretColor: 'transparent' }}
+                        />
+                      </button>
+                      <Input
+                        type="text"
+                        value={editCategoryName}
+                        onChange={e => setEditCategoryName(e.target.value)}
+                        onKeyDown={e => e.key === 'Enter' && handleUpdateCategory(category.id)}
+                      />
+                      <Select
+                        value={editCategoryType}
+                        onChange={e => setEditCategoryType(e.target.value as 'income' | 'expense')}
+                      >
+                        <option value="expense">Expense</option>
+                        <option value="income">Income</option>
+                      </Select>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleUpdateCategory(category.id)}
+                        disabled={isUpdatingCategory}
+                        className="text-green-600 hover:text-green-700 hover:bg-green-50"
+                      >
+                        <Check className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={handleCancelEdit}
+                        disabled={isUpdatingCategory}
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ) : (
+                    // View mode
+                    <div
+                      key={category.id}
+                      className="flex items-center justify-between p-3 rounded-lg border bg-card hover:bg-accent/50 transition-colors"
+                    >
+                      <div className="flex items-center gap-3">
+                        <span className="text-xl">{category.icon}</span>
+                        <span className="font-medium">{category.name}</span>
+                      </div>
+                      <div className="flex gap-1">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleStartEdit(category)}
+                          className="hover:bg-accent"
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleDeleteCategory(category.id, category.name)}
+                          className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  )
+                ))}
+              </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
       <Card>
         <CardHeader>
           <div className="flex items-center gap-3">
