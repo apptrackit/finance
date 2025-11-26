@@ -38,10 +38,31 @@ type Category = {
   type: 'income' | 'expense'
 }
 
+type InvestmentTransaction = {
+  id: string
+  account_id: string
+  type: 'buy' | 'sell'
+  quantity: number
+  price: number
+  total_amount: number
+  date: string
+  notes?: string
+  created_at: number
+}
+
+type MarketQuote = {
+  symbol: string
+  regularMarketPrice?: number
+  shortName?: string
+  currency?: string
+  regularMarketChangePercent?: number
+}
+
 type View = 'dashboard' | 'analytics' | 'settings' | 'investments'
 
 function App() {
   const [netWorth, setNetWorth] = useState<number | null>(null)
+  const [investmentValue, setInvestmentValue] = useState<number>(0)
   const [accounts, setAccounts] = useState<Account[]>([])
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [categories, setCategories] = useState<Category[]>([])
@@ -78,7 +99,101 @@ function App() {
 
   useEffect(() => {
     fetchData()
+    fetchInvestmentValue()
   }, [])
+
+  // Fetch and calculate investment value in master currency
+  const fetchInvestmentValue = async () => {
+    try {
+      const investmentAccounts = accounts.filter(a => a.type === 'investment')
+      if (investmentAccounts.length === 0) {
+        setInvestmentValue(0)
+        return
+      }
+
+      // Fetch transactions for all investment accounts
+      const txPromises = investmentAccounts.map(acc =>
+        apiFetch(`${API_BASE_URL}/investment-transactions?account_id=${acc.id}`)
+          .then(res => res.json())
+          .catch(() => [])
+      )
+      const allTransactions = await Promise.all(txPromises)
+      
+      // Fetch market quotes for all symbols
+      const symbolsToFetch = investmentAccounts
+        .filter(acc => acc.asset_type !== 'manual' && acc.symbol)
+        .map(acc => acc.symbol!)
+      const uniqueSymbols = [...new Set(symbolsToFetch)]
+      
+      const quotePromises = uniqueSymbols.map(symbol =>
+        apiFetch(`${API_BASE_URL}/market/quote?symbol=${encodeURIComponent(symbol)}`)
+          .then(res => res.json())
+          .then(data => ({ symbol, data }))
+          .catch(() => ({ symbol, data: null }))
+      )
+      const quotesArray = await Promise.all(quotePromises)
+      const quotes: Record<string, MarketQuote> = {}
+      quotesArray.forEach(({ symbol, data }) => {
+        if (data) quotes[symbol] = data
+      })
+
+      // Calculate total value
+      let totalValueUSD = 0
+      investmentAccounts.forEach((acc, idx) => {
+        const txs: InvestmentTransaction[] = allTransactions[idx] || []
+        
+        // Calculate position from transactions
+        let totalQuantity = acc.balance // Initial balance
+        txs.forEach(tx => {
+          if (tx.type === 'buy') {
+            totalQuantity += tx.quantity
+          } else {
+            totalQuantity -= tx.quantity
+          }
+        })
+        
+        // Get current price
+        let price = 0
+        if (acc.asset_type === 'manual') {
+          // For manual, calculate average from transactions
+          const buyTxs = txs.filter(tx => tx.type === 'buy')
+          if (buyTxs.length > 0) {
+            const totalCost = buyTxs.reduce((sum, tx) => sum + tx.total_amount, 0)
+            const totalBought = buyTxs.reduce((sum, tx) => sum + tx.quantity, 0)
+            price = totalBought > 0 ? totalCost / totalBought : 0
+          }
+        } else if (acc.symbol && quotes[acc.symbol]) {
+          price = quotes[acc.symbol].regularMarketPrice || 0
+        }
+        
+        totalValueUSD += price * totalQuantity
+      })
+
+      // Convert USD to master currency
+      const currency = getMasterCurrency()
+      if (currency === 'USD') {
+        setInvestmentValue(totalValueUSD)
+      } else {
+        const response = await fetch(`https://open.er-api.com/v6/latest/USD`)
+        const data = await response.json()
+        if (data.rates && data.rates[currency]) {
+          setInvestmentValue(totalValueUSD * data.rates[currency])
+        } else {
+          setInvestmentValue(totalValueUSD) // Fallback
+        }
+      }
+    } catch (error) {
+      console.error('Failed to calculate investment value:', error)
+      setInvestmentValue(0)
+    }
+  }
+
+  // Re-fetch investment value when accounts change
+  useEffect(() => {
+    if (accounts.length > 0) {
+      fetchInvestmentValue()
+    }
+  }, [accounts, masterCurrency])
 
   // Fetch exchange rates for conversion
   const [exchangeRates, setExchangeRates] = useState<Record<string, number>>({})
@@ -208,7 +323,7 @@ function App() {
                 <div className="text-2xl sm:text-4xl font-bold tracking-tight text-foreground">
                   {netWorth !== null ? (
                     <>
-                      {netWorth.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})}
+                      {(netWorth + investmentValue).toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})}
                       <span className="text-muted-foreground text-lg sm:text-2xl ml-1">{masterCurrency}</span>
                     </>
                   ) : (
@@ -216,10 +331,10 @@ function App() {
                   )}
                 </div>
                 <p className="text-xs text-muted-foreground mt-2">
-                  Across {accounts.filter(a => a.type === 'cash').length} cash account{accounts.filter(a => a.type === 'cash').length !== 1 ? 's' : ''}
+                  {accounts.filter(a => a.type === 'cash').length} cash account{accounts.filter(a => a.type === 'cash').length !== 1 ? 's' : ''}
                   {accounts.filter(a => a.type === 'investment').length > 0 && (
-                    <span className="block mt-1">
-                      +{accounts.filter(a => a.type === 'investment').length} investment{accounts.filter(a => a.type === 'investment').length !== 1 ? 's' : ''} (see Investments tab)
+                    <span className="ml-1">
+                      + {accounts.filter(a => a.type === 'investment').length} investment{accounts.filter(a => a.type === 'investment').length !== 1 ? 's' : ''}
                     </span>
                   )}
                 </p>
