@@ -4,6 +4,7 @@ import { cors } from 'hono/cors'
 type Bindings = {
   DB: D1Database
   API_SECRET: string
+  ALLOWED_ORIGINS?: string // Comma-separated list of allowed origins
 }
 
 type Account = {
@@ -34,16 +35,31 @@ type Category = {
 
 const app = new Hono<{ Bindings: Bindings }>()
 
-// CORS configuration - only allow requests from your frontend
-app.use('/*', cors({
-  origin: (origin) => {
-    const allowedOrigins = ['https://finance.szilagyibence.com', 'http://localhost:5173']
-    return allowedOrigins.includes(origin) ? origin : null
-  },
-  allowHeaders: ['Content-Type', 'X-API-Key'],
-  allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  credentials: true,
-}))
+// CORS configuration - only allow requests from configured origins
+app.use('/*', (c, next) => {
+  const allowedOriginsStr = c.env.ALLOWED_ORIGINS || ''
+  const allowedOrigins = allowedOriginsStr.split(',').map(o => o.trim()).filter(o => o)
+  
+  return cors({
+    origin: (origin) => {
+      if (!origin) return null
+      
+      // Check if origin matches any allowed origin
+      for (const allowed of allowedOrigins) {
+        if (origin === allowed) return origin
+        // Allow subdomains if configured with wildcard
+        if (allowed.startsWith('*.') && origin.endsWith(allowed.substring(1))) {
+          return origin
+        }
+      }
+      
+      return null
+    },
+    allowHeaders: ['Content-Type', 'X-API-Key'],
+    allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    credentials: false,
+  })(c, next)
+})
 
 // API Key validation middleware - protect ALL routes
 app.use('*', async (c, next) => {

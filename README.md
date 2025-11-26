@@ -47,7 +47,8 @@ npm install
 ### 2. Set Up Local Environment
 
 ```bash
-# Copy the example config
+# Copy the example config for the API
+cp api/.dev.vars.example api/.dev.vars
 cp .env.example client/.env.local
 
 # Edit with your values (for local dev, defaults work fine)
@@ -147,25 +148,34 @@ database_id = "YOUR-DATABASE-ID-HERE"  # <-- Replace this!
 # custom_domain = true
 ```
 
-#### `api/src/index.ts` - Update CORS origins
-Find the cors configuration and update:
-```typescript
-const corsOrigins = [
-  'http://localhost:5173',
-  'https://finance.yourdomain.com',  // <-- Your frontend domain
-  'https://your-project.pages.dev',  // <-- Your Cloudflare Pages URL
-];
+#### Configure Environment Variables
+
+**For local development**, edit `api/.dev.vars`:
+```env
+API_SECRET=your-secret-api-key
+ALLOWED_ORIGINS=http://localhost:5173,http://localhost:3000
+```
+
+**For production**, set secrets via Wrangler:
+```bash
+cd api
+
+# Set your API key
+echo "your-secret-api-key" | npx wrangler secret put API_SECRET
+
+# Set allowed CORS origins (comma-separated, supports wildcards like *.pages.dev)
+echo "https://finance.yourdomain.com,https://*.pages.dev" | npx wrangler secret put ALLOWED_ORIGINS
 ```
 
 #### `client/.env.local` (create this file)
 ```env
-VITE_API_KEY=generate-a-random-secret-key
+VITE_API_KEY=your-secret-api-key
 VITE_API_DOMAIN=your-api-name.your-subdomain.workers.dev
 ```
 
-**Generate a secure API key:**
+**💡 Tip:** Generate a secure API key with:
 ```bash
-openssl rand -base64 32
+openssl rand -base64 16
 ```
 
 ### Step 5: Apply Database Schema
@@ -175,26 +185,16 @@ cd api
 npx wrangler d1 execute finance-db --remote --file=schema.sql
 ```
 
-### Step 6: Set API Secret
-
-```bash
-cd api
-
-# Set the API key as a secret (same value as VITE_API_KEY)
-npx wrangler secret put API_SECRET
-# Paste your API key when prompted
-```
-
-### Step 7: Deploy API
+### Step 6: Deploy API
 
 ```bash
 cd api
 npm run deploy
 ```
 
-Note the URL (e.g., `finance-api.youraccount.workers.dev`)
+✅ Note the URL (e.g., `finance-api.youraccount.workers.dev`)
 
-### Step 8: Deploy Frontend
+### Step 7: Deploy Frontend
 
 ```bash
 cd client
