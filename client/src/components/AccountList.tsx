@@ -5,6 +5,7 @@ import { Label } from './ui/label'
 import { Select } from './ui/select'
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card'
 import { Plus, X, Wallet, TrendingUp, Building, Pencil, Trash2, Check } from 'lucide-react'
+import { API_BASE_URL, apiFetch } from '../config'
 
 type Account = {
   id: string
@@ -49,23 +50,23 @@ export function AccountList({ accounts, onAccountAdded }: { accounts: Account[],
     e.preventDefault()
     try {
       if (editingId) {
-        await fetch(`/api/accounts/${editingId}`, {
+        await apiFetch(`${API_BASE_URL}/accounts/${editingId}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             ...formData,
             balance: parseFloat(formData.balance) || 0
-          })
+          }),
         })
         setEditingId(null)
       } else {
-        await fetch('/api/accounts', {
+        await apiFetch(`${API_BASE_URL}/accounts`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             ...formData,
             balance: parseFloat(formData.balance) || 0
-          })
+          }),
         })
       }
       setIsAdding(false)
@@ -90,7 +91,7 @@ export function AccountList({ accounts, onAccountAdded }: { accounts: Account[],
   const handleDelete = async (id: string) => {
     if (!confirm('Delete this account and all its transactions?')) return
     try {
-      await fetch(`/api/accounts/${id}`, { method: 'DELETE' })
+      await apiFetch(`${API_BASE_URL}/accounts/${id}`, { method: 'DELETE' })
       onAccountAdded()
     } catch (error) {
       console.error('Failed to delete account', error)

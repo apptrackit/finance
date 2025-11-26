@@ -3,6 +3,7 @@ import { AccountList } from './components/AccountList'
 import { TransactionList } from './components/TransactionList'
 import { Analytics } from './components/Analytics'
 import { Wallet, TrendingUp, TrendingDown, Activity, BarChart3, List } from 'lucide-react'
+import { API_BASE_URL, apiFetch } from './config'
 
 const APP_VERSION = '0.2'
 
@@ -42,22 +43,22 @@ function App() {
   const [view, setView] = useState<View>('dashboard')
 
   const fetchData = () => {
-    fetch('/api/dashboard/net-worth')
+    apiFetch(`${API_BASE_URL}/dashboard/net-worth`)
       .then(res => res.json())
       .then(data => setNetWorth(data.net_worth))
       .catch(err => console.error(err))
 
-    fetch('/api/accounts')
+    apiFetch(`${API_BASE_URL}/accounts`)
       .then(res => res.json())
       .then(data => setAccounts(data))
       .catch(err => console.error(err))
 
-    fetch('/api/transactions')
+    apiFetch(`${API_BASE_URL}/transactions`)
       .then(res => res.json())
       .then(data => setTransactions(data))
       .catch(err => console.error(err))
 
-    fetch('/api/categories')
+    apiFetch(`${API_BASE_URL}/categories`)
       .then(res => res.json())
       .then(data => setCategories(data))
       .catch(err => console.error(err))

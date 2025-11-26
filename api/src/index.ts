@@ -3,6 +3,7 @@ import { cors } from 'hono/cors'
 
 type Bindings = {
   DB: D1Database
+  API_SECRET: string
 }
 
 type Account = {
@@ -33,14 +34,25 @@ type Category = {
 
 const app = new Hono<{ Bindings: Bindings }>()
 
-app.use('/*', cors())
+// CORS configuration - only allow requests from your frontend
+app.use('/*', cors({
+  origin: (origin) => {
+    const allowedOrigins = ['https://finance.szilagyibence.com', 'http://localhost:5173']
+    return allowedOrigins.includes(origin) ? origin : null
+  },
+  allowHeaders: ['Content-Type', 'X-API-Key'],
+  allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  credentials: true,
+}))
 
-// Middleware for CF Access (Basic check)
+// API Key validation middleware - protect ALL routes
 app.use('*', async (c, next) => {
-  const jwt = c.req.header('CF-Access-Jwt-Assertion')
-  // In a real scenario, verify the JWT. 
-  // For this MVP, we assume the network layer handles it, but we log it.
-  console.log('CF-Access-Jwt-Assertion:', jwt ? 'Present' : 'Missing')
+  // Check API key
+  const apiKey = c.req.header('X-API-Key')
+  if (!apiKey || apiKey !== c.env.API_SECRET) {
+    return c.json({ error: 'Unauthorized' }, 401)
+  }
+  
   await next()
 })
 
