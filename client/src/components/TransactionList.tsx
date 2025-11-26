@@ -23,6 +23,9 @@ type Account = {
   name: string
   balance: number
   currency: string
+  type: 'cash' | 'investment'
+  symbol?: string
+  asset_type?: 'stock' | 'crypto' | 'manual'
 }
 
 type Category = {
@@ -98,15 +101,93 @@ export function TransactionList({
     const fetchRate = async () => {
       setIsLoadingRate(true)
       try {
-        const response = await apiFetch(`${API_BASE_URL}/transfers/exchange-rate?from=${fromAccount.currency}&to=${toAccount.currency}`)
-        const data = await response.json()
-        if (data.rate) {
-          // Keep the full rate without any rounding
-          setSuggestedRate(data.rate)
-          setExchangeRate(data.rate)
+        let rate = 0
+
+        // Helper to get quote price
+        const getQuotePrice = async (symbol: string) => {
+          try {
+            const res = await apiFetch(`${API_BASE_URL}/market/quote?symbol=${encodeURIComponent(symbol)}`)
+            if (!res.ok) return null
+            const data = await res.json()
+            return { price: data.regularMarketPrice, currency: data.currency }
+          } catch (e) {
+            console.error('Quote fetch failed', e)
+            return null
+          }
+        }
+
+        // Helper to get FX rate
+        const getFxRate = async (from: string, to: string) => {
+          if (from === to) return 1
+          try {
+            const res = await apiFetch(`${API_BASE_URL}/transfers/exchange-rate?from=${from}&to=${to}`)
+            if (!res.ok) return null
+            const data = await res.json()
+            return data.rate
+          } catch (e) {
+            console.error('FX fetch failed', e)
+            return null
+          }
+        }
+
+        // Case 1: Investment -> Cash/Other
+        if (fromAccount.type === 'investment' && fromAccount.symbol) {
+          const quote = await getQuotePrice(fromAccount.symbol)
+          if (quote && quote.price) {
+            // Ensure currency is uppercase, trimmed, and default to USD
+            const quoteCurrency = (quote.currency || 'USD').toUpperCase().trim()
+            
+            let fxRate = await getFxRate(quoteCurrency, toAccount.currency)
+            
+            // If failed and currency wasn't USD, try USD as fallback (common for crypto quotes)
+            if (!fxRate && quoteCurrency !== 'USD') {
+               fxRate = await getFxRate('USD', toAccount.currency)
+            }
+
+            if (fxRate) {
+              rate = quote.price * fxRate
+            }
+          }
+        }
+        // Case 2: Cash/Other -> Investment
+        else if (toAccount.type === 'investment' && toAccount.symbol) {
+          const quote = await getQuotePrice(toAccount.symbol)
+          if (quote && quote.price) {
+            const quoteCurrency = (quote.currency || 'USD').toUpperCase().trim()
+            
+            let fxRate = await getFxRate(fromAccount.currency, quoteCurrency)
+            
+            // If failed and currency wasn't USD, try converting From -> USD
+            if (!fxRate && quoteCurrency !== 'USD') {
+               fxRate = await getFxRate(fromAccount.currency, 'USD')
+            }
+
+            if (fxRate) {
+              rate = fxRate / quote.price
+            }
+          }
+        }
+        
+        // Fallback / Case 3: Direct Currency Conversion
+        // Only try this if we haven't calculated a rate yet AND it's not an investment case that just failed
+        const isInvestmentCase = (fromAccount.type === 'investment' && fromAccount.symbol) || (toAccount.type === 'investment' && toAccount.symbol)
+        
+        if (!rate && !isInvestmentCase && fromAccount.currency !== toAccount.currency) {
+           const directRate = await getFxRate(fromAccount.currency, toAccount.currency)
+           if (directRate) rate = directRate
+        }
+
+        if (rate > 0) {
+          setSuggestedRate(rate)
+          setExchangeRate(rate)
+        } else {
+          setSuggestedRate(null)
+          setExchangeRate(null)
         }
       } catch (error) {
         console.error('Failed to fetch exchange rate:', error)
+        setSuggestedRate(null)
+        setExchangeRate(null)
       } finally {
         setIsLoadingRate(false)
       }

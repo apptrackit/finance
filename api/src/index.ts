@@ -429,7 +429,7 @@ async function getExchangeRates(fromCurrency: string): Promise<Record<string, nu
   try {
     const response = await fetch(`https://open.er-api.com/v6/latest/${fromCurrency}`)
     if (!response.ok) {
-      console.warn('Exchange rate API responded with non-ok status', response.status)
+      console.warn(`Exchange rate API responded with non-ok status ${response.status} for currency ${fromCurrency}`)
       return {}
     }
 
