@@ -119,6 +119,11 @@ dist
 # Cloudflare Workers
 .wrangler/
 .dev.vars
+api/wrangler.toml  # Each developer has their own config
+
+# Environment files (each developer has their own)
+client/.env.local
+client/.env.production
 
 # OS metadata
 .DS_Store

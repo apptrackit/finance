@@ -40,24 +40,44 @@ A secure, self-hosted personal finance app built with React and Cloudflare Worke
 git clone <your-repo-url>
 cd finance
 
-# Install all dependencies
-npm install
+# Run the setup script (recommended)
+./setup.sh
 ```
 
-### 2. Set Up Local Environment
+The setup script will:
+- Create all necessary config files from templates
+- Generate a secure API key
+- Install dependencies
+
+**Or manually set up:**
+
+### 2. Manual Configuration Setup
 
 ```bash
-# Copy the example config for the API
+# Copy example configuration files
+cp api/wrangler.toml.example api/wrangler.toml
 cp api/.dev.vars.example api/.dev.vars
 cp .env.example client/.env.local
-
-# Edit with your values (for local dev, defaults work fine)
-nano client/.env.local
 ```
 
-For local development, set:
+**Important:** Each developer needs their own `wrangler.toml` with their unique database ID and domain. This file is gitignored to prevent conflicts.
+
+Edit `api/wrangler.toml`:
+```toml
+database_id = "your-d1-database-id-here"
+# Uncomment and set your custom domain if using one
+# routes = [{ pattern = "api.yourname.com", custom_domain = true }]
+```
+
+Edit `api/.dev.vars`:
 ```env
-VITE_API_KEY=your-secret-key-here
+API_SECRET=your-secret-api-key
+ALLOWED_ORIGINS=http://localhost:5173,http://localhost:3000
+```
+
+Edit `client/.env.local`:
+```env
+VITE_API_KEY=your-secret-api-key  # Same as API_SECRET above
 VITE_API_DOMAIN=localhost:8787
 ```
 
