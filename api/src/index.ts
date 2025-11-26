@@ -29,6 +29,7 @@ type Transaction = {
   description?: string
   date: string
   is_recurring: boolean
+  linked_transaction_id?: string
 }
 
 type Category = {
@@ -536,15 +537,16 @@ app.post('/transfers', async (c) => {
   
   // Create outgoing transaction (negative)
   const outgoingId = crypto.randomUUID()
+  const incomingId = crypto.randomUUID()
+
   await c.env.DB.prepare(
-    'INSERT INTO transactions (id, account_id, category_id, amount, description, date, is_recurring) VALUES (?, ?, ?, ?, ?, ?, ?)'
-  ).bind(outgoingId, from_account_id, null, -totalDeduction, outgoingDesc, date, 0).run()
+    'INSERT INTO transactions (id, account_id, category_id, amount, description, date, is_recurring, linked_transaction_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+  ).bind(outgoingId, from_account_id, null, -totalDeduction, outgoingDesc, date, 0, incomingId).run()
   
   // Create incoming transaction (positive)
-  const incomingId = crypto.randomUUID()
   await c.env.DB.prepare(
-    'INSERT INTO transactions (id, account_id, category_id, amount, description, date, is_recurring) VALUES (?, ?, ?, ?, ?, ?, ?)'
-  ).bind(incomingId, to_account_id, null, amount_to, incomingDesc, date, 0).run()
+    'INSERT INTO transactions (id, account_id, category_id, amount, description, date, is_recurring, linked_transaction_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+  ).bind(incomingId, to_account_id, null, amount_to, incomingDesc, date, 0, outgoingId).run()
   
   // Update account balances
   await c.env.DB.prepare('UPDATE accounts SET balance = balance - ?, updated_at = ? WHERE id = ?')

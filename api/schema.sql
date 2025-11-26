@@ -24,6 +24,7 @@ CREATE TABLE IF NOT EXISTS transactions (
   description TEXT,
   date TEXT NOT NULL, -- ISO 8601 YYYY-MM-DD
   is_recurring BOOLEAN DEFAULT 0,
+  linked_transaction_id TEXT,
   FOREIGN KEY(account_id) REFERENCES accounts(id)
 );
 

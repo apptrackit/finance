@@ -16,6 +16,7 @@ type Transaction = {
   description?: string
   date: string
   is_recurring: boolean
+  linked_transaction_id?: string
 }
 
 type Account = {
@@ -446,6 +447,39 @@ export function TransactionList({
     new Date(b).getTime() - new Date(a).getTime()
   )
 
+  // Helper to process transactions and merge transfers
+  const processTransactions = (txs: Transaction[]) => {
+    const processed: (Transaction & { relatedTx?: Transaction })[] = []
+    const skipIds = new Set<string>()
+
+    txs.forEach(tx => {
+      if (skipIds.has(tx.id)) return
+
+      if (tx.linked_transaction_id) {
+        const related = txs.find(t => t.id === tx.linked_transaction_id)
+        if (related) {
+          // Found the pair.
+          // We prefer to show the outgoing one (negative) as the main one
+          if (tx.amount < 0) {
+             processed.push({ ...tx, relatedTx: related })
+             skipIds.add(related.id)
+          } else {
+             // Current is incoming. Use related (outgoing) as base.
+             processed.push({ ...related, relatedTx: tx })
+             skipIds.add(related.id)
+          }
+        } else {
+          // Linked tx not found in this list
+          processed.push(tx)
+        }
+      } else {
+        processed.push(tx)
+      }
+    })
+    
+    return processed
+  }
+
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between pb-4">
@@ -811,23 +845,37 @@ export function TransactionList({
                 <div className="flex-1 h-px bg-border" />
               </div>
               <div className="space-y-1">
-                {groupedTransactions[date].reverse().map(tx => (
+                {processTransactions(groupedTransactions[date]).reverse().map(tx => {
+                  const isTransfer = !!tx.linked_transaction_id && !!(tx as any).relatedTx
+                  const related = (tx as any).relatedTx as Transaction | undefined
+                  
+                  return (
                   <div 
                     key={tx.id} 
                     className="group flex items-center justify-between p-3 rounded-xl hover:bg-secondary/30 transition-all duration-200"
                   >
                     <div className="flex items-center gap-3">
                       <div className={`h-10 w-10 rounded-xl flex items-center justify-center text-lg ${
-                        tx.amount >= 0 
-                          ? 'bg-success/10' 
-                          : 'bg-secondary'
+                        isTransfer ? 'bg-blue-500/10 text-blue-500' :
+                        tx.amount >= 0 ? 'bg-success/10' : 'bg-secondary'
                       }`}>
-                        {getCategoryIcon(tx.category_id)}
+                        {isTransfer ? <ArrowRightLeft className="h-5 w-5" /> : getCategoryIcon(tx.category_id)}
                       </div>
                       <div>
-                        <p className="font-medium text-sm">{tx.description || getCategoryName(tx.category_id)}</p>
+                        <p className="font-medium text-sm">
+                          {isTransfer 
+                            ? `Transfer to ${related ? getAccountName(related.account_id) : 'Unknown'}`
+                            : (tx.description || getCategoryName(tx.category_id))
+                          }
+                        </p>
                         <div className="flex items-center gap-2 text-xs text-muted-foreground">
                           <span>{getAccountName(tx.account_id)}</span>
+                          {isTransfer && related && (
+                             <>
+                               <span>→</span>
+                               <span>{getAccountName(related.account_id)}</span>
+                             </>
+                          )}
                           {tx.is_recurring && (
                             <>
                               <span>•</span>
@@ -840,11 +888,16 @@ export function TransactionList({
                         </div>
                       </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <div className={`font-bold text-sm ${tx.amount >= 0 ? 'text-success' : 'text-destructive'}`}>
+                    <div className="flex flex-col items-end gap-0.5">
+                      <div className={`font-bold text-sm ${isTransfer ? 'text-destructive' : (tx.amount >= 0 ? 'text-success' : 'text-destructive')}`}>
                         {tx.amount >= 0 ? '+' : '-'}
                         {Math.abs(tx.amount).toLocaleString('hu-HU', {minimumFractionDigits: 2, maximumFractionDigits: 2})} {getAccountCurrency(tx.account_id)}
                       </div>
+                      {isTransfer && related && (
+                        <div className="text-xs text-success font-medium">
+                          +{Math.abs(related.amount).toLocaleString('hu-HU', {minimumFractionDigits: 2, maximumFractionDigits: 2})} {getAccountCurrency(related.account_id)}
+                        </div>
+                      )}
                       <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                         <Button 
                           size="icon" 
@@ -865,7 +918,7 @@ export function TransactionList({
                       </div>
                     </div>
                   </div>
-                ))}
+                )})}
               </div>
             </div>
           ))}

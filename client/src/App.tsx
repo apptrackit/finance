@@ -29,6 +29,7 @@ type Transaction = {
   description?: string
   date: string
   is_recurring: boolean
+  linked_transaction_id?: string
 }
 
 type Category = {
@@ -226,10 +227,10 @@ function App() {
 
   // Calculate stats in master currency
   const totalIncome = transactions
-    .filter(t => t.amount > 0)
+    .filter(t => t.amount > 0 && !t.linked_transaction_id)
     .reduce((sum, t) => sum + convertToMasterCurrency(t.amount, t.account_id), 0)
   const totalExpenses = transactions
-    .filter(t => t.amount < 0)
+    .filter(t => t.amount < 0 && !t.linked_transaction_id)
     .reduce((sum, t) => sum + Math.abs(convertToMasterCurrency(t.amount, t.account_id)), 0)
 
   return (

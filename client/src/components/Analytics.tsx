@@ -103,6 +103,7 @@ type Transaction = {
   description?: string
   date: string
   is_recurring: boolean
+  linked_transaction_id?: string
 }
 
 type Category = {
@@ -224,10 +225,10 @@ export function Analytics({
   // Calculate totals in master currency
   const { totalIncome, totalExpenses, netFlow } = useMemo(() => {
     const income = filteredTransactions
-      .filter(t => t.amount > 0)
+      .filter(t => t.amount > 0 && !t.linked_transaction_id)
       .reduce((sum, t) => sum + convertToMasterCurrency(t.amount, t.account_id), 0)
     const expenses = filteredTransactions
-      .filter(t => t.amount < 0)
+      .filter(t => t.amount < 0 && !t.linked_transaction_id)
       .reduce((sum, t) => sum + Math.abs(convertToMasterCurrency(t.amount, t.account_id)), 0)
     return {
       totalIncome: income,
@@ -241,7 +242,7 @@ export function Analytics({
     const expensesByCategory: Record<string, number> = {}
     
     filteredTransactions
-      .filter(t => t.amount < 0)
+      .filter(t => t.amount < 0 && !t.linked_transaction_id)
       .forEach(t => {
         const categoryId = t.category_id || 'uncategorized'
         const convertedAmount = Math.abs(convertToMasterCurrency(t.amount, t.account_id))
@@ -420,7 +421,7 @@ export function Analytics({
         const weekIncome = transactions
           .filter(tx => {
             const txDate = new Date(tx.date)
-            const inDateRange = tx.amount > 0 && isWithinInterval(txDate, { 
+            const inDateRange = tx.amount > 0 && !tx.linked_transaction_id && isWithinInterval(txDate, { 
               start: weekStart < monthStart ? monthStart : weekStart, 
               end: weekEnd > monthEnd ? monthEnd : weekEnd 
             })
@@ -475,7 +476,7 @@ export function Analytics({
         const monthIncome = transactions
           .filter(tx => {
             const txDate = new Date(tx.date)
-            const inDateRange = tx.amount > 0 && isWithinInterval(txDate, { start: monthStart, end: monthEnd })
+            const inDateRange = tx.amount > 0 && !tx.linked_transaction_id && isWithinInterval(txDate, { start: monthStart, end: monthEnd })
             if (!inDateRange) return false
             if (selectedIncomeCategory === 'all') return true
             return tx.category_id === selectedIncomeCategory
@@ -515,7 +516,7 @@ export function Analytics({
         const weekExpenses = transactions
           .filter(tx => {
             const txDate = new Date(tx.date)
-            const inDateRange = tx.amount < 0 && isWithinInterval(txDate, { 
+            const inDateRange = tx.amount < 0 && !tx.linked_transaction_id && isWithinInterval(txDate, { 
               start: weekStart < monthStart ? monthStart : weekStart, 
               end: weekEnd > monthEnd ? monthEnd : weekEnd 
             })
@@ -570,7 +571,7 @@ export function Analytics({
         const monthExpenses = transactions
           .filter(tx => {
             const txDate = new Date(tx.date)
-            const inDateRange = tx.amount < 0 && isWithinInterval(txDate, { start: monthStart, end: monthEnd })
+            const inDateRange = tx.amount < 0 && !tx.linked_transaction_id && isWithinInterval(txDate, { start: monthStart, end: monthEnd })
             if (!inDateRange) return false
             if (selectedExpenseCategory === 'all') return true
             return tx.category_id === selectedExpenseCategory
@@ -1111,7 +1112,7 @@ export function Analytics({
             <CardContent className="px-4 sm:px-6">
               <div className="space-y-2 sm:space-y-3">
                 {filteredTransactions
-                  .filter(t => t.amount < 0)
+                  .filter(t => t.amount < 0 && !t.linked_transaction_id)
                   .sort((a, b) => {
                     const aConverted = Math.abs(convertToMasterCurrency(a.amount, a.account_id))
                     const bConverted = Math.abs(convertToMasterCurrency(b.amount, b.account_id))
@@ -1143,7 +1144,7 @@ export function Analytics({
                       </div>
                     )
                   })}
-                {filteredTransactions.filter(t => t.amount < 0).length === 0 && (
+                {filteredTransactions.filter(t => t.amount < 0 && !t.linked_transaction_id).length === 0 && (
                   <div className="text-center py-6 text-muted-foreground text-sm">
                     No expenses in this period
                   </div>
