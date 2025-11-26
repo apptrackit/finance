@@ -3,6 +3,7 @@ import { cors } from 'hono/cors'
 
 type Bindings = {
   DB: D1Database
+  API_SECRET: string
 }
 
 type Account = {
@@ -33,14 +34,25 @@ type Category = {
 
 const app = new Hono<{ Bindings: Bindings }>()
 
-app.use('/*', cors())
+// CORS configuration - only allow requests from your frontend
+app.use('/*', cors({
+  origin: (origin) => {
+    const allowedOrigins = ['https://finance.szilagyibence.com', 'http://localhost:5173']
+    return allowedOrigins.includes(origin) ? origin : null
+  },
+  allowHeaders: ['Content-Type', 'X-API-Key'],
+  allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  credentials: true,
+}))
 
-// Middleware for CF Access (Basic check)
+// API Key validation middleware - protect ALL routes
 app.use('*', async (c, next) => {
-  const jwt = c.req.header('CF-Access-Jwt-Assertion')
-  // In a real scenario, verify the JWT. 
-  // For this MVP, we assume the network layer handles it, but we log it.
-  console.log('CF-Access-Jwt-Assertion:', jwt ? 'Present' : 'Missing')
+  // Check API key
+  const apiKey = c.req.header('X-API-Key')
+  if (!apiKey || apiKey !== c.env.API_SECRET) {
+    return c.json({ error: 'Unauthorized' }, 401)
+  }
+  
   await next()
 })
 
@@ -75,6 +87,111 @@ app.get('/categories', async (c) => {
   }
   
   return c.json(results)
+})
+
+// Create a new category
+app.post('/categories', async (c) => {
+  const body = await c.req.json<Omit<Category, 'id'>>()
+  
+  // Validate required fields
+  if (!body.name || !body.type) {
+    return c.json({ error: 'Name and type are required' }, 400)
+  }
+  
+  if (body.type !== 'income' && body.type !== 'expense') {
+    return c.json({ error: 'Type must be either "income" or "expense"' }, 400)
+  }
+  
+  const id = crypto.randomUUID()
+  
+  await c.env.DB.prepare(
+    'INSERT INTO categories (id, name, type, icon) VALUES (?, ?, ?, ?)'
+  ).bind(id, body.name, body.type, body.icon || '📌').run()
+  
+  const newCategory: Category = {
+    id,
+    name: body.name,
+    type: body.type,
+    icon: body.icon || '📌'
+  }
+  
+  return c.json(newCategory, 201)
+})
+
+// Update a category
+app.put('/categories/:id', async (c) => {
+  const id = c.req.param('id')
+  const body = await c.req.json<Partial<Omit<Category, 'id'>>>()
+  
+  // Validate at least one field is provided
+  if (!body.name && !body.type && !body.icon) {
+    return c.json({ error: 'At least one field (name, type, or icon) must be provided' }, 400)
+  }
+  
+  // Validate type if provided
+  if (body.type && body.type !== 'income' && body.type !== 'expense') {
+    return c.json({ error: 'Type must be either "income" or "expense"' }, 400)
+  }
+  
+  // Check if category exists
+  const { results: existing } = await c.env.DB.prepare(
+    'SELECT * FROM categories WHERE id = ?'
+  ).bind(id).all<Category>()
+  
+  if (existing.length === 0) {
+    return c.json({ error: 'Category not found' }, 404)
+  }
+  
+  // Build update query dynamically
+  const updates: string[] = []
+  const values: any[] = []
+  
+  if (body.name !== undefined) {
+    updates.push('name = ?')
+    values.push(body.name)
+  }
+  if (body.type !== undefined) {
+    updates.push('type = ?')
+    values.push(body.type)
+  }
+  if (body.icon !== undefined) {
+    updates.push('icon = ?')
+    values.push(body.icon)
+  }
+  
+  values.push(id)
+  
+  await c.env.DB.prepare(
+    `UPDATE categories SET ${updates.join(', ')} WHERE id = ?`
+  ).bind(...values).run()
+  
+  // Fetch and return updated category
+  const { results: updated } = await c.env.DB.prepare(
+    'SELECT * FROM categories WHERE id = ?'
+  ).bind(id).all<Category>()
+  
+  return c.json(updated[0])
+})
+
+// Delete a category
+app.delete('/categories/:id', async (c) => {
+  const id = c.req.param('id')
+  
+  // Check if category is being used by any transactions
+  const { results } = await c.env.DB.prepare(
+    'SELECT COUNT(*) as count FROM transactions WHERE category_id = ?'
+  ).bind(id).all<{ count: number }>()
+  
+  if (results[0]?.count > 0) {
+    return c.json({ 
+      error: 'Cannot delete category that is being used by transactions',
+      transactionCount: results[0].count 
+    }, 400)
+  }
+  
+  await c.env.DB.prepare('DELETE FROM categories WHERE id = ?').bind(id).run()
+  
+  return c.json({ message: 'Category deleted successfully' })
 })
 
 // Reset categories to defaults
@@ -367,46 +484,49 @@ app.post('/transfers', async (c) => {
 // --- Dashboard ---
 
 app.get('/dashboard/net-worth', async (c) => {
+  // Get master currency from query param, default to HUF
+  const masterCurrency = c.req.query('currency') || 'HUF'
+  
   // Get all accounts
   const { results: accounts } = await c.env.DB.prepare('SELECT id, balance, currency FROM accounts').all<Account>()
   
   if (!accounts || accounts.length === 0) {
-    return c.json({ net_worth: 0, currency: 'HUF', accounts: [] })
+    return c.json({ net_worth: 0, currency: masterCurrency, accounts: [] })
   }
   
-  // Fetch exchange rates from HUF
-  const rates = await getExchangeRates('HUF')
+  // Fetch exchange rates from master currency
+  const rates = await getExchangeRates(masterCurrency)
   
-  let totalNetWorthHUF = 0
+  let totalNetWorth = 0
   const accountDetails = []
   
   for (const account of accounts) {
-    let balanceInHUF = account.balance
+    let balanceInMasterCurrency = account.balance
     
-    // Convert to HUF if account is in a different currency
-    if (account.currency !== 'HUF') {
+    // Convert to master currency if account is in a different currency
+    if (account.currency !== masterCurrency) {
       const rate = rates[account.currency]
       if (rate) {
-        // Convert: HUF -> account.currency rate, so reverse to get HUF
-        balanceInHUF = account.balance / rate
+        // Convert: masterCurrency -> account.currency rate, so reverse to get master currency
+        balanceInMasterCurrency = account.balance / rate
       } else {
         console.warn(`Exchange rate not available for ${account.currency}, using original value`)
       }
     }
     
-    totalNetWorthHUF += balanceInHUF
+    totalNetWorth += balanceInMasterCurrency
     
     accountDetails.push({
       id: account.id,
       balance: account.balance,
       currency: account.currency,
-      balance_in_huf: balanceInHUF
+      balance_in_master: balanceInMasterCurrency
     })
   }
   
   return c.json({ 
-    net_worth: totalNetWorthHUF,
-    currency: 'HUF',
+    net_worth: totalNetWorth,
+    currency: masterCurrency,
     accounts: accountDetails,
     rates_fetched: Object.keys(rates).length > 0
   })

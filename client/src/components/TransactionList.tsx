@@ -6,6 +6,7 @@ import { Select } from './ui/select'
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card'
 import { Plus, X, ArrowDownLeft, ArrowUpRight, Receipt, RefreshCw, Pencil, Trash2, Check, ArrowRightLeft, Coins } from 'lucide-react'
 import { format } from 'date-fns'
+import { API_BASE_URL, apiFetch } from '../config'
 
 type Transaction = {
   id: string
@@ -71,7 +72,7 @@ export function TransactionList({
   const [skipAutoCalc, setSkipAutoCalc] = useState(false)
 
   useEffect(() => {
-    fetch('/api/categories')
+    apiFetch(`${API_BASE_URL}/categories`)
       .then(res => res.json())
       .then(data => setCategories(data))
       .catch(console.error)
@@ -97,7 +98,7 @@ export function TransactionList({
     const fetchRate = async () => {
       setIsLoadingRate(true)
       try {
-        const response = await fetch(`/api/transfers/exchange-rate?from=${fromAccount.currency}&to=${toAccount.currency}`)
+        const response = await apiFetch(`${API_BASE_URL}/transfers/exchange-rate?from=${fromAccount.currency}&to=${toAccount.currency}`)
         const data = await response.json()
         if (data.rate) {
           // Keep the full rate without any rounding
@@ -230,7 +231,7 @@ export function TransactionList({
         // Handle transfer
         const fee = parseFloat(formData.fee) || 0
         const amountTo = parseFloat(formData.amount_to) || amount
-        await fetch('/api/transfers', {
+        await apiFetch(`${API_BASE_URL}/transfers`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -242,7 +243,7 @@ export function TransactionList({
             exchange_rate: exchangeRate,
             description: formData.description,
             date: formData.date
-          })
+          }),
         })
         saveDefaults('transfer')
       } else {
@@ -250,7 +251,7 @@ export function TransactionList({
         const finalAmount = formData.type === 'expense' ? -Math.abs(amount) : Math.abs(amount)
 
         if (editingId) {
-          await fetch(`/api/transactions/${editingId}`, {
+          await apiFetch(`${API_BASE_URL}/transactions/${editingId}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -260,11 +261,11 @@ export function TransactionList({
               description: formData.description,
               date: formData.date,
               is_recurring: formData.is_recurring
-            })
+            }),
           })
           setEditingId(null)
         } else {
-          await fetch('/api/transactions', {
+          await apiFetch(`${API_BASE_URL}/transactions`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -274,7 +275,7 @@ export function TransactionList({
               description: formData.description,
               date: formData.date,
               is_recurring: formData.is_recurring
-            })
+            }),
           })
         }
         saveDefaults(formData.type)
@@ -308,7 +309,7 @@ export function TransactionList({
   const handleDelete = async (id: string) => {
     if (!confirm('Delete this transaction?')) return
     try {
-      await fetch(`/api/transactions/${id}`, { method: 'DELETE' })
+      await apiFetch(`${API_BASE_URL}/transactions/${id}`, { method: 'DELETE' })
       onTransactionAdded()
     } catch (error) {
       console.error('Failed to delete transaction', error)

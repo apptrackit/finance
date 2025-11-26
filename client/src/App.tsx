@@ -2,9 +2,12 @@ import { useEffect, useState } from 'react'
 import { AccountList } from './components/AccountList'
 import { TransactionList } from './components/TransactionList'
 import { Analytics } from './components/Analytics'
-import { Wallet, TrendingUp, TrendingDown, Activity, BarChart3, List } from 'lucide-react'
+import { Wallet, TrendingUp, TrendingDown, Activity, BarChart3, List, Settings as SettingsIcon } from 'lucide-react'
+import { API_BASE_URL, apiFetch } from './config'
+import Settings, { getMasterCurrency } from './components/Settings'
 
-const APP_VERSION = '0.2'
+
+const APP_VERSION = '0.4'
 
 type Account = {
   id: string
@@ -32,7 +35,7 @@ type Category = {
   type: 'income' | 'expense'
 }
 
-type View = 'dashboard' | 'analytics'
+type View = 'dashboard' | 'analytics' | 'settings'
 
 function App() {
   const [netWorth, setNetWorth] = useState<number | null>(null)
@@ -40,24 +43,31 @@ function App() {
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [categories, setCategories] = useState<Category[]>([])
   const [view, setView] = useState<View>('dashboard')
+  const [masterCurrency, setMasterCurrency] = useState('HUF')
+
+  useEffect(() => {
+    setMasterCurrency(getMasterCurrency())
+  }, [])
 
   const fetchData = () => {
-    fetch('/api/dashboard/net-worth')
+    const currency = getMasterCurrency()
+    
+    apiFetch(`/api/dashboard/net-worth?currency=${currency}`)
       .then(res => res.json())
       .then(data => setNetWorth(data.net_worth))
       .catch(err => console.error(err))
 
-    fetch('/api/accounts')
+    apiFetch(`${API_BASE_URL}/accounts`)
       .then(res => res.json())
       .then(data => setAccounts(data))
       .catch(err => console.error(err))
 
-    fetch('/api/transactions')
+    apiFetch(`${API_BASE_URL}/transactions`)
       .then(res => res.json())
       .then(data => setTransactions(data))
       .catch(err => console.error(err))
 
-    fetch('/api/categories')
+    apiFetch(`${API_BASE_URL}/categories`)
       .then(res => res.json())
       .then(data => setCategories(data))
       .catch(err => console.error(err))
@@ -67,9 +77,42 @@ function App() {
     fetchData()
   }, [])
 
-  // Calculate stats
-  const totalIncome = transactions.filter(t => t.amount > 0).reduce((sum, t) => sum + t.amount, 0)
-  const totalExpenses = transactions.filter(t => t.amount < 0).reduce((sum, t) => sum + Math.abs(t.amount), 0)
+  // Fetch exchange rates for conversion
+  const [exchangeRates, setExchangeRates] = useState<Record<string, number>>({})
+  
+  useEffect(() => {
+    const fetchRates = async () => {
+      try {
+        const response = await fetch(`https://open.er-api.com/v6/latest/${masterCurrency}`)
+        const data = await response.json()
+        if (data.rates) {
+          setExchangeRates(data.rates)
+        }
+      } catch (error) {
+        console.error('Failed to fetch exchange rates:', error)
+      }
+    }
+    fetchRates()
+  }, [masterCurrency])
+
+  // Convert amount to master currency
+  const convertToMasterCurrency = (amount: number, accountId: string): number => {
+    const account = accounts.find(a => a.id === accountId)
+    if (!account || account.currency === masterCurrency) return amount
+    
+    const rate = exchangeRates[account.currency]
+    if (!rate) return amount // Fallback to original if rate unavailable
+    
+    return amount / rate
+  }
+
+  // Calculate stats in master currency
+  const totalIncome = transactions
+    .filter(t => t.amount > 0)
+    .reduce((sum, t) => sum + convertToMasterCurrency(t.amount, t.account_id), 0)
+  const totalExpenses = transactions
+    .filter(t => t.amount < 0)
+    .reduce((sum, t) => sum + Math.abs(convertToMasterCurrency(t.amount, t.account_id)), 0)
 
   return (
     <div className="min-h-screen bg-background">
@@ -114,6 +157,17 @@ function App() {
                     <BarChart3 className="h-3.5 w-3.5" />
                     Analytics
                   </button>
+                  <button
+                    onClick={() => setView('settings')}
+                    className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all flex items-center gap-1.5 ${
+                      view === 'settings'
+                        ? 'bg-primary text-primary-foreground shadow-sm'
+                        : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
+                    }`}
+                  >
+                    <SettingsIcon className="h-3.5 w-3.5" />
+                    Settings
+                  </button>
                 </div>
                 <div className="h-2 w-2 rounded-full bg-primary animate-pulse" />
                 <span className="text-xs text-muted-foreground">Synced</span>
@@ -138,8 +192,8 @@ function App() {
                 <div className="text-4xl font-bold tracking-tight text-foreground">
                   {netWorth !== null ? (
                     <>
-                      {netWorth.toLocaleString('hu-HU')}
-                      <span className="text-muted-foreground text-2xl ml-1">Ft</span>
+                      {netWorth.toLocaleString('hu-HU', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                      <span className="text-muted-foreground text-2xl ml-1">{masterCurrency}</span>
                     </>
                   ) : (
                     <div className="h-10 w-32 bg-muted animate-pulse rounded" />
@@ -161,7 +215,7 @@ function App() {
               </div>
               <div className="text-3xl font-bold tracking-tight text-success">
                 <span className="text-success/70 text-xl">+</span>
-                {totalIncome.toLocaleString('hu-HU')} Ft
+                {totalIncome.toLocaleString('hu-HU', {minimumFractionDigits: 2, maximumFractionDigits: 2})} {masterCurrency}
               </div>
               <p className="text-xs text-muted-foreground mt-2">This period</p>
             </div>
@@ -176,7 +230,7 @@ function App() {
               </div>
               <div className="text-3xl font-bold tracking-tight text-destructive">
                 <span className="text-destructive/70 text-xl">-</span>
-                {totalExpenses.toLocaleString('hu-HU')} Ft
+                {totalExpenses.toLocaleString('hu-HU', {minimumFractionDigits: 2, maximumFractionDigits: 2})} {masterCurrency}
               </div>
               <p className="text-xs text-muted-foreground mt-2">This period</p>
             </div>
@@ -196,9 +250,12 @@ function App() {
                 />
               </div>
             </div>
-          ) : (
+          ) : view === 'analytics' ? (
             /* Analytics View */
-            <Analytics transactions={transactions} categories={categories} accounts={accounts} />
+            <Analytics transactions={transactions} categories={categories} accounts={accounts} masterCurrency={masterCurrency} />
+          ) : (
+            /* Settings View */
+            <Settings />
           )}
         </main>
 

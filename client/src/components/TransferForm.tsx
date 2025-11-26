@@ -4,6 +4,7 @@ import { Input } from './ui/input'
 import { Label } from './ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card'
 import { Select } from './ui/select'
+import { API_BASE_URL, apiFetch } from '../config'
 
 interface Account {
   id: string
@@ -46,7 +47,7 @@ export default function TransferForm({ accounts, onTransferComplete }: TransferF
     const fetchRate = async () => {
       setIsLoadingRate(true)
       try {
-        const response = await fetch(`/api/transfers/exchange-rate?from=${fromAccount.currency}&to=${toAccount.currency}`)
+        const response = await apiFetch(`${API_BASE_URL}/transfers/exchange-rate?from=${fromAccount.currency}&to=${toAccount.currency}`)
         const data = await response.json()
         if (data.rate) {
           setSuggestedRate(data.rate)
@@ -83,7 +84,7 @@ export default function TransferForm({ accounts, onTransferComplete }: TransferF
     setIsSubmitting(true)
 
     try {
-      const response = await fetch('/api/transfers', {
+      const response = await apiFetch(`${API_BASE_URL}/transfers`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
