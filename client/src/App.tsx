@@ -16,6 +16,8 @@ type Account = {
   type: 'cash' | 'investment'
   balance: number
   currency: string
+  symbol?: string
+  asset_type?: 'stock' | 'crypto' | 'manual'
   updated_at: number
 }
 
@@ -212,7 +214,12 @@ function App() {
                   )}
                 </div>
                 <p className="text-xs text-muted-foreground mt-2">
-                  Across {accounts.length} account{accounts.length !== 1 ? 's' : ''}
+                  Across {accounts.filter(a => a.type === 'cash').length} cash account{accounts.filter(a => a.type === 'cash').length !== 1 ? 's' : ''}
+                  {accounts.filter(a => a.type === 'investment').length > 0 && (
+                    <span className="block mt-1">
+                      +{accounts.filter(a => a.type === 'investment').length} investment{accounts.filter(a => a.type === 'investment').length !== 1 ? 's' : ''} (see Investments tab)
+                    </span>
+                  )}
                 </p>
               </div>
             </div>

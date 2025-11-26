@@ -16,6 +16,8 @@ type Account = {
   type: 'cash' | 'investment'
   balance: number
   currency: string
+  symbol?: string
+  asset_type?: 'stock' | 'crypto' | 'manual'
   updated_at: number
 }
 
@@ -36,16 +38,16 @@ type Category = {
   type: 'income' | 'expense'
 }
 
-type Investment = {
+type InvestmentTransaction = {
   id: string
-  symbol: string
-  name?: string
-  type: 'stock' | 'crypto' | 'manual'
+  account_id: string
+  type: 'buy' | 'sell'
   quantity: number
-  purchase_price?: number
-  manual_price?: number
-  currency: string
-  updated_at: number
+  price: number
+  total_amount: number
+  date: string
+  notes?: string
+  created_at: number
 }
 
 const app = new Hono<{ Bindings: Bindings }>()
@@ -285,8 +287,17 @@ app.post('/accounts', async (c) => {
   const now = Date.now()
   
   await c.env.DB.prepare(
-    'INSERT INTO accounts (id, name, type, balance, currency, updated_at) VALUES (?, ?, ?, ?, ?, ?)'
-  ).bind(id, body.name, body.type, body.balance, body.currency || 'HUF', now).run()
+    'INSERT INTO accounts (id, name, type, balance, currency, symbol, asset_type, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+  ).bind(
+    id, 
+    body.name, 
+    body.type, 
+    body.balance, 
+    body.currency || 'HUF', 
+    body.symbol || null,
+    body.asset_type || null,
+    now
+  ).run()
   
   return c.json({ id, ...body, updated_at: now }, 201)
 })
@@ -297,8 +308,17 @@ app.put('/accounts/:id', async (c) => {
   const now = Date.now()
   
   await c.env.DB.prepare(
-    'UPDATE accounts SET name = COALESCE(?, name), type = COALESCE(?, type), balance = COALESCE(?, balance), currency = COALESCE(?, currency), updated_at = ? WHERE id = ?'
-  ).bind(body.name || null, body.type || null, body.balance ?? null, body.currency || null, now, id).run()
+    'UPDATE accounts SET name = COALESCE(?, name), type = COALESCE(?, type), balance = COALESCE(?, balance), currency = COALESCE(?, currency), symbol = COALESCE(?, symbol), asset_type = COALESCE(?, asset_type), updated_at = ? WHERE id = ?'
+  ).bind(
+    body.name || null, 
+    body.type || null, 
+    body.balance ?? null, 
+    body.currency || null,
+    body.symbol !== undefined ? body.symbol : null,
+    body.asset_type !== undefined ? body.asset_type : null,
+    now, 
+    id
+  ).run()
   
   return c.json({ id, ...body, updated_at: now })
 })
@@ -552,8 +572,8 @@ app.get('/dashboard/net-worth', async (c) => {
   // Get master currency from query param, default to HUF
   const masterCurrency = c.req.query('currency') || 'HUF'
   
-  // Get all accounts
-  const { results: accounts } = await c.env.DB.prepare('SELECT id, balance, currency FROM accounts').all<Account>()
+  // Get all accounts - need type field too
+  const { results: accounts } = await c.env.DB.prepare('SELECT id, type, balance, currency FROM accounts').all<Account>()
   
   if (!accounts || accounts.length === 0) {
     return c.json({ net_worth: 0, currency: masterCurrency, accounts: [] })
@@ -566,6 +586,11 @@ app.get('/dashboard/net-worth', async (c) => {
   const accountDetails = []
   
   for (const account of accounts) {
+    // Skip investment accounts - they will be calculated by frontend with market prices
+    if (account.type === 'investment') {
+      continue
+    }
+    
     let balanceInMasterCurrency = account.balance
     
     // Convert to master currency if account is in a different currency
@@ -589,102 +614,73 @@ app.get('/dashboard/net-worth', async (c) => {
     })
   }
 
-  // Add investments to net worth
-  const { results: investments } = await c.env.DB.prepare('SELECT * FROM investments').all<Investment>()
-  
-  let investmentsTotal = 0
-  const investmentDetails = []
-
-  for (const inv of investments) {
-    let price = 0
-    if (inv.type === 'manual') {
-      price = inv.manual_price || 0
-    } else {
-      // For stock/crypto, we ideally fetch live price. 
-      // But for net worth endpoint, fetching all might be slow.
-      // For now, we can skip live fetching here or use a cached value if we had one.
-      // Or we can fetch if it's just a few.
-      // Let's rely on the frontend to calculate exact investment total for now, 
-      // or just use manual_price/purchase_price as a fallback if we don't want to slow down this endpoint.
-      // However, the user wants "sum of it".
-      // Let's try to batch fetch.
-    }
-    // We will handle investment calculation in the frontend or a separate endpoint to avoid blocking this one too much,
-    // OR we update this endpoint to fetch prices.
-    // Given the complexity, let's just return the investments list in a separate endpoint or let the frontend handle the aggregation for the "Investments" page.
-    // But for "Net Worth" on dashboard, it should ideally include investments.
-    // For now, I will NOT add investments to this specific `net_worth` calculation to avoid breaking it with slow API calls.
-    // I'll let the user see investments separately or update this later.
-  }
+  // Note: Investment accounts are excluded from backend calculation
+  // Frontend will fetch market prices and add investment value to net worth
   
   return c.json({ 
-    net_worth: totalNetWorth, // This is currently just cash accounts
+    net_worth: totalNetWorth,
     currency: masterCurrency,
     accounts: accountDetails,
     rates_fetched: Object.keys(rates).length > 0
   })
 })
 
-// --- Investments ---
+// --- Investment Transactions ---
 
-app.get('/investments', async (c) => {
-  const { results } = await c.env.DB.prepare('SELECT * FROM investments').all<Investment>()
+app.get('/investment-transactions', async (c) => {
+  const accountId = c.req.query('account_id')
+  
+  if (accountId) {
+    const { results } = await c.env.DB.prepare(
+      'SELECT * FROM investment_transactions WHERE account_id = ? ORDER BY date DESC'
+    ).bind(accountId).all<InvestmentTransaction>()
+    return c.json(results)
+  }
+  
+  const { results } = await c.env.DB.prepare(
+    'SELECT * FROM investment_transactions ORDER BY date DESC'
+  ).all<InvestmentTransaction>()
   return c.json(results)
 })
 
-app.post('/investments', async (c) => {
-  const body = await c.req.json<Omit<Investment, 'id' | 'updated_at'>>()
+app.post('/investment-transactions', async (c) => {
+  const body = await c.req.json<Omit<InvestmentTransaction, 'id' | 'created_at'>>()
   const id = crypto.randomUUID()
   const now = Date.now()
   
+  // Validate account exists and is investment type
+  const account = await c.env.DB.prepare(
+    'SELECT * FROM accounts WHERE id = ?'
+  ).bind(body.account_id).first<Account>()
+  
+  if (!account) {
+    return c.json({ error: 'Account not found' }, 404)
+  }
+  
+  if (account.type !== 'investment') {
+    return c.json({ error: 'Account must be of type investment' }, 400)
+  }
+  
   await c.env.DB.prepare(
-    'INSERT INTO investments (id, symbol, name, type, quantity, purchase_price, manual_price, currency, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+    'INSERT INTO investment_transactions (id, account_id, type, quantity, price, total_amount, date, notes, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
   ).bind(
-    id, 
-    body.symbol, 
-    body.name || null, 
-    body.type, 
-    body.quantity, 
-    body.purchase_price || null, 
-    body.manual_price || null, 
-    body.currency || 'USD', 
+    id,
+    body.account_id,
+    body.type,
+    body.quantity,
+    body.price,
+    body.total_amount,
+    body.date,
+    body.notes || null,
     now
   ).run()
   
-  return c.json({ id, ...body, updated_at: now }, 201)
+  return c.json({ id, ...body, created_at: now }, 201)
 })
 
-app.put('/investments/:id', async (c) => {
+app.delete('/investment-transactions/:id', async (c) => {
   const id = c.req.param('id')
-  const body = await c.req.json<Partial<Omit<Investment, 'id' | 'updated_at'>>>()
-  const now = Date.now()
-  
-  // Dynamic update
-  const updates: string[] = []
-  const values: any[] = []
-  
-  if (body.symbol !== undefined) { updates.push('symbol = ?'); values.push(body.symbol) }
-  if (body.name !== undefined) { updates.push('name = ?'); values.push(body.name) }
-  if (body.type !== undefined) { updates.push('type = ?'); values.push(body.type) }
-  if (body.quantity !== undefined) { updates.push('quantity = ?'); values.push(body.quantity) }
-  if (body.purchase_price !== undefined) { updates.push('purchase_price = ?'); values.push(body.purchase_price) }
-  if (body.manual_price !== undefined) { updates.push('manual_price = ?'); values.push(body.manual_price) }
-  if (body.currency !== undefined) { updates.push('currency = ?'); values.push(body.currency) }
-  
-  updates.push('updated_at = ?')
-  values.push(now)
-  values.push(id)
-  
-  await c.env.DB.prepare(
-    `UPDATE investments SET ${updates.join(', ')} WHERE id = ?`
-  ).bind(...values).run()
-  
-  return c.json({ id, ...body, updated_at: now })
-})
-
-app.delete('/investments/:id', async (c) => {
-  const id = c.req.param('id')
-  await c.env.DB.prepare('DELETE FROM investments WHERE id = ?').bind(id).run()
+  await c.env.DB.prepare('DELETE FROM investment_transactions WHERE id = ?').bind(id).run()
   return c.json({ success: true })
 })
 

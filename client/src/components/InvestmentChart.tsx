@@ -4,14 +4,26 @@ import {
   YAxis, 
   CartesianGrid, 
   Tooltip, 
-  ResponsiveContainer, 
-  ReferenceLine,
-  AreaChart,
-  Area
+  ResponsiveContainer,
+  ComposedChart,
+  Area,
+  Scatter
 } from 'recharts'
 import { format } from 'date-fns'
 import { Loader2, TrendingUp, TrendingDown } from 'lucide-react'
 import { API_BASE_URL, apiFetch } from '../config'
+
+type InvestmentTransaction = {
+  id: string
+  account_id: string
+  type: 'buy' | 'sell'
+  quantity: number
+  price: number
+  total_amount: number
+  date: string
+  notes?: string
+  created_at: number
+}
 
 type ChartDataPoint = {
   date: string
@@ -20,12 +32,14 @@ type ChartDataPoint = {
   low: number
   close: number
   volume: number
+  buyPoint?: number
+  sellPoint?: number
+  transaction?: InvestmentTransaction
 }
 
 type InvestmentChartProps = {
   symbol: string
-  purchasePrice?: number
-  currency: string
+  transactions?: InvestmentTransaction[]
 }
 
 type TimeRange = '1d' | '5d' | '1mo' | '6mo' | '1y' | '5y' | 'max'
@@ -40,7 +54,7 @@ const RANGES: { label: string; value: TimeRange; interval: string }[] = [
   { label: 'All', value: 'max', interval: '3mo' },
 ]
 
-export function InvestmentChart({ symbol, purchasePrice, currency }: InvestmentChartProps) {
+export function InvestmentChart({ symbol, transactions = [] }: InvestmentChartProps) {
   const [range, setRange] = useState<TimeRange>('1mo')
   const [data, setData] = useState<ChartDataPoint[]>([])
   const [loading, setLoading] = useState(true)
@@ -61,25 +75,56 @@ export function InvestmentChart({ symbol, purchasePrice, currency }: InvestmentC
         
         const json = await res.json()
         
-        // Parse Yahoo Finance Chart response
-        // Structure: { quotes: [{ date, open, high, low, close, volume, ... }], ... }
-        // OR { timestamp: [], indicators: { quote: [{ open, ... }] } } depending on endpoint version
-        // yahoo-finance2 usually returns a simplified object or the raw result.
-        // Let's assume it returns the result object which has 'quotes' array if using 'chart' method wrapper properly,
-        // OR it might return the raw structure.
-        // Let's inspect the data structure in the component if needed, but usually 'quotes' is the array.
-        
         let points: ChartDataPoint[] = []
         
         if (json.quotes && Array.isArray(json.quotes)) {
-          points = json.quotes.map((q: any) => ({
-            date: q.date, // ISO string or timestamp
-            open: q.open,
-            high: q.high,
-            low: q.low,
-            close: q.close,
-            volume: q.volume
-          })).filter((p: any) => p.close !== null) // Filter out nulls (market closed/no data)
+          const quotes = json.quotes
+          const txMap = new Map<number, InvestmentTransaction>()
+          
+          // Map each transaction to the closest data point
+          if (quotes.length > 0) {
+            const firstQuoteTime = new Date(quotes[0].date).getTime()
+            const lastQuoteTime = new Date(quotes[quotes.length - 1].date).getTime()
+            
+            transactions.forEach(tx => {
+              const txTime = new Date(tx.date).getTime()
+              
+              // Only consider transactions within the chart's time range
+              if (txTime >= firstQuoteTime && txTime <= lastQuoteTime) {
+                let closestIdx = -1
+                let minDiff = Infinity
+                
+                quotes.forEach((q: any, i: number) => {
+                  const qTime = new Date(q.date).getTime()
+                  const diff = Math.abs(qTime - txTime)
+                  if (diff < minDiff) {
+                    minDiff = diff
+                    closestIdx = i
+                  }
+                })
+                
+                if (closestIdx !== -1) {
+                  txMap.set(closestIdx, tx)
+                }
+              }
+            })
+          }
+
+          points = quotes.map((q: any, i: number) => {
+            const tx = txMap.get(i)
+            
+            return {
+              date: q.date,
+              open: q.open,
+              high: q.high,
+              low: q.low,
+              close: q.close,
+              volume: q.volume,
+              buyPoint: tx?.type === 'buy' ? q.close : undefined,
+              sellPoint: tx?.type === 'sell' ? q.close : undefined,
+              transaction: tx
+            }
+          }).filter((p: any) => p.close !== null)
         }
         
         setData(points)
@@ -92,7 +137,7 @@ export function InvestmentChart({ symbol, purchasePrice, currency }: InvestmentC
     }
 
     fetchData()
-  }, [symbol, range])
+  }, [symbol, range, transactions])
 
   const currentPrice = data.length > 0 ? data[data.length - 1].close : 0
   const startPrice = data.length > 0 ? data[0].close : 0
@@ -107,13 +152,12 @@ export function InvestmentChart({ symbol, purchasePrice, currency }: InvestmentC
         <div className="bg-card/95 backdrop-blur border border-border p-3 rounded-lg shadow-xl text-xs">
           <p className="font-medium mb-1">{format(new Date(point.date), 'MMM d, yyyy HH:mm')}</p>
           <p className="text-foreground font-bold">
-            {point.close.toLocaleString(undefined, { style: 'currency', currency })}
+            ${point.close.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </p>
-          {purchasePrice && (
+          {point.transaction && (
             <div className="mt-1 pt-1 border-t border-border/50">
-              <p className="text-muted-foreground">Your Avg: {purchasePrice.toLocaleString(undefined, { style: 'currency', currency })}</p>
-              <p className={`${point.close >= purchasePrice ? 'text-green-500' : 'text-red-500'}`}>
-                {((point.close - purchasePrice) / purchasePrice * 100).toFixed(2)}%
+              <p className={`font-medium ${point.transaction.type === 'buy' ? 'text-green-500' : 'text-red-500'}`}>
+                {point.transaction.type.toUpperCase()}: {point.transaction.quantity} @ ${point.transaction.price}
               </p>
             </div>
           )}
@@ -129,7 +173,7 @@ export function InvestmentChart({ symbol, purchasePrice, currency }: InvestmentC
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <div className="text-2xl font-bold">
-            {(hoveredPrice ?? currentPrice).toLocaleString(undefined, { style: 'currency', currency })}
+            ${(hoveredPrice ?? currentPrice).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </div>
           <div className={`flex items-center gap-1 text-sm ${isPositive ? 'text-green-500' : 'text-red-500'}`}>
             {isPositive ? <TrendingUp className="h-4 w-4" /> : <TrendingDown className="h-4 w-4" />}
@@ -169,7 +213,7 @@ export function InvestmentChart({ symbol, purchasePrice, currency }: InvestmentC
           </div>
         ) : (
           <ResponsiveContainer width="100%" height="100%">
-            <AreaChart
+            <ComposedChart
               data={data}
               onMouseMove={(e: any) => {
                 if (e.activePayload) {
@@ -188,28 +232,12 @@ export function InvestmentChart({ symbol, purchasePrice, currency }: InvestmentC
               <XAxis 
                 dataKey="date" 
                 hide 
-                // tickFormatter={(date) => format(new Date(date), 'MMM d')}
               />
               <YAxis 
                 domain={['auto', 'auto']} 
                 hide 
-                // tickFormatter={(val) => val.toFixed(2)}
               />
               <Tooltip content={<CustomTooltip />} />
-              
-              {purchasePrice && (
-                <ReferenceLine 
-                  y={purchasePrice} 
-                  stroke="hsl(var(--muted-foreground))" 
-                  strokeDasharray="3 3" 
-                  label={{ 
-                    value: 'Avg Buy', 
-                    position: 'right', 
-                    fill: 'hsl(var(--muted-foreground))',
-                    fontSize: 10
-                  }} 
-                />
-              )}
               
               <Area
                 type="monotone"
@@ -219,7 +247,19 @@ export function InvestmentChart({ symbol, purchasePrice, currency }: InvestmentC
                 fillOpacity={1}
                 fill="url(#colorPrice)"
               />
-            </AreaChart>
+              
+              <Scatter
+                dataKey="buyPoint"
+                fill="#22c55e"
+                shape="circle"
+              />
+              
+              <Scatter
+                dataKey="sellPoint"
+                fill="#ef4444"
+                shape="circle"
+              />
+            </ComposedChart>
           </ResponsiveContainer>
         )}
       </div>
