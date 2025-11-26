@@ -52,7 +52,7 @@ function App() {
   const fetchData = () => {
     const currency = getMasterCurrency()
     
-    apiFetch(`/api/dashboard/net-worth?currency=${currency}`)
+    apiFetch(`${API_BASE_URL}/dashboard/net-worth?currency=${currency}`)
       .then(res => res.json())
       .then(data => setNetWorth(data.net_worth))
       .catch(err => console.error(err))
