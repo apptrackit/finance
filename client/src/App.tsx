@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react'
 import { AccountList } from './components/AccountList'
 import { TransactionList } from './components/TransactionList'
 import { Analytics } from './components/Analytics'
-import { Wallet, TrendingUp, TrendingDown, Activity, BarChart3, List, Settings as SettingsIcon } from 'lucide-react'
+import { Investments } from './components/Investments'
+import { Wallet, TrendingUp, TrendingDown, Activity, BarChart3, List, Settings as SettingsIcon, LineChart } from 'lucide-react'
 import { API_BASE_URL, apiFetch } from './config'
 import Settings, { getMasterCurrency } from './components/Settings'
 
@@ -35,7 +36,7 @@ type Category = {
   type: 'income' | 'expense'
 }
 
-type View = 'dashboard' | 'analytics' | 'settings'
+type View = 'dashboard' | 'analytics' | 'settings' | 'investments'
 
 function App() {
   const [netWorth, setNetWorth] = useState<number | null>(null)
@@ -158,6 +159,17 @@ function App() {
                     Analytics
                   </button>
                   <button
+                    onClick={() => setView('investments')}
+                    className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all flex items-center gap-1.5 ${
+                      view === 'investments'
+                        ? 'bg-primary text-primary-foreground shadow-sm'
+                        : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
+                    }`}
+                  >
+                    <LineChart className="h-3.5 w-3.5" />
+                    Investments
+                  </button>
+                  <button
                     onClick={() => setView('settings')}
                     className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all flex items-center gap-1.5 ${
                       view === 'settings'
@@ -253,6 +265,9 @@ function App() {
           ) : view === 'analytics' ? (
             /* Analytics View */
             <Analytics transactions={transactions} categories={categories} accounts={accounts} masterCurrency={masterCurrency} />
+          ) : view === 'investments' ? (
+            /* Investments View */
+            <Investments />
           ) : (
             /* Settings View */
             <Settings />

@@ -24,3 +24,15 @@ CREATE TABLE IF NOT EXISTS transactions (
   is_recurring BOOLEAN DEFAULT 0,
   FOREIGN KEY(account_id) REFERENCES accounts(id)
 );
+
+CREATE TABLE IF NOT EXISTS investments (
+  id TEXT PRIMARY KEY,
+  symbol TEXT NOT NULL,
+  name TEXT,
+  type TEXT NOT NULL, -- 'stock', 'crypto', 'manual'
+  quantity REAL NOT NULL,
+  purchase_price REAL, -- average purchase price per share
+  manual_price REAL, -- for manually tracked assets
+  currency TEXT DEFAULT 'USD',
+  updated_at INTEGER
+);
