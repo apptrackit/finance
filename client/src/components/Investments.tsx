@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
-import { Plus, Search, RefreshCw, TrendingUp, TrendingDown, DollarSign, Trash2, Edit2 } from 'lucide-react'
+import { Plus, Search, RefreshCw, TrendingUp, TrendingDown, DollarSign, Trash2, Edit2, BarChart2 } from 'lucide-react'
 import { API_BASE_URL, apiFetch } from '../config'
+import { InvestmentChart } from './InvestmentChart'
 
 type Investment = {
   id: string
@@ -25,9 +26,9 @@ type MarketQuote = {
 export function Investments() {
   const [investments, setInvestments] = useState<Investment[]>([])
   const [quotes, setQuotes] = useState<Record<string, MarketQuote>>({})
-  const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
+  const [selectedInvestment, setSelectedInvestment] = useState<Investment | null>(null)
   
   // Add Modal State
   const [searchQuery, setSearchQuery] = useState('')
@@ -89,7 +90,6 @@ export function Investments() {
     setRefreshing(true)
     const data = await fetchInvestments()
     await fetchQuotes(data)
-    setLoading(false)
     setRefreshing(false)
   }
 
@@ -227,7 +227,11 @@ export function Investments() {
               const change = quote?.regularMarketChangePercent || 0
               
               return (
-                <div key={inv.id} className="p-4 flex items-center justify-between hover:bg-secondary/20 transition-colors">
+                <div 
+                  key={inv.id} 
+                  className="p-4 flex items-center justify-between hover:bg-secondary/20 transition-colors cursor-pointer"
+                  onClick={() => inv.type !== 'manual' && setSelectedInvestment(inv)}
+                >
                   <div className="flex items-center gap-4">
                     <div className={`h-10 w-10 rounded-full flex items-center justify-center ${
                       inv.type === 'crypto' ? 'bg-orange-100 text-orange-600' : 
@@ -236,7 +240,10 @@ export function Investments() {
                       {inv.type === 'crypto' ? '₿' : inv.type === 'manual' ? 'M' : '$'}
                     </div>
                     <div>
-                      <div className="font-medium">{inv.symbol}</div>
+                      <div className="font-medium flex items-center gap-2">
+                        {inv.symbol}
+                        {inv.type !== 'manual' && <BarChart2 className="h-3 w-3 text-muted-foreground" />}
+                      </div>
                       <div className="text-xs text-muted-foreground">{inv.name}</div>
                     </div>
                   </div>
@@ -253,7 +260,7 @@ export function Investments() {
                     </div>
                   </div>
                   
-                  <div className="flex gap-2 ml-4">
+                  <div className="flex gap-2 ml-4" onClick={(e) => e.stopPropagation()}>
                     <button 
                       onClick={() => handleDelete(inv.id)}
                       className="p-2 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-lg transition-colors"
@@ -267,6 +274,54 @@ export function Investments() {
           )}
         </div>
       </div>
+
+      {/* Investment Detail Modal */}
+      {selectedInvestment && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-card w-full max-w-3xl rounded-2xl shadow-2xl border border-border overflow-hidden flex flex-col max-h-[90vh]">
+            <div className="p-4 border-b border-border flex justify-between items-center">
+              <div>
+                <h3 className="font-semibold text-lg">{selectedInvestment.name}</h3>
+                <p className="text-xs text-muted-foreground">{selectedInvestment.symbol} • {selectedInvestment.type.toUpperCase()}</p>
+              </div>
+              <button onClick={() => setSelectedInvestment(null)} className="text-muted-foreground hover:text-foreground p-2">✕</button>
+            </div>
+            
+            <div className="p-6 overflow-y-auto">
+              <InvestmentChart 
+                symbol={selectedInvestment.symbol} 
+                purchasePrice={selectedInvestment.purchase_price}
+                currency={selectedInvestment.currency}
+              />
+              
+              <div className="mt-6 grid grid-cols-2 sm:grid-cols-4 gap-4">
+                <div className="p-4 bg-secondary/20 rounded-xl border border-border/50">
+                  <div className="text-xs text-muted-foreground mb-1">Quantity</div>
+                  <div className="font-semibold">{selectedInvestment.quantity}</div>
+                </div>
+                <div className="p-4 bg-secondary/20 rounded-xl border border-border/50">
+                  <div className="text-xs text-muted-foreground mb-1">Avg Cost</div>
+                  <div className="font-semibold">
+                    {(selectedInvestment.purchase_price || 0).toLocaleString(undefined, { style: 'currency', currency: selectedInvestment.currency })}
+                  </div>
+                </div>
+                <div className="p-4 bg-secondary/20 rounded-xl border border-border/50">
+                  <div className="text-xs text-muted-foreground mb-1">Total Cost</div>
+                  <div className="font-semibold">
+                    {((selectedInvestment.purchase_price || 0) * selectedInvestment.quantity).toLocaleString(undefined, { style: 'currency', currency: selectedInvestment.currency })}
+                  </div>
+                </div>
+                <div className="p-4 bg-secondary/20 rounded-xl border border-border/50">
+                  <div className="text-xs text-muted-foreground mb-1">Current Value</div>
+                  <div className="font-semibold">
+                    {((quotes[selectedInvestment.symbol]?.regularMarketPrice || 0) * selectedInvestment.quantity).toLocaleString(undefined, { style: 'currency', currency: selectedInvestment.currency })}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Add Investment Modal */}
       {isAddModalOpen && (
