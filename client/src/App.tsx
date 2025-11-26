@@ -125,40 +125,40 @@ function App() {
       <div className="relative">
         {/* Header */}
         <header className="border-b border-border/50 bg-card/50 backdrop-blur-xl sticky top-0 z-50">
-          <div className="max-w-7xl mx-auto px-6 py-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-primary to-primary/60 flex items-center justify-center shadow-lg shadow-primary/25">
-                  <Wallet className="h-5 w-5 text-primary-foreground" />
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 sm:py-4">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
+                <div className="h-8 w-8 sm:h-10 sm:w-10 rounded-xl bg-gradient-to-br from-primary to-primary/60 flex items-center justify-center shadow-lg shadow-primary/25">
+                  <Wallet className="h-4 w-4 sm:h-5 sm:w-5 text-primary-foreground" />
                 </div>
-                <div>
+                <div className="hidden sm:block">
                   <h1 className="text-xl font-bold tracking-tight">Finance</h1>
                   <p className="text-xs text-muted-foreground">Self-Hosted • Zero Trust</p>
                 </div>
               </div>
-              <div className="flex items-center gap-2">
-                <div className="flex gap-1 p-1 rounded-xl bg-secondary/50 border border-border/50">
+              <div className="flex items-center gap-1.5 sm:gap-2">
+                <div className="flex gap-0.5 sm:gap-1 p-0.5 sm:p-1 rounded-xl bg-secondary/50 border border-border/50">
                   <button
                     onClick={() => setView('dashboard')}
-                    className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all flex items-center gap-1.5 ${
+                    className={`px-2 sm:px-3 py-1.5 text-xs font-medium rounded-lg transition-all flex items-center gap-1 sm:gap-1.5 ${
                       view === 'dashboard'
                         ? 'bg-primary text-primary-foreground shadow-sm'
                         : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
                     }`}
                   >
                     <List className="h-3.5 w-3.5" />
-                    Dashboard
+                    <span className="hidden sm:inline">Dashboard</span>
                   </button>
                   <button
                     onClick={() => setView('analytics')}
-                    className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all flex items-center gap-1.5 ${
+                    className={`px-2 sm:px-3 py-1.5 text-xs font-medium rounded-lg transition-all flex items-center gap-1 sm:gap-1.5 ${
                       view === 'analytics'
                         ? 'bg-primary text-primary-foreground shadow-sm'
                         : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
                     }`}
                   >
                     <BarChart3 className="h-3.5 w-3.5" />
-                    Analytics
+                    <span className="hidden sm:inline">Analytics</span>
                   </button>
                   <button
                     onClick={() => setView('investments')}
@@ -173,44 +173,46 @@ function App() {
                   </button>
                   <button
                     onClick={() => setView('settings')}
-                    className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all flex items-center gap-1.5 ${
+                    className={`px-2 sm:px-3 py-1.5 text-xs font-medium rounded-lg transition-all flex items-center gap-1 sm:gap-1.5 ${
                       view === 'settings'
                         ? 'bg-primary text-primary-foreground shadow-sm'
                         : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
                     }`}
                   >
                     <SettingsIcon className="h-3.5 w-3.5" />
-                    Settings
+                    <span className="hidden sm:inline">Settings</span>
                   </button>
                 </div>
-                <div className="h-2 w-2 rounded-full bg-primary animate-pulse" />
-                <span className="text-xs text-muted-foreground">Synced</span>
+                <div className="hidden sm:flex items-center gap-2">
+                  <div className="h-2 w-2 rounded-full bg-primary animate-pulse" />
+                  <span className="text-xs text-muted-foreground">Synced</span>
+                </div>
               </div>
             </div>
           </div>
         </header>
 
-        <main className="max-w-7xl mx-auto px-6 py-8">
+        <main className="max-w-7xl mx-auto px-4 sm:px-6 py-4 sm:py-8">
           {/* Stats Grid */}
-          <div className="grid gap-4 md:grid-cols-3 mb-8">
+          <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-3 mb-4 sm:mb-8">
             {/* Net Worth Card */}
-            <div className="md:col-span-1 group relative overflow-hidden rounded-2xl border border-border/50 bg-gradient-to-br from-card to-card/80 p-6 shadow-xl">
+            <div className="sm:col-span-1 group relative overflow-hidden rounded-2xl border border-border/50 bg-gradient-to-br from-card to-card/80 p-4 sm:p-6 shadow-xl">
               <div className="absolute top-0 right-0 w-32 h-32 bg-primary/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" />
               <div className="relative">
-                <div className="flex items-center justify-between mb-4">
-                  <span className="text-sm font-medium text-muted-foreground">Net Worth</span>
-                  <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center">
-                    <Activity className="h-4 w-4 text-primary" />
+                <div className="flex items-center justify-between mb-2 sm:mb-4">
+                  <span className="text-xs sm:text-sm font-medium text-muted-foreground">Net Worth</span>
+                  <div className="h-7 w-7 sm:h-8 sm:w-8 rounded-lg bg-primary/10 flex items-center justify-center">
+                    <Activity className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-primary" />
                   </div>
                 </div>
-                <div className="text-4xl font-bold tracking-tight text-foreground">
+                <div className="text-2xl sm:text-4xl font-bold tracking-tight text-foreground">
                   {netWorth !== null ? (
                     <>
-                      {netWorth.toLocaleString('hu-HU', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
-                      <span className="text-muted-foreground text-2xl ml-1">{masterCurrency}</span>
+                      {netWorth.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})}
+                      <span className="text-muted-foreground text-lg sm:text-2xl ml-1">{masterCurrency}</span>
                     </>
                   ) : (
-                    <div className="h-10 w-32 bg-muted animate-pulse rounded" />
+                    <div className="h-8 sm:h-10 w-32 bg-muted animate-pulse rounded" />
                   )}
                 </div>
                 <p className="text-xs text-muted-foreground mt-2">
@@ -225,39 +227,39 @@ function App() {
             </div>
 
             {/* Income Card */}
-            <div className="group relative overflow-hidden rounded-2xl border border-border/50 bg-card p-6 shadow-xl hover:border-success/30 transition-colors">
-              <div className="flex items-center justify-between mb-4">
-                <span className="text-sm font-medium text-muted-foreground">Income</span>
-                <div className="h-8 w-8 rounded-lg bg-success/10 flex items-center justify-center">
-                  <TrendingUp className="h-4 w-4 text-success" />
+            <div className="group relative overflow-hidden rounded-2xl border border-border/50 bg-card p-4 sm:p-6 shadow-xl hover:border-success/30 transition-colors">
+              <div className="flex items-center justify-between mb-2 sm:mb-4">
+                <span className="text-xs sm:text-sm font-medium text-muted-foreground">Income</span>
+                <div className="h-7 w-7 sm:h-8 sm:w-8 rounded-lg bg-success/10 flex items-center justify-center">
+                  <TrendingUp className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-success" />
                 </div>
               </div>
-              <div className="text-3xl font-bold tracking-tight text-success">
-                <span className="text-success/70 text-xl">+</span>
-                {totalIncome.toLocaleString('hu-HU', {minimumFractionDigits: 2, maximumFractionDigits: 2})} {masterCurrency}
+              <div className="text-xl sm:text-3xl font-bold tracking-tight text-success">
+                <span className="text-success/70 text-base sm:text-xl">+</span>
+                {totalIncome.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})} <span className="text-sm sm:text-base">{masterCurrency}</span>
               </div>
-              <p className="text-xs text-muted-foreground mt-2">This period</p>
+              <p className="text-[10px] sm:text-xs text-muted-foreground mt-1 sm:mt-2">This period</p>
             </div>
 
             {/* Expenses Card */}
-            <div className="group relative overflow-hidden rounded-2xl border border-border/50 bg-card p-6 shadow-xl hover:border-destructive/30 transition-colors">
-              <div className="flex items-center justify-between mb-4">
-                <span className="text-sm font-medium text-muted-foreground">Expenses</span>
-                <div className="h-8 w-8 rounded-lg bg-destructive/10 flex items-center justify-center">
-                  <TrendingDown className="h-4 w-4 text-destructive" />
+            <div className="group relative overflow-hidden rounded-2xl border border-border/50 bg-card p-4 sm:p-6 shadow-xl hover:border-destructive/30 transition-colors">
+              <div className="flex items-center justify-between mb-2 sm:mb-4">
+                <span className="text-xs sm:text-sm font-medium text-muted-foreground">Expenses</span>
+                <div className="h-7 w-7 sm:h-8 sm:w-8 rounded-lg bg-destructive/10 flex items-center justify-center">
+                  <TrendingDown className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-destructive" />
                 </div>
               </div>
-              <div className="text-3xl font-bold tracking-tight text-destructive">
-                <span className="text-destructive/70 text-xl">-</span>
-                {totalExpenses.toLocaleString('hu-HU', {minimumFractionDigits: 2, maximumFractionDigits: 2})} {masterCurrency}
+              <div className="text-xl sm:text-3xl font-bold tracking-tight text-destructive">
+                <span className="text-destructive/70 text-base sm:text-xl">-</span>
+                {totalExpenses.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})} <span className="text-sm sm:text-base">{masterCurrency}</span>
               </div>
-              <p className="text-xs text-muted-foreground mt-2">This period</p>
+              <p className="text-[10px] sm:text-xs text-muted-foreground mt-1 sm:mt-2">This period</p>
             </div>
           </div>
 
           {view === 'dashboard' ? (
             /* Main Content Grid */
-            <div className="grid gap-6 lg:grid-cols-12">
+            <div className="grid gap-4 sm:gap-6 lg:grid-cols-12">
               <div className="lg:col-span-4">
                 <AccountList accounts={accounts} onAccountAdded={fetchData} />
               </div>
