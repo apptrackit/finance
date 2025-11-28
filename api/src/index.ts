@@ -1,5 +1,8 @@
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
+import YahooFinance from 'yahoo-finance2'
+
+const yahooFinance = new YahooFinance()
 
 type Bindings = {
   DB: D1Database
@@ -13,6 +16,8 @@ type Account = {
   type: 'cash' | 'investment'
   balance: number
   currency: string
+  symbol?: string
+  asset_type?: 'stock' | 'crypto' | 'manual'
   updated_at: number
 }
 
@@ -24,6 +29,7 @@ type Transaction = {
   description?: string
   date: string
   is_recurring: boolean
+  linked_transaction_id?: string
 }
 
 type Category = {
@@ -31,6 +37,18 @@ type Category = {
   name: string
   icon?: string
   type: 'income' | 'expense'
+}
+
+type InvestmentTransaction = {
+  id: string
+  account_id: string
+  type: 'buy' | 'sell'
+  quantity: number
+  price: number
+  total_amount: number
+  date: string
+  notes?: string
+  created_at: number
 }
 
 const app = new Hono<{ Bindings: Bindings }>()
@@ -270,8 +288,17 @@ app.post('/accounts', async (c) => {
   const now = Date.now()
   
   await c.env.DB.prepare(
-    'INSERT INTO accounts (id, name, type, balance, currency, updated_at) VALUES (?, ?, ?, ?, ?, ?)'
-  ).bind(id, body.name, body.type, body.balance, body.currency || 'HUF', now).run()
+    'INSERT INTO accounts (id, name, type, balance, currency, symbol, asset_type, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+  ).bind(
+    id, 
+    body.name, 
+    body.type, 
+    body.balance, 
+    body.currency || 'HUF', 
+    body.symbol || null,
+    body.asset_type || null,
+    now
+  ).run()
   
   return c.json({ id, ...body, updated_at: now }, 201)
 })
@@ -282,8 +309,17 @@ app.put('/accounts/:id', async (c) => {
   const now = Date.now()
   
   await c.env.DB.prepare(
-    'UPDATE accounts SET name = COALESCE(?, name), type = COALESCE(?, type), balance = COALESCE(?, balance), currency = COALESCE(?, currency), updated_at = ? WHERE id = ?'
-  ).bind(body.name || null, body.type || null, body.balance ?? null, body.currency || null, now, id).run()
+    'UPDATE accounts SET name = COALESCE(?, name), type = COALESCE(?, type), balance = COALESCE(?, balance), currency = COALESCE(?, currency), symbol = COALESCE(?, symbol), asset_type = COALESCE(?, asset_type), updated_at = ? WHERE id = ?'
+  ).bind(
+    body.name || null, 
+    body.type || null, 
+    body.balance ?? null, 
+    body.currency || null,
+    body.symbol !== undefined ? body.symbol : null,
+    body.asset_type !== undefined ? body.asset_type : null,
+    now, 
+    id
+  ).run()
   
   return c.json({ id, ...body, updated_at: now })
 })
@@ -394,7 +430,7 @@ async function getExchangeRates(fromCurrency: string): Promise<Record<string, nu
   try {
     const response = await fetch(`https://open.er-api.com/v6/latest/${fromCurrency}`)
     if (!response.ok) {
-      console.warn('Exchange rate API responded with non-ok status', response.status)
+      console.warn(`Exchange rate API responded with non-ok status ${response.status} for currency ${fromCurrency}`)
       return {}
     }
 
@@ -501,15 +537,16 @@ app.post('/transfers', async (c) => {
   
   // Create outgoing transaction (negative)
   const outgoingId = crypto.randomUUID()
+  const incomingId = crypto.randomUUID()
+
   await c.env.DB.prepare(
-    'INSERT INTO transactions (id, account_id, category_id, amount, description, date, is_recurring) VALUES (?, ?, ?, ?, ?, ?, ?)'
-  ).bind(outgoingId, from_account_id, null, -totalDeduction, outgoingDesc, date, 0).run()
+    'INSERT INTO transactions (id, account_id, category_id, amount, description, date, is_recurring, linked_transaction_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+  ).bind(outgoingId, from_account_id, null, -totalDeduction, outgoingDesc, date, 0, incomingId).run()
   
   // Create incoming transaction (positive)
-  const incomingId = crypto.randomUUID()
   await c.env.DB.prepare(
-    'INSERT INTO transactions (id, account_id, category_id, amount, description, date, is_recurring) VALUES (?, ?, ?, ?, ?, ?, ?)'
-  ).bind(incomingId, to_account_id, null, amount_to, incomingDesc, date, 0).run()
+    'INSERT INTO transactions (id, account_id, category_id, amount, description, date, is_recurring, linked_transaction_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+  ).bind(incomingId, to_account_id, null, amount_to, incomingDesc, date, 0, outgoingId).run()
   
   // Update account balances
   await c.env.DB.prepare('UPDATE accounts SET balance = balance - ?, updated_at = ? WHERE id = ?')
@@ -537,8 +574,8 @@ app.get('/dashboard/net-worth', async (c) => {
   // Get master currency from query param, default to HUF
   const masterCurrency = c.req.query('currency') || 'HUF'
   
-  // Get all accounts
-  const { results: accounts } = await c.env.DB.prepare('SELECT id, balance, currency FROM accounts').all<Account>()
+  // Get all accounts - need type field too
+  const { results: accounts } = await c.env.DB.prepare('SELECT id, type, balance, currency FROM accounts').all<Account>()
   
   if (!accounts || accounts.length === 0) {
     return c.json({ net_worth: 0, currency: masterCurrency, accounts: [] })
@@ -551,6 +588,11 @@ app.get('/dashboard/net-worth', async (c) => {
   const accountDetails = []
   
   for (const account of accounts) {
+    // Skip investment accounts - they will be calculated by frontend with market prices
+    if (account.type === 'investment') {
+      continue
+    }
+    
     let balanceInMasterCurrency = account.balance
     
     // Convert to master currency if account is in a different currency
@@ -573,6 +615,9 @@ app.get('/dashboard/net-worth', async (c) => {
       balance_in_master: balanceInMasterCurrency
     })
   }
+
+  // Note: Investment accounts are excluded from backend calculation
+  // Frontend will fetch market prices and add investment value to net worth
   
   return c.json({ 
     net_worth: totalNetWorth,
@@ -580,6 +625,149 @@ app.get('/dashboard/net-worth', async (c) => {
     accounts: accountDetails,
     rates_fetched: Object.keys(rates).length > 0
   })
+})
+
+// --- Investment Transactions ---
+
+app.get('/investment-transactions', async (c) => {
+  const accountId = c.req.query('account_id')
+  
+  if (accountId) {
+    const { results } = await c.env.DB.prepare(
+      'SELECT * FROM investment_transactions WHERE account_id = ? ORDER BY date DESC'
+    ).bind(accountId).all<InvestmentTransaction>()
+    return c.json(results)
+  }
+  
+  const { results } = await c.env.DB.prepare(
+    'SELECT * FROM investment_transactions ORDER BY date DESC'
+  ).all<InvestmentTransaction>()
+  return c.json(results)
+})
+
+app.post('/investment-transactions', async (c) => {
+  const body = await c.req.json<Omit<InvestmentTransaction, 'id' | 'created_at'>>()
+  const id = crypto.randomUUID()
+  const now = Date.now()
+  
+  // Validate account exists and is investment type
+  const account = await c.env.DB.prepare(
+    'SELECT * FROM accounts WHERE id = ?'
+  ).bind(body.account_id).first<Account>()
+  
+  if (!account) {
+    return c.json({ error: 'Account not found' }, 404)
+  }
+  
+  if (account.type !== 'investment') {
+    return c.json({ error: 'Account must be of type investment' }, 400)
+  }
+  
+  await c.env.DB.prepare(
+    'INSERT INTO investment_transactions (id, account_id, type, quantity, price, total_amount, date, notes, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+  ).bind(
+    id,
+    body.account_id,
+    body.type,
+    body.quantity,
+    body.price,
+    body.total_amount,
+    body.date,
+    body.notes || null,
+    now
+  ).run()
+  
+  return c.json({ id, ...body, created_at: now }, 201)
+})
+
+app.delete('/investment-transactions/:id', async (c) => {
+  const id = c.req.param('id')
+  await c.env.DB.prepare('DELETE FROM investment_transactions WHERE id = ?').bind(id).run()
+  return c.json({ success: true })
+})
+
+// --- Market Data (Yahoo Finance) ---
+
+app.get('/market/search', async (c) => {
+  const query = c.req.query('q')
+  if (!query) {
+    return c.json({ error: 'Query parameter "q" is required' }, 400)
+  }
+  try {
+    const result = await yahooFinance.search(query)
+    return c.json(result)
+  } catch (error: any) {
+    console.error('Yahoo Finance Search Error:', error)
+    return c.json({ error: 'Failed to fetch market data' }, 500)
+  }
+})
+
+app.get('/market/quote', async (c) => {
+  const symbol = c.req.query('symbol')
+  if (!symbol) {
+    return c.json({ error: 'Query parameter "symbol" is required' }, 400)
+  }
+  try {
+    const result = await yahooFinance.quote(symbol)
+    return c.json(result)
+  } catch (error: any) {
+    console.error('Yahoo Finance Quote Error:', error)
+    return c.json({ error: 'Failed to fetch quote data' }, 500)
+  }
+})
+
+app.get('/market/chart', async (c) => {
+  const symbol = c.req.query('symbol')
+  const range = c.req.query('range') || '1mo'
+  const interval = c.req.query('interval') || '1d'
+
+  if (!symbol) {
+    return c.json({ error: 'Query parameter "symbol" is required' }, 400)
+  }
+
+  try {
+    const now = new Date()
+    let period1 = new Date()
+
+    switch (range) {
+      case '1d':
+        period1.setDate(now.getDate() - 1)
+        break
+      case '5d':
+        period1.setDate(now.getDate() - 5)
+        break
+      case '1mo':
+        period1.setMonth(now.getMonth() - 1)
+        break
+      case '6mo':
+        period1.setMonth(now.getMonth() - 6)
+        break
+      case '1y':
+        period1.setFullYear(now.getFullYear() - 1)
+        break
+      case '5y':
+        period1.setFullYear(now.getFullYear() - 5)
+        break
+      case 'max':
+        period1 = new Date(0)
+        break
+      default:
+        period1.setMonth(now.getMonth() - 1)
+    }
+
+    const queryOptions = {
+      period1: Math.floor(period1.getTime() / 1000), // Unix timestamp in seconds
+      interval: interval as any
+    }
+
+    const result: any = await yahooFinance.chart(symbol, queryOptions)
+    
+    // yahoo-finance2 returns { meta, quotes } where quotes is already transformed
+    return c.json({ quotes: result.quotes })
+  } catch (error: any) {
+    console.error('Yahoo Finance Chart Error:', error)
+    return c.json({ error: 'Failed to fetch chart data' }, 500)
+  }
 })
 
 export default {

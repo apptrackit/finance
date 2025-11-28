@@ -1,5 +1,6 @@
 name = "finance-api"
-compatibility_date = "2024-02-08"
+compatibility_date = "2024-09-23"
+compatibility_flags = ["nodejs_compat"]
 main = "src/index.ts"
 
 # Enable workers.dev subdomain
@@ -9,6 +10,9 @@ workers_dev = true
 # routes = [
 #   { pattern = "api.finance.yourdomain.com", custom_domain = true }
 # ]
+
+[define]
+__dirname = "'/'"
 
 [[d1_databases]]
 binding = "DB"

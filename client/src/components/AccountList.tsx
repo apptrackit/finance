@@ -4,7 +4,7 @@ import { Input } from './ui/input'
 import { Label } from './ui/label'
 import { Select } from './ui/select'
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card'
-import { Plus, X, Wallet, TrendingUp, Building, Pencil, Trash2, Check } from 'lucide-react'
+import { Plus, X, Wallet, TrendingUp, Building, Pencil, Trash2, Check, Search } from 'lucide-react'
 import { API_BASE_URL, apiFetch } from '../config'
 
 type Account = {
@@ -13,6 +13,8 @@ type Account = {
   type: 'cash' | 'investment'
   balance: number
   currency: string
+  symbol?: string
+  asset_type?: 'stock' | 'crypto' | 'manual'
 }
 
 const accountIcons = {
@@ -39,34 +41,99 @@ export function AccountList({ accounts, onAccountAdded }: { accounts: Account[],
     name: '',
     type: 'cash',
     balance: '',
-    currency: 'HUF'
+    currency: 'HUF',
+    symbol: '',
+    asset_type: 'stock' as 'stock' | 'crypto' | 'manual'
   })
+  
+  // For investment account creation
+  const [showSymbolSearch, setShowSymbolSearch] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [searchResults, setSearchResults] = useState<any[]>([])
+  const [searching, setSearching] = useState(false)
+  const [manualMode, setManualMode] = useState(false)
 
   const resetForm = () => {
-    setFormData({ name: '', type: 'cash', balance: '', currency: 'HUF' })
+    setFormData({ name: '', type: 'cash', balance: '', currency: 'HUF', symbol: '', asset_type: 'stock' })
+    setShowSymbolSearch(false)
+    setSearchQuery('')
+    setSearchResults([])
+    setManualMode(false)
+  }
+
+  const handleTypeChange = (newType: string) => {
+    setFormData({ ...formData, type: newType as 'cash' | 'investment' })
+  }
+
+  const handleSearch = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!searchQuery) return
+    
+    setSearching(true)
+    try {
+      const res = await apiFetch(`${API_BASE_URL}/market/search?q=${encodeURIComponent(searchQuery)}`)
+      const data = await res.json()
+      setSearchResults(data.quotes || [])
+    } catch (error) {
+      console.error('Search failed:', error)
+    } finally {
+      setSearching(false)
+    }
+  }
+
+  const handleSelectAsset = (asset: any) => {
+    const assetType = asset.quoteType === 'CRYPTOCURRENCY' ? 'crypto' : 'stock'
+    // For crypto, currency is the crypto symbol (e.g., BTC). For stocks, use 'SHARE'
+    const currency = assetType === 'crypto' ? asset.symbol.split('-')[0] : 'SHARE'
+    setFormData({
+      ...formData,
+      name: asset.shortname || asset.longname || asset.symbol,
+      symbol: asset.symbol,
+      asset_type: assetType,
+      currency: currency
+    })
+    setShowSymbolSearch(false)
+    setSearchQuery('')
+    setSearchResults([])
+  }
+  
+  const handleManualAsset = () => {
+    setFormData({
+      ...formData,
+      currency: 'SHARE',
+      asset_type: 'manual'
+    })
+    setShowSymbolSearch(false)
+    setManualMode(true)
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     try {
+      const payload: any = {
+        name: formData.name,
+        type: formData.type,
+        balance: parseFloat(formData.balance) || 0,
+        currency: formData.currency
+      }
+      
+      if (formData.type === 'investment') {
+        payload.symbol = formData.symbol || null
+        payload.asset_type = formData.asset_type
+      }
+      
       if (editingId) {
         await apiFetch(`${API_BASE_URL}/accounts/${editingId}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            ...formData,
-            balance: parseFloat(formData.balance) || 0
-          }),
+          body: JSON.stringify(payload),
         })
         setEditingId(null)
       } else {
         await apiFetch(`${API_BASE_URL}/accounts`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            ...formData,
-            balance: parseFloat(formData.balance) || 0
-          }),
+          body: JSON.stringify(payload),
         })
       }
       setIsAdding(false)
@@ -82,7 +149,9 @@ export function AccountList({ accounts, onAccountAdded }: { accounts: Account[],
       name: account.name,
       type: account.type,
       balance: account.balance.toString(),
-      currency: account.currency
+      currency: account.currency,
+      symbol: account.symbol || '',
+      asset_type: account.asset_type || 'stock'
     })
     setEditingId(account.id)
     setIsAdding(true)
@@ -151,37 +220,83 @@ export function AccountList({ accounts, onAccountAdded }: { accounts: Account[],
                 <Select 
                   id="type" 
                   value={formData.type} 
-                  onChange={e => setFormData({...formData, type: e.target.value as any})}
+                  onChange={e => handleTypeChange(e.target.value)}
                 >
                   <option value="cash">💵 Cash / Bank</option>
                   <option value="investment">📈 Investment</option>
                 </Select>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="currency">Currency</Label>
-                <Select 
-                  id="currency" 
-                  value={formData.currency} 
-                  onChange={e => setFormData({...formData, currency: e.target.value})}
-                >
-                  <option value="HUF">🇭🇺 HUF</option>
-                  <option value="EUR">🇪🇺 EUR</option>
-                  <option value="USD">🇺🇸 USD</option>
-                  <option value="GBP">🇬🇧 GBP</option>
-                </Select>
-              </div>
+              
+              {formData.type === 'cash' && (
+                <div className="space-y-2">
+                  <Label htmlFor="currency">Currency</Label>
+                  <Select 
+                    id="currency" 
+                    value={formData.currency} 
+                    onChange={e => setFormData({...formData, currency: e.target.value})}
+                  >
+                    <option value="HUF">🇭🇺 HUF</option>
+                    <option value="EUR">🇪🇺 EUR</option>
+                    <option value="USD">🇺🇸 USD</option>
+                    <option value="GBP">🇬🇧 GBP</option>
+                  </Select>
+                </div>
+              )}
+              
+              {formData.type === 'investment' && !formData.symbol && !editingId && (
+                <div className="space-y-2">
+                  <Label>Asset Symbol</Label>
+                  <button
+                    type="button"
+                    onClick={() => setShowSymbolSearch(true)}
+                    className="w-full p-2 border border-border rounded-lg text-left text-sm text-muted-foreground hover:bg-secondary/50 transition-colors"
+                  >
+                    Search for asset...
+                  </button>
+                </div>
+              )}
               <div className="col-span-2 space-y-2">
-                <Label htmlFor="balance">Current Balance</Label>
+                <Label htmlFor="balance">{formData.type === 'investment' ? 'Initial Quantity (0 if tracking from transactions)' : 'Current Balance'}</Label>
                 <Input 
                   id="balance" 
                   type="number" 
-                  step={formData.currency === 'HUF' ? '1' : '0.01'}
+                  step={formData.type === 'investment' || formData.currency === 'SHARE' ? 'any' : (formData.currency === 'HUF' ? '1' : '0.01')}
                   value={formData.balance} 
                   onChange={e => setFormData({...formData, balance: e.target.value})} 
                   placeholder="0" 
                   required 
                 />
               </div>
+              
+              {formData.type === 'investment' && formData.symbol && (
+                <div className="col-span-2 p-3 bg-secondary/30 rounded-lg flex justify-between items-center">
+                  <div>
+                    <div className="font-bold">{formData.symbol}</div>
+                    <div className="text-sm text-muted-foreground">{formData.name}</div>
+                  </div>
+                  {!editingId && (
+                    <button 
+                      type="button"
+                      onClick={() => { setShowSymbolSearch(true); setFormData({...formData, symbol: '', name: '' }) }} 
+                      className="text-xs text-primary hover:underline"
+                    >
+                      Change
+                    </button>
+                  )}
+                </div>
+              )}
+              
+              {formData.type === 'investment' && manualMode && !formData.symbol && (
+                <div className="col-span-2 space-y-2">
+                  <Label htmlFor="manual-symbol">Symbol (Optional)</Label>
+                  <Input 
+                    id="manual-symbol" 
+                    value={formData.symbol} 
+                    onChange={e => setFormData({...formData, symbol: e.target.value})} 
+                    placeholder="e.g. GOLD" 
+                  />
+                </div>
+              )}
             </div>
             <Button type="submit" className="w-full">
               {editingId ? <Check className="h-4 w-4 mr-2" /> : <Plus className="h-4 w-4 mr-2" />}
@@ -205,7 +320,10 @@ export function AccountList({ accounts, onAccountAdded }: { accounts: Account[],
                     <Icon className="h-5 w-5" />
                   </div>
                   <div>
-                    <p className="font-medium text-sm">{account.name}</p>
+                    <p className="font-medium text-sm">
+                      {account.name}
+                      {account.symbol && <span className="ml-2 text-xs text-muted-foreground">({account.symbol})</span>}
+                    </p>
                     <p className="text-xs text-muted-foreground capitalize">{account.type === 'cash' ? 'Cash / Bank' : 'Investment'}</p>
                   </div>
                 </div>
@@ -213,7 +331,10 @@ export function AccountList({ accounts, onAccountAdded }: { accounts: Account[],
                   <div className="text-right mr-2">
                     <p className={`font-bold text-sm ${account.balance >= 0 ? 'text-foreground' : 'text-destructive'}`}>
                       {account.balance < 0 && '-'}
-                      {formatCurrency(account.balance, account.currency)}
+                      {account.type === 'investment' 
+                        ? `${Math.abs(account.balance).toLocaleString()} ${account.currency}` 
+                        : formatCurrency(account.balance, account.currency)
+                      }
                     </p>
                   </div>
                   <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -250,6 +371,65 @@ export function AccountList({ accounts, onAccountAdded }: { accounts: Account[],
           )}
         </div>
       </CardContent>
+      
+      {/* Symbol Search Modal */}
+      {showSymbolSearch && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-card w-full max-w-md rounded-2xl shadow-2xl border border-border overflow-hidden">
+            <div className="p-4 border-b border-border flex justify-between items-center">
+              <h3 className="font-semibold">Select Investment Asset</h3>
+              <button onClick={() => { setShowSymbolSearch(false); resetForm(); setIsAdding(false); }} className="text-muted-foreground hover:text-foreground">✕</button>
+            </div>
+            
+            <div className="p-4 space-y-4">
+              <form onSubmit={handleSearch} className="flex gap-2">
+                <Input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search symbol (e.g. AAPL, BTC-USD)"
+                  autoFocus
+                />
+                <Button 
+                  type="submit" 
+                  disabled={searching}
+                  size="icon"
+                >
+                  {searching ? '...' : <Search className="h-4 w-4" />}
+                </Button>
+              </form>
+              
+              <div className="max-h-60 overflow-y-auto space-y-2">
+                {searchResults.map((result: any) => (
+                  <button
+                    key={result.symbol}
+                    onClick={() => handleSelectAsset(result)}
+                    className="w-full p-3 text-left hover:bg-secondary/50 rounded-lg transition-colors flex justify-between items-center"
+                  >
+                    <div>
+                      <div className="font-medium">{result.symbol}</div>
+                      <div className="text-xs text-muted-foreground">{result.shortname || result.longname}</div>
+                    </div>
+                    <div className="text-xs px-2 py-1 bg-secondary rounded text-muted-foreground">
+                      {result.quoteType}
+                    </div>
+                  </button>
+                ))}
+              </div>
+              
+              <div className="pt-4 border-t border-border">
+                <Button 
+                  onClick={handleManualAsset}
+                  variant="outline"
+                  className="w-full"
+                >
+                  Enter Manually
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </Card>
   )
 }

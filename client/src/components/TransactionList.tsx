@@ -16,6 +16,7 @@ type Transaction = {
   description?: string
   date: string
   is_recurring: boolean
+  linked_transaction_id?: string
 }
 
 type Account = {
@@ -23,6 +24,9 @@ type Account = {
   name: string
   balance: number
   currency: string
+  type: 'cash' | 'investment'
+  symbol?: string
+  asset_type?: 'stock' | 'crypto' | 'manual'
 }
 
 type Category = {
@@ -98,15 +102,93 @@ export function TransactionList({
     const fetchRate = async () => {
       setIsLoadingRate(true)
       try {
-        const response = await apiFetch(`${API_BASE_URL}/transfers/exchange-rate?from=${fromAccount.currency}&to=${toAccount.currency}`)
-        const data = await response.json()
-        if (data.rate) {
-          // Keep the full rate without any rounding
-          setSuggestedRate(data.rate)
-          setExchangeRate(data.rate)
+        let rate = 0
+
+        // Helper to get quote price
+        const getQuotePrice = async (symbol: string) => {
+          try {
+            const res = await apiFetch(`${API_BASE_URL}/market/quote?symbol=${encodeURIComponent(symbol)}`)
+            if (!res.ok) return null
+            const data = await res.json()
+            return { price: data.regularMarketPrice, currency: data.currency }
+          } catch (e) {
+            console.error('Quote fetch failed', e)
+            return null
+          }
+        }
+
+        // Helper to get FX rate
+        const getFxRate = async (from: string, to: string) => {
+          if (from === to) return 1
+          try {
+            const res = await apiFetch(`${API_BASE_URL}/transfers/exchange-rate?from=${from}&to=${to}`)
+            if (!res.ok) return null
+            const data = await res.json()
+            return data.rate
+          } catch (e) {
+            console.error('FX fetch failed', e)
+            return null
+          }
+        }
+
+        // Case 1: Investment -> Cash/Other
+        if (fromAccount.type === 'investment' && fromAccount.symbol) {
+          const quote = await getQuotePrice(fromAccount.symbol)
+          if (quote && quote.price) {
+            // Ensure currency is uppercase, trimmed, and default to USD
+            const quoteCurrency = (quote.currency || 'USD').toUpperCase().trim()
+            
+            let fxRate = await getFxRate(quoteCurrency, toAccount.currency)
+            
+            // If failed and currency wasn't USD, try USD as fallback (common for crypto quotes)
+            if (!fxRate && quoteCurrency !== 'USD') {
+               fxRate = await getFxRate('USD', toAccount.currency)
+            }
+
+            if (fxRate) {
+              rate = quote.price * fxRate
+            }
+          }
+        }
+        // Case 2: Cash/Other -> Investment
+        else if (toAccount.type === 'investment' && toAccount.symbol) {
+          const quote = await getQuotePrice(toAccount.symbol)
+          if (quote && quote.price) {
+            const quoteCurrency = (quote.currency || 'USD').toUpperCase().trim()
+            
+            let fxRate = await getFxRate(fromAccount.currency, quoteCurrency)
+            
+            // If failed and currency wasn't USD, try converting From -> USD
+            if (!fxRate && quoteCurrency !== 'USD') {
+               fxRate = await getFxRate(fromAccount.currency, 'USD')
+            }
+
+            if (fxRate) {
+              rate = fxRate / quote.price
+            }
+          }
+        }
+        
+        // Fallback / Case 3: Direct Currency Conversion
+        // Only try this if we haven't calculated a rate yet AND it's not an investment case that just failed
+        const isInvestmentCase = (fromAccount.type === 'investment' && fromAccount.symbol) || (toAccount.type === 'investment' && toAccount.symbol)
+        
+        if (!rate && !isInvestmentCase && fromAccount.currency !== toAccount.currency) {
+           const directRate = await getFxRate(fromAccount.currency, toAccount.currency)
+           if (directRate) rate = directRate
+        }
+
+        if (rate > 0) {
+          setSuggestedRate(rate)
+          setExchangeRate(rate)
+        } else {
+          setSuggestedRate(null)
+          setExchangeRate(null)
         }
       } catch (error) {
         console.error('Failed to fetch exchange rate:', error)
+        setSuggestedRate(null)
+        setExchangeRate(null)
       } finally {
         setIsLoadingRate(false)
       }
@@ -364,6 +446,39 @@ export function TransactionList({
   const sortedDates = Object.keys(groupedTransactions).sort((a, b) => 
     new Date(b).getTime() - new Date(a).getTime()
   )
+
+  // Helper to process transactions and merge transfers
+  const processTransactions = (txs: Transaction[]) => {
+    const processed: (Transaction & { relatedTx?: Transaction })[] = []
+    const skipIds = new Set<string>()
+
+    txs.forEach(tx => {
+      if (skipIds.has(tx.id)) return
+
+      if (tx.linked_transaction_id) {
+        const related = txs.find(t => t.id === tx.linked_transaction_id)
+        if (related) {
+          // Found the pair.
+          // We prefer to show the outgoing one (negative) as the main one
+          if (tx.amount < 0) {
+             processed.push({ ...tx, relatedTx: related })
+             skipIds.add(related.id)
+          } else {
+             // Current is incoming. Use related (outgoing) as base.
+             processed.push({ ...related, relatedTx: tx })
+             skipIds.add(related.id)
+          }
+        } else {
+          // Linked tx not found in this list
+          processed.push(tx)
+        }
+      } else {
+        processed.push(tx)
+      }
+    })
+    
+    return processed
+  }
 
   return (
     <Card>
@@ -730,23 +845,37 @@ export function TransactionList({
                 <div className="flex-1 h-px bg-border" />
               </div>
               <div className="space-y-1">
-                {groupedTransactions[date].reverse().map(tx => (
+                {processTransactions(groupedTransactions[date]).reverse().map(tx => {
+                  const isTransfer = !!tx.linked_transaction_id && !!(tx as any).relatedTx
+                  const related = (tx as any).relatedTx as Transaction | undefined
+                  
+                  return (
                   <div 
                     key={tx.id} 
                     className="group flex items-center justify-between p-3 rounded-xl hover:bg-secondary/30 transition-all duration-200"
                   >
                     <div className="flex items-center gap-3">
                       <div className={`h-10 w-10 rounded-xl flex items-center justify-center text-lg ${
-                        tx.amount >= 0 
-                          ? 'bg-success/10' 
-                          : 'bg-secondary'
+                        isTransfer ? 'bg-blue-500/10 text-blue-500' :
+                        tx.amount >= 0 ? 'bg-success/10' : 'bg-secondary'
                       }`}>
-                        {getCategoryIcon(tx.category_id)}
+                        {isTransfer ? <ArrowRightLeft className="h-5 w-5" /> : getCategoryIcon(tx.category_id)}
                       </div>
                       <div>
-                        <p className="font-medium text-sm">{tx.description || getCategoryName(tx.category_id)}</p>
+                        <p className="font-medium text-sm">
+                          {isTransfer 
+                            ? `Transfer to ${related ? getAccountName(related.account_id) : 'Unknown'}`
+                            : (tx.description || getCategoryName(tx.category_id))
+                          }
+                        </p>
                         <div className="flex items-center gap-2 text-xs text-muted-foreground">
                           <span>{getAccountName(tx.account_id)}</span>
+                          {isTransfer && related && (
+                             <>
+                               <span>→</span>
+                               <span>{getAccountName(related.account_id)}</span>
+                             </>
+                          )}
                           {tx.is_recurring && (
                             <>
                               <span>•</span>
@@ -759,11 +888,16 @@ export function TransactionList({
                         </div>
                       </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <div className={`font-bold text-sm ${tx.amount >= 0 ? 'text-success' : 'text-destructive'}`}>
+                    <div className="flex flex-col items-end gap-0.5">
+                      <div className={`font-bold text-sm ${isTransfer ? 'text-destructive' : (tx.amount >= 0 ? 'text-success' : 'text-destructive')}`}>
                         {tx.amount >= 0 ? '+' : '-'}
                         {Math.abs(tx.amount).toLocaleString('hu-HU', {minimumFractionDigits: 2, maximumFractionDigits: 2})} {getAccountCurrency(tx.account_id)}
                       </div>
+                      {isTransfer && related && (
+                        <div className="text-xs text-success font-medium">
+                          +{Math.abs(related.amount).toLocaleString('hu-HU', {minimumFractionDigits: 2, maximumFractionDigits: 2})} {getAccountCurrency(related.account_id)}
+                        </div>
+                      )}
                       <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                         <Button 
                           size="icon" 
@@ -784,7 +918,7 @@ export function TransactionList({
                       </div>
                     </div>
                   </div>
-                ))}
+                )})}
               </div>
             </div>
           ))}

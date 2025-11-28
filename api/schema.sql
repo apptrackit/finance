@@ -4,6 +4,8 @@ CREATE TABLE IF NOT EXISTS accounts (
   type TEXT NOT NULL, -- 'cash', 'investment', 'credit'
   balance REAL NOT NULL DEFAULT 0,
   currency TEXT DEFAULT 'USD',
+  symbol TEXT, -- For investment accounts: stock/crypto symbol
+  asset_type TEXT, -- For investment accounts: 'stock', 'crypto', 'manual'
   updated_at INTEGER
 );
 
@@ -22,5 +24,19 @@ CREATE TABLE IF NOT EXISTS transactions (
   description TEXT,
   date TEXT NOT NULL, -- ISO 8601 YYYY-MM-DD
   is_recurring BOOLEAN DEFAULT 0,
+  linked_transaction_id TEXT,
   FOREIGN KEY(account_id) REFERENCES accounts(id)
+);
+
+CREATE TABLE IF NOT EXISTS investment_transactions (
+  id TEXT PRIMARY KEY,
+  account_id TEXT NOT NULL,
+  type TEXT NOT NULL, -- 'buy', 'sell'
+  quantity REAL NOT NULL,
+  price REAL NOT NULL, -- price per share at time of transaction
+  total_amount REAL NOT NULL, -- quantity * price (+ fees if any)
+  date TEXT NOT NULL, -- ISO 8601 timestamp
+  notes TEXT,
+  created_at INTEGER,
+  FOREIGN KEY(account_id) REFERENCES accounts(id) ON DELETE CASCADE
 );

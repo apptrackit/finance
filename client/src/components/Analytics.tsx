@@ -103,6 +103,7 @@ type Transaction = {
   description?: string
   date: string
   is_recurring: boolean
+  linked_transaction_id?: string
 }
 
 type Category = {
@@ -224,10 +225,10 @@ export function Analytics({
   // Calculate totals in master currency
   const { totalIncome, totalExpenses, netFlow } = useMemo(() => {
     const income = filteredTransactions
-      .filter(t => t.amount > 0)
+      .filter(t => t.amount > 0 && !t.linked_transaction_id)
       .reduce((sum, t) => sum + convertToMasterCurrency(t.amount, t.account_id), 0)
     const expenses = filteredTransactions
-      .filter(t => t.amount < 0)
+      .filter(t => t.amount < 0 && !t.linked_transaction_id)
       .reduce((sum, t) => sum + Math.abs(convertToMasterCurrency(t.amount, t.account_id)), 0)
     return {
       totalIncome: income,
@@ -241,7 +242,7 @@ export function Analytics({
     const expensesByCategory: Record<string, number> = {}
     
     filteredTransactions
-      .filter(t => t.amount < 0)
+      .filter(t => t.amount < 0 && !t.linked_transaction_id)
       .forEach(t => {
         const categoryId = t.category_id || 'uncategorized'
         const convertedAmount = Math.abs(convertToMasterCurrency(t.amount, t.account_id))
@@ -420,7 +421,7 @@ export function Analytics({
         const weekIncome = transactions
           .filter(tx => {
             const txDate = new Date(tx.date)
-            const inDateRange = tx.amount > 0 && isWithinInterval(txDate, { 
+            const inDateRange = tx.amount > 0 && !tx.linked_transaction_id && isWithinInterval(txDate, { 
               start: weekStart < monthStart ? monthStart : weekStart, 
               end: weekEnd > monthEnd ? monthEnd : weekEnd 
             })
@@ -475,7 +476,7 @@ export function Analytics({
         const monthIncome = transactions
           .filter(tx => {
             const txDate = new Date(tx.date)
-            const inDateRange = tx.amount > 0 && isWithinInterval(txDate, { start: monthStart, end: monthEnd })
+            const inDateRange = tx.amount > 0 && !tx.linked_transaction_id && isWithinInterval(txDate, { start: monthStart, end: monthEnd })
             if (!inDateRange) return false
             if (selectedIncomeCategory === 'all') return true
             return tx.category_id === selectedIncomeCategory
@@ -515,7 +516,7 @@ export function Analytics({
         const weekExpenses = transactions
           .filter(tx => {
             const txDate = new Date(tx.date)
-            const inDateRange = tx.amount < 0 && isWithinInterval(txDate, { 
+            const inDateRange = tx.amount < 0 && !tx.linked_transaction_id && isWithinInterval(txDate, { 
               start: weekStart < monthStart ? monthStart : weekStart, 
               end: weekEnd > monthEnd ? monthEnd : weekEnd 
             })
@@ -570,7 +571,7 @@ export function Analytics({
         const monthExpenses = transactions
           .filter(tx => {
             const txDate = new Date(tx.date)
-            const inDateRange = tx.amount < 0 && isWithinInterval(txDate, { start: monthStart, end: monthEnd })
+            const inDateRange = tx.amount < 0 && !tx.linked_transaction_id && isWithinInterval(txDate, { start: monthStart, end: monthEnd })
             if (!inDateRange) return false
             if (selectedExpenseCategory === 'all') return true
             return tx.category_id === selectedExpenseCategory
@@ -602,23 +603,24 @@ export function Analytics({
   return (
     <div className="space-y-6">
       {/* Period Selector */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <BarChart3 className="h-5 w-5 text-primary" />
           <h2 className="text-lg font-semibold">Analytics</h2>
         </div>
-        <div className="flex gap-1 p-1 rounded-xl bg-secondary/50 border border-border/50">
+        <div className="flex gap-1 p-1 rounded-xl bg-secondary/50 border border-border/50 overflow-x-auto w-full sm:w-auto">
           {(Object.keys(periodLabels) as TimePeriod[]).map((p) => (
             <button
               key={p}
               onClick={() => setPeriod(p)}
-              className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all ${
+              className={`px-2 sm:px-3 py-1.5 text-xs font-medium rounded-lg transition-all whitespace-nowrap flex-shrink-0 ${
                 period === p
                   ? 'bg-primary text-primary-foreground shadow-sm'
                   : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
               }`}
             >
-              {periodLabels[p]}
+              <span className="hidden sm:inline">{periodLabels[p]}</span>
+              <span className="sm:hidden">{p === 'thisMonth' ? 'Month' : p === 'lastMonth' ? 'Last' : p === 'thisYear' ? 'Year' : p === 'lastYear' ? 'Prev' : 'All'}</span>
             </button>
           ))}
         </div>
@@ -639,53 +641,53 @@ export function Analytics({
       ) : (
         <>
           {/* Summary Cards */}
-          <div className="grid gap-4 md:grid-cols-3">
+          <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-3">
             <Card className="bg-gradient-to-br from-success/10 to-transparent border-success/20">
-              <CardContent className="pt-6">
+              <CardContent className="p-4 sm:pt-6">
                 <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-muted-foreground">Income</p>
-                    <p className="text-2xl font-bold text-success">
-                      +{totalIncome.toLocaleString('hu-HU', {minimumFractionDigits: 2, maximumFractionDigits: 2})} {masterCurrency}
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs sm:text-sm text-muted-foreground">Income</p>
+                    <p className="text-lg sm:text-2xl font-bold text-success truncate">
+                      +{totalIncome.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})} <span className="text-sm sm:text-base">{masterCurrency}</span>
                     </p>
                   </div>
-                  <div className="h-10 w-10 rounded-xl bg-success/10 flex items-center justify-center">
-                    <TrendingUp className="h-5 w-5 text-success" />
+                  <div className="h-8 w-8 sm:h-10 sm:w-10 rounded-xl bg-success/10 flex items-center justify-center flex-shrink-0 ml-2">
+                    <TrendingUp className="h-4 w-4 sm:h-5 sm:w-5 text-success" />
                   </div>
                 </div>
               </CardContent>
             </Card>
 
             <Card className="bg-gradient-to-br from-destructive/10 to-transparent border-destructive/20">
-              <CardContent className="pt-6">
+              <CardContent className="p-4 sm:pt-6">
                 <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-muted-foreground">Expenses</p>
-                    <p className="text-2xl font-bold text-destructive">
-                      -{totalExpenses.toLocaleString('hu-HU', {minimumFractionDigits: 2, maximumFractionDigits: 2})} {masterCurrency}
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs sm:text-sm text-muted-foreground">Expenses</p>
+                    <p className="text-lg sm:text-2xl font-bold text-destructive truncate">
+                      -{totalExpenses.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})} <span className="text-sm sm:text-base">{masterCurrency}</span>
                     </p>
                   </div>
-                  <div className="h-10 w-10 rounded-xl bg-destructive/10 flex items-center justify-center">
-                    <TrendingDown className="h-5 w-5 text-destructive" />
+                  <div className="h-8 w-8 sm:h-10 sm:w-10 rounded-xl bg-destructive/10 flex items-center justify-center flex-shrink-0 ml-2">
+                    <TrendingDown className="h-4 w-4 sm:h-5 sm:w-5 text-destructive" />
                   </div>
                 </div>
               </CardContent>
             </Card>
 
             <Card className={`bg-gradient-to-br ${netFlow >= 0 ? 'from-primary/10 border-primary/20' : 'from-destructive/10 border-destructive/20'} to-transparent`}>
-              <CardContent className="pt-6">
+              <CardContent className="p-4 sm:pt-6">
                 <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-muted-foreground">Net Flow</p>
-                    <p className={`text-2xl font-bold ${netFlow >= 0 ? 'text-primary' : 'text-destructive'}`}>
-                      {netFlow >= 0 ? '+' : ''}{netFlow.toLocaleString('hu-HU', {minimumFractionDigits: 2, maximumFractionDigits: 2})} {masterCurrency}
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs sm:text-sm text-muted-foreground">Net Flow</p>
+                    <p className={`text-lg sm:text-2xl font-bold truncate ${netFlow >= 0 ? 'text-primary' : 'text-destructive'}`}>
+                      {netFlow >= 0 ? '+' : ''}{netFlow.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})} <span className="text-sm sm:text-base">{masterCurrency}</span>
                     </p>
                   </div>
-                  <div className={`h-10 w-10 rounded-xl ${netFlow >= 0 ? 'bg-primary/10' : 'bg-destructive/10'} flex items-center justify-center`}>
+                  <div className={`h-8 w-8 sm:h-10 sm:w-10 rounded-xl ${netFlow >= 0 ? 'bg-primary/10' : 'bg-destructive/10'} flex items-center justify-center flex-shrink-0 ml-2`}>
                     {netFlow >= 0 ? (
-                      <ArrowUpRight className="h-5 w-5 text-primary" />
+                      <ArrowUpRight className="h-4 w-4 sm:h-5 sm:w-5 text-primary" />
                     ) : (
-                      <ArrowDownRight className="h-5 w-5 text-destructive" />
+                      <ArrowDownRight className="h-4 w-4 sm:h-5 sm:w-5 text-destructive" />
                     )}
                   </div>
                 </div>
@@ -694,20 +696,20 @@ export function Analytics({
           </div>
 
           {/* Charts Grid */}
-          <div className="grid gap-6 lg:grid-cols-2">
+          <div className="grid gap-4 sm:gap-6 grid-cols-1 lg:grid-cols-2">
             {/* Net Worth Trend Chart */}
             <Card className="lg:col-span-2">
-              <CardHeader className="pb-2">
+              <CardHeader className="pb-2 px-4 sm:px-6">
                 <div className="flex items-center gap-2">
                   <TrendingUp className="h-4 w-4 text-muted-foreground" />
-                  <CardTitle className="text-base">Net Worth Trend</CardTitle>
+                  <CardTitle className="text-sm sm:text-base">Net Worth Trend</CardTitle>
                 </div>
               </CardHeader>
-              <CardContent>
+              <CardContent className="px-2 sm:px-6">
                 {netWorthTrendData.length > 1 ? (
-                  <div className="h-64">
+                  <div className="h-48 sm:h-64">
                     <ResponsiveContainer width="100%" height="100%">
-                      <AreaChart data={netWorthTrendData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                      <AreaChart data={netWorthTrendData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
                         <defs>
                           <linearGradient id="netWorthGradient" x1="0" y1="0" x2="0" y2="1">
                             <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.3}/>
@@ -718,25 +720,27 @@ export function Analytics({
                         <XAxis 
                           dataKey="formattedDate" 
                           stroke="hsl(var(--muted-foreground))" 
-                          fontSize={11}
+                          fontSize={10}
                           tickLine={false}
                           axisLine={false}
+                          interval="preserveStartEnd"
                         />
                         <YAxis 
                           stroke="hsl(var(--muted-foreground))" 
-                          fontSize={11}
+                          fontSize={10}
                           tickLine={false}
                           axisLine={false}
                           tickFormatter={(value) => `${(value / 1000).toFixed(0)}k`}
+                          width={35}
                         />
                         <Tooltip 
                           content={({ active, payload, label }) => {
                             if (active && payload && payload.length) {
                               return (
-                                <div className="bg-card border border-border rounded-lg p-3 shadow-xl">
-                                  <p className="text-xs text-muted-foreground mb-2">{label}</p>
-                                  <p className="text-sm font-medium text-primary">
-                                    Balance: {(payload[0].value as number).toLocaleString('hu-HU', {minimumFractionDigits: 2, maximumFractionDigits: 2})} {masterCurrency}
+                                <div className="bg-card border border-border rounded-lg p-2 sm:p-3 shadow-xl text-xs sm:text-sm">
+                                  <p className="text-xs text-muted-foreground mb-1">{label}</p>
+                                  <p className="font-medium text-primary">
+                                    {(payload[0].value as number).toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})} {masterCurrency}
                                   </p>
                                 </div>
                               )
@@ -757,7 +761,7 @@ export function Analytics({
                     </ResponsiveContainer>
                   </div>
                 ) : (
-                  <div className="h-64 flex items-center justify-center text-muted-foreground text-sm">
+                  <div className="h-48 sm:h-64 flex items-center justify-center text-muted-foreground text-sm">
                     Need more data points to show trend
                   </div>
                 )}
@@ -766,18 +770,18 @@ export function Analytics({
 
             {/* Monthly Income Comparison */}
             <Card>
-              <CardHeader className="pb-2">
-                <div className="flex items-center justify-between">
+              <CardHeader className="pb-2 px-4 sm:px-6">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                   <div className="flex items-center gap-2">
                     <TrendingUp className="h-4 w-4 text-success" />
-                    <CardTitle className="text-base">Income by Month</CardTitle>
+                    <CardTitle className="text-sm sm:text-base">Income</CardTitle>
                   </div>
                   <CustomSelect
                     value={selectedIncomeCategory}
                     onChange={setSelectedIncomeCategory}
                     variant="success"
                     options={[
-                      { value: 'all', label: 'All Income', icon: '📊' },
+                      { value: 'all', label: 'All', icon: '📊' },
                       ...incomeCategories.map(cat => ({
                         value: cat.id,
                         label: cat.name,
@@ -787,25 +791,26 @@ export function Analytics({
                   />
                 </div>
               </CardHeader>
-              <CardContent>
+              <CardContent className="px-2 sm:px-6">
                 {incomeChartData.some(d => d.amount > 0) ? (
-                  <div className="h-48">
+                  <div className="h-40 sm:h-48">
                     <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={incomeChartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                      <BarChart data={incomeChartData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
                         <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.5} />
                         <XAxis 
                           dataKey="label" 
                           stroke="hsl(var(--muted-foreground))" 
-                          fontSize={11}
+                          fontSize={10}
                           tickLine={false}
                           axisLine={false}
                         />
                         <YAxis 
                           stroke="hsl(var(--muted-foreground))" 
-                          fontSize={11}
+                          fontSize={10}
                           tickLine={false}
                           axisLine={false}
                           tickFormatter={(value) => `${(value / 1000).toFixed(0)}k`}
+                          width={35}
                         />
                         <Tooltip 
                           cursor={{ fill: 'hsl(var(--muted))', opacity: 0.3 }}
@@ -820,14 +825,14 @@ export function Analytics({
                                 : null
                               
                               return (
-                                <div className="bg-card border border-border rounded-lg p-3 shadow-xl">
-                                  <p className="text-xs text-muted-foreground mb-2">{label}</p>
-                                  <p className="text-sm font-medium text-success">
-                                    +{currentAmount.toLocaleString('hu-HU', {minimumFractionDigits: 2, maximumFractionDigits: 2})} {masterCurrency}
+                                <div className="bg-card border border-border rounded-lg p-2 sm:p-3 shadow-xl text-xs sm:text-sm">
+                                  <p className="text-xs text-muted-foreground mb-1">{label}</p>
+                                  <p className="font-medium text-success">
+                                    +{currentAmount.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})} {masterCurrency}
                                   </p>
                                   {prevPeriod && (
                                     <p className={`text-xs mt-1 ${diff >= 0 ? 'text-success' : 'text-destructive'}`}>
-                                      {diff >= 0 ? '↑' : '↓'} {Math.abs(diff).toLocaleString('hu-HU', {minimumFractionDigits: 2, maximumFractionDigits: 2})} {masterCurrency}
+                                      {diff >= 0 ? '↑' : '↓'} {Math.abs(diff).toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})}
                                       {diffPercent && ` (${diff >= 0 ? '+' : ''}${diffPercent}%)`}
                                     </p>
                                   )}
@@ -842,7 +847,7 @@ export function Analytics({
                     </ResponsiveContainer>
                   </div>
                 ) : (
-                  <div className="h-48 flex items-center justify-center text-muted-foreground text-sm">
+                  <div className="h-40 sm:h-48 flex items-center justify-center text-muted-foreground text-sm">
                     No income data
                   </div>
                 )}
@@ -851,18 +856,18 @@ export function Analytics({
 
             {/* Monthly Expenses Comparison with Category Filter */}
             <Card>
-              <CardHeader className="pb-2">
-                <div className="flex items-center justify-between">
+              <CardHeader className="pb-2 px-4 sm:px-6">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                   <div className="flex items-center gap-2">
                     <TrendingDown className="h-4 w-4 text-destructive" />
-                    <CardTitle className="text-base">Expenses by Month</CardTitle>
+                    <CardTitle className="text-sm sm:text-base">Expenses</CardTitle>
                   </div>
                   <CustomSelect
                     value={selectedExpenseCategory}
                     onChange={setSelectedExpenseCategory}
                     variant="destructive"
                     options={[
-                      { value: 'all', label: 'All Expenses', icon: '📊' },
+                      { value: 'all', label: 'All', icon: '📊' },
                       ...expenseCategories.map(cat => ({
                         value: cat.id,
                         label: cat.name,
@@ -872,25 +877,26 @@ export function Analytics({
                   />
                 </div>
               </CardHeader>
-              <CardContent>
+              <CardContent className="px-2 sm:px-6">
                 {expensesChartData.some(d => d.amount > 0) ? (
-                  <div className="h-48">
+                  <div className="h-40 sm:h-48">
                     <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={expensesChartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                      <BarChart data={expensesChartData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
                         <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.5} />
                         <XAxis 
                           dataKey="label" 
                           stroke="hsl(var(--muted-foreground))" 
-                          fontSize={11}
+                          fontSize={10}
                           tickLine={false}
                           axisLine={false}
                         />
                         <YAxis 
                           stroke="hsl(var(--muted-foreground))" 
-                          fontSize={11}
+                          fontSize={10}
                           tickLine={false}
                           axisLine={false}
                           tickFormatter={(value) => `${(value / 1000).toFixed(0)}k`}
+                          width={35}
                         />
                         <Tooltip 
                           cursor={{ fill: 'hsl(var(--muted))', opacity: 0.3 }}
@@ -905,18 +911,15 @@ export function Analytics({
                                 : null
                               
                               return (
-                                <div className="bg-card border border-border rounded-lg p-3 shadow-xl">
-                                  <p className="text-xs text-muted-foreground mb-2">{label}</p>
-                                  <p className="text-sm font-medium text-destructive">
-                                    -{currentAmount.toLocaleString('hu-HU', {minimumFractionDigits: 2, maximumFractionDigits: 2})} {masterCurrency}
+                                <div className="bg-card border border-border rounded-lg p-2 sm:p-3 shadow-xl text-xs sm:text-sm">
+                                  <p className="text-xs text-muted-foreground mb-1">{label}</p>
+                                  <p className="font-medium text-destructive">
+                                    -{currentAmount.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})} {masterCurrency}
                                   </p>
                                   {prevPeriod && (
                                     <p className={`text-xs mt-1 ${diff <= 0 ? 'text-success' : 'text-destructive'}`}>
-                                      {diff > 0 ? '↑' : '↓'} {Math.abs(diff).toLocaleString('hu-HU', {minimumFractionDigits: 2, maximumFractionDigits: 2})} {masterCurrency}
+                                      {diff > 0 ? '↑' : '↓'} {Math.abs(diff).toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})}
                                       {diffPercent && ` (${diff > 0 ? '+' : ''}${diffPercent}%)`}
-                                      <span className="text-muted-foreground ml-1">
-                                        {diff <= 0 ? '(spending less)' : '(spending more)'}
-                                      </span>
                                     </p>
                                   )}
                                 </div>
@@ -930,7 +933,7 @@ export function Analytics({
                     </ResponsiveContainer>
                   </div>
                 ) : (
-                  <div className="h-48 flex items-center justify-center text-muted-foreground text-sm">
+                  <div className="h-40 sm:h-48 flex items-center justify-center text-muted-foreground text-sm">
                     No expense data
                   </div>
                 )}
@@ -940,20 +943,20 @@ export function Analytics({
             {/* Per-Account Net Worth Trends */}
             {perAccountTrendData.map(({ account, data }, index) => (
               <Card key={account.id}>
-                <CardHeader className="pb-2">
+                <CardHeader className="pb-2 px-4 sm:px-6">
                   <div className="flex items-center gap-2">
-                    <span className="text-lg">{account.icon || '💳'}</span>
-                    <CardTitle className="text-base">{account.name}</CardTitle>
-                    <span className="text-xs text-muted-foreground ml-auto">
-                      {convertToMasterCurrency(account.balance, account.id).toLocaleString('hu-HU', {minimumFractionDigits: 2, maximumFractionDigits: 2})} {masterCurrency}
+                    <span className="text-base sm:text-lg">{account.icon || '💳'}</span>
+                    <CardTitle className="text-sm sm:text-base truncate flex-1">{account.name}</CardTitle>
+                    <span className="text-xs text-muted-foreground flex-shrink-0">
+                      {convertToMasterCurrency(account.balance, account.id).toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})} {masterCurrency}
                     </span>
                   </div>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="px-2 sm:px-6">
                   {data.length > 1 ? (
-                    <div className="h-48">
+                    <div className="h-36 sm:h-48">
                       <ResponsiveContainer width="100%" height="100%">
-                        <AreaChart data={data} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                        <AreaChart data={data} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
                           <defs>
                             <linearGradient id={`accountGradient-${index}`} x1="0" y1="0" x2="0" y2="1">
                               <stop offset="5%" stopColor={COLORS[index % COLORS.length]} stopOpacity={0.3}/>
@@ -964,25 +967,27 @@ export function Analytics({
                           <XAxis 
                             dataKey="formattedDate" 
                             stroke="hsl(var(--muted-foreground))" 
-                            fontSize={10}
+                            fontSize={9}
                             tickLine={false}
                             axisLine={false}
+                            interval="preserveStartEnd"
                           />
                           <YAxis 
                             stroke="hsl(var(--muted-foreground))" 
-                            fontSize={10}
+                            fontSize={9}
                             tickLine={false}
                             axisLine={false}
                             tickFormatter={(value) => `${(value / 1000).toFixed(0)}k`}
+                            width={30}
                           />
                           <Tooltip 
                             content={({ active, payload, label }) => {
                               if (active && payload && payload.length) {
                                 return (
-                                  <div className="bg-card border border-border rounded-lg p-3 shadow-xl">
-                                    <p className="text-xs text-muted-foreground mb-2">{label}</p>
-                                    <p className="text-sm font-medium" style={{ color: COLORS[index % COLORS.length] }}>
-                                      Balance: {(payload[0].value as number).toLocaleString('hu-HU', {minimumFractionDigits: 2, maximumFractionDigits: 2})} {masterCurrency}
+                                  <div className="bg-card border border-border rounded-lg p-2 shadow-xl text-xs">
+                                    <p className="text-xs text-muted-foreground mb-1">{label}</p>
+                                    <p className="font-medium" style={{ color: COLORS[index % COLORS.length] }}>
+                                      {(payload[0].value as number).toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})} {masterCurrency}
                                     </p>
                                   </div>
                                 )
@@ -1003,7 +1008,7 @@ export function Analytics({
                       </ResponsiveContainer>
                     </div>
                   ) : (
-                    <div className="h-48 flex items-center justify-center text-muted-foreground text-sm">
+                    <div className="h-36 sm:h-48 flex items-center justify-center text-muted-foreground text-sm">
                       Need more data points
                     </div>
                   )}
@@ -1013,24 +1018,24 @@ export function Analytics({
 
             {/* Category Breakdown */}
             <Card>
-              <CardHeader className="pb-2">
+              <CardHeader className="pb-2 px-4 sm:px-6">
                 <div className="flex items-center gap-2">
                   <PieChartIcon className="h-4 w-4 text-muted-foreground" />
-                  <CardTitle className="text-base">Spending by Category</CardTitle>
+                  <CardTitle className="text-sm sm:text-base">Spending by Category</CardTitle>
                 </div>
               </CardHeader>
-              <CardContent>
+              <CardContent className="px-4 sm:px-6">
                 {categoryData.length > 0 ? (
-                  <div className="flex flex-col md:flex-row items-center gap-4">
-                    <div className="h-48 w-48">
+                  <div className="flex flex-col items-center gap-4">
+                    <div className="h-40 w-40 sm:h-48 sm:w-48">
                       <ResponsiveContainer width="100%" height="100%">
                         <PieChart>
                           <Pie
                             data={categoryData}
                             cx="50%"
                             cy="50%"
-                            innerRadius={50}
-                            outerRadius={70}
+                            innerRadius={40}
+                            outerRadius={60}
                             paddingAngle={2}
                             dataKey="value"
                           >
@@ -1040,12 +1045,13 @@ export function Analytics({
                             ))}
                           </Pie>
                           <Tooltip 
-                            formatter={(value: number) => `${value.toLocaleString('hu-HU', {minimumFractionDigits: 2, maximumFractionDigits: 2})} ${masterCurrency}`}
+                            formatter={(value: number) => `${value.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})} ${masterCurrency}`}
                             contentStyle={{
                               backgroundColor: 'hsl(var(--card))',
                               border: '1px solid hsl(var(--border))',
                               borderRadius: '8px',
-                              color: 'hsl(var(--foreground))'
+                              color: 'hsl(var(--foreground))',
+                              fontSize: '12px'
                             }}
                             itemStyle={{
                               color: 'hsl(var(--foreground))'
@@ -1057,22 +1063,22 @@ export function Analytics({
                         </PieChart>
                       </ResponsiveContainer>
                     </div>
-                    <div className="flex-1 space-y-2 w-full">
+                    <div className="w-full space-y-2">
                       {categoryData.slice(0, 5).map((cat, index) => (
-                        <div key={cat.name} className="flex items-center gap-3">
+                        <div key={cat.name} className="flex items-center gap-2 sm:gap-3">
                           <div 
-                            className="h-3 w-3 rounded-full" 
+                            className="h-2.5 w-2.5 sm:h-3 sm:w-3 rounded-full flex-shrink-0" 
                             style={{ backgroundColor: COLORS[index % COLORS.length] }}
                           />
-                          <span className="text-lg">{cat.icon}</span>
-                          <div className="flex-1">
-                            <div className="flex items-center justify-between">
-                              <span className="text-sm font-medium">{cat.name}</span>
-                              <span className="text-sm text-muted-foreground">
-                                {cat.value.toLocaleString('hu-HU', {minimumFractionDigits: 2, maximumFractionDigits: 2})} {masterCurrency}
+                          <span className="text-base sm:text-lg flex-shrink-0">{cat.icon}</span>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="text-xs sm:text-sm font-medium truncate">{cat.name}</span>
+                              <span className="text-xs sm:text-sm text-muted-foreground flex-shrink-0">
+                                {cat.value.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})}
                               </span>
                             </div>
-                            <div className="mt-1 h-1.5 rounded-full bg-secondary overflow-hidden">
+                            <div className="mt-1 h-1 sm:h-1.5 rounded-full bg-secondary overflow-hidden">
                               <div 
                                 className="h-full rounded-full transition-all duration-500"
                                 style={{ 
@@ -1097,16 +1103,16 @@ export function Analytics({
 
           {/* Top Expenses */}
           <Card>
-            <CardHeader className="pb-2">
+            <CardHeader className="pb-2 px-4 sm:px-6">
               <div className="flex items-center gap-2">
                 <TrendingDown className="h-4 w-4 text-muted-foreground" />
-                <CardTitle className="text-base">Top Expenses</CardTitle>
+                <CardTitle className="text-sm sm:text-base">Top Expenses</CardTitle>
               </div>
             </CardHeader>
-            <CardContent>
-              <div className="space-y-3">
+            <CardContent className="px-4 sm:px-6">
+              <div className="space-y-2 sm:space-y-3">
                 {filteredTransactions
-                  .filter(t => t.amount < 0)
+                  .filter(t => t.amount < 0 && !t.linked_transaction_id)
                   .sort((a, b) => {
                     const aConverted = Math.abs(convertToMasterCurrency(a.amount, a.account_id))
                     const bConverted = Math.abs(convertToMasterCurrency(b.amount, b.account_id))
@@ -1119,26 +1125,26 @@ export function Analytics({
                     return (
                       <div 
                         key={tx.id} 
-                        className="flex items-center gap-3 p-3 rounded-xl bg-secondary/30 hover:bg-secondary/50 transition-colors"
+                        className="flex items-center gap-2 sm:gap-3 p-2.5 sm:p-3 rounded-xl bg-secondary/30 hover:bg-secondary/50 transition-colors"
                       >
-                        <div className="h-8 w-8 rounded-lg bg-secondary flex items-center justify-center text-sm">
+                        <div className="h-7 w-7 sm:h-8 sm:w-8 rounded-lg bg-secondary flex items-center justify-center text-sm flex-shrink-0">
                           {category?.icon || '📦'}
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium truncate">
+                          <p className="text-xs sm:text-sm font-medium truncate">
                             {tx.description || category?.name || 'Uncategorized'}
                           </p>
-                          <p className="text-xs text-muted-foreground">
-                            {format(new Date(tx.date), 'MMM d, yyyy')}
+                          <p className="text-[10px] sm:text-xs text-muted-foreground">
+                            {format(new Date(tx.date), 'MMM d')}
                           </p>
                         </div>
-                        <div className="text-sm font-bold text-destructive">
-                          -{convertedAmount.toLocaleString('hu-HU', {minimumFractionDigits: 2, maximumFractionDigits: 2})} {masterCurrency}
+                        <div className="text-xs sm:text-sm font-bold text-destructive flex-shrink-0">
+                          -{convertedAmount.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})}
                         </div>
                       </div>
                     )
                   })}
-                {filteredTransactions.filter(t => t.amount < 0).length === 0 && (
+                {filteredTransactions.filter(t => t.amount < 0 && !t.linked_transaction_id).length === 0 && (
                   <div className="text-center py-6 text-muted-foreground text-sm">
                     No expenses in this period
                   </div>
