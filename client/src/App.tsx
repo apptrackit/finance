@@ -8,7 +8,7 @@ import { API_BASE_URL, apiFetch } from './config'
 import Settings, { getMasterCurrency } from './components/Settings'
 
 
-const APP_VERSION = '0.4.4'
+const APP_VERSION = '0.5'
 
 type Account = {
   id: string
