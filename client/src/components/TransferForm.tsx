@@ -12,6 +12,8 @@ interface Account {
   type: string
   balance: number
   currency: string
+  symbol?: string
+  asset_type?: string
 }
 
 interface TransferFormProps {
