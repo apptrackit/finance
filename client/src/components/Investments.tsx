@@ -4,6 +4,7 @@ import { API_BASE_URL, apiFetch } from '../config'
 import { InvestmentChart } from './InvestmentChart'
 import { Input } from './ui/input'
 import { Label } from './ui/label'
+import { usePrivacy } from '../context/PrivacyContext'
 
 type Account = {
   id: string
@@ -43,6 +44,8 @@ export function Investments() {
   const [refreshing, setRefreshing] = useState(false)
   const [selectedAccount, setSelectedAccount] = useState<Account | null>(null)
   const [showTransactionModal, setShowTransactionModal] = useState(false)
+  
+  const { privacyMode } = usePrivacy()
   
   // Transaction modal state
   const [txForm, setTxForm] = useState({
@@ -240,8 +243,8 @@ export function Investments() {
             <h3 className="text-sm font-medium text-muted-foreground">Total Portfolio Value</h3>
             <DollarSign className="h-4 w-4 text-primary" />
           </div>
-          <div className="text-3xl font-bold">
-            ${totalValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          <div className={`text-3xl font-bold ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
+            {privacyMode === 'hidden' ? '••••••' : `$${totalValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
           </div>
         </div>
         
@@ -250,8 +253,8 @@ export function Investments() {
             <h3 className="text-sm font-medium text-muted-foreground">Total Invested</h3>
             <DollarSign className="h-4 w-4 text-muted-foreground" />
           </div>
-          <div className="text-3xl font-bold">
-            ${totalInvested.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          <div className={`text-3xl font-bold ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
+            {privacyMode === 'hidden' ? '••••••' : `$${totalInvested.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
           </div>
         </div>
         
@@ -260,11 +263,11 @@ export function Investments() {
             <h3 className="text-sm font-medium text-muted-foreground">Total Gain/Loss</h3>
             {totalGainLoss >= 0 ? <TrendingUp className="h-4 w-4 text-green-500" /> : <TrendingDown className="h-4 w-4 text-red-500" />}
           </div>
-          <div className={`text-3xl font-bold ${totalGainLoss >= 0 ? 'text-green-500' : 'text-red-500'}`}>
-            {totalGainLoss >= 0 ? '+' : ''}${totalGainLoss.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          <div className={`text-3xl font-bold ${totalGainLoss >= 0 ? 'text-green-500' : 'text-red-500'} ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
+            {privacyMode === 'hidden' ? '••••••' : `${totalGainLoss >= 0 ? '+' : ''}$${totalGainLoss.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
           </div>
-          <div className={`text-sm ${totalGainLoss >= 0 ? 'text-green-500' : 'text-red-500'}`}>
-            {totalGainLossPercent >= 0 ? '+' : ''}{totalGainLossPercent.toFixed(2)}%
+          <div className={`text-sm ${totalGainLoss >= 0 ? 'text-green-500' : 'text-red-500'} ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
+            {privacyMode === 'hidden' ? '••••' : `${totalGainLossPercent >= 0 ? '+' : ''}${totalGainLossPercent.toFixed(2)}%`}
           </div>
         </div>
       </div>
@@ -321,12 +324,14 @@ export function Investments() {
                   </div>
                   
                   <div className="text-right">
-                    <div className="font-medium">${currentValue.toLocaleString(undefined, { minimumFractionDigits: 2 })}</div>
-                    <div className="text-xs text-muted-foreground">
-                      {totalQuantity.toFixed(4)} {acc.currency} @ ${currentPrice.toLocaleString()}
+                    <div className={`font-medium ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
+                      {privacyMode === 'hidden' ? '••••••' : `$${currentValue.toLocaleString(undefined, { minimumFractionDigits: 2 })}`}
                     </div>
-                    <div className={`text-xs font-medium ${gainLoss >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                      {gainLoss >= 0 ? '+' : ''}${Math.abs(gainLoss).toFixed(2)} ({gainLossPercent >= 0 ? '+' : ''}{gainLossPercent.toFixed(2)}%)
+                    <div className={`text-xs text-muted-foreground ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
+                      {privacyMode === 'hidden' ? '••••' : `${totalQuantity.toFixed(4)} ${acc.currency} @ $${currentPrice.toLocaleString()}`}
+                    </div>
+                    <div className={`text-xs font-medium ${gainLoss >= 0 ? 'text-green-600' : 'text-red-600'} ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
+                      {privacyMode === 'hidden' ? '••••' : `${gainLoss >= 0 ? '+' : ''}$${Math.abs(gainLoss).toFixed(2)} (${gainLossPercent >= 0 ? '+' : ''}${gainLossPercent.toFixed(2)}%)`}
                     </div>
                   </div>
                 </div>
@@ -378,10 +383,12 @@ export function Investments() {
                           <span className={`text-xs font-medium px-2 py-0.5 rounded ${tx.type === 'buy' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
                             {tx.type.toUpperCase()}
                           </span>
-                          <span className="font-medium">{tx.quantity} @ ${tx.price}</span>
+                          <span className={`font-medium ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
+                            {privacyMode === 'hidden' ? '•••• @ ••••' : `${tx.quantity} @ $${tx.price}`}
+                          </span>
                         </div>
-                        <div className="text-xs text-muted-foreground mt-1">
-                          {new Date(tx.date).toLocaleString()} • Total: ${tx.total_amount.toFixed(2)}
+                        <div className={`text-xs text-muted-foreground mt-1 ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
+                          {new Date(tx.date).toLocaleString()} • Total: {privacyMode === 'hidden' ? '••••••' : `$${tx.total_amount.toFixed(2)}`}
                         </div>
                         {tx.notes && <div className="text-xs text-muted-foreground mt-1">{tx.notes}</div>}
                       </div>

@@ -3,9 +3,10 @@ import { AccountList } from './components/AccountList'
 import { TransactionList } from './components/TransactionList'
 import { Analytics } from './components/Analytics'
 import { Investments } from './components/Investments'
-import { Wallet, TrendingUp, TrendingDown, Activity, BarChart3, List, Settings as SettingsIcon, LineChart } from 'lucide-react'
+import { Wallet, TrendingUp, TrendingDown, Activity, BarChart3, List, Settings as SettingsIcon, LineChart, Eye, EyeOff } from 'lucide-react'
 import { API_BASE_URL, apiFetch } from './config'
 import Settings, { getMasterCurrency } from './components/Settings'
+import { usePrivacy } from './context/PrivacyContext'
 
 
 const APP_VERSION = '0.5'
@@ -69,6 +70,7 @@ function App() {
   const [categories, setCategories] = useState<Category[]>([])
   const [view, setView] = useState<View>('dashboard')
   const [masterCurrency, setMasterCurrency] = useState('HUF')
+  const { privacyMode, togglePrivacyMode } = usePrivacy()
 
   useEffect(() => {
     setMasterCurrency(getMasterCurrency())
@@ -299,6 +301,22 @@ function App() {
                     <span className="hidden sm:inline">Settings</span>
                   </button>
                 </div>
+                {/* Privacy Toggle */}
+                <button
+                  onClick={togglePrivacyMode}
+                  className={`p-2 rounded-lg transition-all ${
+                    privacyMode === 'hidden'
+                      ? 'bg-primary/10 text-primary'
+                      : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
+                  }`}
+                  title={privacyMode === 'hidden' ? 'Show values' : 'Hide values'}
+                >
+                  {privacyMode === 'hidden' ? (
+                    <EyeOff className="h-4 w-4" />
+                  ) : (
+                    <Eye className="h-4 w-4" />
+                  )}
+                </button>
                 <div className="hidden sm:flex items-center gap-2">
                   <div className="h-2 w-2 rounded-full bg-primary animate-pulse" />
                   <span className="text-xs text-muted-foreground">Synced</span>
@@ -324,7 +342,11 @@ function App() {
                 <div className="text-2xl sm:text-4xl font-bold tracking-tight text-foreground">
                   {netWorth !== null ? (
                     <>
-                      {(netWorth + investmentValue).toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})}
+                      <span className={privacyMode === 'hidden' ? 'select-none' : ''}>
+                        {privacyMode === 'hidden' 
+                          ? '••••••' 
+                          : (netWorth + investmentValue).toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})}
+                      </span>
                       <span className="text-muted-foreground text-lg sm:text-2xl ml-1">{masterCurrency}</span>
                     </>
                   ) : (
@@ -352,7 +374,9 @@ function App() {
               </div>
               <div className="text-xl sm:text-3xl font-bold tracking-tight text-success">
                 <span className="text-success/70 text-base sm:text-xl">+</span>
-                {totalIncome.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})} <span className="text-sm sm:text-base">{masterCurrency}</span>
+                <span className={privacyMode === 'hidden' ? 'select-none' : ''}>
+                  {privacyMode === 'hidden' ? '••••••' : totalIncome.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})}
+                </span> <span className="text-sm sm:text-base">{masterCurrency}</span>
               </div>
               <p className="text-[10px] sm:text-xs text-muted-foreground mt-1 sm:mt-2">This period</p>
             </div>
@@ -367,7 +391,9 @@ function App() {
               </div>
               <div className="text-xl sm:text-3xl font-bold tracking-tight text-destructive">
                 <span className="text-destructive/70 text-base sm:text-xl">-</span>
-                {totalExpenses.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})} <span className="text-sm sm:text-base">{masterCurrency}</span>
+                <span className={privacyMode === 'hidden' ? 'select-none' : ''}>
+                  {privacyMode === 'hidden' ? '••••••' : totalExpenses.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})}
+                </span> <span className="text-sm sm:text-base">{masterCurrency}</span>
               </div>
               <p className="text-[10px] sm:text-xs text-muted-foreground mt-1 sm:mt-2">This period</p>
             </div>

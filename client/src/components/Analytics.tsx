@@ -26,6 +26,7 @@ import {
   Bar
 } from 'recharts'
 import { format, subMonths, startOfMonth, endOfMonth, isWithinInterval, subYears, startOfYear, endOfYear, isThisMonth, isThisYear, startOfWeek, endOfWeek, addWeeks } from 'date-fns'
+import { usePrivacy } from '../context/PrivacyContext'
 
 // Custom Dropdown Component
 function CustomSelect({ 
@@ -157,6 +158,8 @@ export function Analytics({
   const [selectedExpenseCategory, setSelectedExpenseCategory] = useState<string>('all')
   const [selectedIncomeCategory, setSelectedIncomeCategory] = useState<string>('all')
   const [exchangeRates, setExchangeRates] = useState<Record<string, number>>({})
+  
+  const { privacyMode } = usePrivacy()
 
   // Fetch exchange rates
   useEffect(() => {
@@ -647,8 +650,8 @@ export function Analytics({
                 <div className="flex items-center justify-between">
                   <div className="min-w-0 flex-1">
                     <p className="text-xs sm:text-sm text-muted-foreground">Income</p>
-                    <p className="text-lg sm:text-2xl font-bold text-success truncate">
-                      +{totalIncome.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})} <span className="text-sm sm:text-base">{masterCurrency}</span>
+                    <p className={`text-lg sm:text-2xl font-bold text-success truncate ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
+                      {privacyMode === 'hidden' ? '••••••' : `+${totalIncome.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})}`} <span className="text-sm sm:text-base">{masterCurrency}</span>
                     </p>
                   </div>
                   <div className="h-8 w-8 sm:h-10 sm:w-10 rounded-xl bg-success/10 flex items-center justify-center flex-shrink-0 ml-2">
@@ -663,8 +666,8 @@ export function Analytics({
                 <div className="flex items-center justify-between">
                   <div className="min-w-0 flex-1">
                     <p className="text-xs sm:text-sm text-muted-foreground">Expenses</p>
-                    <p className="text-lg sm:text-2xl font-bold text-destructive truncate">
-                      -{totalExpenses.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})} <span className="text-sm sm:text-base">{masterCurrency}</span>
+                    <p className={`text-lg sm:text-2xl font-bold text-destructive truncate ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
+                      {privacyMode === 'hidden' ? '••••••' : `-${totalExpenses.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})}`} <span className="text-sm sm:text-base">{masterCurrency}</span>
                     </p>
                   </div>
                   <div className="h-8 w-8 sm:h-10 sm:w-10 rounded-xl bg-destructive/10 flex items-center justify-center flex-shrink-0 ml-2">
@@ -679,8 +682,8 @@ export function Analytics({
                 <div className="flex items-center justify-between">
                   <div className="min-w-0 flex-1">
                     <p className="text-xs sm:text-sm text-muted-foreground">Net Flow</p>
-                    <p className={`text-lg sm:text-2xl font-bold truncate ${netFlow >= 0 ? 'text-primary' : 'text-destructive'}`}>
-                      {netFlow >= 0 ? '+' : ''}{netFlow.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})} <span className="text-sm sm:text-base">{masterCurrency}</span>
+                    <p className={`text-lg sm:text-2xl font-bold truncate ${netFlow >= 0 ? 'text-primary' : 'text-destructive'} ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
+                      {privacyMode === 'hidden' ? '••••••' : `${netFlow >= 0 ? '+' : ''}${netFlow.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})}`} <span className="text-sm sm:text-base">{masterCurrency}</span>
                     </p>
                   </div>
                   <div className={`h-8 w-8 sm:h-10 sm:w-10 rounded-xl ${netFlow >= 0 ? 'bg-primary/10' : 'bg-destructive/10'} flex items-center justify-center flex-shrink-0 ml-2`}>
