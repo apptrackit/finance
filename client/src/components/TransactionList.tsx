@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from './ui/card'
 import { Plus, X, ArrowDownLeft, ArrowUpRight, Receipt, RefreshCw, Pencil, Trash2, Check, ArrowRightLeft, Coins } from 'lucide-react'
 import { format } from 'date-fns'
 import { API_BASE_URL, apiFetch } from '../config'
+import { usePrivacy } from '../context/PrivacyContext'
 
 type Transaction = {
   id: string
@@ -74,6 +75,8 @@ export function TransactionList({
   const [suggestedRate, setSuggestedRate] = useState<number | null>(null)
   const [isLoadingRate, setIsLoadingRate] = useState(false)
   const [skipAutoCalc, setSkipAutoCalc] = useState(false)
+  
+  const { privacyMode } = usePrivacy()
 
   useEffect(() => {
     apiFetch(`${API_BASE_URL}/categories`)
@@ -889,13 +892,23 @@ export function TransactionList({
                       </div>
                     </div>
                     <div className="flex flex-col items-end gap-0.5">
-                      <div className={`font-bold text-sm ${isTransfer ? 'text-destructive' : (tx.amount >= 0 ? 'text-success' : 'text-destructive')}`}>
-                        {tx.amount >= 0 ? '+' : '-'}
-                        {Math.abs(tx.amount).toLocaleString('hu-HU', {minimumFractionDigits: 2, maximumFractionDigits: 2})} {getAccountCurrency(tx.account_id)}
+                      <div className={`font-bold text-sm ${isTransfer ? 'text-destructive' : (tx.amount >= 0 ? 'text-success' : 'text-destructive')} ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
+                        {privacyMode === 'hidden' ? (
+                          '••••••'
+                        ) : (
+                          <>
+                            {tx.amount >= 0 ? '+' : '-'}
+                            {Math.abs(tx.amount).toLocaleString('hu-HU', {minimumFractionDigits: 2, maximumFractionDigits: 2})} {getAccountCurrency(tx.account_id)}
+                          </>
+                        )}
                       </div>
                       {isTransfer && related && (
-                        <div className="text-xs text-success font-medium">
-                          +{Math.abs(related.amount).toLocaleString('hu-HU', {minimumFractionDigits: 2, maximumFractionDigits: 2})} {getAccountCurrency(related.account_id)}
+                        <div className={`text-xs text-success font-medium ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
+                          {privacyMode === 'hidden' ? (
+                            '••••••'
+                          ) : (
+                            <>+{Math.abs(related.amount).toLocaleString('hu-HU', {minimumFractionDigits: 2, maximumFractionDigits: 2})} {getAccountCurrency(related.account_id)}</>
+                          )}
                         </div>
                       )}
                       <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">

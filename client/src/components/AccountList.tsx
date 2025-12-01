@@ -6,6 +6,7 @@ import { Select } from './ui/select'
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card'
 import { Plus, X, Wallet, TrendingUp, Building, Pencil, Trash2, Check, Search } from 'lucide-react'
 import { API_BASE_URL, apiFetch } from '../config'
+import { usePrivacy } from '../context/PrivacyContext'
 
 type Account = {
   id: string
@@ -52,6 +53,8 @@ export function AccountList({ accounts, onAccountAdded }: { accounts: Account[],
   const [searchResults, setSearchResults] = useState<any[]>([])
   const [searching, setSearching] = useState(false)
   const [manualMode, setManualMode] = useState(false)
+  
+  const { privacyMode } = usePrivacy()
 
   const resetForm = () => {
     setFormData({ name: '', type: 'cash', balance: '', currency: 'HUF', symbol: '', asset_type: 'stock' })
@@ -329,12 +332,18 @@ export function AccountList({ accounts, onAccountAdded }: { accounts: Account[],
                 </div>
                 <div className="flex items-center gap-2">
                   <div className="text-right mr-2">
-                    <p className={`font-bold text-sm ${account.balance >= 0 ? 'text-foreground' : 'text-destructive'}`}>
-                      {account.balance < 0 && '-'}
-                      {account.type === 'investment' 
-                        ? `${Math.abs(account.balance).toLocaleString()} ${account.currency}` 
-                        : formatCurrency(account.balance, account.currency)
-                      }
+                    <p className={`font-bold text-sm ${account.balance >= 0 ? 'text-foreground' : 'text-destructive'} ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
+                      {privacyMode === 'hidden' ? (
+                        '••••••'
+                      ) : (
+                        <>
+                          {account.balance < 0 && '-'}
+                          {account.type === 'investment' 
+                            ? `${Math.abs(account.balance).toLocaleString()} ${account.currency}` 
+                            : formatCurrency(account.balance, account.currency)
+                          }
+                        </>
+                      )}
                     </p>
                   </div>
                   <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
