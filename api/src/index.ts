@@ -54,29 +54,46 @@ type InvestmentTransaction = {
 const app = new Hono<{ Bindings: Bindings }>()
 
 // CORS configuration - only allow requests from configured origins
-app.use('/*', (c, next) => {
+app.use('/*', async (c, next) => {
+  const origin = c.req.header('Origin')
   const allowedOriginsStr = c.env.ALLOWED_ORIGINS || ''
   const allowedOrigins = allowedOriginsStr.split(',').map(o => o.trim()).filter(o => o)
   
-  return cors({
-    origin: (origin) => {
-      if (!origin) return null
-      
-      // Check if origin matches any allowed origin
-      for (const allowed of allowedOrigins) {
-        if (origin === allowed) return origin
-        // Allow subdomains if configured with wildcard
-        if (allowed.startsWith('*.') && origin.endsWith(allowed.substring(1))) {
-          return origin
-        }
-      }
-      
-      return null
-    },
-    allowHeaders: ['Content-Type', 'X-API-Key'],
-    allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    credentials: false,
-  })(c, next)
+  // Reject requests without Origin header (non-browser requests)
+  if (!origin) {
+    return c.json({ error: 'Origin header required' }, 403)
+  }
+  
+  // Check if origin is allowed
+  let isAllowed = false
+  for (const allowed of allowedOrigins) {
+    if (origin === allowed) {
+      isAllowed = true
+      break
+    }
+    // Allow subdomains if configured with wildcard
+    if (allowed.startsWith('*.') && origin.endsWith(allowed.substring(1))) {
+      isAllowed = true
+      break
+    }
+  }
+  
+  // Reject requests from unauthorized origins
+  if (!isAllowed) {
+    return c.json({ error: 'Origin not allowed' }, 403)
+  }
+  
+  // Set CORS headers for allowed origins
+  c.header('Access-Control-Allow-Origin', origin)
+  c.header('Access-Control-Allow-Headers', 'Content-Type, X-API-Key')
+  c.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
+  
+  // Handle preflight requests
+  if (c.req.method === 'OPTIONS') {
+    return new Response(null, { status: 204 })
+  }
+  
+  await next()
 })
 
 // API Key validation middleware - protect ALL routes
