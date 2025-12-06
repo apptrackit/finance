@@ -360,6 +360,64 @@ export function Investments() {
         </div>
       </div>
 
+      {/* Recent Transactions */}
+      <div className="bg-card border border-border/50 rounded-2xl overflow-hidden shadow-sm">
+        <div className="p-4 border-b border-border/50 flex items-center justify-between">
+          <h3 className="font-semibold">Recent Transactions</h3>
+        </div>
+        
+        <div className="divide-y divide-border/50">
+          {(() => {
+            // Combine all transactions from all accounts
+            const allTxs = investmentAccounts.flatMap(acc => 
+              (transactions[acc.id] || []).map(tx => ({
+                ...tx,
+                accountName: acc.name,
+                accountSymbol: acc.symbol
+              }))
+            )
+            // Sort by date, newest first
+            allTxs.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+            
+            if (allTxs.length === 0) {
+              return (
+                <div className="p-8 text-center text-muted-foreground">
+                  <p>No transactions yet.</p>
+                  <p className="text-sm mt-2">Click on an investment to add buy/sell transactions.</p>
+                </div>
+              )
+            }
+            
+            return allTxs.slice(0, 10).map(tx => (
+              <div key={tx.id} className="p-4 flex justify-between items-center hover:bg-secondary/20 transition-colors">
+                <div className="flex items-center gap-3">
+                  <div className={`h-2 w-2 rounded-full ${tx.type === 'buy' ? 'bg-green-500' : 'bg-red-500'}`} />
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium text-sm">{tx.accountSymbol || tx.accountName}</span>
+                      <span className={`text-xs font-medium px-2 py-0.5 rounded ${tx.type === 'buy' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'}`}>
+                        {tx.type.toUpperCase()}
+                      </span>
+                    </div>
+                    <div className={`text-xs text-muted-foreground mt-0.5 ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
+                      {new Date(tx.date).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                    </div>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <div className={`font-medium ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
+                    {privacyMode === 'hidden' ? '•••• @ ••••' : `${tx.quantity} @ $${tx.price}`}
+                  </div>
+                  <div className={`text-xs text-muted-foreground ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
+                    {privacyMode === 'hidden' ? '••••••' : `$${tx.total_amount.toFixed(2)}`}
+                  </div>
+                </div>
+              </div>
+            ))
+          })()}
+        </div>
+      </div>
+
       {/* Investment Detail Modal with Chart */}
       {selectedAccount && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
