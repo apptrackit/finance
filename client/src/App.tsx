@@ -234,6 +234,9 @@ function App() {
   const totalExpenses = transactions
     .filter(t => t.amount < 0 && !t.linked_transaction_id)
     .reduce((sum, t) => sum + Math.abs(convertToMasterCurrency(t.amount, t.account_id)), 0)
+  
+  // Calculate cash balance (accounts without investments)
+  const cashBalance = netWorth !== null ? netWorth : 0
 
   return (
     <div className="min-h-screen bg-background">
@@ -327,16 +330,45 @@ function App() {
         </header>
 
         <main className="max-w-7xl mx-auto px-4 sm:px-6 py-4 sm:py-8">
-          {/* Stats Grid */}
-          <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-3 mb-4 sm:mb-8">
-            {/* Net Worth Card */}
-            <div className="sm:col-span-1 group relative overflow-hidden rounded-2xl border border-border/50 bg-gradient-to-br from-card to-card/80 p-4 sm:p-6 shadow-xl">
-              <div className="absolute top-0 right-0 w-32 h-32 bg-primary/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" />
-              <div className="relative">
+          {view === 'dashboard' && (
+            /* Stats Grid - Only on Dashboard */
+            <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 mb-4 sm:mb-8">
+              {/* Net Worth Card */}
+              <div className="group relative overflow-hidden rounded-2xl border border-border/50 bg-gradient-to-br from-card to-card/80 p-4 sm:p-6 shadow-xl">
+                <div className="absolute top-0 right-0 w-32 h-32 bg-primary/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" />
+                <div className="relative">
+                  <div className="flex items-center justify-between mb-2 sm:mb-4">
+                    <span className="text-xs sm:text-sm font-medium text-muted-foreground">Net Worth</span>
+                    <div className="h-7 w-7 sm:h-8 sm:w-8 rounded-lg bg-primary/10 flex items-center justify-center">
+                      <Activity className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-primary" />
+                    </div>
+                  </div>
+                  <div className="text-2xl sm:text-4xl font-bold tracking-tight text-foreground">
+                    {netWorth !== null ? (
+                      <>
+                        <span className={privacyMode === 'hidden' ? 'select-none' : ''}>
+                          {privacyMode === 'hidden' 
+                            ? '••••••' 
+                            : (netWorth + investmentValue).toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})}
+                        </span>
+                        <span className="text-muted-foreground text-lg sm:text-2xl ml-1">{masterCurrency}</span>
+                      </>
+                    ) : (
+                      <div className="h-8 sm:h-10 w-32 bg-muted animate-pulse rounded" />
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-2">
+                    Total value
+                  </p>
+                </div>
+              </div>
+
+              {/* Cash Balance Card */}
+              <div className="group relative overflow-hidden rounded-2xl border border-border/50 bg-card p-4 sm:p-6 shadow-xl hover:border-emerald-500/30 transition-colors">
                 <div className="flex items-center justify-between mb-2 sm:mb-4">
-                  <span className="text-xs sm:text-sm font-medium text-muted-foreground">Net Worth</span>
-                  <div className="h-7 w-7 sm:h-8 sm:w-8 rounded-lg bg-primary/10 flex items-center justify-center">
-                    <Activity className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-primary" />
+                  <span className="text-xs sm:text-sm font-medium text-muted-foreground">Cash</span>
+                  <div className="h-7 w-7 sm:h-8 sm:w-8 rounded-lg bg-emerald-500/10 flex items-center justify-center">
+                    <Wallet className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-emerald-500" />
                   </div>
                 </div>
                 <div className="text-2xl sm:text-4xl font-bold tracking-tight text-foreground">
@@ -345,7 +377,7 @@ function App() {
                       <span className={privacyMode === 'hidden' ? 'select-none' : ''}>
                         {privacyMode === 'hidden' 
                           ? '••••••' 
-                          : (netWorth + investmentValue).toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})}
+                          : cashBalance.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})}
                       </span>
                       <span className="text-muted-foreground text-lg sm:text-2xl ml-1">{masterCurrency}</span>
                     </>
@@ -354,50 +386,45 @@ function App() {
                   )}
                 </div>
                 <p className="text-xs text-muted-foreground mt-2">
-                  {accounts.filter(a => a.type === 'cash').length} cash account{accounts.filter(a => a.type === 'cash').length !== 1 ? 's' : ''}
-                  {accounts.filter(a => a.type === 'investment').length > 0 && (
-                    <span className="ml-1">
-                      + {accounts.filter(a => a.type === 'investment').length} investment{accounts.filter(a => a.type === 'investment').length !== 1 ? 's' : ''}
-                    </span>
-                  )}
+                  {accounts.filter(a => a.type === 'cash').length} account{accounts.filter(a => a.type === 'cash').length !== 1 ? 's' : ''}
                 </p>
               </div>
-            </div>
 
-            {/* Income Card */}
-            <div className="group relative overflow-hidden rounded-2xl border border-border/50 bg-card p-4 sm:p-6 shadow-xl hover:border-success/30 transition-colors">
-              <div className="flex items-center justify-between mb-2 sm:mb-4">
-                <span className="text-xs sm:text-sm font-medium text-muted-foreground">Income</span>
-                <div className="h-7 w-7 sm:h-8 sm:w-8 rounded-lg bg-success/10 flex items-center justify-center">
-                  <TrendingUp className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-success" />
+              {/* Income Card */}
+              <div className="group relative overflow-hidden rounded-2xl border border-border/50 bg-card p-4 sm:p-6 shadow-xl hover:border-success/30 transition-colors">
+                <div className="flex items-center justify-between mb-2 sm:mb-4">
+                  <span className="text-xs sm:text-sm font-medium text-muted-foreground">Income</span>
+                  <div className="h-7 w-7 sm:h-8 sm:w-8 rounded-lg bg-success/10 flex items-center justify-center">
+                    <TrendingUp className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-success" />
+                  </div>
                 </div>
+                <div className="text-xl sm:text-3xl font-bold tracking-tight text-success">
+                  <span className="text-success/70 text-base sm:text-xl">+</span>
+                  <span className={privacyMode === 'hidden' ? 'select-none' : ''}>
+                    {privacyMode === 'hidden' ? '••••••' : totalIncome.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})}
+                  </span> <span className="text-sm sm:text-base">{masterCurrency}</span>
+                </div>
+                <p className="text-[10px] sm:text-xs text-muted-foreground mt-1 sm:mt-2">This period</p>
               </div>
-              <div className="text-xl sm:text-3xl font-bold tracking-tight text-success">
-                <span className="text-success/70 text-base sm:text-xl">+</span>
-                <span className={privacyMode === 'hidden' ? 'select-none' : ''}>
-                  {privacyMode === 'hidden' ? '••••••' : totalIncome.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})}
-                </span> <span className="text-sm sm:text-base">{masterCurrency}</span>
-              </div>
-              <p className="text-[10px] sm:text-xs text-muted-foreground mt-1 sm:mt-2">This period</p>
-            </div>
 
-            {/* Expenses Card */}
-            <div className="group relative overflow-hidden rounded-2xl border border-border/50 bg-card p-4 sm:p-6 shadow-xl hover:border-destructive/30 transition-colors">
-              <div className="flex items-center justify-between mb-2 sm:mb-4">
-                <span className="text-xs sm:text-sm font-medium text-muted-foreground">Expenses</span>
-                <div className="h-7 w-7 sm:h-8 sm:w-8 rounded-lg bg-destructive/10 flex items-center justify-center">
-                  <TrendingDown className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-destructive" />
+              {/* Expenses Card */}
+              <div className="group relative overflow-hidden rounded-2xl border border-border/50 bg-card p-4 sm:p-6 shadow-xl hover:border-destructive/30 transition-colors">
+                <div className="flex items-center justify-between mb-2 sm:mb-4">
+                  <span className="text-xs sm:text-sm font-medium text-muted-foreground">Expenses</span>
+                  <div className="h-7 w-7 sm:h-8 sm:w-8 rounded-lg bg-destructive/10 flex items-center justify-center">
+                    <TrendingDown className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-destructive" />
+                  </div>
                 </div>
+                <div className="text-xl sm:text-3xl font-bold tracking-tight text-destructive">
+                  <span className="text-destructive/70 text-base sm:text-xl">-</span>
+                  <span className={privacyMode === 'hidden' ? 'select-none' : ''}>
+                    {privacyMode === 'hidden' ? '••••••' : totalExpenses.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})}
+                  </span> <span className="text-sm sm:text-base">{masterCurrency}</span>
+                </div>
+                <p className="text-[10px] sm:text-xs text-muted-foreground mt-1 sm:mt-2">This period</p>
               </div>
-              <div className="text-xl sm:text-3xl font-bold tracking-tight text-destructive">
-                <span className="text-destructive/70 text-base sm:text-xl">-</span>
-                <span className={privacyMode === 'hidden' ? 'select-none' : ''}>
-                  {privacyMode === 'hidden' ? '••••••' : totalExpenses.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})}
-                </span> <span className="text-sm sm:text-base">{masterCurrency}</span>
-              </div>
-              <p className="text-[10px] sm:text-xs text-muted-foreground mt-1 sm:mt-2">This period</p>
             </div>
-          </div>
+          )}
 
           {view === 'dashboard' ? (
             /* Main Content Grid */

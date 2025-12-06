@@ -323,6 +323,10 @@ npm run deploy
 cd client
 npm run build
 npx wrangler pages deploy dist --project-name=finance
+
+if not form main hten use:
+
+npx wrangler pages deploy dist --project-name=finance --branch=main
 ```
 
 ---
