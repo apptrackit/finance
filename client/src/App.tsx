@@ -9,7 +9,7 @@ import Settings, { getMasterCurrency } from './components/Settings'
 import { usePrivacy } from './context/PrivacyContext'
 
 
-const APP_VERSION = '0.6'
+const APP_VERSION = '0.7'
 
 type Account = {
   id: string
