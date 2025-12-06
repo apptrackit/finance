@@ -53,6 +53,7 @@ export function AccountList({ accounts, onAccountAdded }: { accounts: Account[],
   const [searchResults, setSearchResults] = useState<any[]>([])
   const [searching, setSearching] = useState(false)
   const [manualMode, setManualMode] = useState(false)
+  const [activeAccountId, setActiveAccountId] = useState<string | null>(null)
   
   const { privacyMode } = usePrivacy()
 
@@ -317,8 +318,9 @@ export function AccountList({ accounts, onAccountAdded }: { accounts: Account[],
               <div 
                 key={account.id} 
                 className="group flex items-center justify-between p-3 rounded-xl bg-secondary/30 hover:bg-secondary/50 border border-transparent hover:border-border/50 transition-all duration-200"
+                onClick={() => setActiveAccountId(activeAccountId === account.id ? null : account.id)}
               >
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-3" onClick={(e) => e.stopPropagation()}>
                   <div className={`h-10 w-10 rounded-xl bg-gradient-to-br ${colorClass} flex items-center justify-center`}>
                     <Icon className="h-5 w-5" />
                   </div>
@@ -346,12 +348,15 @@ export function AccountList({ accounts, onAccountAdded }: { accounts: Account[],
                       )}
                     </p>
                   </div>
-                  <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <div className={`flex gap-1 transition-opacity ${activeAccountId === account.id ? 'opacity-100' : 'opacity-0 md:group-hover:opacity-100'}`}>
                     <Button 
                       size="icon" 
                       variant="ghost" 
                       className="h-8 w-8"
-                      onClick={() => handleEdit(account)}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        handleEdit(account)
+                      }}
                     >
                       <Pencil className="h-3.5 w-3.5" />
                     </Button>
@@ -359,7 +364,10 @@ export function AccountList({ accounts, onAccountAdded }: { accounts: Account[],
                       size="icon" 
                       variant="ghost" 
                       className="h-8 w-8 text-destructive hover:text-destructive"
-                      onClick={() => handleDelete(account.id)}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        handleDelete(account.id)
+                      }}
                     >
                       <Trash2 className="h-3.5 w-3.5" />
                     </Button>
