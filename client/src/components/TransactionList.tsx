@@ -75,6 +75,7 @@ export function TransactionList({
   const [suggestedRate, setSuggestedRate] = useState<number | null>(null)
   const [isLoadingRate, setIsLoadingRate] = useState(false)
   const [skipAutoCalc, setSkipAutoCalc] = useState(false)
+  const [activeTxId, setActiveTxId] = useState<string | null>(null)
   
   const { privacyMode } = usePrivacy()
 
@@ -856,8 +857,9 @@ export function TransactionList({
                   <div 
                     key={tx.id} 
                     className="group flex items-center justify-between p-3 rounded-xl hover:bg-secondary/30 transition-all duration-200"
+                    onClick={() => setActiveTxId(activeTxId === tx.id ? null : tx.id)}
                   >
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-3" onClick={(e) => e.stopPropagation()}>
                       <div className={`h-10 w-10 rounded-xl flex items-center justify-center text-lg ${
                         isTransfer ? 'bg-blue-500/10 text-blue-500' :
                         tx.amount >= 0 ? 'bg-success/10' : 'bg-secondary'
@@ -911,12 +913,15 @@ export function TransactionList({
                           )}
                         </div>
                       )}
-                      <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <div className={`flex gap-1 transition-opacity ${activeTxId === tx.id ? 'opacity-100' : 'opacity-0 md:group-hover:opacity-100'}`}>
                         <Button 
                           size="icon" 
                           variant="ghost" 
                           className="h-8 w-8"
-                          onClick={() => handleEdit(tx)}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleEdit(tx)
+                          }}
                         >
                           <Pencil className="h-3.5 w-3.5" />
                         </Button>
@@ -924,7 +929,10 @@ export function TransactionList({
                           size="icon" 
                           variant="ghost" 
                           className="h-8 w-8 text-destructive hover:text-destructive"
-                          onClick={() => handleDelete(tx.id)}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleDelete(tx.id)
+                          }}
                         >
                           <Trash2 className="h-3.5 w-3.5" />
                         </Button>
