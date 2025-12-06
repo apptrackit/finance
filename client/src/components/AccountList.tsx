@@ -44,9 +44,10 @@ export function AccountList({ accounts, onAccountAdded }: { accounts: Account[],
     balance: '',
     currency: 'HUF',
     symbol: '',
-    asset_type: 'stock' as 'stock' | 'crypto' | 'manual'
+    asset_type: 'stock' as 'stock' | 'crypto' | 'manual',
+    adjustWithTransaction: false
   })
-  
+
   // For investment account creation
   const [showSymbolSearch, setShowSymbolSearch] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
@@ -54,11 +55,11 @@ export function AccountList({ accounts, onAccountAdded }: { accounts: Account[],
   const [searching, setSearching] = useState(false)
   const [manualMode, setManualMode] = useState(false)
   const [activeAccountId, setActiveAccountId] = useState<string | null>(null)
-  
+
   const { privacyMode } = usePrivacy()
 
   const resetForm = () => {
-    setFormData({ name: '', type: 'cash', balance: '', currency: 'HUF', symbol: '', asset_type: 'stock' })
+    setFormData({ name: '', type: 'cash', balance: '', currency: 'HUF', symbol: '', asset_type: 'stock', adjustWithTransaction: false })
     setShowSymbolSearch(false)
     setSearchQuery('')
     setSearchResults([])
@@ -72,7 +73,7 @@ export function AccountList({ accounts, onAccountAdded }: { accounts: Account[],
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!searchQuery) return
-    
+
     setSearching(true)
     try {
       const res = await apiFetch(`${API_BASE_URL}/market/search?q=${encodeURIComponent(searchQuery)}`)
@@ -100,7 +101,7 @@ export function AccountList({ accounts, onAccountAdded }: { accounts: Account[],
     setSearchQuery('')
     setSearchResults([])
   }
-  
+
   const handleManualAsset = () => {
     setFormData({
       ...formData,
@@ -120,13 +121,16 @@ export function AccountList({ accounts, onAccountAdded }: { accounts: Account[],
         balance: parseFloat(formData.balance) || 0,
         currency: formData.currency
       }
-      
+
       if (formData.type === 'investment') {
         payload.symbol = formData.symbol || null
         payload.asset_type = formData.asset_type
       }
-      
+
       if (editingId) {
+        // Include the adjustWithTransaction flag when editing
+        payload.adjustWithTransaction = formData.adjustWithTransaction
+
         await apiFetch(`${API_BASE_URL}/accounts/${editingId}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
@@ -155,7 +159,8 @@ export function AccountList({ accounts, onAccountAdded }: { accounts: Account[],
       balance: account.balance.toString(),
       currency: account.currency,
       symbol: account.symbol || '',
-      asset_type: account.asset_type || 'stock'
+      asset_type: account.asset_type || 'stock',
+      adjustWithTransaction: false
     })
     setEditingId(account.id)
     setIsAdding(true)
@@ -179,9 +184,9 @@ export function AccountList({ accounts, onAccountAdded }: { accounts: Account[],
 
   const formatCurrency = (amount: number, currency: string) => {
     const symbol = currencySymbols[currency] || currency
-    const formatted = Math.abs(amount).toLocaleString('hu-HU', { 
-      minimumFractionDigits: currency === 'HUF' ? 0 : 2, 
-      maximumFractionDigits: currency === 'HUF' ? 0 : 2 
+    const formatted = Math.abs(amount).toLocaleString('hu-HU', {
+      minimumFractionDigits: currency === 'HUF' ? 0 : 2,
+      maximumFractionDigits: currency === 'HUF' ? 0 : 2
     })
     return currency === 'HUF' ? `${formatted} ${symbol}` : `${symbol}${formatted}`
   }
@@ -195,9 +200,9 @@ export function AccountList({ accounts, onAccountAdded }: { accounts: Account[],
           </div>
           <CardTitle className="text-base">Accounts</CardTitle>
         </div>
-        <Button 
-          onClick={() => isAdding ? handleCancel() : setIsAdding(true)} 
-          size="sm" 
+        <Button
+          onClick={() => isAdding ? handleCancel() : setIsAdding(true)}
+          size="sm"
           variant={isAdding ? "ghost" : "outline"}
           className="h-8"
         >
@@ -211,33 +216,33 @@ export function AccountList({ accounts, onAccountAdded }: { accounts: Account[],
             <div className="grid grid-cols-2 gap-3">
               <div className="col-span-2 space-y-2">
                 <Label htmlFor="name">Account Name</Label>
-                <Input 
-                  id="name" 
-                  value={formData.name} 
-                  onChange={e => setFormData({...formData, name: e.target.value})} 
-                  placeholder="e.g. OTP Bank" 
-                  required 
+                <Input
+                  id="name"
+                  value={formData.name}
+                  onChange={e => setFormData({ ...formData, name: e.target.value })}
+                  placeholder="e.g. OTP Bank"
+                  required
                 />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="type">Type</Label>
-                <Select 
-                  id="type" 
-                  value={formData.type} 
+                <Select
+                  id="type"
+                  value={formData.type}
                   onChange={e => handleTypeChange(e.target.value)}
                 >
                   <option value="cash">💵 Cash / Bank</option>
                   <option value="investment">📈 Investment</option>
                 </Select>
               </div>
-              
+
               {formData.type === 'cash' && (
                 <div className="space-y-2">
                   <Label htmlFor="currency">Currency</Label>
-                  <Select 
-                    id="currency" 
-                    value={formData.currency} 
-                    onChange={e => setFormData({...formData, currency: e.target.value})}
+                  <Select
+                    id="currency"
+                    value={formData.currency}
+                    onChange={e => setFormData({ ...formData, currency: e.target.value })}
                   >
                     <option value="HUF">🇭🇺 HUF</option>
                     <option value="EUR">🇪🇺 EUR</option>
@@ -246,7 +251,7 @@ export function AccountList({ accounts, onAccountAdded }: { accounts: Account[],
                   </Select>
                 </div>
               )}
-              
+
               {formData.type === 'investment' && !formData.symbol && !editingId && (
                 <div className="space-y-2">
                   <Label>Asset Symbol</Label>
@@ -261,17 +266,17 @@ export function AccountList({ accounts, onAccountAdded }: { accounts: Account[],
               )}
               <div className="col-span-2 space-y-2">
                 <Label htmlFor="balance">{formData.type === 'investment' ? 'Initial Quantity (0 if tracking from transactions)' : 'Current Balance'}</Label>
-                <Input 
-                  id="balance" 
-                  type="number" 
+                <Input
+                  id="balance"
+                  type="number"
                   step={formData.type === 'investment' || formData.currency === 'SHARE' ? 'any' : (formData.currency === 'HUF' ? '1' : '0.01')}
-                  value={formData.balance} 
-                  onChange={e => setFormData({...formData, balance: e.target.value})} 
-                  placeholder="0" 
-                  required 
+                  value={formData.balance}
+                  onChange={e => setFormData({ ...formData, balance: e.target.value })}
+                  placeholder="0"
+                  required
                 />
               </div>
-              
+
               {formData.type === 'investment' && formData.symbol && (
                 <div className="col-span-2 p-3 bg-secondary/30 rounded-lg flex justify-between items-center">
                   <div>
@@ -279,9 +284,9 @@ export function AccountList({ accounts, onAccountAdded }: { accounts: Account[],
                     <div className="text-sm text-muted-foreground">{formData.name}</div>
                   </div>
                   {!editingId && (
-                    <button 
+                    <button
                       type="button"
-                      onClick={() => { setShowSymbolSearch(true); setFormData({...formData, symbol: '', name: '' }) }} 
+                      onClick={() => { setShowSymbolSearch(true); setFormData({ ...formData, symbol: '', name: '' }) }}
                       className="text-xs text-primary hover:underline"
                     >
                       Change
@@ -289,16 +294,39 @@ export function AccountList({ accounts, onAccountAdded }: { accounts: Account[],
                   )}
                 </div>
               )}
-              
+
               {formData.type === 'investment' && manualMode && !formData.symbol && (
                 <div className="col-span-2 space-y-2">
                   <Label htmlFor="manual-symbol">Symbol (Optional)</Label>
-                  <Input 
-                    id="manual-symbol" 
-                    value={formData.symbol} 
-                    onChange={e => setFormData({...formData, symbol: e.target.value})} 
-                    placeholder="e.g. GOLD" 
+                  <Input
+                    id="manual-symbol"
+                    value={formData.symbol}
+                    onChange={e => setFormData({ ...formData, symbol: e.target.value })}
+                    placeholder="e.g. GOLD"
                   />
+                </div>
+              )}
+
+              {/* Checkbox for adjusting with transaction - only shown when editing */}
+              {editingId && (
+                <div className="col-span-2 space-y-2">
+                  <div className="flex items-center gap-2 p-3 bg-secondary/30 rounded-lg border border-border/30">
+                    <input
+                      id="adjust-with-transaction"
+                      type="checkbox"
+                      checked={formData.adjustWithTransaction}
+                      onChange={e => setFormData({ ...formData, adjustWithTransaction: e.target.checked })}
+                      className="h-4 w-4 rounded border-border bg-background text-primary focus:ring-2 focus:ring-primary focus:ring-offset-2"
+                    />
+                    <Label htmlFor="adjust-with-transaction" className="cursor-pointer text-sm font-normal">
+                      Adjust balance with a transaction instead of direct update
+                    </Label>
+                  </div>
+                  <p className="text-xs text-muted-foreground px-1">
+                    {formData.adjustWithTransaction
+                      ? "A transaction will be created for the difference between old and new balance"
+                      : "Balance will be updated directly without creating a transaction"}
+                  </p>
                 </div>
               )}
             </div>
@@ -313,10 +341,10 @@ export function AccountList({ accounts, onAccountAdded }: { accounts: Account[],
           {accounts.map(account => {
             const Icon = accountIcons[account.type] || Wallet
             const colorClass = accountColors[account.type] || accountColors.cash
-            
+
             return (
-              <div 
-                key={account.id} 
+              <div
+                key={account.id}
                 className="group flex items-center justify-between p-3 rounded-xl bg-secondary/30 hover:bg-secondary/50 border border-transparent hover:border-border/50 transition-all duration-200"
                 onClick={() => setActiveAccountId(activeAccountId === account.id ? null : account.id)}
               >
@@ -340,8 +368,8 @@ export function AccountList({ accounts, onAccountAdded }: { accounts: Account[],
                       ) : (
                         <>
                           {account.balance < 0 && '-'}
-                          {account.type === 'investment' 
-                            ? `${Math.abs(account.balance).toLocaleString()} ${account.currency}` 
+                          {account.type === 'investment'
+                            ? `${Math.abs(account.balance).toLocaleString()} ${account.currency}`
                             : formatCurrency(account.balance, account.currency)
                           }
                         </>
@@ -349,9 +377,9 @@ export function AccountList({ accounts, onAccountAdded }: { accounts: Account[],
                     </p>
                   </div>
                   <div className={`flex gap-1 transition-opacity ${activeAccountId === account.id ? 'opacity-100' : 'opacity-0 md:group-hover:opacity-100'}`}>
-                    <Button 
-                      size="icon" 
-                      variant="ghost" 
+                    <Button
+                      size="icon"
+                      variant="ghost"
                       className="h-8 w-8"
                       onClick={(e) => {
                         e.stopPropagation()
@@ -360,9 +388,9 @@ export function AccountList({ accounts, onAccountAdded }: { accounts: Account[],
                     >
                       <Pencil className="h-3.5 w-3.5" />
                     </Button>
-                    <Button 
-                      size="icon" 
-                      variant="ghost" 
+                    <Button
+                      size="icon"
+                      variant="ghost"
                       className="h-8 w-8 text-destructive hover:text-destructive"
                       onClick={(e) => {
                         e.stopPropagation()
@@ -376,7 +404,7 @@ export function AccountList({ accounts, onAccountAdded }: { accounts: Account[],
               </div>
             )
           })}
-          
+
           {accounts.length === 0 && !isAdding && (
             <div className="text-center py-8">
               <div className="h-12 w-12 rounded-full bg-secondary/50 flex items-center justify-center mx-auto mb-3">
@@ -388,7 +416,7 @@ export function AccountList({ accounts, onAccountAdded }: { accounts: Account[],
           )}
         </div>
       </CardContent>
-      
+
       {/* Symbol Search Modal */}
       {showSymbolSearch && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
@@ -397,7 +425,7 @@ export function AccountList({ accounts, onAccountAdded }: { accounts: Account[],
               <h3 className="font-semibold">Select Investment Asset</h3>
               <button onClick={() => { setShowSymbolSearch(false); resetForm(); setIsAdding(false); }} className="text-muted-foreground hover:text-foreground">✕</button>
             </div>
-            
+
             <div className="p-4 space-y-4">
               <form onSubmit={handleSearch} className="flex gap-2">
                 <Input
@@ -407,15 +435,15 @@ export function AccountList({ accounts, onAccountAdded }: { accounts: Account[],
                   placeholder="Search symbol (e.g. AAPL, BTC-USD)"
                   autoFocus
                 />
-                <Button 
-                  type="submit" 
+                <Button
+                  type="submit"
                   disabled={searching}
                   size="icon"
                 >
                   {searching ? '...' : <Search className="h-4 w-4" />}
                 </Button>
               </form>
-              
+
               <div className="max-h-60 overflow-y-auto space-y-2">
                 {searchResults.map((result: any) => (
                   <button
@@ -433,9 +461,9 @@ export function AccountList({ accounts, onAccountAdded }: { accounts: Account[],
                   </button>
                 ))}
               </div>
-              
+
               <div className="pt-4 border-t border-border">
-                <Button 
+                <Button
                   onClick={handleManualAsset}
                   variant="outline"
                   className="w-full"
