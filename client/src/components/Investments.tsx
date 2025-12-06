@@ -121,24 +121,43 @@ export function Investments() {
     loadData()
   }, [])
 
-  const calculatePosition = (accountId: string) => {
-    const txs = transactions[accountId] || []
-    let totalQuantity = 0
-    let totalCost = 0
+  const calculatePosition = (account: Account) => {
+    const txs = transactions[account.id] || []
     
+    // Start with initial balance (could be from account creation or pre-existing holdings)
+    let totalQuantity = account.balance
+    let totalCostBasis = 0 // Cost basis of current holdings (for gain/loss calculation)
+    
+    // If there's an initial balance but no transactions, we need to estimate the cost basis
+    // We'll assume the initial balance was "bought" at the current market price when account was created
+    if (totalQuantity > 0 && txs.length === 0) {
+      const quote = account.symbol ? quotes[account.symbol] : null
+      const estimatedPrice = quote?.regularMarketPrice || 0
+      totalCostBasis = totalQuantity * estimatedPrice
+    }
+    
+    // Process all transactions
     txs.forEach(tx => {
       if (tx.type === 'buy') {
         totalQuantity += tx.quantity
-        totalCost += tx.total_amount
-      } else {
-        totalQuantity -= tx.quantity
-        // Don't subtract from cost - we want to track original investment
+        totalCostBasis += tx.total_amount // Cost basis increases
+      } else { // sell
+        const sellQuantity = tx.quantity
+        const avgCostPerUnit = totalQuantity > 0 ? totalCostBasis / totalQuantity : 0
+        const costOfSold = avgCostPerUnit * sellQuantity
+        
+        totalQuantity -= sellQuantity
+        totalCostBasis -= costOfSold // Reduce cost basis proportionally
       }
     })
     
-    const avgPrice = totalQuantity > 0 ? totalCost / totalQuantity : 0
+    const avgPrice = totalQuantity > 0 ? totalCostBasis / totalQuantity : 0
     
-    return { totalQuantity, avgPrice, totalCost }
+    return { 
+      totalQuantity, 
+      avgPrice, 
+      totalCostBasis // Cost basis of current holdings
+    }
   }
 
   const handleOpenChart = async (account: Account) => {
@@ -203,13 +222,12 @@ export function Investments() {
 
   const calculateTotalValue = () => {
     return investmentAccounts.reduce((sum, acc) => {
-      const position = calculatePosition(acc.id)
-      // Add account balance to position quantity (for pre-existing holdings)
-      const totalQuantity = position.totalQuantity + acc.balance
+      const position = calculatePosition(acc)
+      const totalQuantity = position.totalQuantity
       let price = 0
       
       if (acc.asset_type === 'manual') {
-        // For manual, we'd need a manual price field - for now use avg cost
+        // For manual, use the average cost as current price (no market data)
         price = position.avgPrice
       } else if (acc.symbol) {
         const quote = quotes[acc.symbol]
@@ -223,9 +241,10 @@ export function Investments() {
   }
 
   const calculateTotalInvested = () => {
+    // Total invested = sum of all cost bases (what you originally paid for current holdings)
     return investmentAccounts.reduce((sum, acc) => {
-      const position = calculatePosition(acc.id)
-      return sum + position.totalCost
+      const position = calculatePosition(acc)
+      return sum + position.totalCostBasis
     }, 0)
   }
 
@@ -293,13 +312,13 @@ export function Investments() {
             </div>
           ) : (
             investmentAccounts.map(acc => {
-              const position = calculatePosition(acc.id)
-              const totalQuantity = position.totalQuantity + acc.balance
+              const position = calculatePosition(acc)
+              const totalQuantity = position.totalQuantity
               const quote = acc.symbol ? quotes[acc.symbol] : null
               const currentPrice = acc.asset_type === 'manual' ? position.avgPrice : (quote?.regularMarketPrice || position.avgPrice)
               const currentValue = currentPrice * totalQuantity
-              const gainLoss = currentValue - position.totalCost
-              const gainLossPercent = position.totalCost > 0 ? (gainLoss / position.totalCost) * 100 : 0
+              const gainLoss = currentValue - position.totalCostBasis
+              const gainLossPercent = position.totalCostBasis > 0 ? (gainLoss / position.totalCostBasis) * 100 : 0
               
               return (
                 <div 
