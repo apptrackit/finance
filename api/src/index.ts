@@ -88,16 +88,21 @@ app.use('/*', async (c, next) => {
   c.header('Access-Control-Allow-Headers', 'Content-Type, X-API-Key')
   c.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
   
-  // Handle preflight requests
+  // Handle preflight requests - return early without API key check
   if (c.req.method === 'OPTIONS') {
-    return new Response(null, { status: 204 })
+    return c.body(null, 204)
   }
   
   await next()
 })
 
-// API Key validation middleware - protect ALL routes
+// API Key validation middleware - protect ALL routes except OPTIONS
 app.use('*', async (c, next) => {
+  // Skip API key check for OPTIONS (preflight) requests - already handled by CORS middleware
+  if (c.req.method === 'OPTIONS') {
+    return await next()
+  }
+  
   // Check API key
   const apiKey = c.req.header('X-API-Key')
   if (!apiKey || apiKey !== c.env.API_SECRET) {

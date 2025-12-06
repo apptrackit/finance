@@ -14,12 +14,16 @@ export default defineConfig(({ mode }) => {
       proxy: {
         '/api': {
           target: apiTarget,
-          changeOrigin: false, // Preserve the original Origin header (http://localhost:5173)
+          changeOrigin: true, // Let the proxy handle origin properly
           rewrite: (path) => path.replace(/^\/api/, ''),
           configure: (proxy, _options) => {
-            proxy.on('proxyReq', (proxyReq, _req) => {
-              // Ensure Origin header is set to localhost:5173
-              proxyReq.setHeader('Origin', 'http://localhost:5173')
+            proxy.on('proxyReq', (proxyReq, req) => {
+              // Forward the Origin header from the browser
+              if (req.headers.origin) {
+                proxyReq.setHeader('Origin', req.headers.origin)
+              } else {
+                proxyReq.setHeader('Origin', 'http://localhost:5173')
+              }
             })
           },
         },
