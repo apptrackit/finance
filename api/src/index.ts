@@ -28,6 +28,7 @@ type Transaction = {
   amount: number
   description?: string
   date: string
+  price?: number // Optional: for investment transactions, frontend can provide the price
   is_recurring: boolean
   linked_transaction_id?: string
 }
@@ -398,23 +399,110 @@ app.get('/transactions', async (c) => {
 })
 
 app.post('/transactions', async (c) => {
-  const body = await c.req.json<Omit<Transaction, 'id'>>()
-  const id = crypto.randomUUID()
+  try {
+    const body = await c.req.json<Omit<Transaction, 'id'>>()
+    const id = crypto.randomUUID()
 
+    // Get account to check if it's an investment account
+    const account = await c.env.DB.prepare('SELECT * FROM accounts WHERE id = ?').bind(body.account_id).first<Account>()
+    
+    if (!account) {
+      return c.json({ error: 'Account not found' }, 404)
+    }
+
+  // For investment accounts: redirect to investment_transactions table
+  if (account.type === 'investment') {
+    // Amount = quantity (shares)
+    const quantity = body.amount
+    const isIncome = quantity > 0
+    const absQuantity = Math.abs(quantity)
+    let pricePerUnit = body.price || 0
+    
+    // Only fetch price if not provided by frontend
+    if (!pricePerUnit && account.asset_type !== 'manual' && account.symbol) {
+      try {
+        const quoteRes = await fetch(
+          `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(account.symbol)}?interval=1d&range=1d&period1=${Math.floor(new Date(body.date).getTime() / 1000)}&period2=${Math.floor(new Date(body.date).getTime() / 1000) + 86400}`
+        )
+        const quoteData: any = await quoteRes.json()
+        
+        if (quoteData?.chart?.result?.[0]?.meta?.regularMarketPrice) {
+          pricePerUnit = quoteData.chart.result[0].meta.regularMarketPrice
+        } else if (quoteData?.chart?.result?.[0]?.indicators?.quote?.[0]?.close?.[0]) {
+          pricePerUnit = quoteData.chart.result[0].indicators.quote[0].close[0]
+        }
+        
+        // If still no price, try current price
+        if (!pricePerUnit || pricePerUnit === 0) {
+          const currentQuoteRes = await fetch(
+            `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(account.symbol)}?interval=1d&range=1d`
+          )
+          const currentQuoteData: any = await currentQuoteRes.json()
+          if (currentQuoteData?.chart?.result?.[0]?.meta?.regularMarketPrice) {
+            pricePerUnit = currentQuoteData.chart.result[0].meta.regularMarketPrice
+          }
+        }
+      } catch (error: any) {
+        console.error('Failed to fetch price:', error)
+        // Yahoo Finance rate limit - return user-friendly error
+        if (error.message && error.message.includes('Too Many Requests')) {
+          return c.json({ 
+            error: `Yahoo Finance is rate-limiting. Please try again in a few seconds, or enter the price manually.`,
+            details: 'Rate limited by Yahoo Finance API'
+          }, 429)
+        }
+        return c.json({ error: `Failed to fetch price for ${account.symbol}. Error: ${error.message || error}` }, 500)
+      }
+      
+      // Final check - if still no price, return error
+      if (!pricePerUnit || pricePerUnit === 0) {
+        return c.json({ 
+          error: `Could not fetch price for ${account.symbol} on ${body.date}. Please try again or contact support.`,
+          details: 'Price fetch returned 0 or null'
+        }, 500)
+      }
+    }
+    
+    const totalAmount = absQuantity * pricePerUnit
+    
+    // Create investment_transaction record
+    await c.env.DB.prepare(
+      'INSERT INTO investment_transactions (id, account_id, type, quantity, price, total_amount, date, notes, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+    ).bind(
+      id,
+      body.account_id,
+      isIncome ? 'buy' : 'sell',
+      absQuantity,
+      pricePerUnit,
+      totalAmount,
+      body.date,
+      body.description || null,
+      Date.now()
+    ).run()
+    
+    // Update account balance with quantity
+    const newBalance = account.balance + quantity
+    await c.env.DB.prepare('UPDATE accounts SET balance = ?, updated_at = ? WHERE id = ?')
+      .bind(newBalance, Date.now(), body.account_id).run()
+    
+    return c.json({ id, type: isIncome ? 'buy' : 'sell', quantity: absQuantity, price: pricePerUnit, total_amount: totalAmount }, 201)
+  }
+
+  // For non-investment accounts: use regular transactions table
   await c.env.DB.prepare(
     'INSERT INTO transactions (id, account_id, category_id, amount, description, date, is_recurring) VALUES (?, ?, ?, ?, ?, ?, ?)'
   ).bind(id, body.account_id, body.category_id || null, body.amount, body.description || null, body.date, body.is_recurring ? 1 : 0).run()
 
   // Update account balance
-  // Note: This should ideally be a transaction, but D1 batching is simple enough for MVP
-  const account = await c.env.DB.prepare('SELECT balance FROM accounts WHERE id = ?').bind(body.account_id).first<Account>()
-  if (account) {
-    const newBalance = account.balance + body.amount
-    await c.env.DB.prepare('UPDATE accounts SET balance = ?, updated_at = ? WHERE id = ?')
-      .bind(newBalance, Date.now(), body.account_id).run()
-  }
+  const newBalance = account.balance + body.amount
+  await c.env.DB.prepare('UPDATE accounts SET balance = ?, updated_at = ? WHERE id = ?')
+    .bind(newBalance, Date.now(), body.account_id).run()
 
   return c.json({ id, ...body }, 201)
+  } catch (error: any) {
+    console.error('Transaction creation error:', error)
+    return c.json({ error: error.message || 'Failed to create transaction', details: error.toString() }, 500)
+  }
 })
 
 app.put('/transactions/:id', async (c) => {
@@ -540,13 +628,12 @@ app.post('/transfers', async (c) => {
     to_account_id: string
     amount_from: number // Amount deducted from source account (in source currency)
     amount_to: number // Amount added to destination account (in destination currency)
-    fee: number // Fee in source currency
     exchange_rate?: number // Optional: user-specified exchange rate
     description?: string
     date: string
   }>()
 
-  const { from_account_id, to_account_id, amount_from, amount_to, fee, exchange_rate, description, date } = body
+  const { from_account_id, to_account_id, amount_from, amount_to, exchange_rate, description, date } = body
 
   if (from_account_id === to_account_id) {
     return c.json({ error: 'Cannot transfer to same account' }, 400)
@@ -554,10 +641,6 @@ app.post('/transfers', async (c) => {
 
   if (amount_from <= 0 || amount_to <= 0) {
     return c.json({ error: 'Amounts must be positive' }, 400)
-  }
-
-  if (fee < 0) {
-    return c.json({ error: 'Fee cannot be negative' }, 400)
   }
 
   // Get both accounts
@@ -568,7 +651,7 @@ app.post('/transfers', async (c) => {
     return c.json({ error: 'Account not found' }, 404)
   }
 
-  const totalDeduction = amount_from + fee
+  const totalDeduction = amount_from
   const now = Date.now()
   const transferId = crypto.randomUUID()
 
@@ -580,10 +663,6 @@ app.post('/transfers', async (c) => {
     const effectiveRate = amount_to / amount_from
     outgoingDesc += ` (${amount_to.toFixed(2)} ${toAccount.currency} @ ${effectiveRate.toFixed(4)})`
     incomingDesc += ` (${amount_from.toFixed(2)} ${fromAccount.currency} @ ${effectiveRate.toFixed(4)})`
-  }
-
-  if (fee > 0) {
-    outgoingDesc += ` (fee: ${fee} ${fromAccount.currency})`
   }
 
   if (description) {
@@ -617,7 +696,6 @@ app.post('/transfers', async (c) => {
     incoming_transaction_id: incomingId,
     amount_from,
     amount_to,
-    fee,
     exchange_rate: amount_to / amount_from,
     from_account_id,
     to_account_id
@@ -717,6 +795,19 @@ app.post('/investment-transactions', async (c) => {
 
   if (account.type !== 'investment') {
     return c.json({ error: 'Account must be of type investment' }, 400)
+  }
+
+  // Validate required fields
+  if (!body.type || !body.quantity || !body.price || !body.date) {
+    return c.json({ error: 'Missing required fields: type, quantity, price, date' }, 400)
+  }
+
+  if (body.type !== 'buy' && body.type !== 'sell') {
+    return c.json({ error: 'Type must be either "buy" or "sell"' }, 400)
+  }
+
+  if (body.quantity <= 0 || body.price <= 0) {
+    return c.json({ error: 'Quantity and price must be positive numbers' }, 400)
   }
 
   await c.env.DB.prepare(
