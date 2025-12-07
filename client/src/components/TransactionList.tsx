@@ -4,7 +4,7 @@ import { Input } from './ui/input'
 import { Label } from './ui/label'
 import { Select } from './ui/select'
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card'
-import { Plus, X, ArrowDownLeft, ArrowUpRight, Receipt, RefreshCw, Pencil, Trash2, Check, ArrowRightLeft, Coins } from 'lucide-react'
+import { Plus, X, ArrowDownLeft, ArrowUpRight, Receipt, RefreshCw, Pencil, Trash2, Check, ArrowRightLeft } from 'lucide-react'
 import { format } from 'date-fns'
 import { API_BASE_URL, apiFetch } from '../config'
 import { usePrivacy } from '../context/PrivacyContext'
@@ -65,7 +65,6 @@ export function TransactionList({
     category_id: '',
     amount: '',
     amount_to: '',
-    fee: '0',
     description: '',
     date: new Date().toISOString().split('T')[0],
     is_recurring: false,
@@ -211,30 +210,36 @@ export function TransactionList({
     const isDifferentCurrency = fromAccount && toAccount && fromAccount.currency !== toAccount.currency
 
     if (isDifferentCurrency && formData.amount && exchangeRate) {
-      // Different currency: amount_to = (amount_from - fee) × exchange_rate
+      // Different currency: amount_to = amount_from × exchange_rate
       const amountFrom = parseFloat(formData.amount) || 0
-      const fee = parseFloat(formData.fee) || 0
-      const calculated = (amountFrom - fee) * exchangeRate
+      const calculated = amountFrom * exchangeRate
       setFormData(prev => ({ ...prev, amount_to: calculated.toString() }))
     } else if (!isDifferentCurrency && formData.amount) {
-      // Same currency: amount_to = amount_from - fee
+      // Same currency: amount_to = amount_from (no fee)
       const amountFrom = parseFloat(formData.amount) || 0
-      const fee = parseFloat(formData.fee) || 0
-      const amountTo = Math.max(0, amountFrom - fee)
-      setFormData(prev => ({ ...prev, amount_to: amountTo.toString() }))
+      setFormData(prev => ({ ...prev, amount_to: amountFrom.toString() }))
     }
-  }, [formData.amount, formData.fee, exchangeRate, formData.type, formData.account_id, formData.to_account_id, accounts, skipAutoCalc])
+  }, [formData.amount, exchangeRate, formData.type, formData.account_id, formData.to_account_id, accounts, skipAutoCalc])
 
   // Auto-fetch price for investment accounts when date or account changes
   useEffect(() => {
     const fetchHistoricalPrice = async () => {
-      const account = accounts.find(a => a.id === formData.account_id)
+      // Check if income/expense to investment account OR transfer to investment account
+      let investmentAccount = null
       
-      if (!account || account.type !== 'investment' || !account.symbol || account.asset_type === 'manual') {
-        return
+      if (formData.type === 'transfer') {
+        const toAccount = accounts.find(a => a.id === formData.to_account_id)
+        if (toAccount?.type === 'investment' && toAccount.symbol && toAccount.asset_type !== 'manual') {
+          investmentAccount = toAccount
+        }
+      } else {
+        const account = accounts.find(a => a.id === formData.account_id)
+        if (account?.type === 'investment' && account.symbol && account.asset_type !== 'manual') {
+          investmentAccount = account
+        }
       }
       
-      if (!formData.date) return
+      if (!investmentAccount || !formData.date) return
       
       try {
         const txDate = new Date(formData.date)
@@ -247,7 +252,7 @@ export function TransactionList({
         const period2 = Math.floor(endDate.getTime() / 1000)
         
         const chartRes = await apiFetch(
-          `${API_BASE_URL}/market/chart?symbol=${encodeURIComponent(account.symbol)}&interval=1d&period1=${period1}&period2=${period2}`
+          `${API_BASE_URL}/market/chart?symbol=${encodeURIComponent(investmentAccount.symbol!)}&interval=1d&period1=${period1}&period2=${period2}`
         )
         
         if (chartRes.ok) {
@@ -272,7 +277,7 @@ export function TransactionList({
             if (daysDiff <= 3) {
               const price = chartData.quotes[closestIdx].close
               const priceDate = new Date(chartData.quotes[closestIdx].date).toLocaleDateString()
-              console.log(`Auto-filled price for ${account.symbol} on ${priceDate}: $${price}`)
+              console.log(`Auto-filled price for ${investmentAccount.symbol} on ${priceDate}: $${price}`)
               setFormData(prev => ({ ...prev, manual_price: price.toFixed(2) }))
             } else {
               console.warn(`No price data within 3 days of ${formData.date}, leaving manual_price empty`)
@@ -290,7 +295,7 @@ export function TransactionList({
     }
     
     fetchHistoricalPrice()
-  }, [formData.date, formData.account_id, accounts])
+  }, [formData.date, formData.account_id, formData.to_account_id, formData.type, accounts])
 
   // Load saved defaults when opening the form
   const loadSavedDefaults = (type: 'expense' | 'income' | 'transfer') => {
@@ -331,7 +336,6 @@ export function TransactionList({
       category_id: defaults.category_id,
       amount: '',
       amount_to: '',
-      fee: '0',
       description: '',
       date: new Date().toISOString().split('T')[0],
       is_recurring: false,
@@ -351,7 +355,6 @@ export function TransactionList({
       category_id: defaults.category_id,
       amount: '',
       amount_to: '',
-      fee: '0',
       description: '',
       date: new Date().toISOString().split('T')[0],
       is_recurring: false,
@@ -371,7 +374,6 @@ export function TransactionList({
       to_account_id: defaults.to_account_id,
       category_id: defaults.category_id,
       amount_to: defaults.amount_to || '',
-      fee: defaults.fee,
       is_recurring: newType === 'transfer' ? false : formData.is_recurring
     })
     setExchangeRate(null)
@@ -385,8 +387,16 @@ export function TransactionList({
 
       if (formData.type === 'transfer') {
         // Handle transfer
-        const fee = parseFloat(formData.fee) || 0
         const amountTo = parseFloat(formData.amount_to) || amount
+        const toAccount = accounts.find(a => a.id === formData.to_account_id)
+        let price = undefined
+        
+        // For transfers to investment accounts, include price
+        if (toAccount?.type === 'investment' && formData.manual_price) {
+          price = parseFloat(formData.manual_price)
+          console.log(`Transfer to investment: ${amountTo} shares @ $${price}`)
+        }
+        
         await apiFetch(`${API_BASE_URL}/transfers`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -395,10 +405,10 @@ export function TransactionList({
             to_account_id: formData.to_account_id,
             amount_from: amount,
             amount_to: amountTo,
-            fee: fee,
             exchange_rate: exchangeRate,
             description: formData.description,
-            date: formData.date
+            date: formData.date,
+            price: price
           }),
         })
         saveDefaults('transfer')
@@ -462,7 +472,6 @@ export function TransactionList({
       category_id: tx.category_id || '',
       amount: Math.abs(tx.amount).toString(),
       amount_to: '',
-      fee: '0',
       description: tx.description || '',
       date: tx.date,
       is_recurring: tx.is_recurring,
@@ -515,10 +524,7 @@ export function TransactionList({
   const fromAccount = accounts.find(a => a.id === formData.account_id)
   const toAccount = accounts.find(a => a.id === formData.to_account_id)
   const transferAmount = parseFloat(formData.amount) || 0
-  const transferFee = parseFloat(formData.fee) || 0
-  
-  // Fee is always the difference between amount_from and amount_to, so total deduction is always just amount_from
-  const totalDeduction = transferAmount
+  const transferAmountTo = parseFloat(formData.amount_to) || transferAmount
 
   // Group transactions by date
   const groupedTransactions = transactions.reduce((groups, tx) => {
@@ -682,7 +688,7 @@ export function TransactionList({
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="transfer_amount_to">
-                      Amount to Receive {toAccount && `(${toAccount.currency})`}
+                      {toAccount?.type === 'investment' ? 'Shares to Receive' : `Amount to Receive ${toAccount ? `(${toAccount.currency})` : ''}`}
                     </Label>
                     <Input 
                       id="transfer_amount_to" 
@@ -695,25 +701,17 @@ export function TransactionList({
                         setSkipAutoCalc(true)
                         setFormData({...formData, amount_to: value})
                         
-                        // Calculate behavior based on currency match
+                        // Recalculate exchange rate if different currencies
                         if (fromAccount && toAccount && formData.amount && value) {
                           const amountFrom = parseFloat(formData.amount) || 0
                           const amountTo = parseFloat(value) || 0
                           
-                          if (fromAccount.currency === toAccount.currency) {
-                            // Same currency: fee is simply the difference
-                            const calculatedFee = Math.max(0, amountFrom - amountTo)
-                            setFormData(prev => ({...prev, amount_to: value, fee: calculatedFee.toString()}))
-                          } else {
+                          if (fromAccount.currency !== toAccount.currency && amountFrom > 0 && amountTo > 0) {
                             // Different currency: recalculate exchange rate
-                            // Formula: amount_to = (amount_from - fee) × rate
-                            // So: rate = amount_to / (amount_from - fee)
-                            const fee = parseFloat(formData.fee) || 0
-                            const amountAfterFee = amountFrom - fee
-                            if (amountAfterFee > 0 && amountTo > 0) {
-                              const newRate = amountTo / amountAfterFee
-                              setExchangeRate(newRate)
-                            }
+                            // Formula: amount_to = amount_from × rate
+                            // So: rate = amount_to / amount_from
+                            const newRate = amountTo / amountFrom
+                            setExchangeRate(newRate)
                           }
                         }
                       }}
@@ -769,22 +767,23 @@ export function TransactionList({
                   </div>
                 )}
 
-                <div className="grid grid-cols-2 gap-3">
+                {/* Manual Price field for transfers to investment accounts */}
+                {toAccount?.type === 'investment' && (
                   <div className="space-y-2">
-                    <Label htmlFor="transfer_fee" className="flex items-center gap-1">
-                      <Coins className="h-3 w-3" />
-                      Transfer Fee {fromAccount && `(${fromAccount.currency})`}
-                    </Label>
+                    <Label htmlFor="transfer_price">Price per Share in USD (optional - leave blank to auto-fetch)</Label>
                     <Input 
-                      id="transfer_fee" 
+                      id="transfer_price" 
                       type="number" 
-                      step="any" 
-                      min="0"
-                      value={formData.fee} 
-                      onChange={e => setFormData({...formData, fee: e.target.value})} 
-                      placeholder="0.00" 
+                      step="0.01" 
+                      value={formData.manual_price} 
+                      onChange={e => setFormData({...formData, manual_price: e.target.value})} 
+                      placeholder="Auto-fetch from market data" 
                     />
+                    <p className="text-xs text-gray-500">For old dates (before 2020), enter the price manually for accuracy</p>
                   </div>
+                )}
+
+                <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-2">
                     <Label htmlFor="transfer_date">Date</Label>
                     <Input 
@@ -795,16 +794,15 @@ export function TransactionList({
                       required 
                     />
                   </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="transfer_description">Note (optional)</Label>
-                  <Input 
-                    id="transfer_description" 
-                    value={formData.description} 
-                    onChange={e => setFormData({...formData, description: e.target.value})} 
-                    placeholder="e.g. Monthly savings" 
-                  />
+                  <div className="space-y-2">
+                    <Label htmlFor="transfer_description">Note (optional)</Label>
+                    <Input 
+                      id="transfer_description" 
+                      value={formData.description} 
+                      onChange={e => setFormData({...formData, description: e.target.value})} 
+                      placeholder="e.g. Monthly savings" 
+                    />
+                  </div>
                 </div>
 
                 {/* Transfer Preview */}
@@ -813,16 +811,18 @@ export function TransactionList({
                     <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Preview</p>
                     <div className="flex items-center justify-between text-sm">
                       <span>{fromAccount.name}</span>
-                      <span className="text-destructive font-medium">-{totalDeduction} {fromAccount.currency}</span>
+                      <span className="text-destructive font-medium">-{transferAmount} {fromAccount.currency}</span>
                     </div>
                     <div className="flex items-center justify-between text-sm">
                       <span>{toAccount.name}</span>
-                      <span className="text-success font-medium">+{parseFloat(formData.amount_to) || transferAmount} {toAccount.currency}</span>
+                      <span className="text-success font-medium">
+                        +{transferAmountTo} {toAccount.type === 'investment' ? 'shares' : toAccount.currency}
+                      </span>
                     </div>
-                    {transferFee > 0 && (
+                    {toAccount.type === 'investment' && formData.manual_price && (
                       <div className="flex items-center justify-between text-xs text-muted-foreground pt-1 border-t border-border/50">
-                        <span className="flex items-center gap-1"><Coins className="h-3 w-3" /> Lost to fee</span>
-                        <span>{transferFee} {fromAccount.currency}</span>
+                        <span>@ ${formData.manual_price}/share</span>
+                        <span>${(transferAmountTo * parseFloat(formData.manual_price)).toFixed(2)} USD value</span>
                       </div>
                     )}
                   </div>
