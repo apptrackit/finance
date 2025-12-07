@@ -9,7 +9,7 @@ import Settings, { getMasterCurrency } from './components/Settings'
 import { usePrivacy } from './context/PrivacyContext'
 
 
-const APP_VERSION = '0.8.2'
+const APP_VERSION = '0.8.3'
 
 
 type Account = {
@@ -71,6 +71,7 @@ function App() {
   const [categories, setCategories] = useState<Category[]>([])
   const [view, setView] = useState<View>('dashboard')
   const [masterCurrency, setMasterCurrency] = useState('HUF')
+  const [apiVersion, setApiVersion] = useState<string | null>(null)
   const { privacyMode, togglePrivacyMode } = usePrivacy()
 
   useEffect(() => {
@@ -136,7 +137,19 @@ function App() {
   useEffect(() => {
     fetchData()
     fetchInvestmentValue()
+    fetchApiVersion()
   }, [])
+
+  const fetchApiVersion = async () => {
+    try {
+      const res = await apiFetch(`${API_BASE_URL}/version`)
+      const data = await res.json()
+      setApiVersion(data.version)
+    } catch (error) {
+      console.error('Failed to fetch API version:', error)
+      setApiVersion('unknown')
+    }
+  }
 
   // Fetch and calculate investment value in master currency
   const fetchInvestmentValue = async () => {
@@ -486,8 +499,9 @@ function App() {
         </main>
 
         {/* Version Footer */}
-        <footer className="mt-auto py-4 text-center">
-          <span className="text-xs text-muted-foreground">v{APP_VERSION}</span>
+        <footer className="mt-auto py-4 text-center text-xs text-muted-foreground space-y-1">
+          <p>Client v{APP_VERSION}</p>
+          <p>API v{apiVersion || 'loading...'}</p>
         </footer>
       </div>
     </div>
