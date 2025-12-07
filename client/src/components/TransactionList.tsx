@@ -491,7 +491,6 @@ export function TransactionList({
       category_id: tx.category_id || '',
       amount: amountValue,
       amount_to: '',
-      fee: '0',
       description: tx.description || '',
       date: tx.date,
       is_recurring: tx.is_recurring,
