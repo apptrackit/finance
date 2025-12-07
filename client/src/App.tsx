@@ -9,7 +9,7 @@ import Settings, { getMasterCurrency } from './components/Settings'
 import { usePrivacy } from './context/PrivacyContext'
 
 
-const APP_VERSION = '0.6'
+const APP_VERSION = '0.8.2'
 
 type Account = {
   id: string
@@ -76,7 +76,7 @@ function App() {
     setMasterCurrency(getMasterCurrency())
   }, [])
 
-  const fetchData = () => {
+  const fetchData = async () => {
     const currency = getMasterCurrency()
     
     apiFetch(`${API_BASE_URL}/dashboard/net-worth?currency=${currency}`)
@@ -84,15 +84,47 @@ function App() {
       .then(data => setNetWorth(data.net_worth))
       .catch(err => console.error(err))
 
-    apiFetch(`${API_BASE_URL}/accounts`)
-      .then(res => res.json())
-      .then(data => setAccounts(data))
-      .catch(err => console.error(err))
+    // Fetch accounts first
+    const accountsRes = await apiFetch(`${API_BASE_URL}/accounts`)
+    const accountsData = await accountsRes.json()
+    setAccounts(accountsData)
 
-    apiFetch(`${API_BASE_URL}/transactions`)
+    // Fetch regular transactions
+    const regularTxPromise = apiFetch(`${API_BASE_URL}/transactions`)
       .then(res => res.json())
-      .then(data => setTransactions(data))
-      .catch(err => console.error(err))
+      .catch(err => {
+        console.error(err)
+        return []
+      })
+
+    // Fetch investment transactions for all investment accounts and convert to display format
+    const investmentAccounts = accountsData.filter((acc: Account) => acc.type === 'investment')
+    
+    const investmentTxPromises = investmentAccounts.map((acc: Account) =>
+      apiFetch(`${API_BASE_URL}/investment-transactions?account_id=${acc.id}`)
+        .then(res => res.json())
+        .then((txs: any[]) => 
+          txs.map((itx: any) => ({
+            id: itx.id,
+            account_id: itx.account_id,
+            amount: itx.type === 'buy' ? itx.total_amount : -itx.total_amount,
+            description: itx.notes || `${itx.quantity} shares @ $${itx.price}`,
+            date: itx.date,
+            is_recurring: false,
+            category_id: undefined,
+            linked_transaction_id: undefined
+          }))
+        )
+        .catch(() => [])
+    )
+
+    const [regularTxs, ...investmentTxArrays] = await Promise.all([regularTxPromise, ...investmentTxPromises])
+    const allInvestmentTxs = investmentTxArrays.flat()
+    const allTxs = [...regularTxs, ...allInvestmentTxs].sort((a, b) => 
+      new Date(b.date).getTime() - new Date(a.date).getTime()
+    )
+    
+    setTransactions(allTxs)
 
     apiFetch(`${API_BASE_URL}/categories`)
       .then(res => res.json())
