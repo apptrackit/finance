@@ -11,6 +11,7 @@ import { usePrivacy } from './context/PrivacyContext'
 
 const APP_VERSION = '0.8.2'
 
+
 type Account = {
   id: string
   name: string
