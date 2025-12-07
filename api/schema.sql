@@ -28,14 +28,16 @@ CREATE TABLE IF NOT EXISTS transactions (
   FOREIGN KEY(account_id) REFERENCES accounts(id)
 );
 
+-- Investment transactions are now tracked via regular transactions table
+-- This table is kept for backward compatibility but not actively used
 CREATE TABLE IF NOT EXISTS investment_transactions (
   id TEXT PRIMARY KEY,
   account_id TEXT NOT NULL,
   type TEXT NOT NULL, -- 'buy', 'sell'
   quantity REAL NOT NULL,
-  price REAL NOT NULL, -- price per share at time of transaction
-  total_amount REAL NOT NULL, -- quantity * price (+ fees if any)
-  date TEXT NOT NULL, -- ISO 8601 timestamp
+  price REAL NOT NULL,
+  total_amount REAL NOT NULL,
+  date TEXT NOT NULL,
   notes TEXT,
   created_at INTEGER,
   FOREIGN KEY(account_id) REFERENCES accounts(id) ON DELETE CASCADE
