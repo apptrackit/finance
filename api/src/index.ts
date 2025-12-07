@@ -627,13 +627,14 @@ app.post('/transfers', async (c) => {
     from_account_id: string
     to_account_id: string
     amount_from: number // Amount deducted from source account (in source currency)
-    amount_to: number // Amount added to destination account (in destination currency)
+    amount_to: number // Amount added to destination account (in destination currency) OR shares for investment
     exchange_rate?: number // Optional: user-specified exchange rate
     description?: string
     date: string
+    price?: number // Price per share for investment accounts
   }>()
 
-  const { from_account_id, to_account_id, amount_from, amount_to, exchange_rate, description, date } = body
+  const { from_account_id, to_account_id, amount_from, amount_to, exchange_rate, description, date, price } = body
 
   if (from_account_id === to_account_id) {
     return c.json({ error: 'Cannot transfer to same account' }, 400)
@@ -654,6 +655,8 @@ app.post('/transfers', async (c) => {
   const totalDeduction = amount_from
   const now = Date.now()
   const transferId = crypto.randomUUID()
+  const outgoingId = crypto.randomUUID()
+  const incomingId = crypto.randomUUID()
 
   // Build description with exchange rate info if currencies differ
   let outgoingDesc = `Transfer to ${toAccount.name}`
@@ -670,25 +673,49 @@ app.post('/transfers', async (c) => {
     incomingDesc += ` - ${description}`
   }
 
-  // Create outgoing transaction (negative)
-  const outgoingId = crypto.randomUUID()
-  const incomingId = crypto.randomUUID()
-
+  // Create outgoing transaction (always in regular transactions - cash out)
   await c.env.DB.prepare(
     'INSERT INTO transactions (id, account_id, category_id, amount, description, date, is_recurring, linked_transaction_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
   ).bind(outgoingId, from_account_id, null, -totalDeduction, outgoingDesc, date, 0, incomingId).run()
 
-  // Create incoming transaction (positive)
-  await c.env.DB.prepare(
-    'INSERT INTO transactions (id, account_id, category_id, amount, description, date, is_recurring, linked_transaction_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
-  ).bind(incomingId, to_account_id, null, amount_to, incomingDesc, date, 0, outgoingId).run()
-
-  // Update account balances
+  // Update FROM account balance (always cash account)
   await c.env.DB.prepare('UPDATE accounts SET balance = balance - ?, updated_at = ? WHERE id = ?')
     .bind(totalDeduction, now, from_account_id).run()
 
-  await c.env.DB.prepare('UPDATE accounts SET balance = balance + ?, updated_at = ? WHERE id = ?')
-    .bind(amount_to, now, to_account_id).run()
+  // Handle incoming transaction based on TO account type
+  if (toAccount.type === 'investment') {
+    // TO account is investment: save to investment_transactions
+    const quantity = amount_to // amount_to is the number of shares
+    const pricePerUnit = price || 0
+    const totalAmount = quantity * pricePerUnit
+    
+    await c.env.DB.prepare(
+      'INSERT INTO investment_transactions (id, account_id, type, quantity, price, total_amount, date, notes, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+    ).bind(
+      incomingId,
+      to_account_id,
+      'buy',
+      quantity,
+      pricePerUnit,
+      totalAmount,
+      date,
+      incomingDesc,
+      now
+    ).run()
+    
+    // Update investment account balance with shares
+    await c.env.DB.prepare('UPDATE accounts SET balance = balance + ?, updated_at = ? WHERE id = ?')
+      .bind(quantity, now, to_account_id).run()
+  } else {
+    // TO account is regular cash account: save to transactions
+    await c.env.DB.prepare(
+      'INSERT INTO transactions (id, account_id, category_id, amount, description, date, is_recurring, linked_transaction_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+    ).bind(incomingId, to_account_id, null, amount_to, incomingDesc, date, 0, outgoingId).run()
+    
+    // Update cash account balance
+    await c.env.DB.prepare('UPDATE accounts SET balance = balance + ?, updated_at = ? WHERE id = ?')
+      .bind(amount_to, now, to_account_id).run()
+  }
 
   return c.json({
     id: transferId,
@@ -698,7 +725,8 @@ app.post('/transfers', async (c) => {
     amount_to,
     exchange_rate: amount_to / amount_from,
     from_account_id,
-    to_account_id
+    to_account_id,
+    is_investment_transfer: toAccount.type === 'investment'
   }, 201)
 })
 
