@@ -69,7 +69,8 @@ export function TransactionList({
     description: '',
     date: new Date().toISOString().split('T')[0],
     is_recurring: false,
-    type: 'expense' as 'expense' | 'income' | 'transfer'
+    type: 'expense' as 'expense' | 'income' | 'transfer',
+    manual_price: '' // For investment accounts - manual price override
   })
   const [exchangeRate, setExchangeRate] = useState<number | null>(null)
   const [suggestedRate, setSuggestedRate] = useState<number | null>(null)
@@ -224,6 +225,73 @@ export function TransactionList({
     }
   }, [formData.amount, formData.fee, exchangeRate, formData.type, formData.account_id, formData.to_account_id, accounts, skipAutoCalc])
 
+  // Auto-fetch price for investment accounts when date or account changes
+  useEffect(() => {
+    const fetchHistoricalPrice = async () => {
+      const account = accounts.find(a => a.id === formData.account_id)
+      
+      if (!account || account.type !== 'investment' || !account.symbol || account.asset_type === 'manual') {
+        return
+      }
+      
+      if (!formData.date) return
+      
+      try {
+        const txDate = new Date(formData.date)
+        const startDate = new Date(txDate)
+        startDate.setDate(startDate.getDate() - 7)
+        const endDate = new Date(txDate)
+        endDate.setDate(endDate.getDate() + 1)
+        
+        const period1 = Math.floor(startDate.getTime() / 1000)
+        const period2 = Math.floor(endDate.getTime() / 1000)
+        
+        const chartRes = await apiFetch(
+          `${API_BASE_URL}/market/chart?symbol=${encodeURIComponent(account.symbol)}&interval=1d&period1=${period1}&period2=${period2}`
+        )
+        
+        if (chartRes.ok) {
+          const chartData = await chartRes.json()
+          
+          if (chartData.quotes && Array.isArray(chartData.quotes) && chartData.quotes.length > 0) {
+            const txTime = txDate.getTime()
+            let closestIdx = 0
+            let minDiff = Math.abs(new Date(chartData.quotes[0].date).getTime() - txTime)
+            
+            for (let i = 1; i < chartData.quotes.length; i++) {
+              const quoteTime = new Date(chartData.quotes[i].date).getTime()
+              const diff = Math.abs(quoteTime - txTime)
+              if (diff < minDiff) {
+                minDiff = diff
+                closestIdx = i
+              }
+            }
+            
+            // Only use the price if it's within 3 days of the target date
+            const daysDiff = Math.abs(minDiff) / (1000 * 60 * 60 * 24)
+            if (daysDiff <= 3) {
+              const price = chartData.quotes[closestIdx].close
+              const priceDate = new Date(chartData.quotes[closestIdx].date).toLocaleDateString()
+              console.log(`Auto-filled price for ${account.symbol} on ${priceDate}: $${price}`)
+              setFormData(prev => ({ ...prev, manual_price: price.toFixed(2) }))
+            } else {
+              console.warn(`No price data within 3 days of ${formData.date}, leaving manual_price empty`)
+              setFormData(prev => ({ ...prev, manual_price: '' }))
+            }
+          } else {
+            // No chart data, clear manual_price
+            setFormData(prev => ({ ...prev, manual_price: '' }))
+          }
+        }
+      } catch (e) {
+        console.error('Failed to auto-fetch price:', e)
+        // Don't set manual_price on error
+      }
+    }
+    
+    fetchHistoricalPrice()
+  }, [formData.date, formData.account_id, accounts])
+
   // Load saved defaults when opening the form
   const loadSavedDefaults = (type: 'expense' | 'income' | 'transfer') => {
     if (type === 'expense') {
@@ -267,7 +335,8 @@ export function TransactionList({
       description: '',
       date: new Date().toISOString().split('T')[0],
       is_recurring: false,
-      type: 'expense'
+      type: 'expense',
+      manual_price: ''
     })
     setExchangeRate(null)
     setSuggestedRate(null)
@@ -286,7 +355,8 @@ export function TransactionList({
       description: '',
       date: new Date().toISOString().split('T')[0],
       is_recurring: false,
-      type: 'expense'
+      type: 'expense',
+      manual_price: ''
     })
     setIsAdding(true)
   }
@@ -351,6 +421,15 @@ export function TransactionList({
           })
           setEditingId(null)
         } else {
+          // For investment accounts, use the manual_price if set (auto-filled or manually entered)
+          const account = accounts.find(a => a.id === formData.account_id)
+          let price = undefined
+          
+          if (account?.type === 'investment' && formData.manual_price) {
+            price = parseFloat(formData.manual_price)
+            console.log(`Using price for ${account.symbol}: $${price}`)
+          }
+          
           await apiFetch(`${API_BASE_URL}/transactions`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -360,7 +439,8 @@ export function TransactionList({
               amount: finalAmount,
               description: formData.description,
               date: formData.date,
-              is_recurring: formData.is_recurring
+              is_recurring: formData.is_recurring,
+              price: price // Include price for investment accounts
             }),
           })
         }
@@ -386,7 +466,8 @@ export function TransactionList({
       description: tx.description || '',
       date: tx.date,
       is_recurring: tx.is_recurring,
-      type: isIncome ? 'income' : 'expense'
+      type: isIncome ? 'income' : 'expense',
+      manual_price: ''
     })
     setEditingId(tx.id)
     setIsAdding(true)
@@ -757,7 +838,7 @@ export function TransactionList({
               <>
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-2">
-                    <Label htmlFor="amount">Amount</Label>
+                    <Label htmlFor="amount">{accounts.find(a => a.id === formData.account_id)?.type === 'investment' ? 'Shares' : 'Amount'}</Label>
                     <Input 
                       id="amount" 
                       type="number" 
@@ -782,6 +863,21 @@ export function TransactionList({
                       ))}
                     </Select>
                   </div>
+                  {/* Manual Price field for investment accounts */}
+                  {accounts.find(a => a.id === formData.account_id)?.type === 'investment' && (
+                    <div className="space-y-2 col-span-2">
+                      <Label htmlFor="manual_price">Price per Share (optional - leave blank to auto-fetch)</Label>
+                      <Input 
+                        id="manual_price" 
+                        type="number" 
+                        step="0.01" 
+                        value={formData.manual_price} 
+                        onChange={e => setFormData({...formData, manual_price: e.target.value})} 
+                        placeholder="Auto-fetch from market data" 
+                      />
+                      <p className="text-xs text-gray-500">For old dates (before 2020), enter the price manually for accuracy</p>
+                    </div>
+                  )}
                   <div className="space-y-2">
                     <Label htmlFor="category">Category</Label>
                     <Select 

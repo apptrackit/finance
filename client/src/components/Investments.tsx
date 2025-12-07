@@ -1,15 +1,13 @@
 import { useState, useEffect } from 'react'
-import { Plus, RefreshCw, DollarSign, Trash2, BarChart2, TrendingUp, TrendingDown } from 'lucide-react'
+import { RefreshCw, TrendingUp, TrendingDown, DollarSign } from 'lucide-react'
 import { API_BASE_URL, apiFetch } from '../config'
 import { InvestmentChart } from './InvestmentChart'
-import { Input } from './ui/input'
-import { Label } from './ui/label'
 import { usePrivacy } from '../context/PrivacyContext'
 
 type Account = {
   id: string
   name: string
-  type: 'cash' | 'investment'
+  type: 'cash' | 'investment' | 'credit'
   balance: number
   currency: string
   symbol?: string
@@ -17,16 +15,15 @@ type Account = {
   updated_at: number
 }
 
-type InvestmentTransaction = {
+type Transaction = {
   id: string
   account_id: string
-  type: 'buy' | 'sell'
-  quantity: number
-  price: number
-  total_amount: number
+  category_id?: string
+  amount: number
+  description?: string
   date: string
-  notes?: string
-  created_at: number
+  is_recurring: boolean
+  linked_transaction_id?: string
 }
 
 type MarketQuote = {
@@ -37,249 +34,202 @@ type MarketQuote = {
   regularMarketChangePercent?: number
 }
 
+type Category = {
+  id: string
+  name: string
+  icon?: string
+  type: 'income' | 'expense'
+}
+
 export function Investments() {
   const [investmentAccounts, setInvestmentAccounts] = useState<Account[]>([])
-  const [transactions, setTransactions] = useState<Record<string, InvestmentTransaction[]>>({})
+  const [allTransactions, setAllTransactions] = useState<Transaction[]>([])
+  const [categories, setCategories] = useState<Category[]>([])
   const [quotes, setQuotes] = useState<Record<string, MarketQuote>>({})
   const [refreshing, setRefreshing] = useState(false)
   const [selectedAccount, setSelectedAccount] = useState<Account | null>(null)
-  const [showTransactionModal, setShowTransactionModal] = useState(false)
   
   const { privacyMode } = usePrivacy()
-  
-  // Transaction modal state
-  const [txForm, setTxForm] = useState({
-    type: 'buy' as 'buy' | 'sell',
-    quantity: '',
-    price: '',
-    date: new Date().toISOString().slice(0, 16), // YYYY-MM-DDTHH:mm
-    notes: ''
-  })
 
-  const fetchInvestmentAccounts = async () => {
-    try {
-      const res = await apiFetch(`${API_BASE_URL}/accounts`)
-      const data = await res.json()
-      const investments = data.filter((acc: Account) => acc.type === 'investment')
-      setInvestmentAccounts(investments)
-      return investments
-    } catch (error) {
-      console.error('Failed to fetch investment accounts:', error)
-      return []
-    }
-  }
-
-  const fetchTransactions = async (accountId: string) => {
-    try {
-      const res = await apiFetch(`${API_BASE_URL}/investment-transactions?account_id=${accountId}`)
-      const data = await res.json()
-      setTransactions(prev => ({ ...prev, [accountId]: data }))
-      return data
-    } catch (error) {
-      console.error('Failed to fetch transactions:', error)
-      return []
-    }
-  }
-
-  const fetchAllTransactions = async (accounts: Account[]) => {
-    await Promise.all(accounts.map(acc => fetchTransactions(acc.id)))
-  }
-
-  const fetchQuotes = async (accounts: Account[]) => {
-    const newQuotes: Record<string, MarketQuote> = {}
+  const fetchData = async () => {
+    setRefreshing(true)
     
-    const symbolsToFetch = accounts
-      .filter(acc => acc.asset_type !== 'manual' && acc.symbol)
-      .map(acc => acc.symbol!)
-      
-    const uniqueSymbols = [...new Set(symbolsToFetch)]
-
-    await Promise.all(uniqueSymbols.map(async (symbol) => {
+    // Fetch accounts
+    const accountsRes = await apiFetch(`${API_BASE_URL}/accounts`)
+    const allAccounts = await accountsRes.json()
+    const investments = allAccounts.filter((acc: Account) => acc.type === 'investment')
+    setInvestmentAccounts(investments)
+    
+    // Fetch investment transactions for all investment accounts
+    const allInvestmentTxs: Transaction[] = []
+    for (const acc of investments) {
+      const txRes = await apiFetch(`${API_BASE_URL}/investment-transactions?account_id=${acc.id}`)
+      const txData = await txRes.json()
+      // Convert investment transactions to regular transaction format for display
+      txData.forEach((itx: any) => {
+        allInvestmentTxs.push({
+          id: itx.id,
+          account_id: itx.account_id,
+          amount: itx.type === 'buy' ? itx.total_amount : -itx.total_amount,
+          description: itx.notes || `${itx.quantity} shares @ $${itx.price}`,
+          date: itx.date,
+          is_recurring: false
+        })
+      })
+    }
+    setAllTransactions(allInvestmentTxs)
+    
+    // Fetch categories
+    const catRes = await apiFetch(`${API_BASE_URL}/categories`)
+    const catData = await catRes.json()
+    setCategories(catData)
+    
+    // Fetch market quotes for the newly fetched investment accounts
+    const symbolsToFetch = investments
+      .filter((acc: Account) => acc.asset_type !== 'manual' && acc.symbol)
+      .map((acc: Account) => acc.symbol!)
+    const uniqueSymbols = [...new Set(symbolsToFetch)] as string[]
+    
+    const newQuotes: Record<string, MarketQuote> = {}
+    await Promise.all(uniqueSymbols.map(async (symbol: string) => {
       try {
         const res = await apiFetch(`${API_BASE_URL}/market/quote?symbol=${encodeURIComponent(symbol)}`)
         if (res.ok) {
           const data = await res.json()
+          console.log(`Fetched quote for ${symbol}:`, data) // Debug log
           newQuotes[symbol] = data
         }
       } catch (error) {
         console.error(`Failed to fetch quote for ${symbol}:`, error)
       }
     }))
+    setQuotes(newQuotes)
     
-    setQuotes(prev => ({ ...prev, ...newQuotes }))
-  }
-
-  const loadData = async () => {
-    setRefreshing(true)
-    const accounts = await fetchInvestmentAccounts()
-    await fetchAllTransactions(accounts)
-    await fetchQuotes(accounts)
     setRefreshing(false)
   }
 
   useEffect(() => {
-    loadData()
+    fetchData()
   }, [])
 
-  const calculatePosition = (accountId: string) => {
-    const txs = transactions[accountId] || []
-    let totalQuantity = 0
-    let totalCost = 0
-    
-    txs.forEach(tx => {
-      if (tx.type === 'buy') {
-        totalQuantity += tx.quantity
-        totalCost += tx.total_amount
-      } else {
-        totalQuantity -= tx.quantity
-        // Don't subtract from cost - we want to track original investment
-      }
-    })
-    
-    const avgPrice = totalQuantity > 0 ? totalCost / totalQuantity : 0
-    
-    return { totalQuantity, avgPrice, totalCost }
+  const getAccountTransactions = (accountId: string) => {
+    return allTransactions.filter(tx => tx.account_id === accountId)
   }
 
-  const handleOpenChart = async (account: Account) => {
+  const calculatePosition = (account: Account) => {
+    const transactions = getAccountTransactions(account.id)
+    
+    // Get current market price if available
+    let currentPrice = 0
+    if (account.asset_type !== 'manual' && account.symbol && quotes[account.symbol]) {
+      currentPrice = quotes[account.symbol].regularMarketPrice || 0
+    }
+    
+    // For crypto/stock: balance is quantity, multiply by price to get value
+    // For manual: balance is already the dollar value
+    const currentValue = account.asset_type === 'manual' 
+      ? account.balance 
+      : account.balance * currentPrice
+    
+    // Calculate invested amount from investment transactions
+    // Transactions already have the total_amount (quantity × price at purchase time)
+    const totalInvested = transactions
+      .filter(tx => tx.amount > 0)
+      .reduce((sum, tx) => sum + tx.amount, 0)
+    
+    const totalWithdrawn = transactions
+      .filter(tx => tx.amount < 0)
+      .reduce((sum, tx) => sum + Math.abs(tx.amount), 0)
+    
+    const netInvested = totalInvested - totalWithdrawn
+    const gainLoss = currentValue - netInvested
+    const gainLossPercent = netInvested > 0 ? (gainLoss / netInvested) * 100 : 0
+    
+    return {
+      account,
+      netInvested,
+      currentValue,
+      currentPrice,
+      gainLoss,
+      gainLossPercent,
+      transactions
+    }
+  }
+
+  const calculatePortfolioStats = () => {
+    const positions = investmentAccounts.map(acc => calculatePosition(acc))
+    
+    const totalValue = positions.reduce((sum, pos) => sum + pos.currentValue, 0)
+    const totalInvested = positions.reduce((sum, pos) => sum + pos.netInvested, 0)
+    const totalGainLoss = totalValue - totalInvested
+    const totalGainLossPercent = totalInvested > 0 ? (totalGainLoss / totalInvested) * 100 : 0
+    
+    return { totalValue, totalInvested, totalGainLoss, totalGainLossPercent, positions }
+  }
+
+  const handleOpenDetail = (account: Account) => {
     setSelectedAccount(account)
-    if (!transactions[account.id]) {
-      await fetchTransactions(account.id)
-    }
   }
 
-  const handleAddTransaction = () => {
-    setShowTransactionModal(true)
+  const getCategoryName = (categoryId?: string) => {
+    if (!categoryId) return 'Transfer'
+    const cat = categories.find(c => c.id === categoryId)
+    return cat ? `${cat.icon} ${cat.name}` : 'Unknown'
   }
 
-  const handleSubmitTransaction = async () => {
-    if (!selectedAccount) return
-    
-    try {
-      const totalAmount = parseFloat(txForm.quantity) * parseFloat(txForm.price)
-      
-      await apiFetch(`${API_BASE_URL}/investment-transactions`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          account_id: selectedAccount.id,
-          type: txForm.type,
-          quantity: parseFloat(txForm.quantity),
-          price: parseFloat(txForm.price),
-          total_amount: totalAmount,
-          date: new Date(txForm.date).toISOString(),
-          notes: txForm.notes || undefined
-        })
-      })
-
-      // Reload transactions
-      await fetchTransactions(selectedAccount.id)
-      setShowTransactionModal(false)
-      setTxForm({
-        type: 'buy',
-        quantity: '',
-        price: '',
-        date: new Date().toISOString().slice(0, 16),
-        notes: ''
-      })
-    } catch (error) {
-      console.error('Failed to add transaction:', error)
-      alert('Failed to add transaction')
-    }
-  }
-
-  const handleDeleteTransaction = async (txId: string) => {
-    if (!confirm('Delete this transaction?')) return
-    
-    try {
-      await apiFetch(`${API_BASE_URL}/investment-transactions/${txId}`, { method: 'DELETE' })
-      if (selectedAccount) {
-        await fetchTransactions(selectedAccount.id)
-      }
-    } catch (error) {
-      console.error('Failed to delete transaction:', error)
-    }
-  }
-
-  const calculateTotalValue = () => {
-    return investmentAccounts.reduce((sum, acc) => {
-      const position = calculatePosition(acc.id)
-      // Add account balance to position quantity (for pre-existing holdings)
-      const totalQuantity = position.totalQuantity + acc.balance
-      let price = 0
-      
-      if (acc.asset_type === 'manual') {
-        // For manual, we'd need a manual price field - for now use avg cost
-        price = position.avgPrice
-      } else if (acc.symbol) {
-        const quote = quotes[acc.symbol]
-        price = quote?.regularMarketPrice || position.avgPrice
-      } else {
-        price = position.avgPrice
-      }
-      
-      return sum + (price * totalQuantity)
-    }, 0)
-  }
-
-  const calculateTotalInvested = () => {
-    return investmentAccounts.reduce((sum, acc) => {
-      const position = calculatePosition(acc.id)
-      return sum + position.totalCost
-    }, 0)
-  }
-
-  const totalValue = calculateTotalValue()
-  const totalInvested = calculateTotalInvested()
-  const totalGainLoss = totalValue - totalInvested
-  const totalGainLossPercent = totalInvested > 0 ? (totalGainLoss / totalInvested) * 100 : 0
+  const stats = calculatePortfolioStats()
 
   return (
     <div className="space-y-6">
-      {/* Header Stats */}
+      {/* Portfolio Summary */}
       <div className="grid gap-4 md:grid-cols-3">
-        <div className="p-6 rounded-2xl bg-card border border-border/50 shadow-sm">
+        <div className="p-6 rounded-2xl bg-gradient-to-br from-primary/10 to-primary/5 border border-primary/20 shadow-lg">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-sm font-medium text-muted-foreground">Total Portfolio Value</h3>
-            <DollarSign className="h-4 w-4 text-primary" />
+            <DollarSign className="h-5 w-5 text-primary" />
           </div>
-          <div className={`text-3xl font-bold ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
-            {privacyMode === 'hidden' ? '••••••' : `$${totalValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+          <div className={`text-4xl font-bold ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
+            {privacyMode === 'hidden' ? '••••••' : `$${stats.totalValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
           </div>
+          <p className="text-xs text-muted-foreground mt-2">
+            {investmentAccounts.length} investment{investmentAccounts.length !== 1 ? 's' : ''}
+          </p>
         </div>
         
         <div className="p-6 rounded-2xl bg-card border border-border/50 shadow-sm">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-sm font-medium text-muted-foreground">Total Invested</h3>
-            <DollarSign className="h-4 w-4 text-muted-foreground" />
+            <DollarSign className="h-5 w-5 text-muted-foreground" />
           </div>
-          <div className={`text-3xl font-bold ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
-            {privacyMode === 'hidden' ? '••••••' : `$${totalInvested.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+          <div className={`text-4xl font-bold ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
+            {privacyMode === 'hidden' ? '••••••' : `$${stats.totalInvested.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
           </div>
+          <p className="text-xs text-muted-foreground mt-2">Net deposited</p>
         </div>
         
-        <div className="p-6 rounded-2xl bg-card border border-border/50 shadow-sm">
+        <div className={`p-6 rounded-2xl border shadow-sm ${stats.totalGainLoss >= 0 ? 'bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-800/30' : 'bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-800/30'}`}>
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-sm font-medium text-muted-foreground">Total Gain/Loss</h3>
-            {totalGainLoss >= 0 ? <TrendingUp className="h-4 w-4 text-green-500" /> : <TrendingDown className="h-4 w-4 text-red-500" />}
+            <h3 className="text-sm font-medium text-muted-foreground">Total Return</h3>
+            {stats.totalGainLoss >= 0 ? <TrendingUp className="h-5 w-5 text-green-600" /> : <TrendingDown className="h-5 w-5 text-red-600" />}
           </div>
-          <div className={`text-3xl font-bold ${totalGainLoss >= 0 ? 'text-green-500' : 'text-red-500'} ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
-            {privacyMode === 'hidden' ? '••••••' : `${totalGainLoss >= 0 ? '+' : ''}$${totalGainLoss.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+          <div className={`text-4xl font-bold ${stats.totalGainLoss >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'} ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
+            {privacyMode === 'hidden' ? '••••••' : `${stats.totalGainLoss >= 0 ? '+' : ''}$${Math.abs(stats.totalGainLoss).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
           </div>
-          <div className={`text-sm ${totalGainLoss >= 0 ? 'text-green-500' : 'text-red-500'} ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
-            {privacyMode === 'hidden' ? '••••' : `${totalGainLossPercent >= 0 ? '+' : ''}${totalGainLossPercent.toFixed(2)}%`}
+          <div className={`text-sm font-medium mt-2 ${stats.totalGainLoss >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'} ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
+            {privacyMode === 'hidden' ? '••••' : `${stats.totalGainLossPercent >= 0 ? '+' : ''}${stats.totalGainLossPercent.toFixed(2)}%`}
           </div>
         </div>
       </div>
 
-      {/* Investment List */}
+      {/* Holdings List */}
       <div className="bg-card border border-border/50 rounded-2xl overflow-hidden shadow-sm">
         <div className="p-4 border-b border-border/50 flex items-center justify-between">
-          <h3 className="font-semibold">Your Investments</h3>
+          <h3 className="font-semibold text-lg">Your Holdings</h3>
           <button 
-            onClick={loadData} 
+            onClick={fetchData} 
             disabled={refreshing}
             className={`p-2 rounded-lg hover:bg-secondary/50 transition-colors ${refreshing ? 'animate-spin' : ''}`}
+            title="Refresh prices"
           >
             <RefreshCw className="h-4 w-4 text-muted-foreground" />
           </button>
@@ -287,51 +237,67 @@ export function Investments() {
         
         <div className="divide-y divide-border/50">
           {investmentAccounts.length === 0 ? (
-            <div className="p-8 text-center text-muted-foreground">
-              <p>No investment accounts yet.</p>
-              <p className="text-sm mt-2">Create an investment account from the Accounts section to start tracking.</p>
+            <div className="p-12 text-center">
+              <div className="inline-flex h-16 w-16 items-center justify-center rounded-full bg-muted/50 mb-4">
+                <TrendingUp className="h-8 w-8 text-muted-foreground" />
+              </div>
+              <h3 className="font-semibold mb-2">No investment accounts yet</h3>
+              <p className="text-sm text-muted-foreground mb-4">
+                Create an investment account to start tracking your portfolio
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Go to Dashboard → Accounts → Add Account → Choose "Investment" type
+              </p>
             </div>
           ) : (
-            investmentAccounts.map(acc => {
-              const position = calculatePosition(acc.id)
-              const totalQuantity = position.totalQuantity + acc.balance
-              const quote = acc.symbol ? quotes[acc.symbol] : null
-              const currentPrice = acc.asset_type === 'manual' ? position.avgPrice : (quote?.regularMarketPrice || position.avgPrice)
-              const currentValue = currentPrice * totalQuantity
-              const gainLoss = currentValue - position.totalCost
-              const gainLossPercent = position.totalCost > 0 ? (gainLoss / position.totalCost) * 100 : 0
+            stats.positions.map(position => {
+              const quote = position.account.symbol ? quotes[position.account.symbol] : null
+              const priceChange = quote?.regularMarketChangePercent || 0
               
               return (
                 <div 
-                  key={acc.id} 
-                  className="p-4 flex items-center justify-between hover:bg-secondary/20 transition-colors cursor-pointer"
-                  onClick={() => handleOpenChart(acc)}
+                  key={position.account.id} 
+                  className="p-4 flex items-center justify-between hover:bg-secondary/20 transition-colors cursor-pointer group"
+                  onClick={() => handleOpenDetail(position.account)}
                 >
                   <div className="flex items-center gap-4">
-                    <div className={`h-10 w-10 rounded-full flex items-center justify-center ${
-                      acc.asset_type === 'crypto' ? 'bg-orange-100 text-orange-600' : 
-                      acc.asset_type === 'manual' ? 'bg-gray-100 text-gray-600' : 'bg-blue-100 text-blue-600'
+                    <div className={`h-12 w-12 rounded-xl flex items-center justify-center font-bold text-lg shadow-sm ${
+                      position.account.asset_type === 'crypto' 
+                        ? 'bg-gradient-to-br from-orange-400 to-orange-600 text-white' 
+                        : position.account.asset_type === 'manual' 
+                        ? 'bg-gradient-to-br from-gray-400 to-gray-600 text-white' 
+                        : 'bg-gradient-to-br from-blue-400 to-blue-600 text-white'
                     }`}>
-                      {acc.asset_type === 'crypto' ? '₿' : acc.asset_type === 'manual' ? 'M' : '$'}
+                      {position.account.symbol?.slice(0, 3).toUpperCase() || position.account.name.slice(0, 3).toUpperCase()}
                     </div>
                     <div>
-                      <div className="font-medium flex items-center gap-2">
-                        {acc.symbol || acc.name}
-                        {acc.asset_type !== 'manual' && <BarChart2 className="h-3 w-3 text-muted-foreground" />}
+                      <div className="font-semibold text-lg flex items-center gap-2">
+                        {position.account.symbol || position.account.name}
+                        {position.account.asset_type !== 'manual' && (
+                          <span className={`text-xs px-2 py-0.5 rounded-full ${priceChange >= 0 ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'}`}>
+                            {priceChange >= 0 ? '+' : ''}{priceChange.toFixed(2)}%
+                          </span>
+                        )}
                       </div>
-                      <div className="text-xs text-muted-foreground">{acc.name}</div>
+                      <div className={`text-sm text-muted-foreground ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
+                        {privacyMode === 'hidden' ? '•••• invested' : `$${position.netInvested.toFixed(2)} invested`}
+                      </div>
                     </div>
                   </div>
                   
                   <div className="text-right">
-                    <div className={`font-medium ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
-                      {privacyMode === 'hidden' ? '••••••' : `$${currentValue.toLocaleString(undefined, { minimumFractionDigits: 2 })}`}
+                    <div className={`text-xl font-bold ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
+                      {privacyMode === 'hidden' ? '••••••' : `$${position.currentValue.toLocaleString(undefined, { minimumFractionDigits: 2 })}`}
                     </div>
-                    <div className={`text-xs text-muted-foreground ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
-                      {privacyMode === 'hidden' ? '••••' : `${totalQuantity.toFixed(4)} ${acc.currency} @ $${currentPrice.toLocaleString()}`}
-                    </div>
-                    <div className={`text-xs font-medium ${gainLoss >= 0 ? 'text-green-600' : 'text-red-600'} ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
-                      {privacyMode === 'hidden' ? '••••' : `${gainLoss >= 0 ? '+' : ''}$${Math.abs(gainLoss).toFixed(2)} (${gainLossPercent >= 0 ? '+' : ''}${gainLossPercent.toFixed(2)}%)`}
+                    {position.account.asset_type !== 'manual' && (
+                      <div className={`text-sm text-muted-foreground ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
+                        {privacyMode === 'hidden' ? '•••• ' : `${position.account.balance.toLocaleString(undefined, { minimumFractionDigits: 8, maximumFractionDigits: 8 })} `}
+                        {position.account.symbol} {position.currentPrice > 0 && `@ $${position.currentPrice.toLocaleString()}`}
+                      </div>
+                    )}
+                    <div className={`text-sm font-semibold mt-1 flex items-center justify-end gap-1 ${position.gainLoss >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'} ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
+                      {position.gainLoss >= 0 ? <TrendingUp className="h-3.5 w-3.5" /> : <TrendingDown className="h-3.5 w-3.5" />}
+                      {privacyMode === 'hidden' ? '••••' : `${position.gainLoss >= 0 ? '+' : ''}$${Math.abs(position.gainLoss).toFixed(2)} (${position.gainLossPercent >= 0 ? '+' : ''}${position.gainLossPercent.toFixed(2)}%)`}
                     </div>
                   </div>
                 </div>
@@ -341,167 +307,139 @@ export function Investments() {
         </div>
       </div>
 
-      {/* Investment Detail Modal with Chart */}
+      {/* Investment Detail Modal */}
       {selectedAccount && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-card w-full max-w-4xl rounded-2xl shadow-2xl border border-border overflow-hidden flex flex-col max-h-[90vh]">
-            <div className="p-4 border-b border-border flex justify-between items-center">
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-card w-full max-w-6xl rounded-2xl shadow-2xl border border-border overflow-hidden flex flex-col max-h-[90vh]">
+            <div className="p-6 border-b border-border flex justify-between items-start">
               <div>
-                <h3 className="font-semibold text-lg">{selectedAccount.name}</h3>
-                <p className="text-xs text-muted-foreground">
-                  {selectedAccount.symbol} • {selectedAccount.asset_type?.toUpperCase()}
-                </p>
+                <div className="flex items-center gap-3">
+                  <h2 className="font-bold text-2xl">{selectedAccount.symbol || selectedAccount.name}</h2>
+                  <span className={`text-sm px-3 py-1 rounded-full font-medium ${
+                    selectedAccount.asset_type === 'crypto' 
+                      ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400' 
+                      : selectedAccount.asset_type === 'manual' 
+                      ? 'bg-gray-100 text-gray-700 dark:bg-gray-900/30 dark:text-gray-400' 
+                      : 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+                  }`}>
+                    {selectedAccount.asset_type?.toUpperCase()}
+                  </span>
+                </div>
+                <p className="text-sm text-muted-foreground mt-1">{selectedAccount.name}</p>
+                
+                {(() => {
+                  const position = calculatePosition(selectedAccount)
+                  return (
+                    <div className="flex gap-6 mt-4">
+                      <div>
+                        <div className="text-xs text-muted-foreground">Current Value</div>
+                        <div className={`text-lg font-bold ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
+                          {privacyMode === 'hidden' ? '••••••' : `$${position.currentValue.toFixed(2)}`}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-xs text-muted-foreground">Net Invested</div>
+                        <div className={`text-lg font-bold ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
+                          {privacyMode === 'hidden' ? '••••••' : `$${position.netInvested.toFixed(2)}`}
+                        </div>
+                      </div>
+                      {position.currentPrice > 0 && (
+                        <div>
+                          <div className="text-xs text-muted-foreground">Current Price</div>
+                          <div className={`text-lg font-bold ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
+                            {privacyMode === 'hidden' ? '••••••' : `$${position.currentPrice.toFixed(2)}`}
+                          </div>
+                        </div>
+                      )}
+                      <div>
+                        <div className="text-xs text-muted-foreground">Total Return</div>
+                        <div className={`text-lg font-bold ${position.gainLoss >= 0 ? 'text-green-600' : 'text-red-600'} ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
+                          {privacyMode === 'hidden' ? '••••••' : `${position.gainLoss >= 0 ? '+' : ''}$${Math.abs(position.gainLoss).toFixed(2)} (${position.gainLossPercent >= 0 ? '+' : ''}${position.gainLossPercent.toFixed(2)}%)`}
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })()}
               </div>
-              <button onClick={() => setSelectedAccount(null)} className="text-muted-foreground hover:text-foreground p-2">✕</button>
+              <button 
+                onClick={() => setSelectedAccount(null)} 
+                className="p-2 hover:bg-secondary rounded-lg transition-colors text-2xl leading-none"
+              >
+                ×
+              </button>
             </div>
             
-            <div className="p-6 overflow-y-auto">
+            <div className="flex-1 overflow-y-auto p-6 space-y-6">
               {selectedAccount.asset_type !== 'manual' && selectedAccount.symbol && (
-                <InvestmentChart 
-                  symbol={selectedAccount.symbol}
-                  transactions={transactions[selectedAccount.id] || []}
-                />
+                <div className="bg-secondary/20 rounded-xl p-4">
+                  <InvestmentChart 
+                    symbol={selectedAccount.symbol}
+                    transactions={getAccountTransactions(selectedAccount.id)}
+                  />
+                </div>
               )}
               
-              <div className="mt-6">
-                <div className="flex justify-between items-center mb-4">
-                  <h4 className="font-semibold">Transactions</h4>
-                  <button
-                    onClick={handleAddTransaction}
-                    className="flex items-center gap-2 px-3 py-1.5 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 text-sm"
-                  >
-                    <Plus className="h-4 w-4" />
-                    Add Transaction
-                  </button>
+              <div>
+                <h3 className="font-semibold text-lg mb-4">Transaction History</h3>
+                <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-3 mb-4">
+                  <p className="text-sm text-yellow-600 dark:text-yellow-400">
+                    <strong>💡 How to log investment transactions:</strong><br/>
+                    For stock/crypto investments, log the <strong>dollar amount</strong> you invested, not the number of shares.<br/>
+                    Example: If you bought 5 shares of AAPL for $1,400, log an income transaction of <strong>$1,400</strong> with description "Bought 5 AAPL shares"
+                  </p>
                 </div>
                 
                 <div className="space-y-2">
-                  {(transactions[selectedAccount.id] || []).map(tx => (
-                    <div key={tx.id} className="p-3 bg-secondary/20 rounded-lg flex justify-between items-center">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className={`text-xs font-medium px-2 py-0.5 rounded ${tx.type === 'buy' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                            {tx.type.toUpperCase()}
-                          </span>
-                          <span className={`font-medium ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
-                            {privacyMode === 'hidden' ? '•••• @ ••••' : `${tx.quantity} @ $${tx.price}`}
-                          </span>
+                  {(() => {
+                    const txs = getAccountTransactions(selectedAccount.id)
+                    if (txs.length === 0) {
+                      return (
+                        <div className="p-12 text-center bg-secondary/20 rounded-xl">
+                          <p className="text-muted-foreground">No transactions yet</p>
+                          <p className="text-sm text-muted-foreground mt-1">Go to Dashboard to add income, expense, or swap transactions</p>
                         </div>
-                        <div className={`text-xs text-muted-foreground mt-1 ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
-                          {new Date(tx.date).toLocaleString()} • Total: {privacyMode === 'hidden' ? '••••••' : `$${tx.total_amount.toFixed(2)}`}
+                      )
+                    }
+                    
+                    return [...txs]
+                      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+                      .map(tx => (
+                        <div key={tx.id} className="p-4 bg-secondary/30 hover:bg-secondary/50 rounded-xl flex justify-between items-center transition-colors">
+                          <div className="flex items-center gap-4">
+                            <div className={`h-10 w-10 rounded-lg flex items-center justify-center font-medium ${
+                              tx.amount > 0
+                                ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' 
+                                : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+                            }`}>
+                              {tx.amount > 0 ? '↑' : '↓'}
+                            </div>
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <span className="font-semibold">
+                                  {getCategoryName(tx.category_id)}
+                                </span>
+                              </div>
+                              <div className={`text-sm text-muted-foreground ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
+                                {new Date(tx.date).toLocaleString('en-US', { 
+                                  month: 'short', 
+                                  day: 'numeric', 
+                                  year: 'numeric',
+                                  hour: '2-digit',
+                                  minute: '2-digit'
+                                })}
+                                {tx.description && ` • ${tx.description}`}
+                              </div>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <div className={`text-xl font-bold ${tx.amount > 0 ? 'text-green-600' : 'text-red-600'} ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
+                              {privacyMode === 'hidden' ? '••••••' : `${tx.amount > 0 ? '+' : ''}$${Math.abs(tx.amount).toFixed(2)}`}
+                            </div>
+                          </div>
                         </div>
-                        {tx.notes && <div className="text-xs text-muted-foreground mt-1">{tx.notes}</div>}
-                      </div>
-                      <button
-                        onClick={(e) => { e.stopPropagation(); handleDeleteTransaction(tx.id); }}
-                        className="p-2 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-lg transition-colors"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    </div>
-                  ))}
-                  
-                  {(transactions[selectedAccount.id] || []).length === 0 && (
-                    <div className="p-8 text-center text-muted-foreground text-sm">
-                      No transactions yet. Add a buy or sell transaction to start tracking.
-                    </div>
-                  )}
+                      ))
+                  })()}
                 </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Add Transaction Modal */}
-      {showTransactionModal && selectedAccount && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[60] p-4">
-          <div className="bg-card w-full max-w-md rounded-2xl shadow-2xl border border-border overflow-hidden">
-            <div className="p-4 border-b border-border flex justify-between items-center">
-              <h3 className="font-semibold">Add Transaction</h3>
-              <button onClick={() => setShowTransactionModal(false)} className="text-muted-foreground hover:text-foreground">✕</button>
-            </div>
-            
-            <div className="p-4 space-y-4">
-              <div className="flex gap-2 p-1 bg-secondary/50 rounded-lg">
-                <button 
-                  className={`flex-1 py-1.5 text-sm font-medium rounded-md transition-all ${txForm.type === 'buy' ? 'bg-background shadow-sm' : 'text-muted-foreground'}`}
-                  onClick={() => setTxForm({...txForm, type: 'buy'})}
-                >
-                  Buy
-                </button>
-                <button 
-                  className={`flex-1 py-1.5 text-sm font-medium rounded-md transition-all ${txForm.type === 'sell' ? 'bg-background shadow-sm' : 'text-muted-foreground'}`}
-                  onClick={() => setTxForm({...txForm, type: 'sell'})}
-                >
-                  Sell
-                </button>
-              </div>
-
-              <div className="space-y-4">
-                <div>
-                  <Label htmlFor="quantity">Quantity</Label>
-                  <Input
-                    id="quantity"
-                    type="number"
-                    step="any"
-                    value={txForm.quantity}
-                    onChange={(e) => setTxForm({...txForm, quantity: e.target.value})}
-                    placeholder="0.00"
-                    required
-                  />
-                </div>
-                
-                <div>
-                  <Label htmlFor="price">Price per Share</Label>
-                  <Input
-                    id="price"
-                    type="number"
-                    step="any"
-                    value={txForm.price}
-                    onChange={(e) => setTxForm({...txForm, price: e.target.value})}
-                    placeholder="0.00"
-                    required
-                  />
-                </div>
-                
-                <div>
-                  <Label htmlFor="date">Date & Time</Label>
-                  <Input
-                    id="date"
-                    type="datetime-local"
-                    value={txForm.date}
-                    onChange={(e) => setTxForm({...txForm, date: e.target.value})}
-                    required
-                  />
-                </div>
-                
-                <div>
-                  <Label htmlFor="notes">Notes (Optional)</Label>
-                  <Input
-                    id="notes"
-                    value={txForm.notes}
-                    onChange={(e) => setTxForm({...txForm, notes: e.target.value})}
-                    placeholder="Optional notes..."
-                  />
-                </div>
-                
-                {txForm.quantity && txForm.price && (
-                  <div className="p-3 bg-secondary/30 rounded-lg">
-                    <div className="text-sm text-muted-foreground">Total Amount</div>
-                    <div className="text-lg font-bold">
-                      ${(parseFloat(txForm.quantity) * parseFloat(txForm.price)).toFixed(2)}
-                    </div>
-                  </div>
-                )}
-                
-                <button
-                  onClick={handleSubmitTransaction}
-                  disabled={!txForm.quantity || !txForm.price}
-                  className="w-full py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:opacity-50"
-                >
-                  Add {txForm.type === 'buy' ? 'Buy' : 'Sell'} Transaction
-                </button>
               </div>
             </div>
           </div>

@@ -13,16 +13,15 @@ import { format } from 'date-fns'
 import { Loader2, TrendingUp, TrendingDown } from 'lucide-react'
 import { API_BASE_URL, apiFetch } from '../config'
 
-type InvestmentTransaction = {
+type Transaction = {
   id: string
   account_id: string
-  type: 'buy' | 'sell'
-  quantity: number
-  price: number
-  total_amount: number
+  category_id?: string
+  amount: number
+  description?: string
   date: string
-  notes?: string
-  created_at: number
+  is_recurring: boolean
+  linked_transaction_id?: string
 }
 
 type ChartDataPoint = {
@@ -34,12 +33,12 @@ type ChartDataPoint = {
   volume: number
   buyPoint?: number
   sellPoint?: number
-  transaction?: InvestmentTransaction
+  transaction?: Transaction
 }
 
 type InvestmentChartProps = {
   symbol: string
-  transactions?: InvestmentTransaction[]
+  transactions?: Transaction[]
 }
 
 type TimeRange = '1d' | '5d' | '1mo' | '6mo' | '1y' | '5y' | 'max'
@@ -79,7 +78,7 @@ export function InvestmentChart({ symbol, transactions = [] }: InvestmentChartPr
         
         if (json.quotes && Array.isArray(json.quotes)) {
           const quotes = json.quotes
-          const txMap = new Map<number, InvestmentTransaction>()
+          const txMap = new Map<number, Transaction>()
           
           // Map each transaction to the closest data point
           if (quotes.length > 0) {
@@ -120,8 +119,8 @@ export function InvestmentChart({ symbol, transactions = [] }: InvestmentChartPr
               low: q.low,
               close: q.close,
               volume: q.volume,
-              buyPoint: tx?.type === 'buy' ? q.close : undefined,
-              sellPoint: tx?.type === 'sell' ? q.close : undefined,
+              buyPoint: tx && tx.amount > 0 ? q.close : undefined,
+              sellPoint: tx && tx.amount < 0 ? q.close : undefined,
               transaction: tx
             }
           }).filter((p: any) => p.close !== null)
@@ -156,8 +155,9 @@ export function InvestmentChart({ symbol, transactions = [] }: InvestmentChartPr
           </p>
           {point.transaction && (
             <div className="mt-1 pt-1 border-t border-border/50">
-              <p className={`font-medium ${point.transaction.type === 'buy' ? 'text-green-500' : 'text-red-500'}`}>
-                {point.transaction.type.toUpperCase()}: {point.transaction.quantity} @ ${point.transaction.price}
+              <p className={`font-medium ${point.transaction.amount > 0 ? 'text-green-500' : 'text-red-500'}`}>
+                {point.transaction.amount > 0 ? 'BUY' : 'SELL'}: ${Math.abs(point.transaction.amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                {point.transaction.description && <span className="text-muted-foreground text-xs"> • {point.transaction.description}</span>}
               </p>
             </div>
           )}
