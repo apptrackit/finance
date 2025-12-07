@@ -14,6 +14,7 @@ type Transaction = {
   account_id: string
   category_id?: string
   amount: number
+  quantity?: number
   description?: string
   date: string
   is_recurring: boolean
@@ -224,6 +225,11 @@ export function TransactionList({
   // Auto-fetch price for investment accounts when date or account changes
   useEffect(() => {
     const fetchHistoricalPrice = async () => {
+      // Skip auto-fetch if manual_price is already set (e.g., from editing)
+      if (formData.manual_price) {
+        return
+      }
+      
       // Check if income/expense to investment account OR transfer to investment account
       let investmentAccount = null
       
@@ -466,17 +472,31 @@ export function TransactionList({
 
   const handleEdit = (tx: Transaction) => {
     const isIncome = tx.amount >= 0
+    const account = accounts.find(a => a.id === tx.account_id)
+    
+    // For investment accounts, use quantity (shares) instead of amount (USD)
+    const amountValue = account?.type === 'investment' && tx.quantity !== undefined
+      ? Math.abs(tx.quantity).toString()
+      : Math.abs(tx.amount).toString()
+    
+    // Calculate price from amount and quantity for investment accounts
+    let priceValue = ''
+    if (account?.type === 'investment' && tx.quantity !== undefined && tx.quantity !== 0) {
+      priceValue = (Math.abs(tx.amount) / Math.abs(tx.quantity)).toString()
+    }
+    
     setFormData({
       account_id: tx.account_id,
       to_account_id: '',
       category_id: tx.category_id || '',
-      amount: Math.abs(tx.amount).toString(),
+      amount: amountValue,
       amount_to: '',
+      fee: '0',
       description: tx.description || '',
       date: tx.date,
       is_recurring: tx.is_recurring,
       type: isIncome ? 'income' : 'expense',
-      manual_price: ''
+      manual_price: priceValue
     })
     setEditingId(tx.id)
     setIsAdding(true)
@@ -995,8 +1015,13 @@ export function TransactionList({
                           '••••••'
                         ) : (
                           <>
-                            {tx.amount >= 0 ? '+' : '-'}
-                            {Math.abs(tx.amount).toLocaleString('hu-HU', {minimumFractionDigits: 2, maximumFractionDigits: 2})} {getAccountCurrency(tx.account_id)}
+                            {(() => {
+                              const account = accounts.find(a => a.id === tx.account_id)
+                              if (account?.type === 'investment' && tx.quantity !== undefined) {
+                                return <>{tx.quantity > 0 ? '+' : ''}{tx.quantity.toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 8})} {getAccountCurrency(tx.account_id)}</>
+                              }
+                              return <>{tx.amount >= 0 ? '+' : '-'}{Math.abs(tx.amount).toLocaleString('hu-HU', {minimumFractionDigits: 2, maximumFractionDigits: 2})} {getAccountCurrency(tx.account_id)}</>
+                            })()}
                           </>
                         )}
                       </div>

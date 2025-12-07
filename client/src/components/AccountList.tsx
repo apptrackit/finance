@@ -162,6 +162,10 @@ export function AccountList({ accounts, onAccountAdded }: { accounts: Account[],
       asset_type: account.asset_type || 'stock',
       adjustWithTransaction: false
     })
+    // Set manual mode if it's a manual asset
+    if (account.asset_type === 'manual') {
+      setManualMode(true)
+    }
     setEditingId(account.id)
     setIsAdding(true)
   }
@@ -369,7 +373,7 @@ export function AccountList({ accounts, onAccountAdded }: { accounts: Account[],
                         <>
                           {account.balance < 0 && '-'}
                           {account.type === 'investment'
-                            ? `${Math.abs(account.balance).toLocaleString()} ${account.currency}`
+                            ? `${Math.abs(account.balance).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 8 })} ${account.currency}`
                             : formatCurrency(account.balance, account.currency)
                           }
                         </>

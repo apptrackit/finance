@@ -9,7 +9,7 @@ import Settings, { getMasterCurrency } from './components/Settings'
 import { usePrivacy } from './context/PrivacyContext'
 
 
-const APP_VERSION = '0.8.3'
+const APP_VERSION = '0.8.4'
 
 
 type Account = {
@@ -110,6 +110,7 @@ function App() {
             id: itx.id,
             account_id: itx.account_id,
             amount: itx.type === 'buy' ? itx.total_amount : -itx.total_amount,
+            quantity: itx.type === 'buy' ? itx.quantity : -itx.quantity,
             description: itx.notes || `${itx.quantity} shares @ $${itx.price}`,
             date: itx.date,
             is_recurring: false,
@@ -191,17 +192,10 @@ function App() {
       investmentAccounts.forEach((acc, idx) => {
         const txs: InvestmentTransaction[] = allTransactions[idx] || []
         
-        // Calculate position from transactions
-        let totalQuantity = acc.balance // Initial balance
-        txs.forEach(tx => {
-          if (tx.type === 'buy') {
-            totalQuantity += tx.quantity
-          } else {
-            totalQuantity -= tx.quantity
-          }
-        })
+        // Use account balance directly - it already contains the current number of shares
+        const totalQuantity = acc.balance
         
-        // Get current price
+        // Get current price in USD
         let price = 0
         if (acc.asset_type === 'manual') {
           // For manual, calculate average from transactions
@@ -215,6 +209,7 @@ function App() {
           price = quotes[acc.symbol].regularMarketPrice || 0
         }
         
+        // Calculate value: shares × price per share (in USD)
         totalValueUSD += price * totalQuantity
       })
 
