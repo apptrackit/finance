@@ -20,6 +20,7 @@ type Transaction = {
   account_id: string
   category_id?: string
   amount: number
+  quantity?: number
   description?: string
   date: string
   is_recurring: boolean
@@ -71,6 +72,7 @@ export function Investments() {
           id: itx.id,
           account_id: itx.account_id,
           amount: itx.type === 'buy' ? itx.total_amount : -itx.total_amount,
+          quantity: itx.type === 'buy' ? itx.quantity : -itx.quantity,
           description: itx.notes || `${itx.quantity} shares @ $${itx.price}`,
           date: itx.date,
           is_recurring: false
@@ -106,6 +108,12 @@ export function Investments() {
     setQuotes(newQuotes)
     
     setRefreshing(false)
+    
+    // Debug: Log accounts and transactions after fetch
+    console.log('=== INVESTMENTS LOADED ===')
+    console.log('Investment Accounts:', investments)
+    console.log('All Investment Transactions:', allInvestmentTxs)
+    console.log('========================')
   }
 
   useEffect(() => {
@@ -119,17 +127,20 @@ export function Investments() {
   const calculatePosition = (account: Account) => {
     const transactions = getAccountTransactions(account.id)
     
+    // Calculate actual quantity from transactions (don't trust account.balance)
+    const actualQuantity = transactions.reduce((sum, tx) => sum + (tx.quantity || 0), 0)
+    
     // Get current market price if available
     let currentPrice = 0
     if (account.asset_type !== 'manual' && account.symbol && quotes[account.symbol]) {
       currentPrice = quotes[account.symbol].regularMarketPrice || 0
     }
     
-    // For crypto/stock: balance is quantity, multiply by price to get value
+    // For crypto/stock: use calculated quantity, multiply by price to get value
     // For manual: balance is already the dollar value
     const currentValue = account.asset_type === 'manual' 
       ? account.balance 
-      : account.balance * currentPrice
+      : actualQuantity * currentPrice
     
     // Calculate invested amount from investment transactions
     // Transactions already have the total_amount (quantity × price at purchase time)
@@ -152,12 +163,25 @@ export function Investments() {
       currentPrice,
       gainLoss,
       gainLossPercent,
-      transactions
+      transactions,
+      actualQuantity
     }
   }
 
   const calculatePortfolioStats = () => {
     const positions = investmentAccounts.map(acc => calculatePosition(acc))
+    
+    console.log('=== PORTFOLIO DEBUG ===')
+    positions.forEach(pos => {
+      console.log(`Account: ${pos.account.name} (${pos.account.symbol})`)
+      console.log(`  Balance in DB: ${pos.account.balance}`)
+      console.log(`  Actual Quantity (calculated): ${pos.actualQuantity}`)
+      console.log(`  Current Price: ${pos.currentPrice}`)
+      console.log(`  Current Value: ${pos.currentValue}`)
+      console.log(`  Currency: ${pos.account.currency}`)
+      console.log(`  Transactions:`, pos.transactions.map(t => ({ quantity: t.quantity, amount: t.amount })))
+    })
+    console.log('======================')
     
     const totalValue = positions.reduce((sum, pos) => sum + pos.currentValue, 0)
     const totalInvested = positions.reduce((sum, pos) => sum + pos.netInvested, 0)
@@ -291,10 +315,13 @@ export function Investments() {
                     </div>
                     {position.account.asset_type !== 'manual' && (
                       <div className={`text-sm text-muted-foreground ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
-                        {privacyMode === 'hidden' ? '•••• ' : `${position.account.balance.toLocaleString(undefined, { minimumFractionDigits: 8, maximumFractionDigits: 8 })} `}
-                        {position.account.symbol} {position.currentPrice > 0 && `@ $${position.currentPrice.toLocaleString()}`}
+                        {privacyMode === 'hidden' ? '•••• ' : `${position.actualQuantity > 0 ? '+' : ''}${position.actualQuantity.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 8 })} `}
+                        {position.account.currency}
                       </div>
                     )}
+                    <div className={`text-sm text-muted-foreground ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
+                      {privacyMode === 'hidden' ? '•••• ' : `${position.account.symbol || position.account.name}`} {position.currentPrice > 0 && `@ $${position.currentPrice.toLocaleString()}`}
+                    </div>
                     <div className={`text-sm font-semibold mt-1 flex items-center justify-end gap-1 ${position.gainLoss >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'} ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
                       {position.gainLoss >= 0 ? <TrendingUp className="h-3.5 w-3.5" /> : <TrendingDown className="h-3.5 w-3.5" />}
                       {privacyMode === 'hidden' ? '••••' : `${position.gainLoss >= 0 ? '+' : ''}$${Math.abs(position.gainLoss).toFixed(2)} (${position.gainLossPercent >= 0 ? '+' : ''}${position.gainLossPercent.toFixed(2)}%)`}
@@ -404,7 +431,23 @@ export function Investments() {
                     return [...txs]
                       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
                       .map(tx => (
-                        <div key={tx.id} className="p-4 bg-secondary/30 hover:bg-secondary/50 rounded-xl flex justify-between items-center transition-colors">
+                        <div 
+                          key={tx.id} 
+                          className="p-4 bg-secondary/30 hover:bg-secondary/50 rounded-xl flex justify-between items-center transition-colors cursor-pointer"
+                          onClick={() => {
+                            console.log('=== TRANSACTION DEBUG ===')
+                            console.log('Transaction:', tx)
+                            console.log('ID:', tx.id)
+                            console.log('Amount (USD):', tx.amount)
+                            console.log('Quantity (shares):', tx.quantity)
+                            console.log('Description:', tx.description)
+                            console.log('Date:', tx.date)
+                            console.log('Account:', selectedAccount)
+                            console.log('Account Balance:', selectedAccount.balance)
+                            console.log('Account Currency:', selectedAccount.currency)
+                            console.log('========================')
+                          }}
+                        >
                           <div className="flex items-center gap-4">
                             <div className={`h-10 w-10 rounded-lg flex items-center justify-center font-medium ${
                               tx.amount > 0
@@ -433,8 +476,17 @@ export function Investments() {
                           </div>
                           <div className="text-right">
                             <div className={`text-xl font-bold ${tx.amount > 0 ? 'text-green-600' : 'text-red-600'} ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
-                              {privacyMode === 'hidden' ? '••••••' : `${tx.amount > 0 ? '+' : ''}$${Math.abs(tx.amount).toFixed(2)}`}
+                              {privacyMode === 'hidden' ? '••••••' : (
+                                tx.quantity !== undefined 
+                                  ? `${tx.quantity > 0 ? '+' : ''}${Math.abs(tx.quantity).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 8 })} ${selectedAccount.currency}`
+                                  : `${tx.amount > 0 ? '+' : ''}$${Math.abs(tx.amount).toFixed(2)}`
+                              )}
                             </div>
+                            {tx.quantity !== undefined && (
+                              <div className="text-sm text-muted-foreground">
+                                ${Math.abs(tx.amount).toFixed(2)} USD
+                              </div>
+                            )}
                           </div>
                         </div>
                       ))

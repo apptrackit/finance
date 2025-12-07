@@ -9,7 +9,7 @@ import Settings, { getMasterCurrency } from './components/Settings'
 import { usePrivacy } from './context/PrivacyContext'
 
 
-const APP_VERSION = '0.8.2'
+const APP_VERSION = '0.8.5'
 
 
 type Account = {
@@ -71,6 +71,7 @@ function App() {
   const [categories, setCategories] = useState<Category[]>([])
   const [view, setView] = useState<View>('dashboard')
   const [masterCurrency, setMasterCurrency] = useState('HUF')
+  const [apiVersion, setApiVersion] = useState<string | null>(null)
   const { privacyMode, togglePrivacyMode } = usePrivacy()
 
   useEffect(() => {
@@ -109,6 +110,7 @@ function App() {
             id: itx.id,
             account_id: itx.account_id,
             amount: itx.type === 'buy' ? itx.total_amount : -itx.total_amount,
+            quantity: itx.type === 'buy' ? itx.quantity : -itx.quantity,
             description: itx.notes || `${itx.quantity} shares @ $${itx.price}`,
             date: itx.date,
             is_recurring: false,
@@ -136,7 +138,19 @@ function App() {
   useEffect(() => {
     fetchData()
     fetchInvestmentValue()
+    fetchApiVersion()
   }, [])
+
+  const fetchApiVersion = async () => {
+    try {
+      const res = await apiFetch(`${API_BASE_URL}/version`)
+      const data = await res.json()
+      setApiVersion(data.version)
+    } catch (error) {
+      console.error('Failed to fetch API version:', error)
+      setApiVersion('unknown')
+    }
+  }
 
   // Fetch and calculate investment value in master currency
   const fetchInvestmentValue = async () => {
@@ -178,17 +192,10 @@ function App() {
       investmentAccounts.forEach((acc, idx) => {
         const txs: InvestmentTransaction[] = allTransactions[idx] || []
         
-        // Calculate position from transactions
-        let totalQuantity = acc.balance // Initial balance
-        txs.forEach(tx => {
-          if (tx.type === 'buy') {
-            totalQuantity += tx.quantity
-          } else {
-            totalQuantity -= tx.quantity
-          }
-        })
+        // Use account balance directly - it already contains the current number of shares
+        const totalQuantity = acc.balance
         
-        // Get current price
+        // Get current price in USD
         let price = 0
         if (acc.asset_type === 'manual') {
           // For manual, calculate average from transactions
@@ -202,6 +209,7 @@ function App() {
           price = quotes[acc.symbol].regularMarketPrice || 0
         }
         
+        // Calculate value: shares × price per share (in USD)
         totalValueUSD += price * totalQuantity
       })
 
@@ -486,8 +494,9 @@ function App() {
         </main>
 
         {/* Version Footer */}
-        <footer className="mt-auto py-4 text-center">
-          <span className="text-xs text-muted-foreground">v{APP_VERSION}</span>
+        <footer className="mt-auto py-4 text-center text-xs text-muted-foreground space-y-1">
+          <p>Client v{APP_VERSION}</p>
+          <p>API v{apiVersion || 'loading...'}</p>
         </footer>
       </div>
     </div>
