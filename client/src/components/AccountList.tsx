@@ -36,7 +36,7 @@ const currencySymbols: Record<string, string> = {
   GBP: '£',
 }
 
-export function AccountList({ accounts, onAccountAdded }: { accounts: Account[], onAccountAdded: () => void }) {
+export function AccountList({ accounts, onAccountAdded, loading }: { accounts: Account[], onAccountAdded: () => void, loading?: boolean }) {
   const { confirm } = useAlert()
   const [isAdding, setIsAdding] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -420,13 +420,21 @@ export function AccountList({ accounts, onAccountAdded }: { accounts: Account[],
           })}
 
           {accounts.length === 0 && !isAdding && (
-            <div className="text-center py-8">
-              <div className="h-12 w-12 rounded-full bg-secondary/50 flex items-center justify-center mx-auto mb-3">
-                <Wallet className="h-6 w-6 text-muted-foreground" />
+            loading ? (
+              <div className="space-y-3">
+                {[1, 2, 3].map(i => (
+                  <div key={i} className="h-16 bg-muted animate-pulse rounded-xl" />
+                ))}
               </div>
-              <p className="text-sm text-muted-foreground">No accounts yet</p>
-              <p className="text-xs text-muted-foreground/70 mt-1">Add your first account to get started</p>
-            </div>
+            ) : (
+              <div className="text-center py-8">
+                <div className="h-12 w-12 rounded-full bg-secondary/50 flex items-center justify-center mx-auto mb-3">
+                  <Wallet className="h-6 w-6 text-muted-foreground" />
+                </div>
+                <p className="text-sm text-muted-foreground">No accounts yet</p>
+                <p className="text-xs text-muted-foreground/70 mt-1">Add your first account to get started</p>
+              </div>
+            )
           )}
         </div>
       </CardContent>

@@ -526,13 +526,14 @@ function App() {
             /* Main Content Grid */
             <div className="grid gap-4 sm:gap-6 lg:grid-cols-12">
               <div className="lg:col-span-4">
-                <AccountList accounts={accounts} onAccountAdded={fetchData} />
+                <AccountList accounts={accounts} onAccountAdded={fetchData} loading={transactionsLoading} />
               </div>
               <div className="lg:col-span-8">
                 <TransactionList 
                   transactions={transactions} 
                   accounts={accounts} 
-                  onTransactionAdded={fetchData} 
+                  onTransactionAdded={fetchData}
+                  loading={transactionsLoading}
                 />
               </div>
             </div>
