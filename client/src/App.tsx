@@ -66,6 +66,8 @@ type View = 'dashboard' | 'analytics' | 'settings' | 'investments'
 function App() {
   const [netWorth, setNetWorth] = useState<number | null>(null)
   const [investmentValue, setInvestmentValue] = useState<number>(0)
+  const [investmentLoading, setInvestmentLoading] = useState<boolean>(false)
+  const [investmentError, setInvestmentError] = useState<string | null>(null)
   const [accounts, setAccounts] = useState<Account[]>([])
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [categories, setCategories] = useState<Category[]>([])
@@ -162,10 +164,13 @@ function App() {
 
   // Fetch and calculate investment value in master currency
   const fetchInvestmentValue = async () => {
+    setInvestmentLoading(true)
+    setInvestmentError(null)
     try {
       const investmentAccounts = accounts.filter(a => a.type === 'investment')
       if (investmentAccounts.length === 0) {
         setInvestmentValue(0)
+        setInvestmentLoading(false)
         return
       }
 
@@ -187,13 +192,26 @@ function App() {
         apiFetch(`${API_BASE_URL}/market/quote?symbol=${encodeURIComponent(symbol)}`)
           .then(res => res.json())
           .then(data => ({ symbol, data }))
-          .catch(() => ({ symbol, data: null }))
+          .catch((err) => {
+            console.error(`Failed to fetch quote for ${symbol}:`, err)
+            return { symbol, data: null }
+          })
       )
       const quotesArray = await Promise.all(quotePromises)
       const quotes: Record<string, MarketQuote> = {}
+      let failedQuotes = 0
       quotesArray.forEach(({ symbol, data }) => {
-        if (data) quotes[symbol] = data
+        if (data) {
+          quotes[symbol] = data
+        } else {
+          failedQuotes++
+        }
       })
+      
+      // If all quotes failed, throw an error
+      if (uniqueSymbols.length > 0 && failedQuotes === uniqueSymbols.length) {
+        throw new Error('Failed to fetch market data. Yahoo Finance API may be temporarily unavailable.')
+      }
 
       // Calculate total value
       let totalValueUSD = 0
@@ -234,9 +252,13 @@ function App() {
           setInvestmentValue(totalValueUSD) // Fallback
         }
       }
+      setInvestmentLoading(false)
     } catch (error) {
       console.error('Failed to calculate investment value:', error)
+      const errorMessage = error instanceof Error ? error.message : 'Failed to fetch investment data'
+      setInvestmentError(errorMessage)
       setInvestmentValue(0)
+      setInvestmentLoading(false)
     }
   }
 
@@ -286,7 +308,8 @@ function App() {
   
   // Calculate cash balance (accounts without investments)
   const cashBalance = netWorth !== null ? netWorth : 0
-  const totalNetWorth = netWorth !== null ? netWorth + investmentValue : null
+  // Only show total net worth if we have both cash data and investment is not loading
+  const totalNetWorth = netWorth !== null && !investmentLoading ? netWorth + investmentValue : null
   
   // Only show cash card separately if there are investment accounts
   const hasInvestmentAccounts = accounts.some(a => a.type === 'investment')
@@ -398,7 +421,9 @@ function App() {
                     </div>
                   </div>
                   <div className="text-2xl sm:text-4xl font-bold tracking-tight text-foreground">
-                    {totalNetWorth !== null ? (
+                    {investmentError ? (
+                      <span className="text-base sm:text-lg text-destructive">Error loading data</span>
+                    ) : totalNetWorth !== null ? (
                       <>
                         <span className={privacyMode === 'hidden' || shouldHideInvestment() ? 'select-none' : ''}>
                           {privacyMode === 'hidden' || shouldHideInvestment()
@@ -412,7 +437,7 @@ function App() {
                     )}
                   </div>
                   <p className="text-xs text-muted-foreground mt-2">
-                    Total value
+                    {investmentError ? investmentError : 'Total value'}
                   </p>
                 </div>
               </div>
