@@ -58,7 +58,7 @@ export function AccountList({ accounts, onAccountAdded }: { accounts: Account[],
   const [manualMode, setManualMode] = useState(false)
   const [activeAccountId, setActiveAccountId] = useState<string | null>(null)
 
-  const { privacyMode } = usePrivacy()
+  const { privacyMode, shouldHideInvestment } = usePrivacy()
 
   const resetForm = () => {
     setFormData({ name: '', type: 'cash', balance: '', currency: 'HUF', symbol: '', asset_type: 'stock', adjustWithTransaction: false })
@@ -376,8 +376,8 @@ export function AccountList({ accounts, onAccountAdded }: { accounts: Account[],
                 </div>
                 <div className="flex items-center gap-2">
                   <div className="text-right mr-2">
-                    <p className={`font-bold text-sm ${account.balance >= 0 ? 'text-foreground' : 'text-destructive'} ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
-                      {privacyMode === 'hidden' ? (
+                    <p className={`font-bold text-sm ${account.balance >= 0 ? 'text-foreground' : 'text-destructive'} ${privacyMode === 'hidden' || (account.type === 'investment' && shouldHideInvestment()) ? 'select-none' : ''}`}>
+                      {privacyMode === 'hidden' || (account.type === 'investment' && shouldHideInvestment()) ? (
                         '••••••'
                       ) : (
                         <>

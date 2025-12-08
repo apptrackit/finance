@@ -69,10 +69,18 @@ function App() {
   const [accounts, setAccounts] = useState<Account[]>([])
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [categories, setCategories] = useState<Category[]>([])
-  const [view, setView] = useState<View>('dashboard')
+  const [view, setView] = useState<View>(() => {
+    // Restore last view from localStorage if available
+    const lastView = localStorage.getItem('finance_last_view') as View | null
+    if (lastView) {
+      localStorage.removeItem('finance_last_view') // Clear it after reading
+      return lastView
+    }
+    return 'dashboard'
+  })
   const [masterCurrency, setMasterCurrency] = useState('HUF')
   const [apiVersion, setApiVersion] = useState<string | null>(null)
-  const { privacyMode, togglePrivacyMode } = usePrivacy()
+  const { privacyMode, togglePrivacyMode, shouldHideInvestment } = usePrivacy()
 
   useEffect(() => {
     setMasterCurrency(getMasterCurrency())
@@ -392,8 +400,8 @@ function App() {
                   <div className="text-2xl sm:text-4xl font-bold tracking-tight text-foreground">
                     {totalNetWorth !== null ? (
                       <>
-                        <span className={privacyMode === 'hidden' ? 'select-none' : ''}>
-                          {privacyMode === 'hidden' 
+                        <span className={privacyMode === 'hidden' || shouldHideInvestment() ? 'select-none' : ''}>
+                          {privacyMode === 'hidden' || shouldHideInvestment()
                             ? '••••••' 
                             : totalNetWorth.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})}
                         </span>

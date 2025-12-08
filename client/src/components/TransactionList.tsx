@@ -80,7 +80,7 @@ export function TransactionList({
   const [activeTxId, setActiveTxId] = useState<string | null>(null)
   
   const { confirm } = useAlert()
-  const { privacyMode } = usePrivacy()
+  const { privacyMode, shouldHideInvestment } = usePrivacy()
 
   useEffect(() => {
     apiFetch(`${API_BASE_URL}/categories`)
@@ -1020,27 +1020,33 @@ export function TransactionList({
                     </div>
                     <div className="flex flex-col items-end gap-0.5">
                       <div className={`font-bold text-sm ${isTransfer ? 'text-destructive' : (tx.amount >= 0 ? 'text-success' : 'text-destructive')} ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
-                        {privacyMode === 'hidden' ? (
-                          '••••••'
-                        ) : (
-                          <>
-                            {(() => {
-                              const account = accounts.find(a => a.id === tx.account_id)
-                              if (account?.type === 'investment' && tx.quantity !== undefined) {
-                                return <>{tx.quantity > 0 ? '+' : ''}{tx.quantity.toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 8})} {getAccountCurrency(tx.account_id)}</>
-                              }
-                              return <>{tx.amount >= 0 ? '+' : '-'}{Math.abs(tx.amount).toLocaleString('hu-HU', {minimumFractionDigits: 2, maximumFractionDigits: 2})} {getAccountCurrency(tx.account_id)}</>
-                            })()}
-                          </>
-                        )}
+                        {(() => {
+                          const account = accounts.find(a => a.id === tx.account_id)
+                          const isInvestmentTx = account?.type === 'investment'
+                          const shouldHide = privacyMode === 'hidden' || (isInvestmentTx && shouldHideInvestment())
+                          
+                          if (shouldHide) {
+                            return '••••••'
+                          }
+                          
+                          if (isInvestmentTx && tx.quantity !== undefined) {
+                            return <>{tx.quantity > 0 ? '+' : ''}{tx.quantity.toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 8})} {getAccountCurrency(tx.account_id)}</>
+                          }
+                          return <>{tx.amount >= 0 ? '+' : '-'}{Math.abs(tx.amount).toLocaleString('hu-HU', {minimumFractionDigits: 2, maximumFractionDigits: 2})} {getAccountCurrency(tx.account_id)}</>
+                        })()}
                       </div>
                       {isTransfer && related && (
                         <div className={`text-xs text-success font-medium ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
-                          {privacyMode === 'hidden' ? (
-                            '••••••'
-                          ) : (
-                            <>+{Math.abs(related.amount).toLocaleString('hu-HU', {minimumFractionDigits: 2, maximumFractionDigits: 2})} {getAccountCurrency(related.account_id)}</>
-                          )}
+                          {(() => {
+                            const relatedAccount = accounts.find(a => a.id === related.account_id)
+                            const isInvestmentTx = relatedAccount?.type === 'investment'
+                            const shouldHide = privacyMode === 'hidden' || (isInvestmentTx && shouldHideInvestment())
+                            
+                            if (shouldHide) {
+                              return '••••••'
+                            }
+                            return <>+{Math.abs(related.amount).toLocaleString('hu-HU', {minimumFractionDigits: 2, maximumFractionDigits: 2})} {getAccountCurrency(related.account_id)}</>
+                          })()}
                         </div>
                       )}
                       <div className={`flex gap-1 transition-opacity ${activeTxId === tx.id ? 'opacity-100' : 'opacity-0 md:group-hover:opacity-100'}`}>
