@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Button } from './ui/button'
 import { Label } from './ui/label'
 import { Select } from './ui/select'
@@ -17,6 +17,22 @@ const CURRENCIES = [
   { code: 'PLN', name: 'Polish Zloty', symbol: 'zł' },
   { code: 'CZK', name: 'Czech Koruna', symbol: 'Kč' },
   { code: 'RON', name: 'Romanian Leu', symbol: 'lei' },
+]
+
+const EMOJI_OPTIONS = [
+  '💰', '💵', '💳', '💸', '🏦', '💼', '📊', '📈', '📉', '💹',
+  '🛒', '🍕', '🍔', '🍜', '🥗', '🍱', '☕', '🍺', '🥤', '🧃',
+  '🏠', '🏢', '🏪', '🏨', '🏥', '🏫', '⛽', '🚗', '🚕', '🚙',
+  '✈️', '🚆', '🚌', '🚲', '🛴', '⚡', '💡', '🔌', '📱', '💻',
+  '🎮', '🎬', '🎵', '🎸', '🎨', '📚', '📖', '✏️', '📝', '📦',
+  '🎁', '🎉', '🎊', '🎈', '💐', '🌹', '🌺', '🌻', '🌷', '🌸',
+  '👕', '👔', '👗', '👠', '👟', '💄', '💅', '💆', '💇', '🧴',
+  '🏋️', '⚽', '🏀', '🎾', '🏐', '🏓', '🏸', '🥊', '🎯', '🎱',
+  '🏥', '💊', '💉', '🩺', '🧬', '🔬', '🧪', '🧫', '🦷', '👓',
+  '🐶', '🐱', '🐭', '🐹', '🐰', '🦊', '🐻', '🐼', '🐨', '🐯',
+  '❤️', '💙', '💚', '💛', '🧡', '💜', '🖤', '🤍', '🤎', '💔',
+  '⭐', '✨', '🌟', '💫', '🔥', '💥', '🎆', '🎇', '🌈', '☀️',
+  '📌', '📍', '🔖', '🏷️', '🎫', '🎟️', '📮', '📬', '📭', '📪',
 ]
 
 const STORAGE_KEY = 'finance_master_currency'
@@ -47,6 +63,53 @@ type Category = {
   type: 'income' | 'expense'
 }
 
+// Emoji Picker Component
+function EmojiPicker({ 
+  onChange, 
+  onClose 
+}: { 
+  onChange: (emoji: string) => void
+  onClose: () => void
+}) {
+  const pickerRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (pickerRef.current && !pickerRef.current.contains(event.target as Node)) {
+        onClose()
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [onClose])
+
+  return (
+    <div 
+      ref={pickerRef}
+      className="absolute z-50 mt-1 p-3 bg-popover border rounded-lg shadow-lg w-64"
+      style={{ maxHeight: '300px', overflowY: 'auto' }}
+    >
+      <div className="grid grid-cols-8 gap-1">
+        {EMOJI_OPTIONS.map((emoji, index) => (
+          <button
+            key={index}
+            type="button"
+            onClick={() => {
+              onChange(emoji)
+              onClose()
+            }}
+            className="w-8 h-8 flex items-center justify-center text-xl hover:bg-accent rounded transition-colors"
+            title={emoji}
+          >
+            {emoji}
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 export default function Settings() {
   const [masterCurrency, setMasterCurrency] = useState('HUF')
   const [isSaving, setIsSaving] = useState(false)
@@ -68,6 +131,10 @@ export default function Settings() {
   const [editCategoryType, setEditCategoryType] = useState<'income' | 'expense'>('expense')
   const [editCategoryIcon, setEditCategoryIcon] = useState('📌')
   const [isUpdatingCategory, setIsUpdatingCategory] = useState(false)
+
+  // Emoji picker state
+  const [showNewEmojiPicker, setShowNewEmojiPicker] = useState(false)
+  const [showEditEmojiPicker, setShowEditEmojiPicker] = useState<string | null>(null)
 
   useEffect(() => {
     // Load saved currency from localStorage
@@ -380,36 +447,30 @@ export default function Settings() {
           <div className="space-y-4">
             <h3 className="text-sm font-medium">Add New Category</h3>
             <div className="grid grid-cols-[auto_1fr_auto_auto] gap-2 items-end">
-              <div className="space-y-2">
+              <div className="space-y-2 relative">
                 <Label htmlFor="category-icon">Icon</Label>
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    const input = e.currentTarget.querySelector('input')
-                    if (input) {
-                      input.focus()
-                      input.click()
-                    }
-                  }}
-                  className="w-16 h-10 rounded-md border border-input bg-background text-center text-2xl hover:bg-accent cursor-pointer flex items-center justify-center"
-                >
+                <div className="relative">
                   <Input
                     id="category-icon"
                     type="text"
-                    inputMode="none"
                     value={newCategoryIcon}
                     onChange={e => handleNewIconChange(e.target.value)}
-                    onFocus={e => {
-                      e.target.setAttribute('inputmode', 'text')
-                      // Trigger emoji picker on mobile
-                      if ('virtualKeyboard' in navigator) {
-                        (navigator as any).virtualKeyboard.show()
-                      }
-                    }}
-                    className="w-full h-full text-center text-2xl border-0 bg-transparent p-0 focus:ring-0 focus:outline-none cursor-pointer"
-                    style={{ caretColor: 'transparent' }}
+                    onClick={() => setShowNewEmojiPicker(!showNewEmojiPicker)}
+                    placeholder="📌"
+                    maxLength={4}
+                    className="w-16 h-10 text-center text-2xl p-0 cursor-pointer"
+                    title="Click to choose emoji"
                   />
-                </button>
+                  {showNewEmojiPicker && (
+                    <EmojiPicker
+                      onChange={(emoji) => {
+                        setNewCategoryIcon(emoji)
+                        setShowNewEmojiPicker(false)
+                      }}
+                      onClose={() => setShowNewEmojiPicker(false)}
+                    />
+                  )}
+                </div>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="category-name">Name</Label>
@@ -459,32 +520,27 @@ export default function Settings() {
                       key={category.id}
                       className="grid grid-cols-[auto_1fr_auto_auto_auto] gap-2 items-center p-3 rounded-lg border bg-accent"
                     >
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          const input = e.currentTarget.querySelector('input')
-                          if (input) {
-                            input.focus()
-                            input.click()
-                          }
-                        }}
-                        className="w-14 h-10 rounded-md border border-input bg-background text-center text-2xl hover:bg-accent cursor-pointer flex items-center justify-center"
-                      >
+                      <div className="relative">
                         <Input
                           type="text"
-                          inputMode="none"
                           value={editCategoryIcon}
                           onChange={e => handleEditIconChange(e.target.value)}
-                          onFocus={e => {
-                            e.target.setAttribute('inputmode', 'text')
-                            if ('virtualKeyboard' in navigator) {
-                              (navigator as any).virtualKeyboard.show()
-                            }
-                          }}
-                          className="w-full h-full text-center text-2xl border-0 bg-transparent p-0 focus:ring-0 focus:outline-none cursor-pointer"
-                          style={{ caretColor: 'transparent' }}
+                          onClick={() => setShowEditEmojiPicker(showEditEmojiPicker === category.id ? null : category.id)}
+                          placeholder="📌"
+                          maxLength={4}
+                          className="w-14 h-10 text-center text-2xl p-0 cursor-pointer"
+                          title="Click to choose emoji"
                         />
-                      </button>
+                        {showEditEmojiPicker === category.id && (
+                          <EmojiPicker
+                            onChange={(emoji) => {
+                              setEditCategoryIcon(emoji)
+                              setShowEditEmojiPicker(null)
+                            }}
+                            onClose={() => setShowEditEmojiPicker(null)}
+                          />
+                        )}
+                      </div>
                       <Input
                         type="text"
                         value={editCategoryName}
@@ -567,32 +623,27 @@ export default function Settings() {
                       key={category.id}
                       className="grid grid-cols-[auto_1fr_auto_auto_auto] gap-2 items-center p-3 rounded-lg border bg-accent"
                     >
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          const input = e.currentTarget.querySelector('input')
-                          if (input) {
-                            input.focus()
-                            input.click()
-                          }
-                        }}
-                        className="w-14 h-10 rounded-md border border-input bg-background text-center text-2xl hover:bg-accent cursor-pointer flex items-center justify-center"
-                      >
+                      <div className="relative">
                         <Input
                           type="text"
-                          inputMode="none"
                           value={editCategoryIcon}
                           onChange={e => handleEditIconChange(e.target.value)}
-                          onFocus={e => {
-                            e.target.setAttribute('inputmode', 'text')
-                            if ('virtualKeyboard' in navigator) {
-                              (navigator as any).virtualKeyboard.show()
-                            }
-                          }}
-                          className="w-full h-full text-center text-2xl border-0 bg-transparent p-0 focus:ring-0 focus:outline-none cursor-pointer"
-                          style={{ caretColor: 'transparent' }}
+                          onClick={() => setShowEditEmojiPicker(showEditEmojiPicker === category.id ? null : category.id)}
+                          placeholder="📌"
+                          maxLength={4}
+                          className="w-14 h-10 text-center text-2xl p-0 cursor-pointer"
+                          title="Click to choose emoji"
                         />
-                      </button>
+                        {showEditEmojiPicker === category.id && (
+                          <EmojiPicker
+                            onChange={(emoji) => {
+                              setEditCategoryIcon(emoji)
+                              setShowEditEmojiPicker(null)
+                            }}
+                            onClose={() => setShowEditEmojiPicker(null)}
+                          />
+                        )}
+                      </div>
                       <Input
                         type="text"
                         value={editCategoryName}
