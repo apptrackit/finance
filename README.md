@@ -1,384 +1,347 @@
-# 💰 Personal Finance Tracker
+# 💰 Finance Manager
 
-A secure, self-hosted personal finance app built with React and Cloudflare Workers. Track your accounts, transactions, and view analytics - all running for **FREE** on Cloudflare's infrastructure.
+> A full-stack personal finance tracker with multi-currency support, investment portfolio monitoring, and real-time market data integration.
 
-![Security](https://img.shields.io/badge/Security-Cloudflare%20Zero%20Trust-orange)
-![Cost](https://img.shields.io/badge/Cost-Free%20Tier-green)
-![Database](https://img.shields.io/badge/Database-Cloudflare%20D1-blue)
+## Table of Contents
 
-## ✨ Features
-
-- 📊 **Dashboard** - View total net worth across all accounts
-- 🏦 **Accounts** - Track bank accounts, investments, credit cards, crypto
-- 💳 **Transactions** - Log income and expenses with categories
-- 🔄 **Transfers** - Move money between accounts
-- 📈 **Analytics** - Visual charts and spending insights
-- 🔒 **Secure** - 3-layer security (Cloudflare Access + CORS + API Key)
-
-## 🏗️ Tech Stack
-
-| Component | Technology |
-|-----------|------------|
-| Frontend | React 19 + Vite + Tailwind CSS |
-| Backend | Cloudflare Workers + Hono |
-| Database | Cloudflare D1 (SQLite) |
-| Hosting | Cloudflare Pages (frontend) + Workers (API) |
-| Security | Cloudflare Zero Trust Access |
-
----
-
-## 🚀 Quick Start (Local Development)
-
-### Prerequisites
-- Node.js 18+
-- npm or pnpm
-- [Wrangler CLI](https://developers.cloudflare.com/workers/wrangler/install-and-update/)
-
-### 1. Clone and Install
-
-```bash
-git clone <your-repo-url>
-cd finance
-
-# Run the setup script (recommended)
-./setup.sh
-```
-
-The setup script will:
-- Create all necessary config files from templates
-- Generate a secure API key
-- Install dependencies
-
-**Or manually set up:**
-
-### 2. Manual Configuration Setup
-
-```bash
-# Copy example configuration files
-cp api/wrangler.toml.example api/wrangler.toml
-cp api/.dev.vars.example api/.dev.vars
-cp .env.example client/.env.local
-```
-
-**Important:** Each developer needs their own `wrangler.toml` with their unique database ID and domain. This file is gitignored to prevent conflicts.
-
-Edit `api/wrangler.toml`:
-```toml
-database_id = "your-d1-database-id-here"
-# Uncomment and set your custom domain if using one
-# routes = [{ pattern = "api.yourname.com", custom_domain = true }]
-```
-
-Edit `api/.dev.vars`:
-```env
-API_SECRET=your-secret-api-key
-ALLOWED_ORIGINS=http://localhost:5173,http://localhost:3000
-```
-
-Edit `client/.env.local`:
-```env
-VITE_API_KEY=your-secret-api-key  # Same as API_SECRET above
-VITE_API_DOMAIN=localhost:8787
-```
-
-### 3. Create Local Database
-
-```bash
-cd api
-
-# Create local D1 database
-npx wrangler d1 create finance-db --local
-
-# Apply schema
-npx wrangler d1 execute finance-db --local --file=schema.sql
-```
-
-### 4. Run Development Servers
-
-```bash
-# Terminal 1: Start API (from /api folder)
-cd api
-npm run dev
-
-# Terminal 2: Start Frontend (from /client folder)  
-cd client
-npm run dev
-```
-
-Open http://localhost:5173 🎉
+- [Overview](#overview)
+- [Quick Start](#quick-start)
+  - [Backend Deployment](#backend-deployment)
+  - [Frontend Deployment](#frontend-deployment)
+  - [Automated Deployment](#automated-deployment)
+- [Architecture](#architecture)
+  - [Tech Stack](#tech-stack)
+  - [Project Structure](#project-structure)
+- [Core Features](#core-features)
+- [How It Works](#how-it-works)
+  - [Account System](#account-system)
+  - [Transaction Flow](#transaction-flow)
+  - [Investment Tracking](#investment-tracking)
+  - [Privacy Mode](#privacy-mode)
+- [Security](#security)
+- [Development](#development)
+  - [Prerequisites](#prerequisites)
+  - [Local Setup](#local-setup)
+  - [Environment Variables](#environment-variables)
+- [API Documentation](#api-documentation)
 
 ---
 
-## 🌐 Production Deployment
+## Overview
 
-### Step 1: Cloudflare Account Setup
+Finance Manager is a modern, privacy-focused personal finance application that helps you track your net worth, manage multiple accounts, monitor investments, and analyze spending patterns. Built on Cloudflare's edge network for global performance and security.
 
-1. Create a free [Cloudflare account](https://dash.cloudflare.com/sign-up)
-2. Add your domain to Cloudflare (or use `*.workers.dev` subdomain)
-3. Install Wrangler and login:
+## Quick Start
 
-```bash
-npm install -g wrangler
-wrangler login
-```
-
-### Step 2: Get Your Account ID
-
-```bash
-wrangler whoami
-```
-
-Copy the Account ID - you'll need it for configuration.
-
-### Step 3: Create Production Database
-
-```bash
-cd api
-
-# Create the D1 database
-npx wrangler d1 create finance-db
-
-# You'll see output like:
-# Created database 'finance-db' with ID: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
-```
-
-**Important:** Copy the database ID!
-
-### Step 4: Configure Your Deployment
-
-Edit these files with YOUR values:
-
-#### `api/wrangler.toml`
-```toml
-name = "finance-api"
-main = "src/index.ts"
-compatibility_date = "2024-12-01"
-
-# Set to true to get a workers.dev subdomain
-workers_dev = true
-
-[[d1_databases]]
-binding = "DB"
-database_name = "finance-db"
-database_id = "YOUR-DATABASE-ID-HERE"  # <-- Replace this!
-
-# Optional: Custom domain (requires domain in Cloudflare)
-# [[routes]]
-# pattern = "api.finance.yourdomain.com"
-# custom_domain = true
-```
-
-#### Configure Environment Variables
-
-**For local development**, edit `api/.dev.vars`:
-```env
-API_SECRET=your-secret-api-key
-ALLOWED_ORIGINS=http://localhost:5173,http://localhost:3000
-```
-
-**For production**, set secrets via Wrangler:
-```bash
-cd api
-
-# Set your API key
-echo "your-secret-api-key" | npx wrangler secret put API_SECRET
-
-# Set allowed CORS origins (comma-separated, supports wildcards like *.pages.dev)
-echo "https://finance.yourdomain.com,https://*.pages.dev" | npx wrangler secret put ALLOWED_ORIGINS
-```
-
-#### `client/.env.local` (create this file)
-```env
-VITE_API_KEY=your-secret-api-key
-VITE_API_DOMAIN=your-api-name.your-subdomain.workers.dev
-```
-
-**💡 Tip:** Generate a secure API key with:
-```bash
-openssl rand -base64 16
-```
-
-### Step 5: Apply Database Schema
+### Backend Deployment
 
 ```bash
 cd api
 npx wrangler d1 execute finance-db --remote --file=schema.sql
-```
-
-### Step 6: Deploy API
-
-```bash
-cd api
 npm run deploy
 ```
 
-✅ Note the URL (e.g., `finance-api.youraccount.workers.dev`)
-
-### Step 7: Deploy Frontend
+### Frontend Deployment
 
 ```bash
 cd client
-
-# Build the frontend
 npm run build
-
-# Deploy to Cloudflare Pages
-npx wrangler pages deploy dist --project-name=finance
+npx wrangler pages deploy dist --project-name=finance-client
 ```
 
-### Step 9: Set Up Cloudflare Access (Security)
+### Automated Deployment
 
-This restricts access to only YOUR devices!
-
-1. Go to [Cloudflare Zero Trust Dashboard](https://one.dash.cloudflare.com/)
-2. Navigate to **Access** → **Applications** → **Add an Application**
-3. Choose **Self-hosted**
-4. Configure:
-   - **Application name:** Finance App
-   - **Session Duration:** 24 hours (or your preference)
-   - **Application domain:** `finance.yourdomain.com` (your frontend)
-5. Add a policy:
-   - **Policy name:** Allow Me
-   - **Action:** Allow
-   - **Include:** Emails - `your@email.com`
-6. Save!
-
-Now only your email can access the app after authenticating.
-
----
-
-## 📁 Configuration Reference
-
-### All Configuration in One Place
-
-| File | Variable | Description |
-|------|----------|-------------|
-| `api/wrangler.toml` | `database_id` | Your D1 database ID |
-| `api/wrangler.toml` | `routes.pattern` | Custom API domain (optional) |
-| `api/src/index.ts` | `corsOrigins` | Allowed frontend domains |
-| `client/.env.local` | `VITE_API_KEY` | API authentication key |
-| `client/.env.local` | `VITE_API_DOMAIN` | API domain (without https://) |
-| Cloudflare Dashboard | `API_SECRET` | Workers secret (must match VITE_API_KEY) |
-
-### Environment Variables Summary
+Use the deployment script to deploy everything at once:
 
 ```bash
-# Frontend (.env.local)
-VITE_API_KEY=your-secret-api-key     # Must match API_SECRET
-VITE_API_DOMAIN=api.yourdomain.com   # Or: name.account.workers.dev
+./deploy.sh finance-client
+```
 
-# Backend (Cloudflare Secrets)
-API_SECRET=your-secret-api-key       # Set via: wrangler secret put API_SECRET
+This script handles:
+1. **Database schema updates** — Applies migrations to your D1 database
+2. **API deployment** — Deploys backend to Cloudflare Workers
+3. **Client build & deploy** — Builds React app and deploys to Cloudflare Pages
+
+---
+
+## Architecture
+
+### Tech Stack
+
+**Backend**
+- **Runtime**: Cloudflare Workers (serverless, edge-deployed)
+- **Framework**: Hono (lightweight web framework)
+- **Database**: Cloudflare D1 (SQLite at the edge)
+- **Market Data**: Yahoo Finance API v2
+
+**Frontend**
+- **Framework**: React 19 with TypeScript
+- **Build Tool**: Vite 7
+- **Styling**: Tailwind CSS 4 with custom design system
+- **Charts**: Recharts for data visualization
+- **Icons**: Lucide React
+- **State**: React Context API (Privacy, Settings)
+
+### Project Structure
+
+```
+finance/
+├── api/                      # Backend (Cloudflare Workers)
+│   ├── src/
+│   │   └── index.ts         # API routes & business logic
+│   ├── schema.sql           # Database schema
+│   ├── wrangler.toml        # Cloudflare Workers config
+│   └── package.json
+│
+├── client/                   # Frontend (React + Vite)
+│   ├── src/
+│   │   ├── components/      # React components
+│   │   │   ├── AccountList.tsx
+│   │   │   ├── TransactionList.tsx
+│   │   │   ├── Investments.tsx
+│   │   │   ├── InvestmentChart.tsx
+│   │   │   ├── Analytics.tsx
+│   │   │   ├── TransferForm.tsx
+│   │   │   ├── Settings.tsx
+│   │   │   └── ui/          # Reusable UI components
+│   │   ├── context/
+│   │   │   └── PrivacyContext.tsx
+│   │   ├── lib/
+│   │   │   └── utils.ts     # Helper functions
+│   │   ├── App.tsx          # Main application
+│   │   ├── config.ts        # API configuration
+│   │   └── main.tsx         # Entry point
+│   └── package.json
+│
+├── deploy.sh                 # Automated deployment script
+└── package.json             # Workspace root
 ```
 
 ---
 
-## 🔒 Security Model
+## Core Features
 
-This app uses **3 layers of security**:
+✨ **Multi-Account Management**
+- Cash accounts (checking, savings, wallet)
+- Investment accounts (stocks, crypto, manual assets)
+- Multi-currency support with real-time conversion
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    LAYER 1: Cloudflare Access               │
-│         Only authenticated users can reach the frontend     │
-│                  (Email verification via OTP)               │
-└─────────────────────────────────────────────────────────────┘
-                              ↓
-┌─────────────────────────────────────────────────────────────┐
-│                      LAYER 2: CORS                          │
-│     API only accepts requests from your frontend domain     │
-│          (Blocks requests from other websites)              │
-└─────────────────────────────────────────────────────────────┘
-                              ↓
-┌─────────────────────────────────────────────────────────────┐
-│                    LAYER 3: API Key                         │
-│    Every request must include X-API-Key header              │
-│      (Embedded in frontend, verified by Workers)            │
-└─────────────────────────────────────────────────────────────┘
-```
+📊 **Transaction Tracking**
+- Categorized income & expenses
+- Recurring transactions
+- Linked transfers between accounts
+- Custom categories with emoji icons
 
-**Is it hackable?**
-- Direct API access: ❌ Blocked (requires API key)
-- Browser from other sites: ❌ Blocked (CORS)
-- Someone finds your frontend: ❌ Blocked (Cloudflare Access)
-- Your authenticated session: ✅ Works!
+📈 **Investment Portfolio**
+- Real-time stock/crypto prices via Yahoo Finance
+- Portfolio value tracking
+- Transaction history (buy/sell)
+- Performance charts and analytics
+
+🔒 **Privacy Mode**
+- Toggle to hide sensitive financial data
+- Persistent user preference (cookie-based)
+- Quick eye icon toggle in header
+
+📉 **Analytics Dashboard**
+- Net worth overview
+- Income vs. expenses
+- Category breakdown charts
+- Monthly trends and patterns
+
+🌍 **Global Deployment**
+- Edge-deployed on Cloudflare network
+- Sub-50ms response times worldwide
+- Automatic HTTPS and DDoS protection
 
 ---
 
-## 🔄 Updating the App
+## How It Works
 
-### Pull Latest Changes
+### Account System
+
+The application supports two types of accounts:
+
+1. **Cash Accounts** — Traditional bank accounts, wallets
+   - Direct balance management
+   - Currency-specific
+
+2. **Investment Accounts** — Asset holdings
+   - **Stock/Crypto**: Auto-updates price from Yahoo Finance
+   - **Manual**: User-defined assets without market data
+   - Balance calculated from: `transactions × current_price`
+
+### Transaction Flow
+
+Every financial action is recorded as a transaction:
+
+```
+User Action → Transaction Record → Account Balance Update
+```
+
+**Example: Transfer $100 from Checking to Savings**
+1. Creates 2 linked transactions:
+   - Transaction A: Checking -$100 (expense)
+   - Transaction B: Savings +$100 (income)
+2. Both transactions share a `linked_transaction_id`
+3. Account balances update atomically
+
+**Investment Transactions** are tracked via regular transactions with a `price` field:
+- Buy: Negative amount, increases holdings
+- Sell: Positive amount, decreases holdings
+
+### Investment Tracking
+
+Investment accounts use a **transaction-based** approach:
+
+1. User buys 10 shares of AAPL at $150/share
+2. System creates transaction: `-$1500` amount, `price: 150`, `quantity: 10`
+3. Current balance = `SUM(transactions.amount / price) × current_market_price`
+
+**Auto-refresh** runs on:
+- Page load
+- Manual refresh button
+- Every 5 minutes (in dashboard view)
+
+### Privacy Mode
+
+Privacy mode uses a **React Context** to globally mask sensitive data:
+
+```tsx
+// When enabled, transforms:
+"$12,345.67" → "••••••"
+"150 shares" → "•••"
+```
+
+- Preference saved in **localStorage + cookie**
+- Survives page refresh
+- Applies to: balances, amounts, quantities, charts
+
+---
+
+## Security
+
+**Three-Layer Security Model:**
+
+1. **Cloudflare Access** (Frontend)
+   - Email-based authentication
+   - Only authorized users can view the app
+   - 24-hour session duration
+
+2. **API Key Authentication** (Backend)
+   - Every API request requires `X-API-Key` header
+   - Key stored in environment variables
+   - Validates on every request
+
+3. **CORS Protection** (Backend)
+   - Origin whitelist validation
+   - Rejects unauthorized domains
+   - Configurable via `ALLOWED_ORIGINS` env var
+
+**Environment Secrets:**
+- `API_SECRET` — Backend API key
+- `ALLOWED_ORIGINS` — Comma-separated allowed domains
+- `VITE_API_KEY` — Client-side API key (injected at build time)
+
+---
+
+## Development
+
+### Prerequisites
+
+- **Node.js** 18+ and npm
+- **Cloudflare account** with Workers + D1 access
+- **Wrangler CLI** (installed via npm)
+
+### Local Setup
+
+1. **Clone and install dependencies:**
+   ```bash
+   git clone <repo-url>
+   cd finance
+   npm install
+   ```
+
+2. **Configure the API:**
+   ```bash
+   cd api
+   cp wrangler.toml.example wrangler.toml
+   # Edit wrangler.toml:
+   # - Set database_id (create D1 database first)
+   # - Configure API_SECRET and ALLOWED_ORIGINS
+   ```
+
+3. **Initialize database:**
+   ```bash
+   npx wrangler d1 execute finance-db --local --file=schema.sql
+   ```
+
+4. **Configure the client:**
+   ```bash
+   cd ../client
+   # Create .env.local file:
+   echo "VITE_API_KEY=your-api-key-here" > .env.local
+   echo "VITE_API_DOMAIN=localhost:8787" >> .env.local
+   ```
+
+5. **Run development servers:**
+   ```bash
+   cd ..
+   npm run dev
+   # API: http://localhost:8787
+   # Client: http://localhost:5173
+   ```
+
+### Environment Variables
+
+**API (wrangler.toml secrets):**
+```toml
+[vars]
+API_SECRET = "your-secret-key"
+ALLOWED_ORIGINS = "http://localhost:5173,https://finance.yourdomain.com"
+```
+
+**Client (.env.local):**
 ```bash
-git pull origin main
+VITE_API_KEY=your-secret-key
+VITE_API_DOMAIN=localhost:8787  # or api.yourdomain.com for prod
 ```
 
-### Redeploy API
+---
+
+## API Documentation
+
+**Base URL**: `https://api.finance.yourdomain.com`
+
+**Authentication**: Include `X-API-Key` header in all requests.
+
+### Endpoints
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/` | Health check |
+| `GET` | `/version` | API version |
+| `GET` | `/accounts` | List all accounts |
+| `POST` | `/accounts` | Create account |
+| `PUT` | `/accounts/:id` | Update account |
+| `DELETE` | `/accounts/:id` | Delete account |
+| `GET` | `/transactions` | List transactions |
+| `POST` | `/transactions` | Create transaction |
+| `DELETE` | `/transactions/:id` | Delete transaction |
+| `GET` | `/categories` | List categories |
+| `POST` | `/categories` | Create category |
+| `GET` | `/dashboard/net-worth` | Calculate net worth |
+| `GET` | `/market/quote/:symbol` | Get stock/crypto price |
+| `POST` | `/market/refresh-investments` | Refresh all investment prices |
+
+**Example Request:**
 ```bash
-cd api
-npm run deploy
-```
-
-### Redeploy Frontend
-```bash
-cd client
-npm run build
-npx wrangler pages deploy dist --project-name=finance
-
-if not form main hten use:
-
-npx wrangler pages deploy dist --project-name=finance --branch=main
+curl -H "X-API-Key: your-key" \
+     https://api.finance.yourdomain.com/accounts
 ```
 
 ---
 
-## 🆘 Troubleshooting
-
-### "401 Unauthorized" errors
-- Check that `VITE_API_KEY` in frontend matches `API_SECRET` in Workers
-- Verify the secret is set: `wrangler secret list`
-
-### CORS errors
-- Ensure your frontend domain is in the `corsOrigins` array in `api/src/index.ts`
-- Redeploy the API after changing CORS settings
-
-### "Database not found"
-- Check `database_id` in `wrangler.toml` matches your D1 database
-- Verify database exists: `wrangler d1 list`
-
-### Can't access the app
-- Check Cloudflare Access policy includes your email
-- Try incognito mode to force re-authentication
-
----
-
-## 💰 Cost
-
-**Everything runs on Cloudflare's free tier:**
-
-| Service | Free Tier Limit | Typical Usage |
-|---------|-----------------|---------------|
-| Workers | 100,000 requests/day | < 1,000 |
-| D1 Database | 5M rows read/day | < 10,000 |
-| Pages | Unlimited sites | 1 site |
-| Access | 50 users | 1 user |
-
-**Total cost: $0/month** 🎉
-
----
-
-## 📄 License
-
-MIT License - feel free to fork and customize!
-
----
-
-## 🤝 Contributing
-
-1. Fork the repo
-2. Create a feature branch
-3. Make your changes
-4. Submit a PR
-
----
-
-Made with ❤️ using Cloudflare Workers, React, and Hono
+**Version**: 0.8.5 (Client) | 1.0.1 (API)  
+**License**: MIT  
+**Maintained by**: apptrackit
