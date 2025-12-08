@@ -70,6 +70,7 @@ function App() {
   const [investmentError, setInvestmentError] = useState<string | null>(null)
   const [accounts, setAccounts] = useState<Account[]>([])
   const [transactions, setTransactions] = useState<Transaction[]>([])
+  const [transactionsLoading, setTransactionsLoading] = useState<boolean>(true)
   const [categories, setCategories] = useState<Category[]>([])
   const [view, setView] = useState<View>(() => {
     // Restore last view from localStorage if available
@@ -89,6 +90,7 @@ function App() {
   }, [])
 
   const fetchData = async () => {
+    setTransactionsLoading(true)
     const currency = getMasterCurrency()
     
     apiFetch(`${API_BASE_URL}/dashboard/net-worth?currency=${currency}`)
@@ -143,6 +145,7 @@ function App() {
       .then(res => res.json())
       .then(data => setCategories(data))
       .catch(err => console.error(err))
+      .finally(() => setTransactionsLoading(false))
   }
 
   useEffect(() => {
@@ -480,10 +483,16 @@ function App() {
                   </div>
                 </div>
                 <div className="text-xl sm:text-3xl font-bold tracking-tight text-success">
-                  <span className="text-success/70 text-base sm:text-xl">+</span>
-                  <span className={privacyMode === 'hidden' ? 'select-none' : ''}>
-                    {privacyMode === 'hidden' ? '••••••' : totalIncome.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})}
-                  </span> <span className="text-sm sm:text-base">{masterCurrency}</span>
+                  {transactionsLoading ? (
+                    <div className="h-7 sm:h-9 w-32 bg-muted animate-pulse rounded" />
+                  ) : (
+                    <>
+                      <span className="text-success/70 text-base sm:text-xl">+</span>
+                      <span className={privacyMode === 'hidden' ? 'select-none' : ''}>
+                        {privacyMode === 'hidden' ? '••••••' : totalIncome.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})}
+                      </span> <span className="text-sm sm:text-base">{masterCurrency}</span>
+                    </>
+                  )}
                 </div>
                 <p className="text-[10px] sm:text-xs text-muted-foreground mt-1 sm:mt-2">This period</p>
               </div>
@@ -497,10 +506,16 @@ function App() {
                   </div>
                 </div>
                 <div className="text-xl sm:text-3xl font-bold tracking-tight text-destructive">
-                  <span className="text-destructive/70 text-base sm:text-xl">-</span>
-                  <span className={privacyMode === 'hidden' ? 'select-none' : ''}>
-                    {privacyMode === 'hidden' ? '••••••' : totalExpenses.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})}
-                  </span> <span className="text-sm sm:text-base">{masterCurrency}</span>
+                  {transactionsLoading ? (
+                    <div className="h-7 sm:h-9 w-32 bg-muted animate-pulse rounded" />
+                  ) : (
+                    <>
+                      <span className="text-destructive/70 text-base sm:text-xl">-</span>
+                      <span className={privacyMode === 'hidden' ? 'select-none' : ''}>
+                        {privacyMode === 'hidden' ? '••••••' : totalExpenses.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})}
+                      </span> <span className="text-sm sm:text-base">{masterCurrency}</span>
+                    </>
+                  )}
                 </div>
                 <p className="text-[10px] sm:text-xs text-muted-foreground mt-1 sm:mt-2">This period</p>
               </div>
