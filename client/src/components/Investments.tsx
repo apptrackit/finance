@@ -237,7 +237,7 @@ export function Investments() {
             {stats.totalGainLoss >= 0 ? <TrendingUp className="h-5 w-5 text-green-600" /> : <TrendingDown className="h-5 w-5 text-red-600" />}
           </div>
           <div className={`text-4xl font-bold ${stats.totalGainLoss >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'} ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
-            {privacyMode === 'hidden' ? '••••••' : `${stats.totalGainLoss >= 0 ? '+' : ''}$${Math.abs(stats.totalGainLoss).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+            {privacyMode === 'hidden' ? '••••••' : `${stats.totalGainLoss >= 0 ? '+' : '-'}$${Math.abs(stats.totalGainLoss).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
           </div>
           <div className={`text-sm font-medium mt-2 ${stats.totalGainLoss >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'} ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
             {privacyMode === 'hidden' ? '••••' : `${stats.totalGainLossPercent >= 0 ? '+' : ''}${stats.totalGainLossPercent.toFixed(2)}%`}
