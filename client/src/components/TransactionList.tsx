@@ -8,6 +8,7 @@ import { Plus, X, ArrowDownLeft, ArrowUpRight, Receipt, RefreshCw, Pencil, Trash
 import { format } from 'date-fns'
 import { API_BASE_URL, apiFetch } from '../config'
 import { usePrivacy } from '../context/PrivacyContext'
+import { useAlert } from '../context/AlertContext'
 
 type Transaction = {
   id: string
@@ -78,6 +79,7 @@ export function TransactionList({
   const [skipAutoCalc, setSkipAutoCalc] = useState(false)
   const [activeTxId, setActiveTxId] = useState<string | null>(null)
   
+  const { confirm } = useAlert()
   const { privacyMode } = usePrivacy()
 
   useEffect(() => {
@@ -502,7 +504,15 @@ export function TransactionList({
   }
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Delete this transaction?')) return
+    const confirmed = await confirm({
+      title: 'Delete Transaction',
+      message: 'Delete this transaction? This action cannot be undone.',
+      confirmText: 'Delete',
+      cancelText: 'Cancel'
+    })
+    
+    if (!confirmed) return
+    
     try {
       await apiFetch(`${API_BASE_URL}/transactions/${id}`, { method: 'DELETE' })
       onTransactionAdded()

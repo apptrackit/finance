@@ -5,6 +5,7 @@ import { Label } from './ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card'
 import { Select } from './ui/select'
 import { API_BASE_URL, apiFetch } from '../config'
+import { useAlert } from '../context/AlertContext'
 
 interface Account {
   id: string
@@ -22,6 +23,7 @@ interface TransferFormProps {
 }
 
 export default function TransferForm({ accounts, onTransferComplete }: TransferFormProps) {
+  const { showAlert } = useAlert()
   const [fromAccountId, setFromAccountId] = useState('')
   const [toAccountId, setToAccountId] = useState('')
   const [amountFrom, setAmountFrom] = useState('')
@@ -159,7 +161,11 @@ export default function TransferForm({ accounts, onTransferComplete }: TransferF
     e.preventDefault()
     
     if (!fromAccountId || !toAccountId || !amountFrom || !amountTo) {
-      alert('Please fill in all required fields')
+      showAlert({
+        type: 'warning',
+        title: 'Missing Information',
+        message: 'Please fill in all required fields'
+      })
       return
     }
 
@@ -197,10 +203,20 @@ export default function TransferForm({ accounts, onTransferComplete }: TransferF
       setExchangeRate(null)
       setSuggestedRate(null)
 
+      showAlert({
+        type: 'success',
+        title: 'Transfer Complete',
+        message: 'Your transfer has been processed successfully'
+      })
+
       onTransferComplete()
     } catch (error) {
       console.error('Transfer error:', error)
-      alert(error instanceof Error ? error.message : 'Failed to create transfer')
+      showAlert({
+        type: 'error',
+        title: 'Transfer Failed',
+        message: error instanceof Error ? error.message : 'Failed to create transfer'
+      })
     } finally {
       setIsSubmitting(false)
     }

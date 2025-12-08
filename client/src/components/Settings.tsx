@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/
 import { Settings as SettingsIcon, Save, Download, Plus, Trash2, Tag, Pencil, Check, X, Eye, EyeOff } from 'lucide-react'
 import { API_BASE_URL, apiFetch } from '../config'
 import { usePrivacy } from '../context/PrivacyContext'
+import { useAlert } from '../context/AlertContext'
 
 const CURRENCIES = [
   { code: 'HUF', name: 'Hungarian Forint', symbol: 'Ft' },
@@ -116,6 +117,7 @@ export default function Settings() {
   const [isExporting, setIsExporting] = useState(false)
   
   const { defaultPrivacyMode, setDefaultPrivacyMode } = usePrivacy()
+  const { showAlert, confirm } = useAlert()
   
   // Category management state
   const [categories, setCategories] = useState<Category[]>([])
@@ -188,7 +190,11 @@ export default function Settings() {
   
   const handleAddCategory = async () => {
     if (!newCategoryName.trim()) {
-      alert('Please enter a category name')
+      showAlert({
+        type: 'warning',
+        title: 'Missing Information',
+        message: 'Please enter a category name'
+      })
       return
     }
     
@@ -216,16 +222,33 @@ export default function Settings() {
       setNewCategoryName('')
       setNewCategoryIcon('📌')
       setNewCategoryType('expense')
+      
+      showAlert({
+        type: 'success',
+        title: 'Category Added',
+        message: `"${newCategory.name}" has been created successfully`
+      })
     } catch (error) {
       console.error('Failed to add category:', error)
-      alert(error instanceof Error ? error.message : 'Failed to add category')
+      showAlert({
+        type: 'error',
+        title: 'Failed to Add Category',
+        message: error instanceof Error ? error.message : 'Failed to add category'
+      })
     } finally {
       setIsAddingCategory(false)
     }
   }
   
   const handleDeleteCategory = async (id: string, name: string) => {
-    if (!confirm(`Are you sure you want to delete "${name}"?`)) {
+    const confirmed = await confirm({
+      title: 'Delete Category',
+      message: `Are you sure you want to delete "${name}"? This action cannot be undone.`,
+      confirmText: 'Delete',
+      cancelText: 'Cancel'
+    })
+    
+    if (!confirmed) {
       return
     }
     
@@ -240,9 +263,19 @@ export default function Settings() {
       }
       
       setCategories(categories.filter(c => c.id !== id))
+      
+      showAlert({
+        type: 'success',
+        title: 'Category Deleted',
+        message: `"${name}" has been removed`
+      })
     } catch (error) {
       console.error('Failed to delete category:', error)
-      alert(error instanceof Error ? error.message : 'Failed to delete category')
+      showAlert({
+        type: 'error',
+        title: 'Failed to Delete Category',
+        message: error instanceof Error ? error.message : 'Failed to delete category'
+      })
     }
   }
   
@@ -262,7 +295,11 @@ export default function Settings() {
   
   const handleUpdateCategory = async (id: string) => {
     if (!editCategoryName.trim()) {
-      alert('Please enter a category name')
+      showAlert({
+        type: 'warning',
+        title: 'Missing Information',
+        message: 'Please enter a category name'
+      })
       return
     }
     
@@ -288,9 +325,19 @@ export default function Settings() {
       
       // Reset edit state
       handleCancelEdit()
+      
+      showAlert({
+        type: 'success',
+        title: 'Category Updated',
+        message: `"${updatedCategory.name}" has been updated successfully`
+      })
     } catch (error) {
       console.error('Failed to update category:', error)
-      alert(error instanceof Error ? error.message : 'Failed to update category')
+      showAlert({
+        type: 'error',
+        title: 'Failed to Update Category',
+        message: error instanceof Error ? error.message : 'Failed to update category'
+      })
     } finally {
       setIsUpdatingCategory(false)
     }
@@ -372,7 +419,11 @@ export default function Settings() {
       URL.revokeObjectURL(url)
     } catch (error) {
       console.error('Failed to export CSV:', error)
-      alert('Failed to export data. Please try again.')
+      showAlert({
+        type: 'error',
+        title: 'Export Failed',
+        message: 'Failed to export data. Please try again.'
+      })
     } finally {
       setIsExporting(false)
     }
@@ -419,7 +470,11 @@ export default function Settings() {
       URL.revokeObjectURL(url)
     } catch (error) {
       console.error('Failed to export JSON:', error)
-      alert('Failed to export data. Please try again.')
+      showAlert({
+        type: 'error',
+        title: 'Export Failed',
+        message: 'Failed to export data. Please try again.'
+      })
     } finally {
       setIsExporting(false)
     }

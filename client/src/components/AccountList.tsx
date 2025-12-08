@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from './ui/card'
 import { Plus, X, Wallet, TrendingUp, Building, Pencil, Trash2, Check, Search } from 'lucide-react'
 import { API_BASE_URL, apiFetch } from '../config'
 import { usePrivacy } from '../context/PrivacyContext'
+import { useAlert } from '../context/AlertContext'
 
 type Account = {
   id: string
@@ -36,6 +37,7 @@ const currencySymbols: Record<string, string> = {
 }
 
 export function AccountList({ accounts, onAccountAdded }: { accounts: Account[], onAccountAdded: () => void }) {
+  const { confirm } = useAlert()
   const [isAdding, setIsAdding] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [formData, setFormData] = useState({
@@ -171,7 +173,15 @@ export function AccountList({ accounts, onAccountAdded }: { accounts: Account[],
   }
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Delete this account and all its transactions?')) return
+    const confirmed = await confirm({
+      title: 'Delete Account',
+      message: 'Delete this account and all its transactions? This action cannot be undone.',
+      confirmText: 'Delete',
+      cancelText: 'Cancel'
+    })
+    
+    if (!confirmed) return
+    
     try {
       await apiFetch(`${API_BASE_URL}/accounts/${id}`, { method: 'DELETE' })
       onAccountAdded()
