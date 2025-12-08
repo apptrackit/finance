@@ -9,7 +9,7 @@ import Settings, { getMasterCurrency } from './components/Settings'
 import { usePrivacy } from './context/PrivacyContext'
 
 
-const APP_VERSION = '0.8.5'
+const APP_VERSION = '0.8.6'
 
 
 type Account = {
@@ -69,10 +69,18 @@ function App() {
   const [accounts, setAccounts] = useState<Account[]>([])
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [categories, setCategories] = useState<Category[]>([])
-  const [view, setView] = useState<View>('dashboard')
+  const [view, setView] = useState<View>(() => {
+    // Restore last view from localStorage if available
+    const lastView = localStorage.getItem('finance_last_view') as View | null
+    if (lastView) {
+      localStorage.removeItem('finance_last_view') // Clear it after reading
+      return lastView
+    }
+    return 'dashboard'
+  })
   const [masterCurrency, setMasterCurrency] = useState('HUF')
   const [apiVersion, setApiVersion] = useState<string | null>(null)
-  const { privacyMode, togglePrivacyMode } = usePrivacy()
+  const { privacyMode, togglePrivacyMode, shouldHideInvestment } = usePrivacy()
 
   useEffect(() => {
     setMasterCurrency(getMasterCurrency())
@@ -278,6 +286,11 @@ function App() {
   
   // Calculate cash balance (accounts without investments)
   const cashBalance = netWorth !== null ? netWorth : 0
+  const totalNetWorth = netWorth !== null ? netWorth + investmentValue : null
+  
+  // Only show cash card separately if there are investment accounts
+  const hasInvestmentAccounts = accounts.some(a => a.type === 'investment')
+  const showSeparateCashCard = hasInvestmentAccounts
 
   return (
     <div className="min-h-screen bg-background">
@@ -373,7 +386,7 @@ function App() {
         <main className="max-w-7xl mx-auto px-4 sm:px-6 py-4 sm:py-8">
           {view === 'dashboard' && (
             /* Stats Grid - Only on Dashboard */
-            <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 mb-4 sm:mb-8">
+            <div className={`grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2 ${showSeparateCashCard ? 'lg:grid-cols-4' : 'lg:grid-cols-3'} mb-4 sm:mb-8`}>
               {/* Net Worth Card */}
               <div className="group relative overflow-hidden rounded-2xl border border-border/50 bg-gradient-to-br from-card to-card/80 p-4 sm:p-6 shadow-xl">
                 <div className="absolute top-0 right-0 w-32 h-32 bg-primary/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" />
@@ -385,12 +398,12 @@ function App() {
                     </div>
                   </div>
                   <div className="text-2xl sm:text-4xl font-bold tracking-tight text-foreground">
-                    {netWorth !== null ? (
+                    {totalNetWorth !== null ? (
                       <>
-                        <span className={privacyMode === 'hidden' ? 'select-none' : ''}>
-                          {privacyMode === 'hidden' 
+                        <span className={privacyMode === 'hidden' || shouldHideInvestment() ? 'select-none' : ''}>
+                          {privacyMode === 'hidden' || shouldHideInvestment()
                             ? '••••••' 
-                            : (netWorth + investmentValue).toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})}
+                            : totalNetWorth.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})}
                         </span>
                         <span className="text-muted-foreground text-lg sm:text-2xl ml-1">{masterCurrency}</span>
                       </>
@@ -404,32 +417,34 @@ function App() {
                 </div>
               </div>
 
-              {/* Cash Balance Card */}
-              <div className="group relative overflow-hidden rounded-2xl border border-border/50 bg-card p-4 sm:p-6 shadow-xl hover:border-emerald-500/30 transition-colors">
-                <div className="flex items-center justify-between mb-2 sm:mb-4">
-                  <span className="text-xs sm:text-sm font-medium text-muted-foreground">Cash</span>
-                  <div className="h-7 w-7 sm:h-8 sm:w-8 rounded-lg bg-emerald-500/10 flex items-center justify-center">
-                    <Wallet className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-emerald-500" />
+              {/* Cash Balance Card - Only show if there are investments */}
+              {showSeparateCashCard && (
+                <div className="group relative overflow-hidden rounded-2xl border border-border/50 bg-card p-4 sm:p-6 shadow-xl hover:border-emerald-500/30 transition-colors">
+                  <div className="flex items-center justify-between mb-2 sm:mb-4">
+                    <span className="text-xs sm:text-sm font-medium text-muted-foreground">Cash</span>
+                    <div className="h-7 w-7 sm:h-8 sm:w-8 rounded-lg bg-emerald-500/10 flex items-center justify-center">
+                      <Wallet className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-emerald-500" />
+                    </div>
                   </div>
+                  <div className="text-2xl sm:text-4xl font-bold tracking-tight text-foreground">
+                    {netWorth !== null ? (
+                      <>
+                        <span className={privacyMode === 'hidden' ? 'select-none' : ''}>
+                          {privacyMode === 'hidden' 
+                            ? '••••••' 
+                            : cashBalance.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})}
+                        </span>
+                        <span className="text-muted-foreground text-lg sm:text-2xl ml-1">{masterCurrency}</span>
+                      </>
+                    ) : (
+                      <div className="h-8 sm:h-10 w-32 bg-muted animate-pulse rounded" />
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-2">
+                    {accounts.filter(a => a.type === 'cash').length} account{accounts.filter(a => a.type === 'cash').length !== 1 ? 's' : ''}
+                  </p>
                 </div>
-                <div className="text-2xl sm:text-4xl font-bold tracking-tight text-foreground">
-                  {netWorth !== null ? (
-                    <>
-                      <span className={privacyMode === 'hidden' ? 'select-none' : ''}>
-                        {privacyMode === 'hidden' 
-                          ? '••••••' 
-                          : cashBalance.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})}
-                      </span>
-                      <span className="text-muted-foreground text-lg sm:text-2xl ml-1">{masterCurrency}</span>
-                    </>
-                  ) : (
-                    <div className="h-8 sm:h-10 w-32 bg-muted animate-pulse rounded" />
-                  )}
-                </div>
-                <p className="text-xs text-muted-foreground mt-2">
-                  {accounts.filter(a => a.type === 'cash').length} account{accounts.filter(a => a.type === 'cash').length !== 1 ? 's' : ''}
-                </p>
-              </div>
+              )}
 
               {/* Income Card */}
               <div className="group relative overflow-hidden rounded-2xl border border-border/50 bg-card p-4 sm:p-6 shadow-xl hover:border-success/30 transition-colors">

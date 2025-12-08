@@ -3,11 +3,14 @@ import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.tsx'
 import { PrivacyProvider } from './context/PrivacyContext.tsx'
+import { AlertProvider } from './context/AlertContext.tsx'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <PrivacyProvider>
-      <App />
+      <AlertProvider>
+        <App />
+      </AlertProvider>
     </PrivacyProvider>
   </StrictMode>,
 )

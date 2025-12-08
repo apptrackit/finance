@@ -21,16 +21,23 @@ const getCookie = (name: string): string | null => {
 
 // Storage keys
 const PRIVACY_DEFAULT_KEY = 'finance_privacy_default'
+const PRIVACY_INVESTMENTS_KEY = 'finance_privacy_investments'
 
 type PrivacyMode = 'visible' | 'hidden'
 
 interface PrivacyContextType {
   privacyMode: PrivacyMode
+  investmentPrivacyMode: PrivacyMode
   togglePrivacyMode: () => void
+  toggleInvestmentPrivacy: () => void
   setPrivacyMode: (mode: PrivacyMode) => void
+  setInvestmentPrivacyMode: (mode: PrivacyMode) => void
   defaultPrivacyMode: PrivacyMode
+  defaultInvestmentPrivacyMode: PrivacyMode
   setDefaultPrivacyMode: (mode: PrivacyMode) => void
+  setDefaultInvestmentPrivacyMode: (mode: PrivacyMode) => void
   maskValue: (value: string | number, type?: 'currency' | 'text') => string
+  shouldHideInvestment: () => boolean
 }
 
 const PrivacyContext = createContext<PrivacyContextType | undefined>(undefined)
@@ -42,9 +49,20 @@ export function PrivacyProvider({ children }: { children: ReactNode }) {
     return (savedDefault as PrivacyMode) || 'visible'
   })
 
+  const [defaultInvestmentPrivacyMode, setDefaultInvestmentPrivacyModeState] = useState<PrivacyMode>(() => {
+    const savedDefault = getCookie(PRIVACY_INVESTMENTS_KEY) || localStorage.getItem(PRIVACY_INVESTMENTS_KEY)
+    return (savedDefault as PrivacyMode) || 'visible'
+  })
+
   const [privacyMode, setPrivacyModeState] = useState<PrivacyMode>(() => {
     // On initial load, use the default privacy mode setting
     const savedDefault = getCookie(PRIVACY_DEFAULT_KEY) || localStorage.getItem(PRIVACY_DEFAULT_KEY)
+    return (savedDefault as PrivacyMode) || 'visible'
+  })
+
+  const [investmentPrivacyMode, setInvestmentPrivacyModeState] = useState<PrivacyMode>(() => {
+    // On initial load, use the default investment privacy mode setting
+    const savedDefault = getCookie(PRIVACY_INVESTMENTS_KEY) || localStorage.getItem(PRIVACY_INVESTMENTS_KEY)
     return (savedDefault as PrivacyMode) || 'visible'
   })
 
@@ -55,13 +73,32 @@ export function PrivacyProvider({ children }: { children: ReactNode }) {
     localStorage.setItem(PRIVACY_DEFAULT_KEY, mode)
   }
 
+  const setDefaultInvestmentPrivacyMode = (mode: PrivacyMode) => {
+    setDefaultInvestmentPrivacyModeState(mode)
+    setCookie(PRIVACY_INVESTMENTS_KEY, mode)
+    localStorage.setItem(PRIVACY_INVESTMENTS_KEY, mode)
+  }
+
   // Toggle current session's privacy mode
   const togglePrivacyMode = () => {
     setPrivacyModeState(prev => prev === 'visible' ? 'hidden' : 'visible')
   }
 
+  const toggleInvestmentPrivacy = () => {
+    setInvestmentPrivacyModeState(prev => prev === 'visible' ? 'hidden' : 'visible')
+  }
+
   const setPrivacyMode = (mode: PrivacyMode) => {
     setPrivacyModeState(mode)
+  }
+
+  const setInvestmentPrivacyMode = (mode: PrivacyMode) => {
+    setInvestmentPrivacyModeState(mode)
+  }
+
+  // Check if investments should be hidden (either all data is hidden OR investment-specific is hidden)
+  const shouldHideInvestment = () => {
+    return privacyMode === 'hidden' || investmentPrivacyMode === 'hidden'
   }
 
   // Mask sensitive values
@@ -86,11 +123,17 @@ export function PrivacyProvider({ children }: { children: ReactNode }) {
     <PrivacyContext.Provider 
       value={{ 
         privacyMode, 
+        investmentPrivacyMode,
         togglePrivacyMode, 
+        toggleInvestmentPrivacy,
         setPrivacyMode,
+        setInvestmentPrivacyMode,
         defaultPrivacyMode,
+        defaultInvestmentPrivacyMode,
         setDefaultPrivacyMode,
-        maskValue 
+        setDefaultInvestmentPrivacyMode,
+        maskValue,
+        shouldHideInvestment
       }}
     >
       {children}

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Button } from './ui/button'
 import { Label } from './ui/label'
 import { Select } from './ui/select'
@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/
 import { Settings as SettingsIcon, Save, Download, Plus, Trash2, Tag, Pencil, Check, X, Eye, EyeOff } from 'lucide-react'
 import { API_BASE_URL, apiFetch } from '../config'
 import { usePrivacy } from '../context/PrivacyContext'
+import { useAlert } from '../context/AlertContext'
 
 const CURRENCIES = [
   { code: 'HUF', name: 'Hungarian Forint', symbol: 'Ft' },
@@ -17,6 +18,22 @@ const CURRENCIES = [
   { code: 'PLN', name: 'Polish Zloty', symbol: 'zł' },
   { code: 'CZK', name: 'Czech Koruna', symbol: 'Kč' },
   { code: 'RON', name: 'Romanian Leu', symbol: 'lei' },
+]
+
+const EMOJI_OPTIONS = [
+  '💰', '💵', '💳', '💸', '🏦', '💼', '📊', '📈', '📉', '💹',
+  '🛒', '🍕', '🍔', '🍜', '🥗', '🍱', '☕', '🍺', '🥤', '🧃',
+  '🏠', '🏢', '🏪', '🏨', '🏥', '🏫', '⛽', '🚗', '🚕', '🚙',
+  '✈️', '🚆', '🚌', '🚲', '🛴', '⚡', '💡', '🔌', '📱', '💻',
+  '🎮', '🎬', '🎵', '🎸', '🎨', '📚', '📖', '✏️', '📝', '📦',
+  '🎁', '🎉', '🎊', '🎈', '💐', '🌹', '🌺', '🌻', '🌷', '🌸',
+  '👕', '👔', '👗', '👠', '👟', '💄', '💅', '💆', '💇', '🧴',
+  '🏋️', '⚽', '🏀', '🎾', '🏐', '🏓', '🏸', '🥊', '🎯', '🎱',
+  '🏥', '💊', '💉', '🩺', '🧬', '🔬', '🧪', '🧫', '🦷', '👓',
+  '🐶', '🐱', '🐭', '🐹', '🐰', '🦊', '🐻', '🐼', '🐨', '🐯',
+  '❤️', '💙', '💚', '💛', '🧡', '💜', '🖤', '🤍', '🤎', '💔',
+  '⭐', '✨', '🌟', '💫', '🔥', '💥', '🎆', '🎇', '🌈', '☀️',
+  '📌', '📍', '🔖', '🏷️', '🎫', '🎟️', '📮', '📬', '📭', '📪',
 ]
 
 const STORAGE_KEY = 'finance_master_currency'
@@ -47,12 +64,63 @@ type Category = {
   type: 'income' | 'expense'
 }
 
+// Emoji Picker Component
+function EmojiPicker({ 
+  onChange, 
+  onClose 
+}: { 
+  onChange: (emoji: string) => void
+  onClose: () => void
+}) {
+  const pickerRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (pickerRef.current && !pickerRef.current.contains(event.target as Node)) {
+        onClose()
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [onClose])
+
+  return (
+    <div 
+      ref={pickerRef}
+      className="absolute z-50 mt-1 p-3 bg-popover border rounded-lg shadow-lg w-64"
+      style={{ maxHeight: '300px', overflowY: 'auto' }}
+    >
+      <div className="grid grid-cols-8 gap-1">
+        {EMOJI_OPTIONS.map((emoji, index) => (
+          <button
+            key={index}
+            type="button"
+            onClick={() => {
+              onChange(emoji)
+              onClose()
+            }}
+            className="w-8 h-8 flex items-center justify-center text-xl hover:bg-accent rounded transition-colors"
+            title={emoji}
+          >
+            {emoji}
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 export default function Settings() {
   const [masterCurrency, setMasterCurrency] = useState('HUF')
   const [isSaving, setIsSaving] = useState(false)
   const [isExporting, setIsExporting] = useState(false)
   
-  const { defaultPrivacyMode, setDefaultPrivacyMode } = usePrivacy()
+  const { defaultPrivacyMode, setDefaultPrivacyMode, defaultInvestmentPrivacyMode, setDefaultInvestmentPrivacyMode } = usePrivacy()
+  const { showAlert, confirm } = useAlert()
+  
+  // Track if balances are hidden (either all or investments only)
+  const isHidingBalances = defaultPrivacyMode === 'hidden' || defaultInvestmentPrivacyMode === 'hidden'
   
   // Category management state
   const [categories, setCategories] = useState<Category[]>([])
@@ -68,6 +136,10 @@ export default function Settings() {
   const [editCategoryType, setEditCategoryType] = useState<'income' | 'expense'>('expense')
   const [editCategoryIcon, setEditCategoryIcon] = useState('📌')
   const [isUpdatingCategory, setIsUpdatingCategory] = useState(false)
+
+  // Emoji picker state
+  const [showNewEmojiPicker, setShowNewEmojiPicker] = useState(false)
+  const [showEditEmojiPicker, setShowEditEmojiPicker] = useState<string | null>(null)
 
   useEffect(() => {
     // Load saved currency from localStorage
@@ -121,7 +193,11 @@ export default function Settings() {
   
   const handleAddCategory = async () => {
     if (!newCategoryName.trim()) {
-      alert('Please enter a category name')
+      showAlert({
+        type: 'warning',
+        title: 'Missing Information',
+        message: 'Please enter a category name'
+      })
       return
     }
     
@@ -149,16 +225,33 @@ export default function Settings() {
       setNewCategoryName('')
       setNewCategoryIcon('📌')
       setNewCategoryType('expense')
+      
+      showAlert({
+        type: 'success',
+        title: 'Category Added',
+        message: `"${newCategory.name}" has been created successfully`
+      })
     } catch (error) {
       console.error('Failed to add category:', error)
-      alert(error instanceof Error ? error.message : 'Failed to add category')
+      showAlert({
+        type: 'error',
+        title: 'Failed to Add Category',
+        message: error instanceof Error ? error.message : 'Failed to add category'
+      })
     } finally {
       setIsAddingCategory(false)
     }
   }
   
   const handleDeleteCategory = async (id: string, name: string) => {
-    if (!confirm(`Are you sure you want to delete "${name}"?`)) {
+    const confirmed = await confirm({
+      title: 'Delete Category',
+      message: `Are you sure you want to delete "${name}"? This action cannot be undone.`,
+      confirmText: 'Delete',
+      cancelText: 'Cancel'
+    })
+    
+    if (!confirmed) {
       return
     }
     
@@ -173,9 +266,19 @@ export default function Settings() {
       }
       
       setCategories(categories.filter(c => c.id !== id))
+      
+      showAlert({
+        type: 'success',
+        title: 'Category Deleted',
+        message: `"${name}" has been removed`
+      })
     } catch (error) {
       console.error('Failed to delete category:', error)
-      alert(error instanceof Error ? error.message : 'Failed to delete category')
+      showAlert({
+        type: 'error',
+        title: 'Failed to Delete Category',
+        message: error instanceof Error ? error.message : 'Failed to delete category'
+      })
     }
   }
   
@@ -195,7 +298,11 @@ export default function Settings() {
   
   const handleUpdateCategory = async (id: string) => {
     if (!editCategoryName.trim()) {
-      alert('Please enter a category name')
+      showAlert({
+        type: 'warning',
+        title: 'Missing Information',
+        message: 'Please enter a category name'
+      })
       return
     }
     
@@ -221,9 +328,19 @@ export default function Settings() {
       
       // Reset edit state
       handleCancelEdit()
+      
+      showAlert({
+        type: 'success',
+        title: 'Category Updated',
+        message: `"${updatedCategory.name}" has been updated successfully`
+      })
     } catch (error) {
       console.error('Failed to update category:', error)
-      alert(error instanceof Error ? error.message : 'Failed to update category')
+      showAlert({
+        type: 'error',
+        title: 'Failed to Update Category',
+        message: error instanceof Error ? error.message : 'Failed to update category'
+      })
     } finally {
       setIsUpdatingCategory(false)
     }
@@ -305,7 +422,11 @@ export default function Settings() {
       URL.revokeObjectURL(url)
     } catch (error) {
       console.error('Failed to export CSV:', error)
-      alert('Failed to export data. Please try again.')
+      showAlert({
+        type: 'error',
+        title: 'Export Failed',
+        message: 'Failed to export data. Please try again.'
+      })
     } finally {
       setIsExporting(false)
     }
@@ -352,7 +473,11 @@ export default function Settings() {
       URL.revokeObjectURL(url)
     } catch (error) {
       console.error('Failed to export JSON:', error)
-      alert('Failed to export data. Please try again.')
+      showAlert({
+        type: 'error',
+        title: 'Export Failed',
+        message: 'Failed to export data. Please try again.'
+      })
     } finally {
       setIsExporting(false)
     }
@@ -380,36 +505,30 @@ export default function Settings() {
           <div className="space-y-4">
             <h3 className="text-sm font-medium">Add New Category</h3>
             <div className="grid grid-cols-[auto_1fr_auto_auto] gap-2 items-end">
-              <div className="space-y-2">
+              <div className="space-y-2 relative">
                 <Label htmlFor="category-icon">Icon</Label>
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    const input = e.currentTarget.querySelector('input')
-                    if (input) {
-                      input.focus()
-                      input.click()
-                    }
-                  }}
-                  className="w-16 h-10 rounded-md border border-input bg-background text-center text-2xl hover:bg-accent cursor-pointer flex items-center justify-center"
-                >
+                <div className="relative">
                   <Input
                     id="category-icon"
                     type="text"
-                    inputMode="none"
                     value={newCategoryIcon}
                     onChange={e => handleNewIconChange(e.target.value)}
-                    onFocus={e => {
-                      e.target.setAttribute('inputmode', 'text')
-                      // Trigger emoji picker on mobile
-                      if ('virtualKeyboard' in navigator) {
-                        (navigator as any).virtualKeyboard.show()
-                      }
-                    }}
-                    className="w-full h-full text-center text-2xl border-0 bg-transparent p-0 focus:ring-0 focus:outline-none cursor-pointer"
-                    style={{ caretColor: 'transparent' }}
+                    onClick={() => setShowNewEmojiPicker(!showNewEmojiPicker)}
+                    placeholder="📌"
+                    maxLength={4}
+                    className="w-16 h-10 text-center text-2xl p-0 cursor-pointer"
+                    title="Click to choose emoji"
                   />
-                </button>
+                  {showNewEmojiPicker && (
+                    <EmojiPicker
+                      onChange={(emoji) => {
+                        setNewCategoryIcon(emoji)
+                        setShowNewEmojiPicker(false)
+                      }}
+                      onClose={() => setShowNewEmojiPicker(false)}
+                    />
+                  )}
+                </div>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="category-name">Name</Label>
@@ -459,32 +578,27 @@ export default function Settings() {
                       key={category.id}
                       className="grid grid-cols-[auto_1fr_auto_auto_auto] gap-2 items-center p-3 rounded-lg border bg-accent"
                     >
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          const input = e.currentTarget.querySelector('input')
-                          if (input) {
-                            input.focus()
-                            input.click()
-                          }
-                        }}
-                        className="w-14 h-10 rounded-md border border-input bg-background text-center text-2xl hover:bg-accent cursor-pointer flex items-center justify-center"
-                      >
+                      <div className="relative">
                         <Input
                           type="text"
-                          inputMode="none"
                           value={editCategoryIcon}
                           onChange={e => handleEditIconChange(e.target.value)}
-                          onFocus={e => {
-                            e.target.setAttribute('inputmode', 'text')
-                            if ('virtualKeyboard' in navigator) {
-                              (navigator as any).virtualKeyboard.show()
-                            }
-                          }}
-                          className="w-full h-full text-center text-2xl border-0 bg-transparent p-0 focus:ring-0 focus:outline-none cursor-pointer"
-                          style={{ caretColor: 'transparent' }}
+                          onClick={() => setShowEditEmojiPicker(showEditEmojiPicker === category.id ? null : category.id)}
+                          placeholder="📌"
+                          maxLength={4}
+                          className="w-14 h-10 text-center text-2xl p-0 cursor-pointer"
+                          title="Click to choose emoji"
                         />
-                      </button>
+                        {showEditEmojiPicker === category.id && (
+                          <EmojiPicker
+                            onChange={(emoji) => {
+                              setEditCategoryIcon(emoji)
+                              setShowEditEmojiPicker(null)
+                            }}
+                            onClose={() => setShowEditEmojiPicker(null)}
+                          />
+                        )}
+                      </div>
                       <Input
                         type="text"
                         value={editCategoryName}
@@ -567,32 +681,27 @@ export default function Settings() {
                       key={category.id}
                       className="grid grid-cols-[auto_1fr_auto_auto_auto] gap-2 items-center p-3 rounded-lg border bg-accent"
                     >
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          const input = e.currentTarget.querySelector('input')
-                          if (input) {
-                            input.focus()
-                            input.click()
-                          }
-                        }}
-                        className="w-14 h-10 rounded-md border border-input bg-background text-center text-2xl hover:bg-accent cursor-pointer flex items-center justify-center"
-                      >
+                      <div className="relative">
                         <Input
                           type="text"
-                          inputMode="none"
                           value={editCategoryIcon}
                           onChange={e => handleEditIconChange(e.target.value)}
-                          onFocus={e => {
-                            e.target.setAttribute('inputmode', 'text')
-                            if ('virtualKeyboard' in navigator) {
-                              (navigator as any).virtualKeyboard.show()
-                            }
-                          }}
-                          className="w-full h-full text-center text-2xl border-0 bg-transparent p-0 focus:ring-0 focus:outline-none cursor-pointer"
-                          style={{ caretColor: 'transparent' }}
+                          onClick={() => setShowEditEmojiPicker(showEditEmojiPicker === category.id ? null : category.id)}
+                          placeholder="📌"
+                          maxLength={4}
+                          className="w-14 h-10 text-center text-2xl p-0 cursor-pointer"
+                          title="Click to choose emoji"
                         />
-                      </button>
+                        {showEditEmojiPicker === category.id && (
+                          <EmojiPicker
+                            onChange={(emoji) => {
+                              setEditCategoryIcon(emoji)
+                              setShowEditEmojiPicker(null)
+                            }}
+                            onClose={() => setShowEditEmojiPicker(null)}
+                          />
+                        )}
+                      </div>
                       <Input
                         type="text"
                         value={editCategoryName}
@@ -728,29 +837,81 @@ export default function Settings() {
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-4">
+            {/* Master toggle for hiding balances */}
             <div className="flex items-center justify-between p-4 rounded-lg border bg-secondary/20">
               <div className="space-y-1">
-                <div className="font-medium">Hide values on startup</div>
+                <div className="font-medium">Hide balances on startup</div>
                 <div className="text-sm text-muted-foreground">
-                  When enabled, all monetary values will be hidden (••••••) when you open the app.
+                  When enabled, monetary values will be hidden (••••••) when you open the app.
                   You can toggle visibility anytime using the eye icon in the header.
                 </div>
               </div>
               <button
-                onClick={() => setDefaultPrivacyMode(defaultPrivacyMode === 'hidden' ? 'visible' : 'hidden')}
+                onClick={() => {
+                  const newValue = !isHidingBalances
+                  if (!newValue) {
+                    // If turning off, disable both
+                    setDefaultPrivacyMode('visible')
+                    setDefaultInvestmentPrivacyMode('visible')
+                  } else {
+                    // If turning on, hide all by default (investments only = OFF)
+                    setDefaultPrivacyMode('hidden')
+                  }
+                  localStorage.setItem('finance_last_view', 'settings')
+                  window.location.reload()
+                }}
                 className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 ${
-                  defaultPrivacyMode === 'hidden' ? 'bg-primary' : 'bg-muted'
+                  isHidingBalances ? 'bg-primary' : 'bg-muted'
                 }`}
                 role="switch"
-                aria-checked={defaultPrivacyMode === 'hidden'}
+                aria-checked={isHidingBalances}
               >
                 <span
                   className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
-                    defaultPrivacyMode === 'hidden' ? 'translate-x-5' : 'translate-x-0'
+                    isHidingBalances ? 'translate-x-5' : 'translate-x-0'
                   }`}
                 />
               </button>
             </div>
+
+            {/* Conditional sub-option: investments only vs all */}
+            {isHidingBalances && (
+              <div className="flex items-center justify-between p-4 rounded-lg border bg-secondary/20 ml-6">
+                <div className="space-y-1">
+                  <div className="font-medium">Hide investments only</div>
+                  <div className="text-sm text-muted-foreground">
+                    Only hide investment-related values (stocks, crypto, net worth).
+                    When disabled, all balances will be hidden.
+                  </div>
+                </div>
+                <button
+                  onClick={() => {
+                    if (defaultInvestmentPrivacyMode === 'hidden') {
+                      // Switch to hide all
+                      setDefaultPrivacyMode('hidden')
+                      setDefaultInvestmentPrivacyMode('visible')
+                    } else {
+                      // Switch to hide investments only
+                      setDefaultPrivacyMode('visible')
+                      setDefaultInvestmentPrivacyMode('hidden')
+                    }
+                    localStorage.setItem('finance_last_view', 'settings')
+                    window.location.reload()
+                  }}
+                  className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 ${
+                    defaultInvestmentPrivacyMode === 'hidden' ? 'bg-primary' : 'bg-muted'
+                  }`}
+                  role="switch"
+                  aria-checked={defaultInvestmentPrivacyMode === 'hidden'}
+                >
+                  <span
+                    className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                      defaultInvestmentPrivacyMode === 'hidden' ? 'translate-x-5' : 'translate-x-0'
+                    }`}
+                  />
+                </button>
+              </div>
+            )}
             
             <div className="text-xs text-muted-foreground space-y-1">
               <p className="flex items-center gap-2">

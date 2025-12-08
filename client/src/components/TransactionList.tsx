@@ -8,6 +8,7 @@ import { Plus, X, ArrowDownLeft, ArrowUpRight, Receipt, RefreshCw, Pencil, Trash
 import { format } from 'date-fns'
 import { API_BASE_URL, apiFetch } from '../config'
 import { usePrivacy } from '../context/PrivacyContext'
+import { useAlert } from '../context/AlertContext'
 
 type Transaction = {
   id: string
@@ -78,7 +79,8 @@ export function TransactionList({
   const [skipAutoCalc, setSkipAutoCalc] = useState(false)
   const [activeTxId, setActiveTxId] = useState<string | null>(null)
   
-  const { privacyMode } = usePrivacy()
+  const { confirm } = useAlert()
+  const { privacyMode, shouldHideInvestment } = usePrivacy()
 
   useEffect(() => {
     apiFetch(`${API_BASE_URL}/categories`)
@@ -502,7 +504,15 @@ export function TransactionList({
   }
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Delete this transaction?')) return
+    const confirmed = await confirm({
+      title: 'Delete Transaction',
+      message: 'Delete this transaction? This action cannot be undone.',
+      confirmText: 'Delete',
+      cancelText: 'Cancel'
+    })
+    
+    if (!confirmed) return
+    
     try {
       await apiFetch(`${API_BASE_URL}/transactions/${id}`, { method: 'DELETE' })
       onTransactionAdded()
@@ -1010,27 +1020,33 @@ export function TransactionList({
                     </div>
                     <div className="flex flex-col items-end gap-0.5">
                       <div className={`font-bold text-sm ${isTransfer ? 'text-destructive' : (tx.amount >= 0 ? 'text-success' : 'text-destructive')} ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
-                        {privacyMode === 'hidden' ? (
-                          '••••••'
-                        ) : (
-                          <>
-                            {(() => {
-                              const account = accounts.find(a => a.id === tx.account_id)
-                              if (account?.type === 'investment' && tx.quantity !== undefined) {
-                                return <>{tx.quantity > 0 ? '+' : ''}{tx.quantity.toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 8})} {getAccountCurrency(tx.account_id)}</>
-                              }
-                              return <>{tx.amount >= 0 ? '+' : '-'}{Math.abs(tx.amount).toLocaleString('hu-HU', {minimumFractionDigits: 2, maximumFractionDigits: 2})} {getAccountCurrency(tx.account_id)}</>
-                            })()}
-                          </>
-                        )}
+                        {(() => {
+                          const account = accounts.find(a => a.id === tx.account_id)
+                          const isInvestmentTx = account?.type === 'investment'
+                          const shouldHide = privacyMode === 'hidden' || (isInvestmentTx && shouldHideInvestment())
+                          
+                          if (shouldHide) {
+                            return '••••••'
+                          }
+                          
+                          if (isInvestmentTx && tx.quantity !== undefined) {
+                            return <>{tx.quantity > 0 ? '+' : ''}{tx.quantity.toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 8})} {getAccountCurrency(tx.account_id)}</>
+                          }
+                          return <>{tx.amount >= 0 ? '+' : '-'}{Math.abs(tx.amount).toLocaleString('hu-HU', {minimumFractionDigits: 2, maximumFractionDigits: 2})} {getAccountCurrency(tx.account_id)}</>
+                        })()}
                       </div>
                       {isTransfer && related && (
                         <div className={`text-xs text-success font-medium ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
-                          {privacyMode === 'hidden' ? (
-                            '••••••'
-                          ) : (
-                            <>+{Math.abs(related.amount).toLocaleString('hu-HU', {minimumFractionDigits: 2, maximumFractionDigits: 2})} {getAccountCurrency(related.account_id)}</>
-                          )}
+                          {(() => {
+                            const relatedAccount = accounts.find(a => a.id === related.account_id)
+                            const isInvestmentTx = relatedAccount?.type === 'investment'
+                            const shouldHide = privacyMode === 'hidden' || (isInvestmentTx && shouldHideInvestment())
+                            
+                            if (shouldHide) {
+                              return '••••••'
+                            }
+                            return <>+{Math.abs(related.amount).toLocaleString('hu-HU', {minimumFractionDigits: 2, maximumFractionDigits: 2})} {getAccountCurrency(related.account_id)}</>
+                          })()}
                         </div>
                       )}
                       <div className={`flex gap-1 transition-opacity ${activeTxId === tx.id ? 'opacity-100' : 'opacity-0 md:group-hover:opacity-100'}`}>
