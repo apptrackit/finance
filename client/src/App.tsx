@@ -72,6 +72,7 @@ function App() {
   const [masterCurrency, setMasterCurrency] = useState('HUF')
   const [apiVersion, setApiVersion] = useState<string | null>(null)
   const [showNetWorth, setShowNetWorth] = useState(false)
+  const [investmentRefreshKey, setInvestmentRefreshKey] = useState(0)
   const { privacyMode, togglePrivacyMode, shouldHideInvestment } = usePrivacy()
 
   useEffect(() => {
@@ -80,6 +81,7 @@ function App() {
 
   const fetchData = async () => {
     setTransactionsLoading(true)
+    setInvestmentRefreshKey(prev => prev + 1) // Trigger Investments component refresh
     const currency = getMasterCurrency()
     
     apiFetch(`${API_BASE_URL}/dashboard/net-worth?currency=${currency}`)
@@ -556,7 +558,7 @@ function App() {
             <Analytics transactions={transactions} categories={categories} accounts={accounts} masterCurrency={masterCurrency} />
           ) : view === 'investments' ? (
             /* Investments View */
-            <Investments />
+            <Investments key={investmentRefreshKey} />
           ) : (
             /* Settings View */
             <Settings />

@@ -4,9 +4,17 @@ import react from '@vitejs/plugin-react'
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
-  const apiDomain = env.VITE_API_DOMAIN || 'localhost:8787'
-  const isLocalhost = apiDomain.includes('localhost')
-  const apiTarget = isLocalhost ? `http://${apiDomain}` : `https://${apiDomain}`
+  let apiDomain = env.VITE_API_DOMAIN || 'localhost:8787'
+  
+  // If apiDomain already includes protocol, use it as-is
+  // Otherwise, add http:// for localhost or https:// for remote
+  let apiTarget: string
+  if (apiDomain.startsWith('http://') || apiDomain.startsWith('https://')) {
+    apiTarget = apiDomain
+  } else {
+    const isLocalhost = apiDomain.includes('localhost')
+    apiTarget = isLocalhost ? `http://${apiDomain}` : `https://${apiDomain}`
+  }
   
   return {
     plugins: [react()],
