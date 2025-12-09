@@ -503,9 +503,8 @@ function App() {
                     <div className="h-7 sm:h-9 w-32 bg-muted animate-pulse rounded" />
                   ) : (
                     <>
-                      <span className="text-success/70 text-base sm:text-xl">+</span>
                       <span className={privacyMode === 'hidden' ? 'select-none' : ''}>
-                        {privacyMode === 'hidden' ? '••••••' : totalIncome.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})}
+                        +{privacyMode === 'hidden' ? '••••••' : totalIncome.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})}
                       </span> <span className="text-sm sm:text-base">{masterCurrency}</span>
                     </>
                   )}
@@ -526,9 +525,8 @@ function App() {
                     <div className="h-7 sm:h-9 w-32 bg-muted animate-pulse rounded" />
                   ) : (
                     <>
-                      <span className="text-destructive/70 text-base sm:text-xl">-</span>
                       <span className={privacyMode === 'hidden' ? 'select-none' : ''}>
-                        {privacyMode === 'hidden' ? '••••••' : totalExpenses.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})}
+                        <span className="mr-0.5">−</span>{privacyMode === 'hidden' ? '••••••' : totalExpenses.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})}
                       </span> <span className="text-sm sm:text-base">{masterCurrency}</span>
                     </>
                   )}
