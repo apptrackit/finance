@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Button } from './ui/button'
 import { Input } from './ui/input'
 import { Label } from './ui/label'
@@ -36,6 +36,14 @@ const currencySymbols: Record<string, string> = {
   GBP: '£',
 }
 
+type MarketQuote = {
+  symbol: string
+  regularMarketPrice?: number
+  shortName?: string
+  currency?: string
+  regularMarketChangePercent?: number
+}
+
 export function AccountList({ accounts, onAccountAdded, loading }: { accounts: Account[], onAccountAdded: () => void, loading?: boolean }) {
   const { confirm } = useAlert()
   const [isAdding, setIsAdding] = useState(false)
@@ -57,8 +65,106 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
   const [searching, setSearching] = useState(false)
   const [manualMode, setManualMode] = useState(false)
   const [activeAccountId, setActiveAccountId] = useState<string | null>(null)
+  const [exchangeRates, setExchangeRates] = useState<Record<string, number>>({})
+  const [quotes, setQuotes] = useState<Record<string, MarketQuote>>({})
 
   const { privacyMode, shouldHideInvestment } = usePrivacy()
+
+  // Fetch exchange rates
+  useEffect(() => {
+    const fetchRates = async () => {
+      try {
+        const response = await fetch('https://open.er-api.com/v6/latest/USD')
+        const data = await response.json()
+        if (data.rates) {
+          setExchangeRates(data.rates)
+        }
+      } catch (error) {
+        console.error('Failed to fetch exchange rates:', error)
+      }
+    }
+    fetchRates()
+  }, [])
+
+  // Fetch market quotes for investment accounts
+  useEffect(() => {
+    const fetchQuotes = async () => {
+      const investmentAccounts = accounts.filter(a => a.type === 'investment' && a.symbol && a.asset_type !== 'manual')
+      if (investmentAccounts.length === 0) return
+
+      const symbols = [...new Set(investmentAccounts.map(a => a.symbol!))]
+      const newQuotes: Record<string, MarketQuote> = {}
+
+      await Promise.all(symbols.map(async (symbol) => {
+        try {
+          const res = await apiFetch(`${API_BASE_URL}/market/quote?symbol=${encodeURIComponent(symbol)}`)
+          if (res.ok) {
+            const data = await res.json()
+            newQuotes[symbol] = data
+          }
+        } catch (error) {
+          console.error(`Failed to fetch quote for ${symbol}:`, error)
+        }
+      }))
+
+      setQuotes(newQuotes)
+    }
+
+    if (accounts.length > 0) {
+      fetchQuotes()
+    }
+  }, [accounts])
+
+  // Calculate percentages for cash and investment accounts
+  const calculatePercentages = () => {
+    const cashAccounts = accounts.filter(a => a.type === 'cash')
+    const investmentAccounts = accounts.filter(a => a.type === 'investment')
+
+    // Calculate total cash value in USD
+    const totalCashUSD = cashAccounts.reduce((sum, account) => {
+      const rate = exchangeRates[account.currency] || 1
+      return sum + (account.balance / rate)
+    }, 0)
+
+    // Calculate total investment value in USD (current market value, not cost basis)
+    const totalInvestmentUSD = investmentAccounts.reduce((sum, account) => {
+      if (account.asset_type === 'manual') {
+        // For manual accounts, balance is in the account's currency
+        const rate = exchangeRates[account.currency] || 1
+        return sum + (account.balance / rate)
+      } else if (account.symbol && quotes[account.symbol]) {
+        // For stocks/crypto, balance is the quantity, multiply by current price
+        const currentPrice = quotes[account.symbol].regularMarketPrice || 0
+        return sum + (account.balance * currentPrice)
+      }
+      return sum
+    }, 0)
+
+    // Calculate percentages
+    const cashPercentages: Record<string, number> = {}
+    cashAccounts.forEach(account => {
+      const rate = exchangeRates[account.currency] || 1
+      const valueUSD = account.balance / rate
+      cashPercentages[account.id] = totalCashUSD > 0 ? (valueUSD / totalCashUSD) * 100 : 0
+    })
+
+    const investmentPercentages: Record<string, number> = {}
+    investmentAccounts.forEach(account => {
+      let valueUSD = 0
+      if (account.asset_type === 'manual') {
+        const rate = exchangeRates[account.currency] || 1
+        valueUSD = account.balance / rate
+      } else if (account.symbol && quotes[account.symbol]) {
+        const currentPrice = quotes[account.symbol].regularMarketPrice || 0
+        valueUSD = account.balance * currentPrice
+      }
+      investmentPercentages[account.id] = totalInvestmentUSD > 0 ? (valueUSD / totalInvestmentUSD) * 100 : 0
+    })
+
+    return { cashPercentages, investmentPercentages, totalCashUSD, totalInvestmentUSD }
+  }
+
+  const { cashPercentages, investmentPercentages } = calculatePercentages()
 
   const resetForm = () => {
     setFormData({ name: '', type: 'cash', balance: '', currency: 'HUF', symbol: '', asset_type: 'stock', adjustWithTransaction: false })
@@ -367,92 +473,193 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
           </form>
         )}
 
-        <div className="space-y-2">
-          {accounts.map(account => {
-            const Icon = accountIcons[account.type] || Wallet
-            const colorClass = accountColors[account.type] || accountColors.cash
+        {/* Cash Accounts Section */}
+        {accounts.filter(a => a.type === 'cash').length > 0 && (
+          <div className="space-y-3 mb-6">
+            <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-1">Cash Accounts</h4>
+            <div className="space-y-2">
+              {accounts.filter(a => a.type === 'cash').map(account => {
+                const percentage = cashPercentages[account.id] || 0
+                
+                return (
+                  <div
+                    key={account.id}
+                    className="group relative overflow-hidden rounded-xl bg-gradient-to-br from-emerald-500/10 to-emerald-500/5 border border-emerald-500/20 hover:border-emerald-500/40 transition-all duration-300"
+                    onClick={() => setActiveAccountId(activeAccountId === account.id ? null : account.id)}
+                  >
+                    {/* Percentage bar background */}
+                    <div 
+                      className="absolute inset-y-0 left-0 bg-gradient-to-r from-emerald-500/20 to-emerald-500/10 transition-all duration-500"
+                      style={{ width: `${percentage}%` }}
+                    />
+                    
+                    <div className="relative p-4 flex items-center justify-between">
+                      <div className="flex items-center gap-3 flex-1">
+                        <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-600 flex items-center justify-center shadow-lg shadow-emerald-500/25">
+                          <Wallet className="h-6 w-6 text-white" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1">
+                            <p className="font-semibold text-base truncate">{account.name}</p>
+                            <span className="inline-flex items-center justify-center h-5 px-2 rounded-full bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-xs font-medium">
+                              {percentage.toFixed(1)}%
+                            </span>
+                          </div>
+                          <p className={`text-lg font-bold ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
+                            {privacyMode === 'hidden' ? '••••••' : formatCurrency(account.balance, account.currency)}
+                          </p>
+                        </div>
+                      </div>
+                      
+                      <div className={`flex gap-1 ml-3 transition-opacity ${activeAccountId === account.id ? 'opacity-100' : 'opacity-0 md:group-hover:opacity-100'}`}>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-9 w-9 hover:bg-emerald-500/20"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleEdit(account)
+                          }}
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-9 w-9 text-destructive hover:text-destructive hover:bg-red-500/10"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleDelete(account.id)
+                          }}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
 
-            return (
-              <div
-                key={account.id}
-                className="group flex items-center justify-between p-3 rounded-xl bg-secondary/30 hover:bg-secondary/50 border border-transparent hover:border-border/50 transition-all duration-200"
-                onClick={() => setActiveAccountId(activeAccountId === account.id ? null : account.id)}
-              >
-                <div className="flex items-center gap-3" onClick={(e) => e.stopPropagation()}>
-                  <div className={`h-10 w-10 rounded-xl bg-gradient-to-br ${colorClass} flex items-center justify-center`}>
-                    <Icon className="h-5 w-5" />
+        {/* Investment Accounts Section */}
+        {accounts.filter(a => a.type === 'investment').length > 0 && (
+          <div className="space-y-3">
+            <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-1">Investment Accounts</h4>
+            <div className="space-y-2">
+              {accounts.filter(a => a.type === 'investment').map(account => {
+                const percentage = investmentPercentages[account.id] || 0
+                const quote = account.symbol ? quotes[account.symbol] : null
+                const priceChange = quote?.regularMarketChangePercent || 0
+                
+                return (
+                  <div
+                    key={account.id}
+                    className="group relative overflow-hidden rounded-xl bg-gradient-to-br from-blue-500/10 to-purple-500/5 border border-blue-500/20 hover:border-blue-500/40 transition-all duration-300"
+                    onClick={() => setActiveAccountId(activeAccountId === account.id ? null : account.id)}
+                  >
+                    {/* Percentage bar background */}
+                    <div 
+                      className="absolute inset-y-0 left-0 bg-gradient-to-r from-blue-500/20 to-purple-500/10 transition-all duration-500"
+                      style={{ width: `${percentage}%` }}
+                    />
+                    
+                    <div className="relative p-4 flex items-center justify-between">
+                      <div className="flex items-center gap-3 flex-1">
+                        <div className={`h-12 w-12 rounded-xl flex items-center justify-center shadow-lg font-bold text-sm ${
+                          account.asset_type === 'crypto' 
+                            ? 'bg-gradient-to-br from-orange-500 to-orange-600 text-white shadow-orange-500/25' 
+                            : account.asset_type === 'manual' 
+                            ? 'bg-gradient-to-br from-gray-500 to-gray-600 text-white shadow-gray-500/25' 
+                            : 'bg-gradient-to-br from-blue-500 to-blue-600 text-white shadow-blue-500/25'
+                        }`}>
+                          {account.symbol?.slice(0, 3).toUpperCase() || account.name.slice(0, 3).toUpperCase()}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1">
+                            <p className="font-semibold text-base truncate">
+                              {account.symbol || account.name}
+                            </p>
+                            <span className="inline-flex items-center justify-center h-5 px-2 rounded-full bg-blue-500/20 text-blue-600 dark:text-blue-400 text-xs font-medium">
+                              {percentage.toFixed(1)}%
+                            </span>
+                            {account.asset_type !== 'manual' && priceChange !== 0 && (
+                              <span className={`inline-flex items-center justify-center h-5 px-2 rounded-full text-xs font-medium ${
+                                priceChange >= 0 
+                                  ? 'bg-green-500/20 text-green-600 dark:text-green-400' 
+                                  : 'bg-red-500/20 text-red-600 dark:text-red-400'
+                              }`}>
+                                {priceChange >= 0 ? '+' : ''}{priceChange.toFixed(2)}%
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-baseline gap-2">
+                            <p className={`text-lg font-bold ${privacyMode === 'hidden' || shouldHideInvestment() ? 'select-none' : ''}`}>
+                              {privacyMode === 'hidden' || shouldHideInvestment() ? (
+                                '••••••'
+                              ) : (
+                                `${account.balance.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 8 })} ${account.currency}`
+                              )}
+                            </p>
+                            {quote?.regularMarketPrice && (
+                              <p className="text-xs text-muted-foreground">
+                                @ ${quote.regularMarketPrice.toFixed(2)}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                      
+                      <div className={`flex gap-1 ml-3 transition-opacity ${activeAccountId === account.id ? 'opacity-100' : 'opacity-0 md:group-hover:opacity-100'}`}>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-9 w-9 hover:bg-blue-500/20"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleEdit(account)
+                          }}
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-9 w-9 text-destructive hover:text-destructive hover:bg-red-500/10"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleDelete(account.id)
+                          }}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
                   </div>
-                  <div>
-                    <p className="font-medium text-sm">
-                      {account.name}
-                      {account.symbol && <span className="ml-2 text-xs text-muted-foreground">({account.symbol})</span>}
-                    </p>
-                    <p className="text-xs text-muted-foreground capitalize">{account.type === 'cash' ? 'Cash / Bank' : 'Investment'}</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="text-right mr-2">
-                    <p className={`font-bold text-sm ${account.balance >= 0 ? 'text-foreground' : 'text-destructive'} ${privacyMode === 'hidden' || (account.type === 'investment' && shouldHideInvestment()) ? 'select-none' : ''}`}>
-                      {privacyMode === 'hidden' || (account.type === 'investment' && shouldHideInvestment()) ? (
-                        '••••••'
-                      ) : (
-                        <>
-                          {account.balance < 0 && '-'}
-                          {account.type === 'investment'
-                            ? `${Math.abs(account.balance).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 8 })} ${account.currency}`
-                            : formatCurrency(account.balance, account.currency)
-                          }
-                        </>
-                      )}
-                    </p>
-                  </div>
-                  <div className={`flex gap-1 transition-opacity ${activeAccountId === account.id ? 'opacity-100' : 'opacity-0 md:group-hover:opacity-100'}`}>
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      className="h-8 w-8"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        handleEdit(account)
-                      }}
-                    >
-                      <Pencil className="h-3.5 w-3.5" />
-                    </Button>
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      className="h-8 w-8 text-destructive hover:text-destructive"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        handleDelete(account.id)
-                      }}
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            )
-          })}
+                )
+              })}
+            </div>
+          </div>
+        )}
 
-          {accounts.length === 0 && !isAdding && (
-            loading ? (
-              <div className="space-y-3">
-                {[1, 2, 3].map(i => (
-                  <div key={i} className="h-16 bg-muted animate-pulse rounded-xl" />
-                ))}
+        {accounts.length === 0 && !isAdding && (
+          loading ? (
+            <div className="space-y-3">
+              {[1, 2, 3].map(i => (
+                <div key={i} className="h-16 bg-muted animate-pulse rounded-xl" />
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-8">
+              <div className="h-12 w-12 rounded-full bg-secondary/50 flex items-center justify-center mx-auto mb-3">
+                <Wallet className="h-6 w-6 text-muted-foreground" />
               </div>
-            ) : (
-              <div className="text-center py-8">
-                <div className="h-12 w-12 rounded-full bg-secondary/50 flex items-center justify-center mx-auto mb-3">
-                  <Wallet className="h-6 w-6 text-muted-foreground" />
-                </div>
-                <p className="text-sm text-muted-foreground">No accounts yet</p>
-                <p className="text-xs text-muted-foreground/70 mt-1">Add your first account to get started</p>
-              </div>
-            )
-          )}
-        </div>
+              <p className="text-sm text-muted-foreground">No accounts yet</p>
+              <p className="text-xs text-muted-foreground/70 mt-1">Add your first account to get started</p>
+            </div>
+          )
+        )}
       </CardContent>
 
       {/* Symbol Search Modal */}
