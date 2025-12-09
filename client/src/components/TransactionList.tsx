@@ -52,11 +52,13 @@ const STORAGE_KEYS = {
 export function TransactionList({ 
   transactions, 
   accounts, 
-  onTransactionAdded 
+  onTransactionAdded,
+  loading
 }: { 
   transactions: Transaction[], 
   accounts: Account[],
-  onTransactionAdded: () => void 
+  onTransactionAdded: () => void,
+  loading?: boolean
 }) {
   const [isAdding, setIsAdding] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -1081,13 +1083,21 @@ export function TransactionList({
           ))}
           
           {transactions.length === 0 && !isAdding && (
-            <div className="text-center py-12">
-              <div className="h-12 w-12 rounded-full bg-secondary/50 flex items-center justify-center mx-auto mb-3">
-                <Receipt className="h-6 w-6 text-muted-foreground" />
+            loading ? (
+              <div className="space-y-3">
+                {[1, 2, 3, 4, 5].map(i => (
+                  <div key={i} className="h-20 bg-muted animate-pulse rounded-xl" />
+                ))}
               </div>
-              <p className="text-sm text-muted-foreground">No transactions yet</p>
-              <p className="text-xs text-muted-foreground/70 mt-1">Record your first transaction to start tracking</p>
-            </div>
+            ) : (
+              <div className="text-center py-12">
+                <div className="h-12 w-12 rounded-full bg-secondary/50 flex items-center justify-center mx-auto mb-3">
+                  <Receipt className="h-6 w-6 text-muted-foreground" />
+                </div>
+                <p className="text-sm text-muted-foreground">No transactions yet</p>
+                <p className="text-xs text-muted-foreground/70 mt-1">Record your first transaction to start tracking</p>
+              </div>
+            )
           )}
         </div>
       </CardContent>

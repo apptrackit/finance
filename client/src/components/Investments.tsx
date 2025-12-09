@@ -49,12 +49,14 @@ export function Investments() {
   const [quotes, setQuotes] = useState<Record<string, MarketQuote>>({})
   const [exchangeRates, setExchangeRates] = useState<Record<string, number>>({})
   const [refreshing, setRefreshing] = useState(false)
+  const [loading, setLoading] = useState(true)
   const [selectedAccount, setSelectedAccount] = useState<Account | null>(null)
   
   const { privacyMode } = usePrivacy()
 
   const fetchData = async () => {
     setRefreshing(true)
+    if (investmentAccounts.length === 0) setLoading(true)
     
     // Fetch accounts
     const accountsRes = await apiFetch(`${API_BASE_URL}/accounts`)
@@ -118,6 +120,7 @@ export function Investments() {
     }
     
     setRefreshing(false)
+    setLoading(false)
     
     // Debug: Log accounts and transactions after fetch
     console.log('=== INVESTMENTS LOADED ===')
@@ -295,43 +298,64 @@ export function Investments() {
     <div className="space-y-6">
       {/* Portfolio Summary */}
       <div className="grid gap-4 md:grid-cols-3">
-        <div className="p-6 rounded-2xl bg-gradient-to-br from-primary/10 to-primary/5 border border-primary/20 shadow-lg">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-sm font-medium text-muted-foreground">Total Portfolio Value</h3>
-            <DollarSign className="h-5 w-5 text-primary" />
-          </div>
-          <div className={`text-4xl font-bold ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
-            {privacyMode === 'hidden' ? '••••••' : `$${stats.totalValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
-          </div>
-          <p className="text-xs text-muted-foreground mt-2">
-            {investmentAccounts.length} investment{investmentAccounts.length !== 1 ? 's' : ''}
-          </p>
-        </div>
-        
-        <div className="p-6 rounded-2xl bg-card border border-border/50 shadow-sm">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-sm font-medium text-muted-foreground">Total Invested</h3>
-            <DollarSign className="h-5 w-5 text-muted-foreground" />
-          </div>
-          <div className={`text-4xl font-bold ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
-            {privacyMode === 'hidden' ? '••••••' : `$${stats.totalInvested.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
-          </div>
-          <p className="text-xs text-muted-foreground mt-2">Multi-currency portfolio</p>
-          <p className="text-xs text-muted-foreground mt-2">Net deposited</p>
-        </div>
-        
-        <div className={`p-6 rounded-2xl border shadow-sm ${stats.totalGainLoss >= 0 ? 'bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-800/30' : 'bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-800/30'}`}>
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-sm font-medium text-muted-foreground">Total Return</h3>
-            {stats.totalGainLoss >= 0 ? <TrendingUp className="h-5 w-5 text-green-600" /> : <TrendingDown className="h-5 w-5 text-red-600" />}
-          </div>
-          <div className={`text-4xl font-bold ${stats.totalGainLoss >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'} ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
-            {privacyMode === 'hidden' ? '••••••' : `${stats.totalGainLoss >= 0 ? '+' : '-'}$${Math.abs(stats.totalGainLoss).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
-          </div>
-          <div className={`text-sm font-medium mt-2 ${stats.totalGainLoss >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'} ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
-            {privacyMode === 'hidden' ? '••••' : `${stats.totalGainLossPercent >= 0 ? '+' : ''}${stats.totalGainLossPercent.toFixed(2)}%`}
-          </div>
-        </div>
+        {loading ? (
+          <>
+            <div className="p-6 rounded-2xl bg-card border border-border/50 shadow-sm">
+              <div className="h-4 w-32 bg-muted animate-pulse rounded mb-4" />
+              <div className="h-10 w-40 bg-muted animate-pulse rounded mb-2" />
+              <div className="h-3 w-24 bg-muted animate-pulse rounded" />
+            </div>
+            <div className="p-6 rounded-2xl bg-card border border-border/50 shadow-sm">
+              <div className="h-4 w-32 bg-muted animate-pulse rounded mb-4" />
+              <div className="h-10 w-40 bg-muted animate-pulse rounded mb-2" />
+              <div className="h-3 w-24 bg-muted animate-pulse rounded" />
+            </div>
+            <div className="p-6 rounded-2xl bg-card border border-border/50 shadow-sm">
+              <div className="h-4 w-32 bg-muted animate-pulse rounded mb-4" />
+              <div className="h-10 w-40 bg-muted animate-pulse rounded mb-2" />
+              <div className="h-3 w-24 bg-muted animate-pulse rounded" />
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="p-6 rounded-2xl bg-gradient-to-br from-primary/10 to-primary/5 border border-primary/20 shadow-lg">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-sm font-medium text-muted-foreground">Total Portfolio Value</h3>
+                <DollarSign className="h-5 w-5 text-primary" />
+              </div>
+              <div className={`text-4xl font-bold ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
+                {privacyMode === 'hidden' ? '••••••' : `$${stats.totalValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+              </div>
+              <p className="text-xs text-muted-foreground mt-2">
+                {investmentAccounts.length} investment{investmentAccounts.length !== 1 ? 's' : ''}
+              </p>
+            </div>
+            
+            <div className="p-6 rounded-2xl bg-card border border-border/50 shadow-sm">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-sm font-medium text-muted-foreground">Total Invested</h3>
+                <DollarSign className="h-5 w-5 text-muted-foreground" />
+              </div>
+              <div className={`text-4xl font-bold ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
+                {privacyMode === 'hidden' ? '••••••' : `$${stats.totalInvested.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+              </div>
+              <p className="text-xs text-muted-foreground mt-2">Net deposited</p>
+            </div>
+            
+            <div className={`p-6 rounded-2xl border shadow-sm ${stats.totalGainLoss >= 0 ? 'bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-800/30' : 'bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-800/30'}`}>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-sm font-medium text-muted-foreground">Total Return</h3>
+                {stats.totalGainLoss >= 0 ? <TrendingUp className="h-5 w-5 text-green-600" /> : <TrendingDown className="h-5 w-5 text-red-600" />}
+              </div>
+              <div className={`text-4xl font-bold ${stats.totalGainLoss >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'} ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
+                {privacyMode === 'hidden' ? '••••••' : `${stats.totalGainLoss >= 0 ? '+' : '-'}$${Math.abs(stats.totalGainLoss).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+              </div>
+              <div className={`text-sm font-medium mt-2 ${stats.totalGainLoss >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'} ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
+                {privacyMode === 'hidden' ? '••••' : `${stats.totalGainLossPercent >= 0 ? '+' : ''}${stats.totalGainLossPercent.toFixed(2)}%`}
+              </div>
+            </div>
+          </>
+        )}
       </div>
 
       {/* Holdings List */}
@@ -349,7 +373,13 @@ export function Investments() {
         </div>
         
         <div className="divide-y divide-border/50">
-          {investmentAccounts.length === 0 ? (
+          {loading ? (
+            <div className="p-4 space-y-4">
+              {[1, 2, 3].map(i => (
+                <div key={i} className="h-24 bg-muted animate-pulse rounded-xl" />
+              ))}
+            </div>
+          ) : investmentAccounts.length === 0 ? (
             <div className="p-12 text-center">
               <div className="inline-flex h-16 w-16 items-center justify-center rounded-full bg-muted/50 mb-4">
                 <TrendingUp className="h-8 w-8 text-muted-foreground" />
