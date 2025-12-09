@@ -168,17 +168,56 @@ export function Investments() {
     }
     
     // Calculate invested amount from investment transactions
-    // Transactions already have the total_amount (quantity × price at purchase time)
-    const totalInvested = transactions
-      .filter(tx => tx.amount > 0)
-      .reduce((sum, tx) => sum + tx.amount, 0)
+    // For manual assets: initial balance + transactions
+    // For stock/crypto: transactions already have the total_amount (quantity × price at purchase time)
+    let netInvested = 0
+    let initialInvestment = 0
     
-    const totalWithdrawn = transactions
-      .filter(tx => tx.amount < 0)
-      .reduce((sum, tx) => sum + Math.abs(tx.amount), 0)
+    if (account.asset_type === 'manual') {
+      // For manual: need to get initial balance from account creation
+      // We'll use a proxy: if no transactions, balance is initial
+      // If there are transactions, we need to subtract transaction gains to get initial
+      const totalAdded = transactions
+        .filter(tx => tx.amount > 0)
+        .reduce((sum, tx) => sum + tx.amount, 0)
+      
+      const totalWithdrawn = transactions
+        .filter(tx => tx.amount < 0)
+        .reduce((sum, tx) => sum + Math.abs(tx.amount), 0)
+      
+      const transactionNet = totalAdded - totalWithdrawn
+      
+      // Initial investment = current balance - transaction gains
+      if (account.currency === 'USD') {
+        initialInvestment = account.balance - transactionNet
+      } else {
+        const rate = exchangeRates[account.currency]
+        if (rate) {
+          initialInvestment = (account.balance - transactionNet) / rate
+        } else {
+          initialInvestment = account.balance - transactionNet
+        }
+      }
+      
+      netInvested = initialInvestment + transactionNet
+    } else {
+      // For stock/crypto: count all transactions as invested
+      const totalInvested = transactions
+        .filter(tx => tx.amount > 0)
+        .reduce((sum, tx) => sum + tx.amount, 0)
+      
+      const totalWithdrawn = transactions
+        .filter(tx => tx.amount < 0)
+        .reduce((sum, tx) => sum + Math.abs(tx.amount), 0)
+      
+      netInvested = totalInvested - totalWithdrawn
+    }
     
-    const netInvested = totalInvested - totalWithdrawn
-    const gainLoss = currentValue - netInvested
+    // For manual assets, gain/loss should only be from transactions
+    // For stock/crypto, gain/loss is current value - invested
+    const gainLoss = account.asset_type === 'manual' 
+      ? (transactions.reduce((sum, tx) => sum + tx.amount, 0)) 
+      : (currentValue - netInvested)
     const gainLossPercent = netInvested > 0 ? (gainLoss / netInvested) * 100 : 0
     
     // For display purposes, store the value in the original currency for manual assets
