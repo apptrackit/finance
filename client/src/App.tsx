@@ -9,7 +9,7 @@ import Settings, { getMasterCurrency } from './components/Settings'
 import { usePrivacy } from './context/PrivacyContext'
 
 
-const APP_VERSION = '0.8.6'
+const APP_VERSION = '0.8.7'
 
 
 type Account = {
@@ -54,8 +54,11 @@ type View = 'dashboard' | 'analytics' | 'settings' | 'investments'
 function App() {
   const [netWorth, setNetWorth] = useState<number | null>(null)
   const [investmentValue, setInvestmentValue] = useState<number>(0)
+  const [investmentLoading, setInvestmentLoading] = useState<boolean>(false)
+  const [investmentError, setInvestmentError] = useState<string | null>(null)
   const [accounts, setAccounts] = useState<Account[]>([])
   const [transactions, setTransactions] = useState<Transaction[]>([])
+  const [transactionsLoading, setTransactionsLoading] = useState<boolean>(true)
   const [categories, setCategories] = useState<Category[]>([])
   const [view, setView] = useState<View>(() => {
     // Restore last view from localStorage if available
@@ -75,6 +78,7 @@ function App() {
   }, [])
 
   const fetchData = async () => {
+    setTransactionsLoading(true)
     const currency = getMasterCurrency()
     
     apiFetch(`${API_BASE_URL}/dashboard/net-worth?currency=${currency}`)
@@ -129,6 +133,7 @@ function App() {
       .then(res => res.json())
       .then(data => setCategories(data))
       .catch(err => console.error(err))
+      .finally(() => setTransactionsLoading(false))
   }
 
   useEffect(() => {
@@ -150,10 +155,13 @@ function App() {
 
   // Fetch and calculate investment value in master currency
   const fetchInvestmentValue = async () => {
+    setInvestmentLoading(true)
+    setInvestmentError(null)
     try {
       const investmentAccounts = accounts.filter(a => a.type === 'investment')
       if (investmentAccounts.length === 0) {
         setInvestmentValue(0)
+        setInvestmentLoading(false)
         return
       }
       
@@ -167,13 +175,26 @@ function App() {
         apiFetch(`${API_BASE_URL}/market/quote?symbol=${encodeURIComponent(symbol)}`)
           .then(res => res.json())
           .then(data => ({ symbol, data }))
-          .catch(() => ({ symbol, data: null }))
+          .catch((err) => {
+            console.error(`Failed to fetch quote for ${symbol}:`, err)
+            return { symbol, data: null }
+          })
       )
       const quotesArray = await Promise.all(quotePromises)
       const quotes: Record<string, MarketQuote> = {}
+      let failedQuotes = 0
       quotesArray.forEach(({ symbol, data }) => {
-        if (data) quotes[symbol] = data
+        if (data) {
+          quotes[symbol] = data
+        } else {
+          failedQuotes++
+        }
       })
+      
+      // If all quotes failed, throw an error
+      if (uniqueSymbols.length > 0 && failedQuotes === uniqueSymbols.length) {
+        throw new Error('Failed to fetch market data. Yahoo Finance API may be temporarily unavailable.')
+      }
 
       // Calculate total value - need to handle multiple currencies
       let totalValueInMasterCurrency = 0
@@ -233,9 +254,14 @@ function App() {
       }
 
       setInvestmentValue(totalValueInMasterCurrency)
+
+      setInvestmentLoading(false)
     } catch (error) {
       console.error('Failed to calculate investment value:', error)
+      const errorMessage = error instanceof Error ? error.message : 'Failed to fetch investment data'
+      setInvestmentError(errorMessage)
       setInvestmentValue(0)
+      setInvestmentLoading(false)
     }
   }
 
@@ -285,7 +311,8 @@ function App() {
   
   // Calculate cash balance (accounts without investments)
   const cashBalance = netWorth !== null ? netWorth : 0
-  const totalNetWorth = netWorth !== null ? netWorth + investmentValue : null
+  // Only show total net worth if we have both cash data and investment is not loading
+  const totalNetWorth = netWorth !== null && !investmentLoading ? netWorth + investmentValue : null
   
   // Only show cash card separately if there are investment accounts
   const hasInvestmentAccounts = accounts.some(a => a.type === 'investment')
@@ -397,7 +424,9 @@ function App() {
                     </div>
                   </div>
                   <div className="text-2xl sm:text-4xl font-bold tracking-tight text-foreground">
-                    {totalNetWorth !== null ? (
+                    {investmentError ? (
+                      <span className="text-base sm:text-lg text-destructive">Error loading data</span>
+                    ) : totalNetWorth !== null ? (
                       <>
                         <span className={privacyMode === 'hidden' || shouldHideInvestment() ? 'select-none' : ''}>
                           {privacyMode === 'hidden' || shouldHideInvestment()
@@ -411,7 +440,7 @@ function App() {
                     )}
                   </div>
                   <p className="text-xs text-muted-foreground mt-2">
-                    Total value
+                    {investmentError ? investmentError : 'Total value'}
                   </p>
                 </div>
               </div>
@@ -454,10 +483,16 @@ function App() {
                   </div>
                 </div>
                 <div className="text-xl sm:text-3xl font-bold tracking-tight text-success">
-                  <span className="text-success/70 text-base sm:text-xl">+</span>
-                  <span className={privacyMode === 'hidden' ? 'select-none' : ''}>
-                    {privacyMode === 'hidden' ? '••••••' : totalIncome.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})}
-                  </span> <span className="text-sm sm:text-base">{masterCurrency}</span>
+                  {transactionsLoading ? (
+                    <div className="h-7 sm:h-9 w-32 bg-muted animate-pulse rounded" />
+                  ) : (
+                    <>
+                      <span className="text-success/70 text-base sm:text-xl">+</span>
+                      <span className={privacyMode === 'hidden' ? 'select-none' : ''}>
+                        {privacyMode === 'hidden' ? '••••••' : totalIncome.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})}
+                      </span> <span className="text-sm sm:text-base">{masterCurrency}</span>
+                    </>
+                  )}
                 </div>
                 <p className="text-[10px] sm:text-xs text-muted-foreground mt-1 sm:mt-2">This period</p>
               </div>
@@ -471,10 +506,16 @@ function App() {
                   </div>
                 </div>
                 <div className="text-xl sm:text-3xl font-bold tracking-tight text-destructive">
-                  <span className="text-destructive/70 text-base sm:text-xl">-</span>
-                  <span className={privacyMode === 'hidden' ? 'select-none' : ''}>
-                    {privacyMode === 'hidden' ? '••••••' : totalExpenses.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})}
-                  </span> <span className="text-sm sm:text-base">{masterCurrency}</span>
+                  {transactionsLoading ? (
+                    <div className="h-7 sm:h-9 w-32 bg-muted animate-pulse rounded" />
+                  ) : (
+                    <>
+                      <span className="text-destructive/70 text-base sm:text-xl">-</span>
+                      <span className={privacyMode === 'hidden' ? 'select-none' : ''}>
+                        {privacyMode === 'hidden' ? '••••••' : totalExpenses.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})}
+                      </span> <span className="text-sm sm:text-base">{masterCurrency}</span>
+                    </>
+                  )}
                 </div>
                 <p className="text-[10px] sm:text-xs text-muted-foreground mt-1 sm:mt-2">This period</p>
               </div>
@@ -485,13 +526,14 @@ function App() {
             /* Main Content Grid */
             <div className="grid gap-4 sm:gap-6 lg:grid-cols-12">
               <div className="lg:col-span-4">
-                <AccountList accounts={accounts} onAccountAdded={fetchData} />
+                <AccountList accounts={accounts} onAccountAdded={fetchData} loading={transactionsLoading} />
               </div>
               <div className="lg:col-span-8">
                 <TransactionList 
                   transactions={transactions} 
                   accounts={accounts} 
-                  onTransactionAdded={fetchData} 
+                  onTransactionAdded={fetchData}
+                  loading={transactionsLoading}
                 />
               </div>
             </div>
