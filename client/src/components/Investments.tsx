@@ -47,6 +47,7 @@ export function Investments() {
   const [allTransactions, setAllTransactions] = useState<Transaction[]>([])
   const [categories, setCategories] = useState<Category[]>([])
   const [quotes, setQuotes] = useState<Record<string, MarketQuote>>({})
+  const [exchangeRates, setExchangeRates] = useState<Record<string, number>>({})
   const [refreshing, setRefreshing] = useState(false)
   const [selectedAccount, setSelectedAccount] = useState<Account | null>(null)
   
@@ -107,6 +108,15 @@ export function Investments() {
     }))
     setQuotes(newQuotes)
     
+    // Fetch exchange rates for manual assets (USD base)
+    try {
+      const ratesRes = await fetch('https://open.er-api.com/v6/latest/USD')
+      const ratesData = await ratesRes.json()
+      setExchangeRates(ratesData.rates || {})
+    } catch (error) {
+      console.error('Failed to fetch exchange rates:', error)
+    }
+    
     setRefreshing(false)
     
     // Debug: Log accounts and transactions after fetch
@@ -136,11 +146,26 @@ export function Investments() {
       currentPrice = quotes[account.symbol].regularMarketPrice || 0
     }
     
-    // For crypto/stock: use calculated quantity, multiply by price to get value
-    // For manual: balance is already the dollar value
-    const currentValue = account.asset_type === 'manual' 
-      ? account.balance 
-      : actualQuantity * currentPrice
+    // Calculate current value in USD
+    let currentValue = 0
+    if (account.asset_type === 'manual') {
+      // For manual: balance is in account's currency, convert to USD
+      const balanceInAccountCurrency = account.balance
+      if (account.currency === 'USD') {
+        currentValue = balanceInAccountCurrency
+      } else {
+        const rate = exchangeRates[account.currency]
+        if (rate) {
+          currentValue = balanceInAccountCurrency / rate
+        } else {
+          console.warn(`No exchange rate for ${account.currency}, using raw value`)
+          currentValue = balanceInAccountCurrency
+        }
+      }
+    } else {
+      // For crypto/stock: use calculated quantity, multiply by USD price
+      currentValue = actualQuantity * currentPrice
+    }
     
     // Calculate invested amount from investment transactions
     // Transactions already have the total_amount (quantity × price at purchase time)
@@ -156,10 +181,14 @@ export function Investments() {
     const gainLoss = currentValue - netInvested
     const gainLossPercent = netInvested > 0 ? (gainLoss / netInvested) * 100 : 0
     
+    // For display purposes, store the value in the original currency for manual assets
+    const displayValue = account.asset_type === 'manual' ? account.balance : currentValue
+    
     return {
       account,
       netInvested,
-      currentValue,
+      currentValue, // USD value for portfolio totals
+      displayValue, // Original currency value for display
       currentPrice,
       gainLoss,
       gainLossPercent,
@@ -201,6 +230,26 @@ export function Investments() {
     return cat ? `${cat.icon} ${cat.name}` : 'Unknown'
   }
 
+  const formatValue = (value: number, account?: Account) => {
+    if (!account || account.asset_type !== 'manual') {
+      return `$${value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+    }
+    // For manual assets, use their currency
+    const currencySymbols: Record<string, string> = {
+      HUF: 'Ft',
+      EUR: '€',
+      USD: '$',
+      GBP: '£'
+    }
+    const symbol = currencySymbols[account.currency] || account.currency
+    const decimals = account.currency === 'HUF' ? 0 : 2
+    const formatted = Math.abs(value).toLocaleString('hu-HU', {
+      minimumFractionDigits: decimals,
+      maximumFractionDigits: decimals
+    })
+    return account.currency === 'HUF' ? `${formatted} ${symbol}` : `${symbol}${formatted}`
+  }
+
   const stats = calculatePortfolioStats()
 
   return (
@@ -228,6 +277,7 @@ export function Investments() {
           <div className={`text-4xl font-bold ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
             {privacyMode === 'hidden' ? '••••••' : `$${stats.totalInvested.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
           </div>
+          <p className="text-xs text-muted-foreground mt-2">Multi-currency portfolio</p>
           <p className="text-xs text-muted-foreground mt-2">Net deposited</p>
         </div>
         
@@ -304,14 +354,14 @@ export function Investments() {
                         )}
                       </div>
                       <div className={`text-sm text-muted-foreground ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
-                        {privacyMode === 'hidden' ? '•••• invested' : `$${position.netInvested.toFixed(2)} invested`}
+                        {privacyMode === 'hidden' ? '•••• invested' : `${formatValue(position.netInvested, position.account)} invested`}
                       </div>
                     </div>
                   </div>
                   
                   <div className="text-right">
                     <div className={`text-xl font-bold ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
-                      {privacyMode === 'hidden' ? '••••••' : `$${position.currentValue.toLocaleString(undefined, { minimumFractionDigits: 2 })}`}
+                      {privacyMode === 'hidden' ? '••••••' : formatValue(position.displayValue, position.account)}
                     </div>
                     {position.account.asset_type !== 'manual' && (
                       <div className={`text-sm text-muted-foreground ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
@@ -324,7 +374,7 @@ export function Investments() {
                     </div>
                     <div className={`text-sm font-semibold mt-1 flex items-center justify-end gap-1 ${position.gainLoss >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'} ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
                       {position.gainLoss >= 0 ? <TrendingUp className="h-3.5 w-3.5" /> : <TrendingDown className="h-3.5 w-3.5" />}
-                      {privacyMode === 'hidden' ? '••••' : `${position.gainLoss >= 0 ? '+' : ''}$${Math.abs(position.gainLoss).toFixed(2)} (${position.gainLossPercent >= 0 ? '+' : ''}${position.gainLossPercent.toFixed(2)}%)`}
+                      {privacyMode === 'hidden' ? '••••' : `${position.gainLoss >= 0 ? '+' : ''}${formatValue(Math.abs(position.gainLoss), position.account)} (${position.gainLossPercent >= 0 ? '+' : ''}${position.gainLossPercent.toFixed(2)}%)`}
                     </div>
                   </div>
                 </div>
@@ -361,27 +411,27 @@ export function Investments() {
                       <div>
                         <div className="text-xs text-muted-foreground">Current Value</div>
                         <div className={`text-lg font-bold ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
-                          {privacyMode === 'hidden' ? '••••••' : `$${position.currentValue.toFixed(2)}`}
+                          {privacyMode === 'hidden' ? '••••••' : formatValue(position.displayValue, selectedAccount)}
                         </div>
                       </div>
                       <div>
                         <div className="text-xs text-muted-foreground">Net Invested</div>
                         <div className={`text-lg font-bold ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
-                          {privacyMode === 'hidden' ? '••••••' : `$${position.netInvested.toFixed(2)}`}
+                          {privacyMode === 'hidden' ? '••••••' : formatValue(position.netInvested, selectedAccount)}
                         </div>
                       </div>
                       {position.currentPrice > 0 && (
                         <div>
                           <div className="text-xs text-muted-foreground">Current Price</div>
                           <div className={`text-lg font-bold ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
-                            {privacyMode === 'hidden' ? '••••••' : `$${position.currentPrice.toFixed(2)}`}
+                            {privacyMode === 'hidden' ? '••••••' : formatValue(position.currentPrice, selectedAccount)}
                           </div>
                         </div>
                       )}
                       <div>
                         <div className="text-xs text-muted-foreground">Total Return</div>
                         <div className={`text-lg font-bold ${position.gainLoss >= 0 ? 'text-green-600' : 'text-red-600'} ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
-                          {privacyMode === 'hidden' ? '••••••' : `${position.gainLoss >= 0 ? '+' : ''}$${Math.abs(position.gainLoss).toFixed(2)} (${position.gainLossPercent >= 0 ? '+' : ''}${position.gainLossPercent.toFixed(2)}%)`}
+                          {privacyMode === 'hidden' ? '••••••' : `${position.gainLoss >= 0 ? '+' : ''}${formatValue(Math.abs(position.gainLoss), selectedAccount)} (${position.gainLossPercent >= 0 ? '+' : ''}${position.gainLossPercent.toFixed(2)}%)`}
                         </div>
                       </div>
                     </div>

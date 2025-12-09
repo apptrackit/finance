@@ -107,7 +107,7 @@ export function AccountList({ accounts, onAccountAdded }: { accounts: Account[],
   const handleManualAsset = () => {
     setFormData({
       ...formData,
-      currency: 'SHARE',
+      currency: 'HUF',
       asset_type: 'manual'
     })
     setShowSymbolSearch(false)
@@ -310,15 +310,31 @@ export function AccountList({ accounts, onAccountAdded }: { accounts: Account[],
               )}
 
               {formData.type === 'investment' && manualMode && !formData.symbol && (
-                <div className="col-span-2 space-y-2">
-                  <Label htmlFor="manual-symbol">Symbol (Optional)</Label>
-                  <Input
-                    id="manual-symbol"
-                    value={formData.symbol}
-                    onChange={e => setFormData({ ...formData, symbol: e.target.value })}
-                    placeholder="e.g. GOLD"
-                  />
-                </div>
+                <>
+                  <div className="space-y-2">
+                    <Label htmlFor="manual-currency">Currency</Label>
+                    <Select
+                      id="manual-currency"
+                      value={formData.currency}
+                      onChange={e => setFormData({ ...formData, currency: e.target.value })}
+                    >
+                      <option value="HUF">🇭🇺 HUF</option>
+                      <option value="EUR">🇪🇺 EUR</option>
+                      <option value="USD">🇺🇸 USD</option>
+                      <option value="GBP">🇬🇧 GBP</option>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="manual-symbol">Symbol (Optional)</Label>
+                    <Input
+                      id="manual-symbol"
+                      value={formData.symbol}
+                      onChange={e => setFormData({ ...formData, symbol: e.target.value.slice(0, 5) })}
+                      placeholder="e.g. MÁP+"
+                      maxLength={5}
+                    />
+                  </div>
+                </>
               )}
 
               {/* Checkbox for adjusting with transaction - only shown when editing */}

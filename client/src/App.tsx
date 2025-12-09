@@ -41,18 +41,6 @@ type Category = {
   type: 'income' | 'expense'
 }
 
-type InvestmentTransaction = {
-  id: string
-  account_id: string
-  type: 'buy' | 'sell'
-  quantity: number
-  price: number
-  total_amount: number
-  date: string
-  notes?: string
-  created_at: number
-}
-
 type MarketQuote = {
   symbol: string
   regularMarketPrice?: number
@@ -168,14 +156,6 @@ function App() {
         setInvestmentValue(0)
         return
       }
-
-      // Fetch transactions for all investment accounts
-      const txPromises = investmentAccounts.map(acc =>
-        apiFetch(`${API_BASE_URL}/investment-transactions?account_id=${acc.id}`)
-          .then(res => res.json())
-          .catch(() => [])
-      )
-      const allTransactions = await Promise.all(txPromises)
       
       // Fetch market quotes for all symbols
       const symbolsToFetch = investmentAccounts
@@ -195,45 +175,64 @@ function App() {
         if (data) quotes[symbol] = data
       })
 
-      // Calculate total value
-      let totalValueUSD = 0
-      investmentAccounts.forEach((acc, idx) => {
-        const txs: InvestmentTransaction[] = allTransactions[idx] || []
-        
-        // Use account balance directly - it already contains the current number of shares
-        const totalQuantity = acc.balance
-        
-        // Get current price in USD
-        let price = 0
-        if (acc.asset_type === 'manual') {
-          // For manual, calculate average from transactions
-          const buyTxs = txs.filter(tx => tx.type === 'buy')
-          if (buyTxs.length > 0) {
-            const totalCost = buyTxs.reduce((sum, tx) => sum + tx.total_amount, 0)
-            const totalBought = buyTxs.reduce((sum, tx) => sum + tx.quantity, 0)
-            price = totalBought > 0 ? totalCost / totalBought : 0
-          }
-        } else if (acc.symbol && quotes[acc.symbol]) {
-          price = quotes[acc.symbol].regularMarketPrice || 0
-        }
-        
-        // Calculate value: shares × price per share (in USD)
-        totalValueUSD += price * totalQuantity
-      })
+      // Calculate total value - need to handle multiple currencies
+      let totalValueInMasterCurrency = 0
+      const masterCurrency = getMasterCurrency()
+      
+      // Fetch exchange rates to master currency
+      const ratesResponse = await fetch(`https://open.er-api.com/v6/latest/${masterCurrency}`)
+      const ratesData = await ratesResponse.json()
+      const rates = ratesData.rates || {}
 
-      // Convert USD to master currency
-      const currency = getMasterCurrency()
-      if (currency === 'USD') {
-        setInvestmentValue(totalValueUSD)
-      } else {
-        const response = await fetch(`https://open.er-api.com/v6/latest/USD`)
-        const data = await response.json()
-        if (data.rates && data.rates[currency]) {
-          setInvestmentValue(totalValueUSD * data.rates[currency])
+      for (let idx = 0; idx < investmentAccounts.length; idx++) {
+        const acc = investmentAccounts[idx]
+        
+        let valueInAccountCurrency = 0
+
+        if (acc.asset_type === 'manual') {
+          // For manual assets, balance is already the total value in account's currency
+          valueInAccountCurrency = acc.balance
         } else {
-          setInvestmentValue(totalValueUSD) // Fallback
+          // For stock/crypto: calculate quantity × market price
+          const totalQuantity = acc.balance
+          let priceUSD = 0
+          
+          if (acc.symbol && quotes[acc.symbol]) {
+            priceUSD = quotes[acc.symbol].regularMarketPrice || 0
+          }
+          
+          // Value in USD
+          const valueUSD = priceUSD * totalQuantity
+          
+          // Convert USD to master currency
+          if (masterCurrency === 'USD') {
+            valueInAccountCurrency = valueUSD
+          } else {
+            const usdToMasterRate = rates['USD'] || 1
+            valueInAccountCurrency = valueUSD / usdToMasterRate
+          }
+          
+          // Add to total and continue to next account
+          totalValueInMasterCurrency += valueInAccountCurrency
+          continue
+        }
+
+        // For manual assets, convert from account currency to master currency
+        if (acc.currency === masterCurrency) {
+          totalValueInMasterCurrency += valueInAccountCurrency
+        } else {
+          const rate = rates[acc.currency]
+          if (rate) {
+            // Convert: account.currency -> masterCurrency
+            totalValueInMasterCurrency += valueInAccountCurrency / rate
+          } else {
+            console.warn(`No exchange rate for ${acc.currency}, using raw value`)
+            totalValueInMasterCurrency += valueInAccountCurrency
+          }
         }
       }
+
+      setInvestmentValue(totalValueInMasterCurrency)
     } catch (error) {
       console.error('Failed to calculate investment value:', error)
       setInvestmentValue(0)
