@@ -516,7 +516,19 @@ export function TransactionList({
     if (!confirmed) return
     
     try {
-      await apiFetch(`${API_BASE_URL}/transactions/${id}`, { method: 'DELETE' })
+      // Find the transaction to determine if it's an investment transaction
+      const tx = transactions.find(t => t.id === id)
+      const account = accounts.find(a => a.id === tx?.account_id)
+      
+      // If it's an investment account and has quantity data, it's from investment_transactions table
+      const isInvestmentTx = account?.type === 'investment' && tx?.quantity !== undefined
+      
+      if (isInvestmentTx) {
+        await apiFetch(`${API_BASE_URL}/investment-transactions/${id}`, { method: 'DELETE' })
+      } else {
+        await apiFetch(`${API_BASE_URL}/transactions/${id}`, { method: 'DELETE' })
+      }
+      
       onTransactionAdded()
     } catch (error) {
       console.error('Failed to delete transaction', error)

@@ -866,9 +866,20 @@ app.post('/investment-transactions', async (c) => {
 })
 
 app.delete('/investment-transactions/:id', async (c) => {
-  const id = c.req.param('id')
-  await c.env.DB.prepare('DELETE FROM investment_transactions WHERE id = ?').bind(id).run()
-  return c.json({ success: true })
+  try {
+    const id = c.req.param('id')
+    const result = await c.env.DB.prepare('DELETE FROM investment_transactions WHERE id = ?').bind(id).run()
+    
+    if (!result.success) {
+      console.error('Delete failed:', result)
+      return c.json({ error: 'Failed to delete investment transaction' }, 500)
+    }
+    
+    return c.json({ success: true })
+  } catch (error: any) {
+    console.error('Delete investment transaction error:', error)
+    return c.json({ error: error.message || 'Internal server error' }, 500)
+  }
 })
 
 // --- Market Data (Yahoo Finance) ---

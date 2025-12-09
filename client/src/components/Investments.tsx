@@ -3,6 +3,7 @@ import { RefreshCw, TrendingUp, TrendingDown, DollarSign } from 'lucide-react'
 import { API_BASE_URL, apiFetch } from '../config'
 import { InvestmentChart } from './InvestmentChart'
 import { usePrivacy } from '../context/PrivacyContext'
+import { getMasterCurrency } from './Settings'
 
 type Account = {
   id: string
@@ -51,8 +52,13 @@ export function Investments() {
   const [refreshing, setRefreshing] = useState(false)
   const [loading, setLoading] = useState(true)
   const [selectedAccount, setSelectedAccount] = useState<Account | null>(null)
+  const [masterCurrency, setMasterCurrency] = useState('HUF')
   
   const { privacyMode } = usePrivacy()
+
+  useEffect(() => {
+    setMasterCurrency(getMasterCurrency())
+  }, [])
 
   const fetchData = async () => {
     setRefreshing(true)
@@ -171,17 +177,56 @@ export function Investments() {
     }
     
     // Calculate invested amount from investment transactions
-    // Transactions already have the total_amount (quantity × price at purchase time)
-    const totalInvested = transactions
-      .filter(tx => tx.amount > 0)
-      .reduce((sum, tx) => sum + tx.amount, 0)
+    // For manual assets: initial balance + transactions
+    // For stock/crypto: transactions already have the total_amount (quantity × price at purchase time)
+    let netInvested = 0
+    let initialInvestment = 0
     
-    const totalWithdrawn = transactions
-      .filter(tx => tx.amount < 0)
-      .reduce((sum, tx) => sum + Math.abs(tx.amount), 0)
+    if (account.asset_type === 'manual') {
+      // For manual: need to get initial balance from account creation
+      // We'll use a proxy: if no transactions, balance is initial
+      // If there are transactions, we need to subtract transaction gains to get initial
+      const totalAdded = transactions
+        .filter(tx => tx.amount > 0)
+        .reduce((sum, tx) => sum + tx.amount, 0)
+      
+      const totalWithdrawn = transactions
+        .filter(tx => tx.amount < 0)
+        .reduce((sum, tx) => sum + Math.abs(tx.amount), 0)
+      
+      const transactionNet = totalAdded - totalWithdrawn
+      
+      // Initial investment = current balance - transaction gains
+      if (account.currency === 'USD') {
+        initialInvestment = account.balance - transactionNet
+      } else {
+        const rate = exchangeRates[account.currency]
+        if (rate) {
+          initialInvestment = (account.balance - transactionNet) / rate
+        } else {
+          initialInvestment = account.balance - transactionNet
+        }
+      }
+      
+      netInvested = initialInvestment + transactionNet
+    } else {
+      // For stock/crypto: count all transactions as invested
+      const totalInvested = transactions
+        .filter(tx => tx.amount > 0)
+        .reduce((sum, tx) => sum + tx.amount, 0)
+      
+      const totalWithdrawn = transactions
+        .filter(tx => tx.amount < 0)
+        .reduce((sum, tx) => sum + Math.abs(tx.amount), 0)
+      
+      netInvested = totalInvested - totalWithdrawn
+    }
     
-    const netInvested = totalInvested - totalWithdrawn
-    const gainLoss = currentValue - netInvested
+    // For manual assets, gain/loss should only be from transactions
+    // For stock/crypto, gain/loss is current value - invested
+    const gainLoss = account.asset_type === 'manual' 
+      ? (transactions.reduce((sum, tx) => sum + tx.amount, 0)) 
+      : (currentValue - netInvested)
     const gainLossPercent = netInvested > 0 ? (gainLoss / netInvested) * 100 : 0
     
     // For display purposes, store the value in the original currency for manual assets
@@ -253,6 +298,28 @@ export function Investments() {
     return account.currency === 'HUF' ? `${formatted} ${symbol}` : `${symbol}${formatted}`
   }
 
+  const formatMasterCurrency = (value: number) => {
+    const currencySymbols: Record<string, string> = {
+      HUF: 'Ft',
+      EUR: '€',
+      USD: '$',
+      GBP: '£'
+    }
+    const symbol = currencySymbols[masterCurrency] || masterCurrency
+    const decimals = masterCurrency === 'HUF' ? 0 : 2
+    const formatted = Math.abs(value).toLocaleString('hu-HU', {
+      minimumFractionDigits: decimals,
+      maximumFractionDigits: decimals
+    })
+    return masterCurrency === 'HUF' ? `${formatted} ${symbol}` : `${symbol}${formatted}`
+  }
+
+  const convertToMasterCurrency = (usdValue: number) => {
+    if (masterCurrency === 'USD') return usdValue
+    const rate = exchangeRates[masterCurrency]
+    return rate ? usdValue * rate : usdValue
+  }
+
   const stats = calculatePortfolioStats()
 
   return (
@@ -285,7 +352,7 @@ export function Investments() {
                 <DollarSign className="h-5 w-5 text-primary" />
               </div>
               <div className={`text-4xl font-bold ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
-                {privacyMode === 'hidden' ? '••••••' : `$${stats.totalValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                {privacyMode === 'hidden' ? '••••••' : formatMasterCurrency(convertToMasterCurrency(stats.totalValue))}
               </div>
               <p className="text-xs text-muted-foreground mt-2">
                 {investmentAccounts.length} investment{investmentAccounts.length !== 1 ? 's' : ''}
@@ -298,7 +365,7 @@ export function Investments() {
                 <DollarSign className="h-5 w-5 text-muted-foreground" />
               </div>
               <div className={`text-4xl font-bold ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
-                {privacyMode === 'hidden' ? '••••••' : `$${stats.totalInvested.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                {privacyMode === 'hidden' ? '••••••' : formatMasterCurrency(convertToMasterCurrency(stats.totalInvested))}
               </div>
               <p className="text-xs text-muted-foreground mt-2">Net deposited</p>
             </div>
@@ -309,7 +376,7 @@ export function Investments() {
                 {stats.totalGainLoss >= 0 ? <TrendingUp className="h-5 w-5 text-green-600" /> : <TrendingDown className="h-5 w-5 text-red-600" />}
               </div>
               <div className={`text-4xl font-bold ${stats.totalGainLoss >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'} ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
-                {privacyMode === 'hidden' ? '••••••' : `${stats.totalGainLoss >= 0 ? '+' : '-'}$${Math.abs(stats.totalGainLoss).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                {privacyMode === 'hidden' ? '••••••' : `${stats.totalGainLoss >= 0 ? '+' : '-'}${formatMasterCurrency(convertToMasterCurrency(Math.abs(stats.totalGainLoss)))}`}
               </div>
               <div className={`text-sm font-medium mt-2 ${stats.totalGainLoss >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'} ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
                 {privacyMode === 'hidden' ? '••••' : `${stats.totalGainLossPercent >= 0 ? '+' : ''}${stats.totalGainLossPercent.toFixed(2)}%`}

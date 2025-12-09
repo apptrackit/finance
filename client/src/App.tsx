@@ -71,6 +71,8 @@ function App() {
   })
   const [masterCurrency, setMasterCurrency] = useState('HUF')
   const [apiVersion, setApiVersion] = useState<string | null>(null)
+  const [showNetWorth, setShowNetWorth] = useState(false)
+  const [investmentRefreshKey, setInvestmentRefreshKey] = useState(0)
   const { privacyMode, togglePrivacyMode, shouldHideInvestment } = usePrivacy()
 
   useEffect(() => {
@@ -79,6 +81,7 @@ function App() {
 
   const fetchData = async () => {
     setTransactionsLoading(true)
+    setInvestmentRefreshKey(prev => prev + 1) // Trigger Investments component refresh
     const currency = getMasterCurrency()
     
     apiFetch(`${API_BASE_URL}/dashboard/net-worth?currency=${currency}`)
@@ -423,20 +426,35 @@ function App() {
                       <Activity className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-primary" />
                     </div>
                   </div>
-                  <div className="text-2xl sm:text-4xl font-bold tracking-tight text-foreground">
-                    {investmentError ? (
-                      <span className="text-base sm:text-lg text-destructive">Error loading data</span>
-                    ) : totalNetWorth !== null ? (
-                      <>
-                        <span className={privacyMode === 'hidden' || shouldHideInvestment() ? 'select-none' : ''}>
-                          {privacyMode === 'hidden' || shouldHideInvestment()
-                            ? '••••••' 
-                            : totalNetWorth.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})}
-                        </span>
-                        <span className="text-muted-foreground text-lg sm:text-2xl ml-1">{masterCurrency}</span>
-                      </>
-                    ) : (
-                      <div className="h-8 sm:h-10 w-32 bg-muted animate-pulse rounded" />
+                  <div className="flex items-center gap-2">
+                    <div className="text-2xl sm:text-4xl font-bold tracking-tight text-foreground">
+                      {investmentError ? (
+                        <span className="text-base sm:text-lg text-destructive">Error loading data</span>
+                      ) : totalNetWorth !== null ? (
+                        <>
+                          <span className={privacyMode === 'hidden' || shouldHideInvestment() ? 'select-none' : ''}>
+                            {(privacyMode === 'hidden' || shouldHideInvestment()) && !showNetWorth
+                              ? '••••••' 
+                              : totalNetWorth.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})}
+                          </span>
+                          <span className="text-muted-foreground text-lg sm:text-2xl ml-1">{masterCurrency}</span>
+                        </>
+                      ) : (
+                        <div className="h-8 sm:h-10 w-32 bg-muted animate-pulse rounded" />
+                      )}
+                    </div>
+                    {(privacyMode === 'hidden' || shouldHideInvestment()) && totalNetWorth !== null && !investmentError && (
+                      <button
+                        onClick={() => setShowNetWorth(!showNetWorth)}
+                        className="ml-2 p-1.5 rounded-lg hover:bg-primary/10 transition-colors"
+                        aria-label={showNetWorth ? "Hide net worth" : "Show net worth"}
+                      >
+                        {showNetWorth ? (
+                          <EyeOff className="h-4 w-4 text-muted-foreground" />
+                        ) : (
+                          <Eye className="h-4 w-4 text-muted-foreground" />
+                        )}
+                      </button>
                     )}
                   </div>
                   <p className="text-xs text-muted-foreground mt-2">
@@ -487,9 +505,8 @@ function App() {
                     <div className="h-7 sm:h-9 w-32 bg-muted animate-pulse rounded" />
                   ) : (
                     <>
-                      <span className="text-success/70 text-base sm:text-xl">+</span>
                       <span className={privacyMode === 'hidden' ? 'select-none' : ''}>
-                        {privacyMode === 'hidden' ? '••••••' : totalIncome.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})}
+                        +{privacyMode === 'hidden' ? '••••••' : totalIncome.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})}
                       </span> <span className="text-sm sm:text-base">{masterCurrency}</span>
                     </>
                   )}
@@ -510,9 +527,8 @@ function App() {
                     <div className="h-7 sm:h-9 w-32 bg-muted animate-pulse rounded" />
                   ) : (
                     <>
-                      <span className="text-destructive/70 text-base sm:text-xl">-</span>
                       <span className={privacyMode === 'hidden' ? 'select-none' : ''}>
-                        {privacyMode === 'hidden' ? '••••••' : totalExpenses.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})}
+                        <span className="mr-0.5">−</span>{privacyMode === 'hidden' ? '••••••' : totalExpenses.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})}
                       </span> <span className="text-sm sm:text-base">{masterCurrency}</span>
                     </>
                   )}
@@ -542,7 +558,7 @@ function App() {
             <Analytics transactions={transactions} categories={categories} accounts={accounts} masterCurrency={masterCurrency} />
           ) : view === 'investments' ? (
             /* Investments View */
-            <Investments />
+            <Investments key={investmentRefreshKey} />
           ) : (
             /* Settings View */
             <Settings />
