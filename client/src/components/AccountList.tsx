@@ -4,7 +4,7 @@ import { Input } from './ui/input'
 import { Label } from './ui/label'
 import { Select } from './ui/select'
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card'
-import { Plus, X, Wallet, TrendingUp, Building, Pencil, Trash2, Check, Search } from 'lucide-react'
+import { Plus, X, Wallet, Building, Pencil, Trash2, Check, Search } from 'lucide-react'
 import { API_BASE_URL, apiFetch } from '../config'
 import { usePrivacy } from '../context/PrivacyContext'
 import { useAlert } from '../context/AlertContext'
@@ -17,16 +17,6 @@ type Account = {
   currency: string
   symbol?: string
   asset_type?: 'stock' | 'crypto' | 'manual'
-}
-
-const accountIcons = {
-  cash: Wallet,
-  investment: TrendingUp,
-}
-
-const accountColors = {
-  cash: 'from-emerald-500/20 to-emerald-500/5 text-emerald-400',
-  investment: 'from-blue-500/20 to-blue-500/5 text-blue-400',
 }
 
 const currencySymbols: Record<string, string> = {
