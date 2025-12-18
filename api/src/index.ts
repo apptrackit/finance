@@ -868,6 +868,22 @@ app.post('/investment-transactions', async (c) => {
 app.delete('/investment-transactions/:id', async (c) => {
   try {
     const id = c.req.param('id')
+    
+    // Get investment transaction to revert balance
+    const invTx = await c.env.DB.prepare('SELECT * FROM investment_transactions WHERE id = ?').bind(id).first<InvestmentTransaction>()
+    
+    if (invTx) {
+      // Revert balance by subtracting the quantity that was added
+      const account = await c.env.DB.prepare('SELECT balance FROM accounts WHERE id = ?').bind(invTx.account_id).first<Account>()
+      if (account) {
+        // For 'buy' transactions, quantity was added, so we subtract it
+        // For 'sell' transactions, quantity was subtracted (negative), so subtracting it adds it back
+        const quantityChange = invTx.type === 'buy' ? invTx.quantity : -invTx.quantity
+        await c.env.DB.prepare('UPDATE accounts SET balance = ?, updated_at = ? WHERE id = ?')
+          .bind(account.balance - quantityChange, Date.now(), invTx.account_id).run()
+      }
+    }
+    
     const result = await c.env.DB.prepare('DELETE FROM investment_transactions WHERE id = ?').bind(id).run()
     
     if (!result.success) {
