@@ -55,7 +55,7 @@ type InvestmentTransaction = {
 const app = new Hono<{ Bindings: Bindings }>()
 
 // API Version
-const API_VERSION = '1.0.1'
+const API_VERSION = '1.0.2'
 
 // CORS configuration - only allow requests from configured origins
 app.use('/*', async (c, next) => {
