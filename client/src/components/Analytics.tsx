@@ -1094,7 +1094,7 @@ export function Analytics({
                             <div className="flex items-center justify-between gap-2">
                               <span className="text-xs sm:text-sm font-medium truncate">{cat.name}</span>
                               <span className="text-xs sm:text-sm text-muted-foreground flex-shrink-0">
-                                {cat.value.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})}
+                                {cat.value.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})} {masterCurrency}
                               </span>
                             </div>
                             <div className="mt-1 h-1 sm:h-1.5 rounded-full bg-secondary overflow-hidden">
