@@ -733,8 +733,12 @@ export function Analytics({
                           fontSize={10}
                           tickLine={false}
                           axisLine={false}
-                          tickFormatter={(value) => `${(value / 1000).toFixed(0)}k`}
-                          width={35}
+                          tickFormatter={(value) => {
+                            if (value >= 1000000) return `${(value / 1000000).toFixed(1)}M`
+                            if (value >= 1000) return `${(value / 1000).toFixed(0)}K`
+                            return value.toFixed(0)
+                          }}
+                          width={50}
                         />
                         <Tooltip 
                           content={({ active, payload, label }) => {
@@ -812,8 +816,12 @@ export function Analytics({
                           fontSize={10}
                           tickLine={false}
                           axisLine={false}
-                          tickFormatter={(value) => `${(value / 1000).toFixed(0)}k`}
-                          width={35}
+                          tickFormatter={(value) => {
+                            if (value >= 1000000) return `${(value / 1000000).toFixed(1)}M`
+                            if (value >= 1000) return `${(value / 1000).toFixed(0)}K`
+                            return value.toFixed(0)
+                          }}
+                          width={50}
                         />
                         <Tooltip 
                           cursor={{ fill: 'hsl(var(--muted))', opacity: 0.3 }}
@@ -898,8 +906,12 @@ export function Analytics({
                           fontSize={10}
                           tickLine={false}
                           axisLine={false}
-                          tickFormatter={(value) => `${(value / 1000).toFixed(0)}k`}
-                          width={35}
+                          tickFormatter={(value) => {
+                            if (value >= 1000000) return `${(value / 1000000).toFixed(1)}M`
+                            if (value >= 1000) return `${(value / 1000).toFixed(0)}K`
+                            return value.toFixed(0)
+                          }}
+                          width={50}
                         />
                         <Tooltip 
                           cursor={{ fill: 'hsl(var(--muted))', opacity: 0.3 }}
@@ -980,8 +992,12 @@ export function Analytics({
                             fontSize={9}
                             tickLine={false}
                             axisLine={false}
-                            tickFormatter={(value) => `${(value / 1000).toFixed(0)}k`}
-                            width={30}
+                            tickFormatter={(value) => {
+                              if (value >= 1000000) return `${(value / 1000000).toFixed(1)}M`
+                              if (value >= 1000) return `${(value / 1000).toFixed(0)}K`
+                              return value.toFixed(0)
+                            }}
+                            width={45}
                           />
                           <Tooltip 
                             content={({ active, payload, label }) => {
