@@ -228,12 +228,12 @@ export function TransactionList({
 
     if (isDifferentCurrency && formData.amount && exchangeRate) {
       // Different currency: amount_to = amount_from × exchange_rate
-      const amountFrom = parseFloat(formData.amount) || 0
+      const amountFrom = parseFloat(formData.amount.replace(/\s/g, '')) || 0
       const calculated = amountFrom * exchangeRate
       setFormData(prev => ({ ...prev, amount_to: calculated.toString() }))
     } else if (!isDifferentCurrency && formData.amount) {
       // Same currency: amount_to = amount_from (no fee)
-      const amountFrom = parseFloat(formData.amount) || 0
+      const amountFrom = parseFloat(formData.amount.replace(/\s/g, '')) || 0
       setFormData(prev => ({ ...prev, amount_to: amountFrom.toString() }))
     }
   }, [formData.amount, exchangeRate, formData.type, formData.account_id, formData.to_account_id, accounts, skipAutoCalc])
@@ -405,17 +405,17 @@ export function TransactionList({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     try {
-      const amount = parseFloat(formData.amount)
+      const amount = parseFloat(formData.amount.replace(/\s/g, ''))
 
       if (formData.type === 'transfer') {
         // Handle transfer
-        const amountTo = parseFloat(formData.amount_to) || amount
+        const amountTo = parseFloat(formData.amount_to.replace(/\s/g, '')) || amount
         const toAccount = accounts.find(a => a.id === formData.to_account_id)
         let price = undefined
         
         // For transfers to investment accounts, include price
         if (toAccount?.type === 'investment' && formData.manual_price) {
-          price = parseFloat(formData.manual_price)
+          price = parseFloat(formData.manual_price.replace(/\s/g, ''))
           console.log(`Transfer to investment: ${amountTo} shares @ $${price}`)
         }
         
@@ -503,15 +503,23 @@ export function TransactionList({
     const isIncome = tx.amount >= 0
     const account = accounts.find(a => a.id === tx.account_id)
     
+    // Format numbers with spaces
+    const formatNumber = (num: number) => {
+      const str = Math.abs(num).toString()
+      return str.includes('.') 
+        ? (() => { const [integer, decimal] = str.split('.'); return integer.replace(/\B(?=(\d{3})+(?!\d))/g, ' ') + '.' + decimal })()
+        : str.replace(/\B(?=(\d{3})+(?!\d))/g, ' ')
+    }
+    
     // For investment accounts, use quantity (shares) instead of amount (USD)
     const amountValue = account?.type === 'investment' && tx.quantity !== undefined
-      ? Math.abs(tx.quantity).toString()
-      : Math.abs(tx.amount).toString()
+      ? formatNumber(tx.quantity)
+      : formatNumber(tx.amount)
     
     // Calculate price from amount and quantity for investment accounts
     let priceValue = ''
     if (account?.type === 'investment' && tx.quantity !== undefined && tx.quantity !== 0) {
-      priceValue = (Math.abs(tx.amount) / Math.abs(tx.quantity)).toString()
+      priceValue = formatNumber(Math.abs(tx.amount) / Math.abs(tx.quantity))
     }
     
     setFormData({
@@ -608,8 +616,8 @@ export function TransactionList({
   // For transfer preview
   const fromAccount = accounts.find(a => a.id === formData.account_id)
   const toAccount = accounts.find(a => a.id === formData.to_account_id)
-  const transferAmount = parseFloat(formData.amount) || 0
-  const transferAmountTo = parseFloat(formData.amount_to) || transferAmount
+  const transferAmount = parseFloat(formData.amount.replace(/\s/g, '')) || 0
+  const transferAmountTo = parseFloat(formData.amount_to.replace(/\s/g, '')) || transferAmount
 
   // Group transactions by date
   const groupedTransactions = transactions.reduce((groups, tx) => {
@@ -897,11 +905,17 @@ export function TransactionList({
                     </Label>
                     <Input 
                       id="transfer_amount" 
-                      type="number" 
-                      step="any" 
-                      min="0.00000001"
+                      type="text"
+                      inputMode="decimal"
                       value={formData.amount} 
-                      onChange={e => setFormData({...formData, amount: e.target.value})} 
+                      onChange={e => {
+                        let value = e.target.value.replace(/\s/g, '')
+                        if (!/^\d*\.?\d*$/.test(value)) return
+                        const formatted = value.includes('.') 
+                          ? (() => { const [integer, decimal] = value.split('.'); return integer.replace(/\B(?=(\d{3})+(?!\d))/g, ' ') + '.' + decimal })() 
+                          : value.replace(/\B(?=(\d{3})+(?!\d))/g, ' ')
+                        setFormData({...formData, amount: formatted})
+                      }} 
                       placeholder="0.00" 
                       required 
                     />
@@ -912,18 +926,21 @@ export function TransactionList({
                     </Label>
                     <Input 
                       id="transfer_amount_to" 
-                      type="number" 
-                      step="any" 
-                      min="0.00000001"
+                      type="text"
+                      inputMode="decimal"
                       value={formData.amount_to} 
                       onChange={e => {
-                        const value = e.target.value
+                        let value = e.target.value.replace(/\s/g, '')
+                        if (!/^\d*\.?\d*$/.test(value)) return
+                        const formatted = value.includes('.') 
+                          ? (() => { const [integer, decimal] = value.split('.'); return integer.replace(/\B(?=(\d{3})+(?!\d))/g, ' ') + '.' + decimal })() 
+                          : value.replace(/\B(?=(\d{3})+(?!\d))/g, ' ')
                         setSkipAutoCalc(true)
-                        setFormData({...formData, amount_to: value})
+                        setFormData({...formData, amount_to: formatted})
                         
                         // Recalculate exchange rate if different currencies
                         if (fromAccount && toAccount && formData.amount && value) {
-                          const amountFrom = parseFloat(formData.amount) || 0
+                          const amountFrom = parseFloat(formData.amount.replace(/\s/g, '')) || 0
                           const amountTo = parseFloat(value) || 0
                           
                           if (fromAccount.currency !== toAccount.currency && amountFrom > 0 && amountTo > 0) {
@@ -959,16 +976,16 @@ export function TransactionList({
                         )}
                         <Input 
                           id="exchange_rate"
-                          type="number" 
-                          step="any"
-                          min="0.00000001"
-                          value={exchangeRate || ''} 
+                          type="text"
+                          inputMode="decimal"
+                          value={exchangeRate !== null ? exchangeRate.toString() : ''} 
                           onChange={e => {
-                            const value = e.target.value
+                            let value = e.target.value.replace(/\s/g, '')
                             if (value === '') {
                               setExchangeRate(null)
                               return
                             }
+                            if (!/^\d*\.?\d*$/.test(value)) return
                             const rate = parseFloat(value)
                             if (!isNaN(rate) && rate > 0) {
                               setExchangeRate(rate)
@@ -979,7 +996,7 @@ export function TransactionList({
                         />
                         {exchangeRate && formData.amount && (
                           <p className="text-xs text-muted-foreground">
-                            {parseFloat(formData.amount)} {fromAccount.currency} = {parseFloat(formData.amount) * exchangeRate} {toAccount.currency}
+                            {parseFloat(formData.amount.replace(/\s/g, ''))} {fromAccount.currency} = {parseFloat(formData.amount.replace(/\s/g, '')) * exchangeRate} {toAccount.currency}
                           </p>
                         )}
                       </>
@@ -993,10 +1010,17 @@ export function TransactionList({
                     <Label htmlFor="transfer_price">Price per Share in USD (optional - leave blank to auto-fetch)</Label>
                     <Input 
                       id="transfer_price" 
-                      type="number" 
-                      step="0.01" 
+                      type="text"
+                      inputMode="decimal"
                       value={formData.manual_price} 
-                      onChange={e => setFormData({...formData, manual_price: e.target.value})} 
+                      onChange={e => {
+                        let value = e.target.value.replace(/\s/g, '')
+                        if (!/^\d*\.?\d*$/.test(value)) return
+                        const formatted = value.includes('.') 
+                          ? (() => { const [integer, decimal] = value.split('.'); return integer.replace(/\B(?=(\d{3})+(?!\d))/g, ' ') + '.' + decimal })() 
+                          : value.replace(/\B(?=(\d{3})+(?!\d))/g, ' ')
+                        setFormData({...formData, manual_price: formatted})
+                      }} 
                       placeholder="Auto-fetch from market data" 
                     />
                     <p className="text-xs text-gray-500">For old dates (before 2020), enter the price manually for accuracy</p>
@@ -1061,10 +1085,17 @@ export function TransactionList({
                     <Label htmlFor="amount">{accounts.find(a => a.id === formData.account_id)?.type === 'investment' ? 'Shares' : 'Amount'}</Label>
                     <Input 
                       id="amount" 
-                      type="number" 
-                      step="1" 
+                      type="text"
+                      inputMode="decimal"
                       value={formData.amount} 
-                      onChange={e => setFormData({...formData, amount: e.target.value})} 
+                      onChange={e => {
+                        let value = e.target.value.replace(/\s/g, '')
+                        if (!/^\d*\.?\d*$/.test(value)) return
+                        const formatted = value.includes('.') 
+                          ? (() => { const [integer, decimal] = value.split('.'); return integer.replace(/\B(?=(\d{3})+(?!\d))/g, ' ') + '.' + decimal })() 
+                          : value.replace(/\B(?=(\d{3})+(?!\d))/g, ' ')
+                        setFormData({...formData, amount: formatted})
+                      }} 
                       placeholder="0" 
                       required 
                     />
@@ -1089,10 +1120,17 @@ export function TransactionList({
                       <Label htmlFor="manual_price">Price per Share (optional - leave blank to auto-fetch)</Label>
                       <Input 
                         id="manual_price" 
-                        type="number" 
-                        step="0.01" 
+                        type="text"
+                        inputMode="decimal"
                         value={formData.manual_price} 
-                        onChange={e => setFormData({...formData, manual_price: e.target.value})} 
+                        onChange={e => {
+                          let value = e.target.value.replace(/\s/g, '')
+                          if (!/^\d*\.?\d*$/.test(value)) return
+                          const formatted = value.includes('.') 
+                            ? (() => { const [integer, decimal] = value.split('.'); return integer.replace(/\B(?=(\d{3})+(?!\d))/g, ' ') + '.' + decimal })() 
+                            : value.replace(/\B(?=(\d{3})+(?!\d))/g, ' ')
+                          setFormData({...formData, manual_price: formatted})
+                        }} 
                         placeholder="Auto-fetch from market data" 
                       />
                       <p className="text-xs text-gray-500">For old dates (before 2020), enter the price manually for accuracy</p>

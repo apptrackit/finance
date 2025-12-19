@@ -152,8 +152,9 @@ export default function TransferForm({ accounts, onTransferComplete }: TransferF
   // Auto-calculate amountTo when amountFrom or rate changes
   useEffect(() => {
     if (isDifferentCurrency && amountFrom && exchangeRate) {
-      const calculated = parseFloat(amountFrom) * exchangeRate
-      setAmountTo(calculated.toFixed(2))
+      const calculated = parseFloat(amountFrom.replace(/\s/g, '')) * exchangeRate
+      const formatted = calculated.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ' ')
+      setAmountTo(formatted)
     } else if (!isDifferentCurrency && amountFrom) {
       setAmountTo(amountFrom)
     }
@@ -180,9 +181,9 @@ export default function TransferForm({ accounts, onTransferComplete }: TransferF
         body: JSON.stringify({
           from_account_id: fromAccountId,
           to_account_id: toAccountId,
-          amount_from: parseFloat(amountFrom),
-          amount_to: parseFloat(amountTo),
-          fee: parseFloat(fee) || 0,
+          amount_from: parseFloat(amountFrom.replace(/\s/g, '')),
+          amount_to: parseFloat(amountTo.replace(/\s/g, '')),
+          fee: parseFloat(fee.replace(/\s/g, '')) || 0,
           exchange_rate: exchangeRate,
           description: description || undefined,
           date,
@@ -284,10 +285,17 @@ export default function TransferForm({ accounts, onTransferComplete }: TransferF
               </Label>
               <Input
                 id="amount-from"
-                type="number"
-                step="0.01"
+                type="text"
+                inputMode="decimal"
                 value={amountFrom}
-                onChange={(e) => setAmountFrom(e.target.value)}
+                onChange={(e) => {
+                  let value = e.target.value.replace(/\s/g, '')
+                  if (!/^\d*\.?\d*$/.test(value)) return
+                  const formatted = value.includes('.') 
+                    ? (() => { const [integer, decimal] = value.split('.'); return integer.replace(/\B(?=(\d{3})+(?!\d))/g, ' ') + '.' + decimal })() 
+                    : value.replace(/\B(?=(\d{3})+(?!\d))/g, ' ')
+                  setAmountFrom(formatted)
+                }}
                 placeholder="0.00"
                 required
               />
@@ -299,10 +307,17 @@ export default function TransferForm({ accounts, onTransferComplete }: TransferF
               </Label>
               <Input
                 id="amount-to"
-                type="number"
-                step="0.01"
+                type="text"
+                inputMode="decimal"
                 value={amountTo}
-                onChange={(e) => setAmountTo(e.target.value)}
+                onChange={(e) => {
+                  let value = e.target.value.replace(/\s/g, '')
+                  if (!/^\d*\.?\d*$/.test(value)) return
+                  const formatted = value.includes('.') 
+                    ? (() => { const [integer, decimal] = value.split('.'); return integer.replace(/\B(?=(\d{3})+(?!\d))/g, ' ') + '.' + decimal })() 
+                    : value.replace(/\B(?=(\d{3})+(?!\d))/g, ' ')
+                  setAmountTo(formatted)
+                }}
                 placeholder="0.00"
                 required
                 disabled={!isDifferentCurrency}
@@ -324,15 +339,19 @@ export default function TransferForm({ accounts, onTransferComplete }: TransferF
                   )}
                   <Input
                     id="exchange-rate"
-                    type="number"
-                    step="0.0001"
+                    type="text"
+                    inputMode="decimal"
                     value={exchangeRate || ''}
-                    onChange={(e) => handleExchangeRateChange(e.target.value)}
+                    onChange={(e) => {
+                      let value = e.target.value.replace(/\s/g, '')
+                      if (!/^\d*\.?\d*$/.test(value)) return
+                      handleExchangeRateChange(value)
+                    }}
                     placeholder="Enter custom rate"
                   />
                   {exchangeRate && amountFrom && (
                     <p className="text-sm text-gray-600">
-                      {amountFrom} {fromAccount?.currency} = {(parseFloat(amountFrom) * exchangeRate).toFixed(2)} {toAccount?.currency}
+                      {amountFrom} {fromAccount?.currency} = {(parseFloat(amountFrom.replace(/\s/g, '')) * exchangeRate).toFixed(2)} {toAccount?.currency}
                     </p>
                   )}
                 </>
@@ -345,10 +364,17 @@ export default function TransferForm({ accounts, onTransferComplete }: TransferF
               <Label htmlFor="fee">Fee {fromAccount && `(${fromAccount.currency})`}</Label>
               <Input
                 id="fee"
-                type="number"
-                step="0.01"
+                type="text"
+                inputMode="decimal"
                 value={fee}
-                onChange={(e) => setFee(e.target.value)}
+                onChange={(e) => {
+                  let value = e.target.value.replace(/\s/g, '')
+                  if (!/^\d*\.?\d*$/.test(value)) return
+                  const formatted = value.includes('.') 
+                    ? (() => { const [integer, decimal] = value.split('.'); return integer.replace(/\B(?=(\d{3})+(?!\d))/g, ' ') + '.' + decimal })() 
+                    : value.replace(/\B(?=(\d{3})+(?!\d))/g, ' ')
+                  setFee(formatted)
+                }}
                 placeholder="0.00"
               />
             </div>
@@ -376,9 +402,9 @@ export default function TransferForm({ accounts, onTransferComplete }: TransferF
             />
           </div>
 
-          {fromAccount && fee && parseFloat(fee) > 0 && (
+          {fromAccount && fee && parseFloat(fee.replace(/\s/g, '')) > 0 && (
             <p className="text-sm text-gray-600">
-              Total deduction: {(parseFloat(amountFrom || '0') + parseFloat(fee)).toFixed(2)} {fromAccount.currency}
+              Total deduction: {(parseFloat(amountFrom.replace(/\s/g, '') || '0') + parseFloat(fee.replace(/\s/g, ''))).toFixed(2)} {fromAccount.currency}
             </p>
           )}
 
