@@ -4,10 +4,11 @@ import { Input } from './ui/input'
 import { Label } from './ui/label'
 import { Select } from './ui/select'
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card'
-import { Plus, X, Wallet, Building, Pencil, Trash2, Check, Search } from 'lucide-react'
+import { Plus, X, Wallet, Building, Pencil, Trash2, Check, Search, Lock, LockOpen } from 'lucide-react'
 import { API_BASE_URL, apiFetch } from '../config'
 import { usePrivacy } from '../context/PrivacyContext'
 import { useAlert } from '../context/AlertContext'
+import { useLockedAccounts } from '../context/LockedAccountsContext'
 
 type Account = {
   id: string
@@ -36,6 +37,7 @@ type MarketQuote = {
 
 export function AccountList({ accounts, onAccountAdded, loading }: { accounts: Account[], onAccountAdded: () => void, loading?: boolean }) {
   const { confirm } = useAlert()
+  const { isLocked, lockAccount, unlockAccount } = useLockedAccounts()
   const [isAdding, setIsAdding] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [formData, setFormData] = useState({
@@ -213,10 +215,11 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     try {
+      const balanceValue = formData.balance.replace(/\s/g, '').trim()
       const payload: any = {
         name: formData.name,
         type: formData.type,
-        balance: parseFloat(formData.balance) || 0,
+        balance: balanceValue === '' ? 0 : parseFloat(balanceValue) || 0,
         currency: formData.currency
       }
 
@@ -251,10 +254,18 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
   }
 
   const handleEdit = (account: Account) => {
+    const balanceStr = account.balance.toString()
+    const formattedBalance = balanceStr.includes('.') 
+      ? (() => {
+          const [integer, decimal] = balanceStr.split('.')
+          return integer.replace(/\B(?=(\d{3})+(?!\d))/g, ' ') + '.' + decimal
+        })()
+      : balanceStr.replace(/\B(?=(\d{3})+(?!\d))/g, ' ')
+    
     setFormData({
       name: account.name,
       type: account.type,
-      balance: account.balance.toString(),
+      balance: formattedBalance,
       currency: account.currency,
       symbol: account.symbol || '',
       asset_type: account.asset_type || 'stock',
@@ -290,6 +301,25 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
     setIsAdding(false)
     setEditingId(null)
     resetForm()
+  }
+
+  const handleLockToggle = async (accountId: string) => {
+    if (isLocked(accountId)) {
+      // Unlocking requires confirmation
+      const confirmed = await confirm({
+        title: 'Unlock Account',
+        message: 'Are you sure you want to unlock this account? You will be able to edit, delete, and add transactions again.',
+        confirmText: 'Unlock',
+        cancelText: 'Cancel'
+      })
+      
+      if (confirmed) {
+        unlockAccount(accountId)
+      }
+    } else {
+      // Locking doesn't require confirmation
+      lockAccount(accountId)
+    }
   }
 
   const formatCurrency = (amount: number, currency: string) => {
@@ -378,10 +408,24 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
                 <Label htmlFor="balance">{formData.type === 'investment' ? 'Initial Quantity (0 if tracking from transactions)' : 'Current Balance'}</Label>
                 <Input
                   id="balance"
-                  type="number"
-                  step={formData.type === 'investment' || formData.currency === 'SHARE' ? 'any' : (formData.currency === 'HUF' ? '1' : '0.01')}
+                  type="text"
+                  inputMode="decimal"
                   value={formData.balance}
-                  onChange={e => setFormData({ ...formData, balance: e.target.value })}
+                  onChange={e => {
+                    let value = e.target.value.replace(/\s/g, '') // Remove spaces
+                    // Allow only numbers and one decimal point
+                    if (!/^\d*\.?\d*$/.test(value)) return
+                    
+                    // Format with spaces
+                    if (value.includes('.')) {
+                      const [integer, decimal] = value.split('.')
+                      const formatted = integer.replace(/\B(?=(\d{3})+(?!\d))/g, ' ') + (decimal !== undefined ? '.' + decimal : '')
+                      setFormData({ ...formData, balance: formatted })
+                    } else {
+                      const formatted = value.replace(/\B(?=(\d{3})+(?!\d))/g, ' ')
+                      setFormData({ ...formData, balance: formatted })
+                    }
+                  }}
                   placeholder="0"
                 />
               </div>
@@ -504,25 +548,41 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
                         <Button
                           size="icon"
                           variant="ghost"
-                          className="h-9 w-9 hover:bg-emerald-500/20"
+                          className={`h-9 w-9 ${isLocked(account.id) ? 'text-amber-500 hover:bg-amber-500/20' : 'hover:bg-emerald-500/20'}`}
                           onClick={(e) => {
                             e.stopPropagation()
-                            handleEdit(account)
+                            handleLockToggle(account.id)
                           }}
+                          title={isLocked(account.id) ? 'Unlock account' : 'Lock account'}
                         >
-                          <Pencil className="h-4 w-4" />
+                          {isLocked(account.id) ? <Lock className="h-4 w-4" /> : <LockOpen className="h-4 w-4" />}
                         </Button>
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          className="h-9 w-9 text-destructive hover:text-destructive hover:bg-red-500/10"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            handleDelete(account.id)
-                          }}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
+                        {!isLocked(account.id) && (
+                          <>
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="h-9 w-9 hover:bg-emerald-500/20"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handleEdit(account)
+                              }}
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="h-9 w-9 text-destructive hover:text-destructive hover:bg-red-500/10"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handleDelete(account.id)
+                              }}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -604,25 +664,41 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
                         <Button
                           size="icon"
                           variant="ghost"
-                          className="h-9 w-9 hover:bg-blue-500/20"
+                          className={`h-9 w-9 ${isLocked(account.id) ? 'text-amber-500 hover:bg-amber-500/20' : 'hover:bg-blue-500/20'}`}
                           onClick={(e) => {
                             e.stopPropagation()
-                            handleEdit(account)
+                            handleLockToggle(account.id)
                           }}
+                          title={isLocked(account.id) ? 'Unlock account' : 'Lock account'}
                         >
-                          <Pencil className="h-4 w-4" />
+                          {isLocked(account.id) ? <Lock className="h-4 w-4" /> : <LockOpen className="h-4 w-4" />}
                         </Button>
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          className="h-9 w-9 text-destructive hover:text-destructive hover:bg-red-500/10"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            handleDelete(account.id)
-                          }}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
+                        {!isLocked(account.id) && (
+                          <>
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="h-9 w-9 hover:bg-blue-500/20"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handleEdit(account)
+                              }}
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="h-9 w-9 text-destructive hover:text-destructive hover:bg-red-500/10"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handleDelete(account.id)
+                              }}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </>
+                        )}
                       </div>
                     </div>
                   </div>

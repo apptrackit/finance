@@ -4,12 +4,15 @@ import './index.css'
 import App from './App.tsx'
 import { PrivacyProvider } from './context/PrivacyContext.tsx'
 import { AlertProvider } from './context/AlertContext.tsx'
+import { LockedAccountsProvider } from './context/LockedAccountsContext.tsx'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <PrivacyProvider>
       <AlertProvider>
-        <App />
+        <LockedAccountsProvider>
+          <App />
+        </LockedAccountsProvider>
       </AlertProvider>
     </PrivacyProvider>
   </StrictMode>,
