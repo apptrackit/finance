@@ -59,6 +59,7 @@ function App() {
   const [investmentError, setInvestmentError] = useState<string | null>(null)
   const [accounts, setAccounts] = useState<Account[]>([])
   const [transactions, setTransactions] = useState<Transaction[]>([])
+  const [allTransactions, setAllTransactions] = useState<Transaction[]>([]) // Unfiltered for Analytics
   const [transactionsLoading, setTransactionsLoading] = useState<boolean>(true)
   const [categories, setCategories] = useState<Category[]>([])
   const [view, setView] = useState<View>(() => {
@@ -102,7 +103,7 @@ function App() {
     const accountsData = await accountsRes.json()
     setAccounts(accountsData)
 
-    // Fetch regular transactions with date range
+    // Fetch regular transactions with date range (for TransactionList)
     const regularTxPromise = apiFetch(`${API_BASE_URL}/transactions/date-range?startDate=${dateRange.startDate}&endDate=${dateRange.endDate}`)
       .then(res => res.json())
       .catch(err => {
@@ -149,8 +150,56 @@ function App() {
       .finally(() => setTransactionsLoading(false))
   }
 
+  // Fetch ALL transactions (unfiltered) for Analytics
+  const fetchAllTransactions = async () => {
+    try {
+      const accountsData = accounts.length > 0 ? accounts : await apiFetch(`${API_BASE_URL}/accounts`).then(res => res.json())
+      
+      // Fetch all regular transactions (no date filter)
+      const regularTxPromise = apiFetch(`${API_BASE_URL}/transactions`)
+        .then(res => res.json())
+        .catch(err => {
+          console.error(err)
+          return []
+        })
+
+      // Fetch all investment transactions
+      const investmentAccounts = accountsData.filter((acc: Account) => acc.type === 'investment')
+      
+      const investmentTxPromises = investmentAccounts.map((acc: Account) =>
+        apiFetch(`${API_BASE_URL}/investment-transactions?account_id=${acc.id}`)
+          .then(res => res.json())
+          .then((txs: any[]) => 
+            txs.map((itx: any) => ({
+              id: itx.id,
+              account_id: itx.account_id,
+              amount: itx.type === 'buy' ? itx.total_amount : -itx.total_amount,
+              quantity: itx.type === 'buy' ? itx.quantity : -itx.quantity,
+              description: itx.notes || `${itx.quantity} shares @ $${itx.price}`,
+              date: itx.date,
+              is_recurring: false,
+              category_id: undefined,
+              linked_transaction_id: undefined
+            }))
+          )
+          .catch(() => [])
+      )
+
+      const [regularTxs, ...investmentTxArrays] = await Promise.all([regularTxPromise, ...investmentTxPromises])
+      const allInvestmentTxs = investmentTxArrays.flat()
+      const allTxs = [...regularTxs, ...allInvestmentTxs].sort((a, b) => 
+        new Date(b.date).getTime() - new Date(a.date).getTime()
+      )
+      
+      setAllTransactions(allTxs)
+    } catch (error) {
+      console.error('Failed to fetch all transactions:', error)
+    }
+  }
+
   useEffect(() => {
     fetchData()
+    fetchAllTransactions()
     fetchInvestmentValue()
     fetchApiVersion()
   }, [])
@@ -161,6 +210,12 @@ function App() {
       fetchData()
     }
   }, [dateRange])
+
+  // Handler for when transactions or accounts are added/modified
+  const handleDataChange = () => {
+    fetchData()
+    fetchAllTransactions()
+  }
 
   const fetchApiVersion = async () => {
     try {
@@ -559,13 +614,13 @@ function App() {
             /* Main Content Grid */
             <div className="grid gap-4 sm:gap-6 lg:grid-cols-12">
               <div className="lg:col-span-4">
-                <AccountList accounts={accounts} onAccountAdded={fetchData} loading={transactionsLoading} />
+                <AccountList accounts={accounts} onAccountAdded={handleDataChange} loading={transactionsLoading} />
               </div>
               <div className="lg:col-span-8">
                 <TransactionList 
                   transactions={transactions} 
                   accounts={accounts} 
-                  onTransactionAdded={fetchData}
+                  onTransactionAdded={handleDataChange}
                   loading={transactionsLoading}
                   dateRange={dateRange}
                   onDateRangeChange={(newRange) => setDateRange(newRange)}
@@ -582,7 +637,7 @@ function App() {
             </div>
           ) : view === 'analytics' ? (
             /* Analytics View */
-            <Analytics transactions={transactions} categories={categories} accounts={accounts} masterCurrency={masterCurrency} />
+            <Analytics transactions={allTransactions} categories={categories} accounts={accounts} masterCurrency={masterCurrency} />
           ) : view === 'investments' ? (
             /* Investments View */
             <Investments key={investmentRefreshKey} />
