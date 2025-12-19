@@ -4,8 +4,8 @@ import { Input } from './ui/input'
 import { Label } from './ui/label'
 import { Select } from './ui/select'
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card'
-import { Plus, X, ArrowDownLeft, ArrowUpRight, Receipt, RefreshCw, Pencil, Trash2, Check, ArrowRightLeft } from 'lucide-react'
-import { format } from 'date-fns'
+import { Plus, X, ArrowDownLeft, ArrowUpRight, Receipt, RefreshCw, Pencil, Trash2, Check, ArrowRightLeft, ChevronLeft, ChevronRight, Calendar } from 'lucide-react'
+import { format, addMonths, subMonths } from 'date-fns'
 import { API_BASE_URL, apiFetch } from '../config'
 import { usePrivacy } from '../context/PrivacyContext'
 import { useAlert } from '../context/AlertContext'
@@ -53,12 +53,20 @@ export function TransactionList({
   transactions, 
   accounts, 
   onTransactionAdded,
-  loading
+  loading,
+  dateRange,
+  onDateRangeChange,
+  currentMonth,
+  onMonthChange
 }: { 
   transactions: Transaction[], 
   accounts: Account[],
   onTransactionAdded: () => void,
-  loading?: boolean
+  loading?: boolean,
+  dateRange: { startDate: string; endDate: string },
+  onDateRangeChange: (range: { startDate: string; endDate: string }) => void,
+  currentMonth: Date,
+  onMonthChange: (month: Date) => void
 }) {
   const [isAdding, setIsAdding] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -626,15 +634,44 @@ export function TransactionList({
             <p className="text-xs text-muted-foreground">{transactions.length} total</p>
           </div>
         </div>
-        <Button 
-          onClick={() => isAdding ? handleCancel() : handleOpenForm()} 
-          size="sm" 
-          variant={isAdding ? "ghost" : "outline"}
-          className="h-8"
-        >
-          {isAdding ? <X className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
-          <span className="ml-1">{isAdding ? 'Cancel' : 'Add'}</span>
-        </Button>
+        
+        <div className="flex items-center gap-4">
+          {/* Month Navigation */}
+          <div className="flex items-center gap-2">
+            <Button
+              onClick={() => onMonthChange(subMonths(currentMonth, 1))}
+              size="sm"
+              variant="ghost"
+              className="h-8 w-8 p-0"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <div className="flex items-center gap-2 px-3 py-1 rounded-md bg-secondary/50 border border-border/50">
+              <Calendar className="h-3 w-3 text-muted-foreground" />
+              <span className="text-sm font-medium min-w-[120px] text-center">
+                {format(currentMonth, 'MMMM yyyy')}
+              </span>
+            </div>
+            <Button
+              onClick={() => onMonthChange(addMonths(currentMonth, 1))}
+              size="sm"
+              variant="ghost"
+              className="h-8 w-8 p-0"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
+          
+          <Button 
+            onClick={() => isAdding ? handleCancel() : handleOpenForm()} 
+            size="sm" 
+            variant={isAdding ? "ghost" : "outline"}
+            className="h-8"
+          >
+            {isAdding ? <X className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
+            <span className="ml-1">{isAdding ? 'Cancel' : 'Add'}</span>
+          </Button>
+        </div>
       </CardHeader>
       <CardContent className="space-y-4">
         {isAdding && (

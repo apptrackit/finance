@@ -7,6 +7,7 @@ import { Wallet, TrendingUp, TrendingDown, Activity, BarChart3, List, Settings a
 import { API_BASE_URL, apiFetch } from './config'
 import Settings, { getMasterCurrency } from './components/Settings'
 import { usePrivacy } from './context/PrivacyContext'
+import { startOfMonth, endOfMonth, format } from 'date-fns'
 
 
 const APP_VERSION = '0.8.9'
@@ -74,6 +75,13 @@ function App() {
   const [showNetWorth, setShowNetWorth] = useState(false)
   const [investmentRefreshKey, setInvestmentRefreshKey] = useState(0)
   const { privacyMode, togglePrivacyMode, shouldHideInvestment } = usePrivacy()
+  
+  // Date range state for transactions
+  const [currentMonth, setCurrentMonth] = useState(new Date())
+  const [dateRange, setDateRange] = useState({
+    startDate: format(startOfMonth(new Date()), 'yyyy-MM-dd'),
+    endDate: format(endOfMonth(new Date()), 'yyyy-MM-dd')
+  })
 
   useEffect(() => {
     setMasterCurrency(getMasterCurrency())
@@ -94,8 +102,8 @@ function App() {
     const accountsData = await accountsRes.json()
     setAccounts(accountsData)
 
-    // Fetch regular transactions
-    const regularTxPromise = apiFetch(`${API_BASE_URL}/transactions`)
+    // Fetch regular transactions with date range
+    const regularTxPromise = apiFetch(`${API_BASE_URL}/transactions/date-range?startDate=${dateRange.startDate}&endDate=${dateRange.endDate}`)
       .then(res => res.json())
       .catch(err => {
         console.error(err)
@@ -109,17 +117,19 @@ function App() {
       apiFetch(`${API_BASE_URL}/investment-transactions?account_id=${acc.id}`)
         .then(res => res.json())
         .then((txs: any[]) => 
-          txs.map((itx: any) => ({
-            id: itx.id,
-            account_id: itx.account_id,
-            amount: itx.type === 'buy' ? itx.total_amount : -itx.total_amount,
-            quantity: itx.type === 'buy' ? itx.quantity : -itx.quantity,
-            description: itx.notes || `${itx.quantity} shares @ $${itx.price}`,
-            date: itx.date,
-            is_recurring: false,
-            category_id: undefined,
-            linked_transaction_id: undefined
-          }))
+          // Filter investment transactions by date range
+          txs.filter(itx => itx.date >= dateRange.startDate && itx.date <= dateRange.endDate)
+            .map((itx: any) => ({
+              id: itx.id,
+              account_id: itx.account_id,
+              amount: itx.type === 'buy' ? itx.total_amount : -itx.total_amount,
+              quantity: itx.type === 'buy' ? itx.quantity : -itx.quantity,
+              description: itx.notes || `${itx.quantity} shares @ $${itx.price}`,
+              date: itx.date,
+              is_recurring: false,
+              category_id: undefined,
+              linked_transaction_id: undefined
+            }))
         )
         .catch(() => [])
     )
@@ -144,6 +154,13 @@ function App() {
     fetchInvestmentValue()
     fetchApiVersion()
   }, [])
+
+  // Refetch transactions when date range changes
+  useEffect(() => {
+    if (accounts.length > 0) {
+      fetchData()
+    }
+  }, [dateRange])
 
   const fetchApiVersion = async () => {
     try {
@@ -550,6 +567,16 @@ function App() {
                   accounts={accounts} 
                   onTransactionAdded={fetchData}
                   loading={transactionsLoading}
+                  dateRange={dateRange}
+                  onDateRangeChange={(newRange) => setDateRange(newRange)}
+                  currentMonth={currentMonth}
+                  onMonthChange={(newMonth) => {
+                    setCurrentMonth(newMonth)
+                    setDateRange({
+                      startDate: format(startOfMonth(newMonth), 'yyyy-MM-dd'),
+                      endDate: format(endOfMonth(newMonth), 'yyyy-MM-dd')
+                    })
+                  }}
                 />
               </div>
             </div>
