@@ -215,10 +215,11 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     try {
+      const balanceValue = formData.balance.replace(/\s/g, '').trim()
       const payload: any = {
         name: formData.name,
         type: formData.type,
-        balance: parseFloat(formData.balance.replace(/\s/g, '')) || 0,
+        balance: balanceValue === '' ? 0 : parseFloat(balanceValue) || 0,
         currency: formData.currency
       }
 
