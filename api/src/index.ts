@@ -107,6 +107,11 @@ app.post('/transactions', (c) => getControllers(c).transactionController.create(
 app.put('/transactions/:id', (c) => getControllers(c).transactionController.update(c))
 app.delete('/transactions/:id', (c) => getControllers(c).transactionController.delete(c))
 
+// Transaction Pagination
+app.get('/transactions/paginated', (c) => getControllers(c).transactionController.getPaginated(c))
+app.get('/transactions/date-range', (c) => getControllers(c).transactionController.getByDateRange(c))
+app.get('/transactions/from-date', (c) => getControllers(c).transactionController.getFromDate(c))
+
 // Investment Transactions
 app.get('/investment-transactions', (c) => getControllers(c).investmentTransactionController.getAll(c))
 app.post('/investment-transactions', (c) => getControllers(c).investmentTransactionController.create(c))

@@ -81,4 +81,60 @@ export class TransactionRepository {
   async deleteByAccountId(accountId: string): Promise<void> {
     await this.db.prepare('DELETE FROM transactions WHERE account_id = ?').bind(accountId).run()
   }
+
+  async findPaginated(offset: number, limit: number, sortBy: string = 'date', sortOrder: string = 'desc'): Promise<Transaction[]> {
+    const allowedSortFields = ['date', 'amount', 'description']
+    const field = allowedSortFields.includes(sortBy) ? sortBy : 'date'
+    const order = sortOrder.toLowerCase() === 'asc' ? 'ASC' : 'DESC'
+    
+    const { results } = await this.db.prepare(
+      `SELECT * FROM transactions ORDER BY ${field} ${order} LIMIT ? OFFSET ?`
+    ).bind(limit, offset).all<Transaction>()
+    return results
+  }
+
+  async count(): Promise<number> {
+    const result = await this.db.prepare('SELECT COUNT(*) as count FROM transactions').first<{ count: number }>()
+    return result?.count || 0
+  }
+
+  async findByDateRange(startDate: string, endDate: string, accountId?: string, categoryId?: string): Promise<Transaction[]> {
+    let query = 'SELECT * FROM transactions WHERE date >= ? AND date <= ?'
+    const params: any[] = [startDate, endDate]
+
+    if (accountId) {
+      query += ' AND account_id = ?'
+      params.push(accountId)
+    }
+
+    if (categoryId) {
+      query += ' AND category_id = ?'
+      params.push(categoryId)
+    }
+
+    query += ' ORDER BY date DESC'
+
+    const { results } = await this.db.prepare(query).bind(...params).all<Transaction>()
+    return results
+  }
+
+  async findFromDate(startDate: string, accountId?: string, categoryId?: string): Promise<Transaction[]> {
+    let query = 'SELECT * FROM transactions WHERE date >= ?'
+    const params: any[] = [startDate]
+
+    if (accountId) {
+      query += ' AND account_id = ?'
+      params.push(accountId)
+    }
+
+    if (categoryId) {
+      query += ' AND category_id = ?'
+      params.push(categoryId)
+    }
+
+    query += ' ORDER BY date DESC'
+
+    const { results } = await this.db.prepare(query).bind(...params).all<Transaction>()
+    return results
+  }
 }

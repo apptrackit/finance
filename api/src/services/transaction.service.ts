@@ -5,6 +5,7 @@ import { AccountRepository } from '../repositories/account.repository'
 import { InvestmentTransactionRepository } from '../repositories/investment-transaction.repository'
 import { CreateTransactionDto, UpdateTransactionDto } from '../dtos/transaction.dto'
 import { fetchPriceFromYahoo } from '../utils/yahoo-finance.util'
+import { PaginatedResponse, PaginationHelper, PaginationParams, DateFilterParams } from '../models/Pagination'
 
 export class TransactionService {
   constructor(
@@ -195,5 +196,40 @@ export class TransactionService {
         console.log(`Cloned transaction ${tx.id} to ${newId}`)
       }
     }
+  }
+
+  async getTransactionsPaginated(params: PaginationParams): Promise<PaginatedResponse<Transaction>> {
+    const { page, limit } = PaginationHelper.validatePaginationParams(params)
+    const offset = PaginationHelper.calculateOffset(page, limit)
+    
+    const sortBy = params.sortBy || 'date'
+    const sortOrder = params.sortOrder || 'desc'
+
+    const [transactions, total] = await Promise.all([
+      this.transactionRepo.findPaginated(offset, limit, sortBy, sortOrder),
+      this.transactionRepo.count()
+    ])
+
+    return {
+      data: transactions,
+      meta: PaginationHelper.createMeta(total, page, limit)
+    }
+  }
+
+  async getTransactionsByDateRange(
+    startDate: string, 
+    endDate: string, 
+    accountId?: string, 
+    categoryId?: string
+  ): Promise<Transaction[]> {
+    return await this.transactionRepo.findByDateRange(startDate, endDate, accountId, categoryId)
+  }
+
+  async getTransactionsFromDate(
+    startDate: string,
+    accountId?: string,
+    categoryId?: string
+  ): Promise<Transaction[]> {
+    return await this.transactionRepo.findFromDate(startDate, accountId, categoryId)
   }
 }
