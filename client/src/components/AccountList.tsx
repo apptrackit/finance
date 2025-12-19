@@ -383,7 +383,6 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
                   value={formData.balance}
                   onChange={e => setFormData({ ...formData, balance: e.target.value })}
                   placeholder="0"
-                  required
                 />
               </div>
 
