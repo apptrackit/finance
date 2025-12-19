@@ -665,13 +665,17 @@ export function TransactionList({
             </Button>
             <button
               onClick={() => {
+                const now = new Date()
+                const todayMonthStart = format(startOfMonth(now), 'yyyy-MM-dd')
+                const todayMonthEnd = format(endOfMonth(now), 'yyyy-MM-dd')
                 const monthStart = format(startOfMonth(currentMonth), 'yyyy-MM-dd')
                 const monthEnd = format(endOfMonth(currentMonth), 'yyyy-MM-dd')
                 const isDefaultMonth = dateRange.startDate === monthStart && dateRange.endDate === monthEnd
                 
                 if (!isDefaultMonth) {
-                  // Reset to current month
-                  onDateRangeChange({ startDate: monthStart, endDate: monthEnd })
+                  // Reset to today's month (not currentMonth)
+                  onMonthChange(now)
+                  onDateRangeChange({ startDate: todayMonthStart, endDate: todayMonthEnd })
                 } else {
                   // Open date picker
                   setCustomRange({ startDate: dateRange.startDate, endDate: dateRange.endDate })
