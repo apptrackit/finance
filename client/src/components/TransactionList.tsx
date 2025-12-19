@@ -71,6 +71,8 @@ export function TransactionList({
   const [isAdding, setIsAdding] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [categories, setCategories] = useState<Category[]>([])
+  const [showDatePicker, setShowDatePicker] = useState(false)
+  const [customRange, setCustomRange] = useState({ startDate: dateRange.startDate, endDate: dateRange.endDate })
   const [formData, setFormData] = useState({
     account_id: '',
     to_account_id: '',
@@ -637,7 +639,7 @@ export function TransactionList({
         
         <div className="flex items-center gap-4">
           {/* Month Navigation */}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 relative">
             <Button
               onClick={() => onMonthChange(subMonths(currentMonth, 1))}
               size="sm"
@@ -646,12 +648,18 @@ export function TransactionList({
             >
               <ChevronLeft className="h-4 w-4" />
             </Button>
-            <div className="flex items-center gap-2 px-3 py-1 rounded-md bg-secondary/50 border border-border/50">
+            <button
+              onClick={() => {
+                setCustomRange({ startDate: dateRange.startDate, endDate: dateRange.endDate })
+                setShowDatePicker(!showDatePicker)
+              }}
+              className="flex items-center gap-2 px-3 py-1 rounded-md bg-secondary/50 border border-border/50 hover:bg-secondary/70 transition-colors cursor-pointer"
+            >
               <Calendar className="h-3 w-3 text-muted-foreground" />
               <span className="text-sm font-medium min-w-[120px] text-center">
                 {format(currentMonth, 'MMMM yyyy')}
               </span>
-            </div>
+            </button>
             <Button
               onClick={() => onMonthChange(addMonths(currentMonth, 1))}
               size="sm"
@@ -660,6 +668,52 @@ export function TransactionList({
             >
               <ChevronRight className="h-4 w-4" />
             </Button>
+            
+            {/* Custom Date Range Picker */}
+            {showDatePicker && (
+              <div className="absolute top-full right-0 mt-2 p-4 bg-background border border-border rounded-lg shadow-lg z-50 min-w-[280px]">
+                <div className="space-y-3">
+                  <div>
+                    <Label className="text-xs">Start Date</Label>
+                    <Input
+                      type="date"
+                      value={customRange.startDate}
+                      onChange={(e) => setCustomRange({ ...customRange, startDate: e.target.value })}
+                      className="mt-1"
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-xs">End Date</Label>
+                    <Input
+                      type="date"
+                      value={customRange.endDate}
+                      onChange={(e) => setCustomRange({ ...customRange, endDate: e.target.value })}
+                      className="mt-1"
+                    />
+                  </div>
+                  <div className="flex gap-2 pt-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setShowDatePicker(false)}
+                      className="flex-1"
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      size="sm"
+                      onClick={() => {
+                        onDateRangeChange(customRange)
+                        setShowDatePicker(false)
+                      }}
+                      className="flex-1"
+                    >
+                      Apply
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
           
           <Button 
