@@ -4,10 +4,11 @@ import { Input } from './ui/input'
 import { Label } from './ui/label'
 import { Select } from './ui/select'
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card'
-import { Plus, X, Wallet, Building, Pencil, Trash2, Check, Search } from 'lucide-react'
+import { Plus, X, Wallet, Building, Pencil, Trash2, Check, Search, Lock, LockOpen } from 'lucide-react'
 import { API_BASE_URL, apiFetch } from '../config'
 import { usePrivacy } from '../context/PrivacyContext'
 import { useAlert } from '../context/AlertContext'
+import { useLockedAccounts } from '../context/LockedAccountsContext'
 
 type Account = {
   id: string
@@ -36,6 +37,7 @@ type MarketQuote = {
 
 export function AccountList({ accounts, onAccountAdded, loading }: { accounts: Account[], onAccountAdded: () => void, loading?: boolean }) {
   const { confirm } = useAlert()
+  const { isLocked, lockAccount, unlockAccount } = useLockedAccounts()
   const [isAdding, setIsAdding] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [formData, setFormData] = useState({
@@ -292,6 +294,25 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
     resetForm()
   }
 
+  const handleLockToggle = async (accountId: string) => {
+    if (isLocked(accountId)) {
+      // Unlocking requires confirmation
+      const confirmed = await confirm({
+        title: 'Unlock Account',
+        message: 'Are you sure you want to unlock this account? You will be able to edit, delete, and add transactions again.',
+        confirmText: 'Unlock',
+        cancelText: 'Cancel'
+      })
+      
+      if (confirmed) {
+        unlockAccount(accountId)
+      }
+    } else {
+      // Locking doesn't require confirmation
+      lockAccount(accountId)
+    }
+  }
+
   const formatCurrency = (amount: number, currency: string) => {
     const symbol = currencySymbols[currency] || currency
     const formatted = Math.abs(amount).toLocaleString('hu-HU', {
@@ -504,25 +525,41 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
                         <Button
                           size="icon"
                           variant="ghost"
-                          className="h-9 w-9 hover:bg-emerald-500/20"
+                          className={`h-9 w-9 ${isLocked(account.id) ? 'text-amber-500 hover:bg-amber-500/20' : 'hover:bg-emerald-500/20'}`}
                           onClick={(e) => {
                             e.stopPropagation()
-                            handleEdit(account)
+                            handleLockToggle(account.id)
                           }}
+                          title={isLocked(account.id) ? 'Unlock account' : 'Lock account'}
                         >
-                          <Pencil className="h-4 w-4" />
+                          {isLocked(account.id) ? <Lock className="h-4 w-4" /> : <LockOpen className="h-4 w-4" />}
                         </Button>
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          className="h-9 w-9 text-destructive hover:text-destructive hover:bg-red-500/10"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            handleDelete(account.id)
-                          }}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
+                        {!isLocked(account.id) && (
+                          <>
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="h-9 w-9 hover:bg-emerald-500/20"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handleEdit(account)
+                              }}
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="h-9 w-9 text-destructive hover:text-destructive hover:bg-red-500/10"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handleDelete(account.id)
+                              }}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -604,25 +641,41 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
                         <Button
                           size="icon"
                           variant="ghost"
-                          className="h-9 w-9 hover:bg-blue-500/20"
+                          className={`h-9 w-9 ${isLocked(account.id) ? 'text-amber-500 hover:bg-amber-500/20' : 'hover:bg-blue-500/20'}`}
                           onClick={(e) => {
                             e.stopPropagation()
-                            handleEdit(account)
+                            handleLockToggle(account.id)
                           }}
+                          title={isLocked(account.id) ? 'Unlock account' : 'Lock account'}
                         >
-                          <Pencil className="h-4 w-4" />
+                          {isLocked(account.id) ? <Lock className="h-4 w-4" /> : <LockOpen className="h-4 w-4" />}
                         </Button>
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          className="h-9 w-9 text-destructive hover:text-destructive hover:bg-red-500/10"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            handleDelete(account.id)
-                          }}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
+                        {!isLocked(account.id) && (
+                          <>
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="h-9 w-9 hover:bg-blue-500/20"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handleEdit(account)
+                              }}
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="h-9 w-9 text-destructive hover:text-destructive hover:bg-red-500/10"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handleDelete(account.id)
+                              }}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </>
+                        )}
                       </div>
                     </div>
                   </div>

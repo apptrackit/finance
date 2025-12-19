@@ -9,6 +9,7 @@ import { format, addMonths, subMonths, startOfMonth, endOfMonth, addDays, differ
 import { API_BASE_URL, apiFetch } from '../config'
 import { usePrivacy } from '../context/PrivacyContext'
 import { useAlert } from '../context/AlertContext'
+import { useLockedAccounts } from '../context/LockedAccountsContext'
 
 type Transaction = {
   id: string
@@ -93,6 +94,7 @@ export function TransactionList({
   
   const { confirm } = useAlert()
   const { privacyMode, shouldHideInvestment } = usePrivacy()
+  const { isLocked } = useLockedAccounts()
 
   useEffect(() => {
     apiFetch(`${API_BASE_URL}/categories`)
@@ -485,6 +487,19 @@ export function TransactionList({
   }
 
   const handleEdit = (tx: Transaction) => {
+    // Prevent editing if the account is locked
+    if (isLocked(tx.account_id)) {
+      return
+    }
+    
+    // For transfers, also check if the linked account is locked
+    if (tx.linked_transaction_id) {
+      const linkedTx = transactions.find(t => t.id === tx.linked_transaction_id)
+      if (linkedTx && isLocked(linkedTx.account_id)) {
+        return
+      }
+    }
+    
     const isIncome = tx.amount >= 0
     const account = accounts.find(a => a.id === tx.account_id)
     
@@ -516,6 +531,23 @@ export function TransactionList({
   }
 
   const handleDelete = async (id: string) => {
+    // Find the transaction first to check if account is locked
+    const tx = transactions.find(t => t.id === id)
+    if (!tx) return
+    
+    // Check if the account is locked
+    if (isLocked(tx.account_id)) {
+      return
+    }
+    
+    // For transfers, also check if the linked account is locked
+    if (tx.linked_transaction_id) {
+      const linkedTx = transactions.find(t => t.id === tx.linked_transaction_id)
+      if (linkedTx && isLocked(linkedTx.account_id)) {
+        return
+      }
+    }
+    
     const confirmed = await confirm({
       title: 'Delete Transaction',
       message: 'Delete this transaction? This action cannot be undone.',
@@ -838,7 +870,7 @@ export function TransactionList({
                       required
                     >
                       <option value="">Select Account</option>
-                      {accounts.map(acc => (
+                      {accounts.filter(acc => !isLocked(acc.id)).map(acc => (
                         <option key={acc.id} value={acc.id}>{acc.name} ({acc.balance.toLocaleString('hu-HU')} {acc.currency})</option>
                       ))}
                     </Select>
@@ -853,7 +885,7 @@ export function TransactionList({
                     >
                       <option value="">Select Account</option>
                       {accounts
-                        .filter(acc => acc.id !== formData.account_id)
+                        .filter(acc => acc.id !== formData.account_id && !isLocked(acc.id))
                         .map(acc => (
                         <option key={acc.id} value={acc.id}>{acc.name} ({acc.balance.toLocaleString('hu-HU')} {acc.currency})</option>
                       ))}
@@ -1046,7 +1078,7 @@ export function TransactionList({
                       required
                     >
                       <option value="">Select Account</option>
-                      {accounts.map(acc => (
+                      {accounts.filter(acc => !isLocked(acc.id)).map(acc => (
                         <option key={acc.id} value={acc.id}>{acc.name}</option>
                       ))}
                     </Select>
@@ -1209,28 +1241,32 @@ export function TransactionList({
                         </div>
                       )}
                       <div className={`flex gap-1 transition-opacity ${activeTxId === tx.id ? 'opacity-100' : 'opacity-0 md:group-hover:opacity-100'}`}>
-                        <Button 
-                          size="icon" 
-                          variant="ghost" 
-                          className="h-8 w-8"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            handleEdit(tx)
-                          }}
-                        >
-                          <Pencil className="h-3.5 w-3.5" />
-                        </Button>
-                        <Button 
-                          size="icon" 
-                          variant="ghost" 
-                          className="h-8 w-8 text-destructive hover:text-destructive"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            handleDelete(tx.id)
-                          }}
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
+                        {!isLocked(tx.account_id) && !(related && isLocked(related.account_id)) && (
+                          <>
+                            <Button 
+                              size="icon" 
+                              variant="ghost" 
+                              className="h-8 w-8"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handleEdit(tx)
+                              }}
+                            >
+                              <Pencil className="h-3.5 w-3.5" />
+                            </Button>
+                            <Button 
+                              size="icon" 
+                              variant="ghost" 
+                              className="h-8 w-8 text-destructive hover:text-destructive"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handleDelete(tx.id)
+                              }}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          </>
+                        )}
                       </div>
                     </div>
                   </div>
