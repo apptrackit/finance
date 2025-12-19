@@ -1,4 +1,4 @@
-export const API_VERSION = '1.0.2'
+export const API_VERSION = '1.1.0'
 
 export const DEFAULT_CATEGORIES = [
   { name: 'Salary', type: 'income', icon: '💰' },
