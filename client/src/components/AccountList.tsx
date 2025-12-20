@@ -544,11 +544,18 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
                         </div>
                       </div>
                       
-                      <div className={`flex gap-1 ml-3 transition-opacity ${activeAccountId === account.id ? 'opacity-100' : 'opacity-0 md:group-hover:opacity-100'}`}>
+                      {/* Blur background overlay */}
+                      <div className={`absolute inset-0 backdrop-blur-sm bg-background/30 rounded-xl transition-opacity pointer-events-none ${
+                        activeAccountId === account.id || 'opacity-0 md:group-hover:opacity-100'
+                      } ${activeAccountId === account.id ? 'opacity-100' : ''}`} />
+                      
+                      <div className={`absolute inset-0 flex items-center justify-center gap-3 transition-opacity z-10 ${
+                        activeAccountId === account.id ? 'opacity-100' : 'opacity-0 md:group-hover:opacity-100'
+                      }`}>
                         <Button
                           size="icon"
                           variant="ghost"
-                          className={`h-9 w-9 ${isLocked(account.id) ? 'text-amber-500 hover:bg-amber-500/20' : 'hover:bg-emerald-500/20'}`}
+                          className={`h-10 w-10 ${isLocked(account.id) ? 'text-amber-500 hover:bg-amber-500/20' : 'hover:bg-emerald-500/20'}`}
                           onClick={(e) => {
                             e.stopPropagation()
                             handleLockToggle(account.id)
@@ -562,7 +569,7 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
                             <Button
                               size="icon"
                               variant="ghost"
-                              className="h-9 w-9 hover:bg-emerald-500/20"
+                              className="h-10 w-10 hover:bg-emerald-500/20"
                               onClick={(e) => {
                                 e.stopPropagation()
                                 handleEdit(account)
@@ -573,7 +580,7 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
                             <Button
                               size="icon"
                               variant="ghost"
-                              className="h-9 w-9 text-destructive hover:text-destructive hover:bg-red-500/10"
+                              className="h-10 w-10 text-destructive hover:text-destructive hover:bg-red-500/10"
                               onClick={(e) => {
                                 e.stopPropagation()
                                 handleDelete(account.id)
@@ -660,11 +667,18 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
                         </div>
                       </div>
                       
-                      <div className={`flex gap-1 ml-3 transition-opacity ${activeAccountId === account.id ? 'opacity-100' : 'opacity-0 md:group-hover:opacity-100'}`}>
+                      {/* Blur background overlay */}
+                      <div className={`absolute inset-0 backdrop-blur-sm bg-background/30 rounded-xl transition-opacity pointer-events-none ${
+                        activeAccountId === account.id || 'opacity-0 md:group-hover:opacity-100'
+                      } ${activeAccountId === account.id ? 'opacity-100' : ''}`} />
+                      
+                      <div className={`absolute inset-0 flex items-center justify-center gap-3 transition-opacity z-10 ${
+                        activeAccountId === account.id ? 'opacity-100' : 'opacity-0 md:group-hover:opacity-100'
+                      }`}>
                         <Button
                           size="icon"
                           variant="ghost"
-                          className={`h-9 w-9 ${isLocked(account.id) ? 'text-amber-500 hover:bg-amber-500/20' : 'hover:bg-blue-500/20'}`}
+                          className={`h-10 w-10 ${isLocked(account.id) ? 'text-amber-500 hover:bg-amber-500/20' : 'hover:bg-blue-500/20'}`}
                           onClick={(e) => {
                             e.stopPropagation()
                             handleLockToggle(account.id)
@@ -678,7 +692,7 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
                             <Button
                               size="icon"
                               variant="ghost"
-                              className="h-9 w-9 hover:bg-blue-500/20"
+                              className="h-10 w-10 hover:bg-blue-500/20"
                               onClick={(e) => {
                                 e.stopPropagation()
                                 handleEdit(account)
@@ -689,7 +703,7 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
                             <Button
                               size="icon"
                               variant="ghost"
-                              className="h-9 w-9 text-destructive hover:text-destructive hover:bg-red-500/10"
+                              className="h-10 w-10 text-destructive hover:text-destructive hover:bg-red-500/10"
                               onClick={(e) => {
                                 e.stopPropagation()
                                 handleDelete(account.id)
