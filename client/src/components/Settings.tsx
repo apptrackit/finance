@@ -4,7 +4,7 @@ import { Label } from './ui/label'
 import { Select } from './ui/select'
 import { Input } from './ui/input'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card'
-import { Settings as SettingsIcon, Save, Download, Plus, Trash2, Tag, Pencil, Check, X, Eye, EyeOff } from 'lucide-react'
+import { Settings as SettingsIcon, Save, Download, Plus, Trash2, Tag, Pencil, Check, X, Eye, EyeOff, RefreshCw } from 'lucide-react'
 import { API_BASE_URL, apiFetch } from '../config'
 import { usePrivacy } from '../context/PrivacyContext'
 import { useAlert } from '../context/AlertContext'
@@ -115,6 +115,8 @@ export default function Settings() {
   const [masterCurrency, setMasterCurrency] = useState('HUF')
   const [isSaving, setIsSaving] = useState(false)
   const [isExporting, setIsExporting] = useState(false)
+  const [isRefreshingMarketData, setIsRefreshingMarketData] = useState(false)
+  const [refreshCooldown, setRefreshCooldown] = useState(0)
   
   const { defaultPrivacyMode, setDefaultPrivacyMode, defaultInvestmentPrivacyMode, setDefaultInvestmentPrivacyMode } = usePrivacy()
   const { showAlert, confirm } = useAlert()
@@ -150,7 +152,34 @@ export default function Settings() {
     
     // Load categories
     loadCategories()
+    
+    // Check for cooldown on mount
+    const lastRefresh = localStorage.getItem('finance_last_market_refresh')
+    if (lastRefresh) {
+      const timeSince = Date.now() - parseInt(lastRefresh, 10)
+      const remainingCooldown = 60000 - timeSince // 60 seconds
+      if (remainingCooldown > 0) {
+        setRefreshCooldown(Math.ceil(remainingCooldown / 1000))
+      }
+    }
   }, [])
+  
+  // Cooldown timer effect
+  useEffect(() => {
+    if (refreshCooldown > 0) {
+      const timer = setInterval(() => {
+        setRefreshCooldown(prev => {
+          if (prev <= 1) {
+            clearInterval(timer)
+            return 0
+          }
+          return prev - 1
+        })
+      }, 1000)
+      
+      return () => clearInterval(timer)
+    }
+  }, [refreshCooldown])
   
   const loadCategories = async () => {
     try {
@@ -480,6 +509,56 @@ export default function Settings() {
       })
     } finally {
       setIsExporting(false)
+    }
+  }
+
+  const handleRefreshMarketData = async () => {
+    // Check cooldown
+    const lastRefresh = localStorage.getItem('finance_last_market_refresh')
+    if (lastRefresh) {
+      const timeSince = Date.now() - parseInt(lastRefresh, 10)
+      if (timeSince < 60000) {
+        const remainingSeconds = Math.ceil((60000 - timeSince) / 1000)
+        showAlert({
+          type: 'warning',
+          title: 'Please Wait',
+          message: `You can refresh market data again in ${remainingSeconds} seconds.`
+        })
+        return
+      }
+    }
+    
+    setIsRefreshingMarketData(true)
+    try {
+      const res = await apiFetch(`${API_BASE_URL}/cache/refresh`, {
+        method: 'POST'
+      })
+      
+      if (!res.ok) {
+        const error = await res.json()
+        throw new Error(error.error || 'Failed to refresh market data')
+      }
+      
+      const result = await res.json()
+      
+      // Set cooldown
+      localStorage.setItem('finance_last_market_refresh', Date.now().toString())
+      setRefreshCooldown(60)
+      
+      showAlert({
+        type: 'success',
+        title: 'Market Data Refreshed',
+        message: result.message || 'Exchange rates and stock prices have been updated'
+      })
+    } catch (error) {
+      console.error('Failed to refresh market data:', error)
+      showAlert({
+        type: 'error',
+        title: 'Refresh Failed',
+        message: error instanceof Error ? error.message : 'Failed to refresh market data'
+      })
+    } finally {
+      setIsRefreshingMarketData(false)
     }
   }
 
@@ -815,6 +894,49 @@ export default function Settings() {
             <Save className="h-4 w-4 mr-2" />
             {isSaving ? 'Saving...' : 'Save Settings'}
           </Button>
+        </CardContent>
+      </Card>
+
+      {/* Market Data Refresh */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-3">
+            <div className="h-8 w-8 rounded-lg bg-secondary flex items-center justify-center">
+              <RefreshCw className="h-4 w-4 text-muted-foreground" />
+            </div>
+            <div>
+              <CardTitle>Market Data</CardTitle>
+              <CardDescription>Manage exchange rates and stock price cache</CardDescription>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <p className="text-sm text-muted-foreground">
+              Exchange rates and stock prices are automatically cached for 1 hour to improve performance.
+              Use this button to manually refresh all market data.
+            </p>
+          </div>
+
+          <Button 
+            onClick={handleRefreshMarketData} 
+            className="w-full"
+            disabled={isRefreshingMarketData || refreshCooldown > 0}
+          >
+            <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshingMarketData ? 'animate-spin' : ''}`} />
+            {isRefreshingMarketData 
+              ? 'Refreshing...' 
+              : refreshCooldown > 0 
+                ? `Wait ${refreshCooldown}s` 
+                : 'Refresh Market Data'}
+          </Button>
+          
+          <div className="text-xs text-muted-foreground">
+            <p>This will update exchange rates for all your currencies and stock prices for your investment accounts.</p>
+            {refreshCooldown > 0 && (
+              <p className="text-amber-600 mt-1">⏱️ You can refresh again in {refreshCooldown} seconds</p>
+            )}
+          </div>
         </CardContent>
       </Card>
 

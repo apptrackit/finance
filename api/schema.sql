@@ -42,3 +42,20 @@ CREATE TABLE IF NOT EXISTS investment_transactions (
   created_at INTEGER,
   FOREIGN KEY(account_id) REFERENCES accounts(id) ON DELETE CASCADE
 );
+
+-- Exchange rates cache table
+CREATE TABLE IF NOT EXISTS exchange_rates (
+  base_currency TEXT NOT NULL,
+  target_currency TEXT NOT NULL,
+  rate REAL NOT NULL,
+  fetched_at INTEGER NOT NULL, -- Unix timestamp in milliseconds
+  PRIMARY KEY (base_currency, target_currency)
+);
+
+-- Stock prices cache table
+CREATE TABLE IF NOT EXISTS stock_prices (
+  symbol TEXT NOT NULL,
+  price REAL NOT NULL,
+  fetched_at INTEGER NOT NULL, -- Unix timestamp in milliseconds
+  PRIMARY KEY (symbol)
+);

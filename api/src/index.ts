@@ -16,6 +16,7 @@ import { InvestmentTransactionService } from './services/investment-transaction.
 import { TransferService } from './services/transfer.service'
 import { DashboardService } from './services/dashboard.service'
 import { MarketDataService } from './services/market-data.service'
+import { CacheService } from './services/cache.service'
 
 // Controllers
 import { AccountController } from './controllers/account.controller'
@@ -25,6 +26,7 @@ import { InvestmentTransactionController } from './controllers/investment-transa
 import { TransferController } from './controllers/transfer.controller'
 import { DashboardController } from './controllers/dashboard.controller'
 import { MarketDataController } from './controllers/market-data.controller'
+import { CacheController } from './controllers/cache.controller'
 
 // Middleware
 import { corsMiddleware } from './middlewares/cors.middleware'
@@ -41,11 +43,12 @@ function createDependencies(db: D1Database) {
   // Initialize services
   const accountService = new AccountService(accountRepo, transactionRepo)
   const categoryService = new CategoryService(categoryRepo)
-  const transactionService = new TransactionService(transactionRepo, accountRepo, investmentTransactionRepo)
+  const transactionService = new TransactionService(transactionRepo, accountRepo, investmentTransactionRepo, db)
   const investmentTransactionService = new InvestmentTransactionService(investmentTransactionRepo, accountRepo)
-  const transferService = new TransferService(accountRepo, transactionRepo, investmentTransactionRepo)
-  const dashboardService = new DashboardService(accountRepo)
+  const transferService = new TransferService(accountRepo, transactionRepo, investmentTransactionRepo, db)
+  const dashboardService = new DashboardService(accountRepo, db)
   const marketDataService = new MarketDataService()
+  const cacheService = new CacheService(db, accountRepo)
 
   // Initialize controllers
   const accountController = new AccountController(accountService)
@@ -55,6 +58,7 @@ function createDependencies(db: D1Database) {
   const transferController = new TransferController(transferService)
   const dashboardController = new DashboardController(dashboardService)
   const marketDataController = new MarketDataController(marketDataService)
+  const cacheController = new CacheController(cacheService)
 
   return {
     accountController,
@@ -63,7 +67,8 @@ function createDependencies(db: D1Database) {
     investmentTransactionController,
     transferController,
     dashboardController,
-    marketDataController
+    marketDataController,
+    cacheController
   }
 }
 
@@ -124,6 +129,11 @@ app.post('/transfers', (c) => getControllers(c).transferController.create(c))
 // Dashboard
 app.get('/dashboard/net-worth', (c) => getControllers(c).dashboardController.getNetWorth(c))
 
+// Cache Management
+app.post('/cache/refresh', (c) => getControllers(c).cacheController.refreshMarketData(c))
+app.post('/cache/clear', (c) => getControllers(c).cacheController.clearCache(c))
+app.get('/cache/status', (c) => getControllers(c).cacheController.getCacheStatus(c))
+
 // Market Data
 app.get('/market/search', (c) => getControllers(c).marketDataController.search(c))
 app.get('/market/quote', (c) => getControllers(c).marketDataController.quote(c))
@@ -138,7 +148,7 @@ export default {
     const transactionRepo = new TransactionRepository(env.DB)
     const accountRepo = new AccountRepository(env.DB)
     const investmentTransactionRepo = new InvestmentTransactionRepository(env.DB)
-    const transactionService = new TransactionService(transactionRepo, accountRepo, investmentTransactionRepo)
+    const transactionService = new TransactionService(transactionRepo, accountRepo, investmentTransactionRepo, env.DB)
 
     // Clone recurring transactions
     await transactionService.cloneRecurringTransactions()

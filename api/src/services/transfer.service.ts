@@ -1,3 +1,4 @@
+import { D1Database } from '@cloudflare/workers-types'
 import { AccountRepository } from '../repositories/account.repository'
 import { TransactionRepository } from '../repositories/transaction.repository'
 import { InvestmentTransactionRepository } from '../repositories/investment-transaction.repository'
@@ -8,7 +9,8 @@ export class TransferService {
   constructor(
     private accountRepo: AccountRepository,
     private transactionRepo: TransactionRepository,
-    private investmentTransactionRepo: InvestmentTransactionRepository
+    private investmentTransactionRepo: InvestmentTransactionRepository,
+    private db: D1Database
   ) {}
 
   async getExchangeRate(from: string, to: string): Promise<{ rate: number; from: string; to: string }> {
@@ -16,7 +18,7 @@ export class TransferService {
       return { rate: 1, from, to }
     }
 
-    const rates = await getExchangeRates(from)
+    const rates = await getExchangeRates(from, this.db)
     const rate = rates[to] || null
 
     if (!rate) {

@@ -1,3 +1,4 @@
+import { D1Database } from '@cloudflare/workers-types'
 import { Transaction } from '../models/Transaction'
 import { InvestmentTransaction } from '../models/InvestmentTransaction'
 import { TransactionRepository } from '../repositories/transaction.repository'
@@ -11,7 +12,8 @@ export class TransactionService {
   constructor(
     private transactionRepo: TransactionRepository,
     private accountRepo: AccountRepository,
-    private investmentTransactionRepo: InvestmentTransactionRepository
+    private investmentTransactionRepo: InvestmentTransactionRepository,
+    private db: D1Database
   ) {}
 
   async getAllTransactions(): Promise<Transaction[]> {
@@ -38,7 +40,7 @@ export class TransactionService {
       // Only fetch price if not provided by frontend
       if (!pricePerUnit && account.asset_type !== 'manual' && account.symbol) {
         try {
-          pricePerUnit = await fetchPriceFromYahoo(account.symbol, dto.date)
+          pricePerUnit = await fetchPriceFromYahoo(account.symbol, dto.date, this.db)
           
           if (!pricePerUnit || pricePerUnit === 0) {
             throw new Error(`Could not fetch price for ${account.symbol} on ${dto.date}. Please try again or contact support.`)

@@ -1,8 +1,86 @@
-export async function fetchPriceFromYahoo(symbol: string, date: string): Promise<number> {
+import { D1Database } from '@cloudflare/workers-types'
+import { MarketDataRepository } from '../repositories/market-data.repository'
+
+export async function fetchPriceFromYahoo(
+  symbol: string,
+  date: string,
+  db?: D1Database,
+  forceRefresh: boolean = false
+): Promise<number> {
+  // If database is provided, try to get cached price
+  if (db) {
+    const repo = new MarketDataRepository(db)
+    
+    if (!forceRefresh) {
+      const cachedPrice = await repo.getStockPrice(symbol)
+      
+      // Check if we have cached data and if it's still fresh (within 1 hour)
+      if (cachedPrice && !repo.isStale(cachedPrice.fetchedAt)) {
+        return cachedPrice.price
+      }
+    }
+    
+    // If no cached data or data is stale or force refresh, fetch new data
+    try {
+      const freshPrice = await fetchPriceFromYahooAPI(symbol, date)
+      
+      // Save to cache if we got a valid price
+      if (freshPrice > 0) {
+        await repo.saveStockPrice(symbol, freshPrice, Date.now())
+        return freshPrice
+      }
+    } catch (error: any) {
+      // If rate limited or fetch failed, fall back to cached data
+      if (error.message?.includes('RATE_LIMITED')) {
+        console.warn(`Rate limited fetching ${symbol}, using cached data if available`)
+      } else {
+        console.warn(`Failed to fetch ${symbol}, using cached data if available:`, error.message)
+      }
+      
+      const cachedPrice = await repo.getStockPrice(symbol)
+      if (cachedPrice) {
+        console.log(`Using stale cached price for ${symbol}: $${cachedPrice.price}`)
+        return cachedPrice.price
+      }
+      
+      // Re-throw if we have no cached data
+      throw error
+    }
+    
+    // If we got here with price 0, try cached data
+    const cachedPrice = await repo.getStockPrice(symbol)
+    if (cachedPrice) {
+      console.log(`Using cached price for ${symbol} (fresh fetch returned 0)`)
+      return cachedPrice.price
+    }
+    
+    return 0
+  }
+  
+  // No database provided, fetch directly
+  return await fetchPriceFromYahooAPI(symbol, date)
+}
+
+async function fetchPriceFromYahooAPI(symbol: string, date: string): Promise<number> {
   try {
     const quoteRes = await fetch(
       `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=1d&period1=${Math.floor(new Date(date).getTime() / 1000)}&period2=${Math.floor(new Date(date).getTime() / 1000) + 86400}`
     )
+    
+    // Check for rate limiting before parsing JSON
+    if (quoteRes.status === 429) {
+      throw new Error('RATE_LIMITED')
+    }
+    
+    if (!quoteRes.ok) {
+      const text = await quoteRes.text()
+      if (text.includes('Too Many Requests')) {
+        throw new Error('RATE_LIMITED')
+      }
+      console.warn(`Yahoo Finance API returned status ${quoteRes.status} for ${symbol}`)
+      return 0
+    }
+    
     const quoteData: any = await quoteRes.json()
     
     if (quoteData?.chart?.result?.[0]?.meta?.regularMarketPrice) {
@@ -22,13 +100,13 @@ export async function fetchPriceFromYahoo(symbol: string, date: string): Promise
 
     return 0
   } catch (error: any) {
-    console.error('Failed to fetch price:', error)
-    
-    // Yahoo Finance rate limit - throw specific error
-    if (error.message && error.message.includes('Too Many Requests')) {
+    // Yahoo Finance rate limit - throw specific error without logging full stack
+    if (error.message && error.message.includes('RATE_LIMITED')) {
       throw new Error('RATE_LIMITED')
     }
     
+    console.error(`Failed to fetch price for ${symbol}:`, error.message || error)
     throw new Error(`FETCH_FAILED: ${error.message || error}`)
   }
 }
+

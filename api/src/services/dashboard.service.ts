@@ -1,9 +1,13 @@
+import { D1Database } from '@cloudflare/workers-types'
 import { AccountRepository } from '../repositories/account.repository'
 import { NetWorthResponseDto, AccountNetWorth } from '../dtos/dashboard.dto'
 import { getExchangeRates } from '../utils/exchange-rate.util'
 
 export class DashboardService {
-  constructor(private accountRepo: AccountRepository) {}
+  constructor(
+    private accountRepo: AccountRepository,
+    private db: D1Database
+  ) {}
 
   async getNetWorth(currency: string = 'HUF'): Promise<NetWorthResponseDto> {
     // Get all accounts - need type field too
@@ -14,7 +18,7 @@ export class DashboardService {
     }
 
     // Fetch exchange rates from master currency
-    const rates = await getExchangeRates(currency)
+    const rates = await getExchangeRates(currency, this.db)
 
     let totalNetWorth = 0
     const accountDetails: AccountNetWorth[] = []
