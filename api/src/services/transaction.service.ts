@@ -146,7 +146,7 @@ export class TransactionService {
     const tx = await this.transactionRepo.findById(id)
 
     if (tx) {
-      // Revert balance
+      // Revert balance for the main transaction
       const account = await this.accountRepo.findById(tx.account_id)
       if (account) {
         await this.accountRepo.updateBalance(
@@ -156,6 +156,25 @@ export class TransactionService {
         )
       }
 
+      // If this is a transfer (has linked_transaction_id), delete the linked transaction too
+      if (tx.linked_transaction_id) {
+        const linkedTx = await this.transactionRepo.findById(tx.linked_transaction_id)
+        if (linkedTx) {
+          // Revert balance for the linked account
+          const linkedAccount = await this.accountRepo.findById(linkedTx.account_id)
+          if (linkedAccount) {
+            await this.accountRepo.updateBalance(
+              linkedTx.account_id,
+              linkedAccount.balance - linkedTx.amount,
+              Date.now()
+            )
+          }
+          // Delete the linked transaction
+          await this.transactionRepo.delete(tx.linked_transaction_id)
+        }
+      }
+
+      // Delete the main transaction
       await this.transactionRepo.delete(id)
     }
   }
