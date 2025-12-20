@@ -666,20 +666,33 @@ export function TransactionList({
 
   return (
     <Card>
-      <CardHeader className="flex flex-row items-center justify-between pb-4">
-        <div className="flex items-center gap-3">
-          <div className="h-8 w-8 rounded-lg bg-secondary flex items-center justify-center">
-            <Receipt className="h-4 w-4 text-muted-foreground" />
+      <CardHeader className="pb-3 sm:pb-4">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div className="flex items-center justify-between sm:justify-start">
+            <div className="flex items-center gap-2 sm:gap-3">
+              <div className="h-7 w-7 sm:h-8 sm:w-8 rounded-lg bg-secondary flex items-center justify-center">
+                <Receipt className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-muted-foreground" />
+              </div>
+              <div>
+                <CardTitle className="text-sm sm:text-base">Transactions</CardTitle>
+                <p className="text-[10px] sm:text-xs text-muted-foreground">{transactions.length} total</p>
+              </div>
+            </div>
+            
+            <Button 
+              onClick={() => isAdding ? handleCancel() : handleOpenForm()} 
+              size="sm" 
+              variant={isAdding ? "ghost" : "outline"}
+              className="h-7 sm:h-8 text-xs flex-shrink-0 sm:hidden"
+            >
+              {isAdding ? <X className="h-3.5 w-3.5 sm:h-4 sm:w-4" /> : <Plus className="h-3.5 w-3.5 sm:h-4 sm:w-4" />}
+              <span className="ml-1">{isAdding ? 'Cancel' : 'Add'}</span>
+            </Button>
           </div>
-          <div>
-            <CardTitle className="text-base">Transactions</CardTitle>
-            <p className="text-xs text-muted-foreground">{transactions.length} total</p>
-          </div>
-        </div>
-        
-        <div className="flex items-center gap-4">
-          {/* Month Navigation */}
-          <div className="flex items-center gap-2 relative">
+          
+          <div className="flex items-center justify-center sm:justify-start gap-2 sm:gap-4">
+            {/* Month Navigation */}
+            <div className="flex items-center gap-1 sm:gap-2 relative">
             <Button
               onClick={() => {
                 const monthStart = format(startOfMonth(currentMonth), 'yyyy-MM-dd')
@@ -699,9 +712,9 @@ export function TransactionList({
               }}
               size="sm"
               variant="ghost"
-              className="h-8 w-8 p-0"
+              className="h-7 w-7 sm:h-8 sm:w-8 p-0"
             >
-              <ChevronLeft className="h-4 w-4" />
+              <ChevronLeft className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
             </Button>
             <button
               onClick={() => {
@@ -722,10 +735,10 @@ export function TransactionList({
                   setShowDatePicker(!showDatePicker)
                 }
               }}
-              className="flex items-center gap-2 px-3 py-1 rounded-md bg-secondary/50 border border-border/50 hover:bg-secondary/70 transition-colors cursor-pointer"
+              className="flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-1 rounded-md bg-secondary/50 border border-border/50 hover:bg-secondary/70 transition-colors cursor-pointer"
             >
               <Calendar className="h-3 w-3 text-muted-foreground" />
-              <span className="text-sm font-medium min-w-[120px] text-center">
+              <span className="text-[11px] sm:text-sm font-medium min-w-[90px] sm:min-w-[120px] text-center">
                 {(() => {
                   const monthStart = format(startOfMonth(currentMonth), 'yyyy-MM-dd')
                   const monthEnd = format(endOfMonth(currentMonth), 'yyyy-MM-dd')
@@ -758,9 +771,9 @@ export function TransactionList({
               }}
               size="sm"
               variant="ghost"
-              className="h-8 w-8 p-0"
+              className="h-7 w-7 sm:h-8 sm:w-8 p-0"
             >
-              <ChevronRight className="h-4 w-4" />
+              <ChevronRight className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
             </Button>
             
             {/* Custom Date Range Picker */}
@@ -808,20 +821,21 @@ export function TransactionList({
                 </div>
               </div>
             )}
-          </div>
+            </div>
           
-          <Button 
-            onClick={() => isAdding ? handleCancel() : handleOpenForm()} 
-            size="sm" 
-            variant={isAdding ? "ghost" : "outline"}
-            className="h-8"
-          >
-            {isAdding ? <X className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
-            <span className="ml-1">{isAdding ? 'Cancel' : 'Add'}</span>
-          </Button>
+            <Button 
+              onClick={() => isAdding ? handleCancel() : handleOpenForm()} 
+              size="sm" 
+              variant={isAdding ? "ghost" : "outline"}
+              className="h-7 sm:h-8 text-xs flex-shrink-0 hidden sm:flex"
+            >
+              {isAdding ? <X className="h-3.5 w-3.5 sm:h-4 sm:w-4" /> : <Plus className="h-3.5 w-3.5 sm:h-4 sm:w-4" />}
+              <span className="ml-1">{isAdding ? 'Cancel' : 'Add'}</span>
+            </Button>
+          </div>
         </div>
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="space-y-3 sm:space-y-4">
         {isAdding && (
           <form onSubmit={handleSubmit} className="p-4 rounded-xl bg-secondary/50 border border-border/50 space-y-4 animate-in slide-in-from-top-2 duration-200">
             {/* Transaction Type Selector - 3 options now */}
@@ -1193,11 +1207,11 @@ export function TransactionList({
           </form>
         )}
 
-        <div className="space-y-4">
+        <div className="space-y-3 sm:space-y-4">
           {sortedDates.map(date => (
             <div key={date}>
-              <div className="flex items-center gap-2 mb-2">
-                <div className="text-xs font-medium text-muted-foreground">
+              <div className="flex items-center gap-1.5 sm:gap-2 mb-1.5 sm:mb-2">
+                <div className="text-[10px] sm:text-xs font-medium text-muted-foreground">
                   {format(new Date(date), 'EEEE, MMM d')}
                 </div>
                 <div className="flex-1 h-px bg-border" />
@@ -1210,24 +1224,24 @@ export function TransactionList({
                   return (
                   <div 
                     key={tx.id} 
-                    className="group flex items-center justify-between p-3 rounded-xl hover:bg-secondary/30 transition-all duration-200"
+                    className="group flex items-center justify-between p-2 sm:p-3 rounded-lg sm:rounded-xl hover:bg-secondary/30 transition-all duration-200"
                     onClick={() => setActiveTxId(activeTxId === tx.id ? null : tx.id)}
                   >
-                    <div className="flex items-center gap-3" onClick={(e) => e.stopPropagation()}>
-                      <div className={`h-10 w-10 rounded-xl flex items-center justify-center text-lg ${
+                    <div className="flex items-center gap-2 sm:gap-3" onClick={(e) => e.stopPropagation()}>
+                      <div className={`h-8 w-8 sm:h-10 sm:w-10 rounded-lg sm:rounded-xl flex items-center justify-center text-base sm:text-lg ${
                         isTransfer ? 'bg-blue-500/10 text-blue-500' :
                         tx.amount >= 0 ? 'bg-success/10' : 'bg-secondary'
                       }`}>
-                        {isTransfer ? <ArrowRightLeft className="h-5 w-5" /> : getCategoryIcon(tx.category_id)}
+                        {isTransfer ? <ArrowRightLeft className="h-4 w-4 sm:h-5 sm:w-5" /> : getCategoryIcon(tx.category_id)}
                       </div>
                       <div>
-                        <p className="font-medium text-sm">
+                        <p className="font-medium text-xs sm:text-sm">
                           {isTransfer 
                             ? `Transfer to ${related ? getAccountName(related.account_id) : 'Unknown'}`
                             : (tx.description || getCategoryName(tx.category_id))
                           }
                         </p>
-                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <div className="flex items-center gap-1.5 sm:gap-2 text-[10px] sm:text-xs text-muted-foreground">
                           <span>{getAccountName(tx.account_id)}</span>
                           {isTransfer && related && (
                              <>
@@ -1239,7 +1253,7 @@ export function TransactionList({
                             <>
                               <span>•</span>
                               <span className="flex items-center gap-1 text-primary">
-                                <RefreshCw className="h-3 w-3" />
+                                <RefreshCw className="h-2.5 w-2.5 sm:h-3 sm:w-3" />
                                 Recurring
                               </span>
                             </>
@@ -1248,7 +1262,7 @@ export function TransactionList({
                       </div>
                     </div>
                     <div className="flex flex-col items-end gap-0.5">
-                      <div className={`font-bold text-sm ${isTransfer ? 'text-destructive' : (tx.amount >= 0 ? 'text-success' : 'text-destructive')} ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
+                      <div className={`font-bold text-xs sm:text-sm ${isTransfer ? 'text-destructive' : (tx.amount >= 0 ? 'text-success' : 'text-destructive')} ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
                         {(() => {
                           const account = accounts.find(a => a.id === tx.account_id)
                           const isInvestmentTx = account?.type === 'investment'
@@ -1265,7 +1279,7 @@ export function TransactionList({
                         })()}
                       </div>
                       {isTransfer && related && (
-                        <div className={`text-xs text-success font-medium ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
+                        <div className={`text-[10px] sm:text-xs text-success font-medium ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
                           {(() => {
                             const relatedAccount = accounts.find(a => a.id === related.account_id)
                             const isInvestmentTx = relatedAccount?.type === 'investment'
@@ -1284,24 +1298,24 @@ export function TransactionList({
                             <Button 
                               size="icon" 
                               variant="ghost" 
-                              className="h-8 w-8"
+                              className="h-7 w-7 sm:h-8 sm:w-8"
                               onClick={(e) => {
                                 e.stopPropagation()
                                 handleEdit(tx)
                               }}
                             >
-                              <Pencil className="h-3.5 w-3.5" />
+                              <Pencil className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
                             </Button>
                             <Button 
                               size="icon" 
                               variant="ghost" 
-                              className="h-8 w-8 text-destructive hover:text-destructive"
+                              className="h-7 w-7 sm:h-8 sm:w-8 text-destructive hover:text-destructive"
                               onClick={(e) => {
                                 e.stopPropagation()
                                 handleDelete(tx.id)
                               }}
                             >
-                              <Trash2 className="h-3.5 w-3.5" />
+                              <Trash2 className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
                             </Button>
                           </>
                         )}

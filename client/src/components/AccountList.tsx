@@ -333,24 +333,24 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
 
   return (
     <Card className="h-fit">
-      <CardHeader className="flex flex-row items-center justify-between pb-4">
-        <div className="flex items-center gap-3">
-          <div className="h-8 w-8 rounded-lg bg-secondary flex items-center justify-center">
-            <Building className="h-4 w-4 text-muted-foreground" />
+      <CardHeader className="flex flex-row items-center justify-between pb-3 sm:pb-4">
+        <div className="flex items-center gap-2 sm:gap-3">
+          <div className="h-7 w-7 sm:h-8 sm:w-8 rounded-lg bg-secondary flex items-center justify-center">
+            <Building className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-muted-foreground" />
           </div>
-          <CardTitle className="text-base">Accounts</CardTitle>
+          <CardTitle className="text-sm sm:text-base">Accounts</CardTitle>
         </div>
         <Button
           onClick={() => isAdding ? handleCancel() : setIsAdding(true)}
           size="sm"
           variant={isAdding ? "ghost" : "outline"}
-          className="h-8"
+          className="h-7 sm:h-8 text-xs"
         >
-          {isAdding ? <X className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
+          {isAdding ? <X className="h-3.5 w-3.5 sm:h-4 sm:w-4" /> : <Plus className="h-3.5 w-3.5 sm:h-4 sm:w-4" />}
           <span className="ml-1">{isAdding ? 'Cancel' : 'Add'}</span>
         </Button>
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="space-y-3 sm:space-y-4">
         {isAdding && (
           <form onSubmit={handleSubmit} className="p-4 rounded-xl bg-secondary/50 border border-border/50 space-y-4 animate-in slide-in-from-top-2 duration-200">
             <div className="grid grid-cols-2 gap-3">
@@ -508,16 +508,16 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
 
         {/* Cash Accounts Section */}
         {accounts.filter(a => a.type === 'cash').length > 0 && (
-          <div className="space-y-3 mb-6">
-            <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-1">Cash Accounts</h4>
-            <div className="space-y-2">
+          <div className="space-y-2 sm:space-y-3 mb-4 sm:mb-6">
+            <h4 className="text-[10px] sm:text-xs font-semibold text-muted-foreground uppercase tracking-wider px-1">Cash Accounts</h4>
+            <div className="space-y-1.5 sm:space-y-2">
               {accounts.filter(a => a.type === 'cash').map(account => {
                 const percentage = cashPercentages[account.id] || 0
                 
                 return (
                   <div
                     key={account.id}
-                    className="group relative overflow-hidden rounded-xl bg-gradient-to-br from-emerald-500/10 to-emerald-500/5 border border-emerald-500/20 hover:border-emerald-500/40 transition-all duration-300"
+                    className="group relative overflow-hidden rounded-lg sm:rounded-xl bg-gradient-to-br from-emerald-500/10 to-emerald-500/5 border border-emerald-500/20 hover:border-emerald-500/40 transition-all duration-300"
                     onClick={() => setActiveAccountId(activeAccountId === account.id ? null : account.id)}
                   >
                     {/* Percentage bar background */}
@@ -526,19 +526,19 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
                       style={{ width: `${percentage}%` }}
                     />
                     
-                    <div className="relative p-4 flex items-center justify-between">
-                      <div className="flex items-center gap-3 flex-1">
-                        <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-600 flex items-center justify-center shadow-lg shadow-emerald-500/25">
-                          <Wallet className="h-6 w-6 text-white" />
+                    <div className="relative p-2.5 sm:p-4 flex items-center justify-between">
+                      <div className="flex items-center gap-2 sm:gap-3 flex-1">
+                        <div className="h-9 w-9 sm:h-12 sm:w-12 rounded-lg sm:rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-600 flex items-center justify-center shadow-lg shadow-emerald-500/25">
+                          <Wallet className="h-4 w-4 sm:h-6 sm:w-6 text-white" />
                         </div>
                         <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-1">
-                            <p className="font-semibold text-base truncate">{account.name}</p>
-                            <span className="inline-flex items-center justify-center h-5 px-2 rounded-full bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-xs font-medium">
+                          <div className="flex items-center gap-1.5 sm:gap-2 mb-0.5 sm:mb-1">
+                            <p className="font-semibold text-sm sm:text-base truncate">{account.name}</p>
+                            <span className="inline-flex items-center justify-center h-4 sm:h-5 px-1.5 sm:px-2 rounded-full bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-[10px] sm:text-xs font-medium">
                               {percentage.toFixed(1)}%
                             </span>
                           </div>
-                          <p className={`text-lg font-bold ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
+                          <p className={`text-base sm:text-lg font-bold ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
                             {privacyMode === 'hidden' ? '••••••' : formatCurrency(account.balance, account.currency)}
                           </p>
                         </div>
@@ -601,9 +601,9 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
 
         {/* Investment Accounts Section */}
         {accounts.filter(a => a.type === 'investment').length > 0 && (
-          <div className="space-y-3">
-            <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-1">Investment Accounts</h4>
-            <div className="space-y-2">
+          <div className="space-y-2 sm:space-y-3">
+            <h4 className="text-[10px] sm:text-xs font-semibold text-muted-foreground uppercase tracking-wider px-1">Investment Accounts</h4>
+            <div className="space-y-1.5 sm:space-y-2">
               {accounts.filter(a => a.type === 'investment').map(account => {
                 const percentage = investmentPercentages[account.id] || 0
                 const quote = account.symbol ? quotes[account.symbol] : null
@@ -612,7 +612,7 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
                 return (
                   <div
                     key={account.id}
-                    className="group relative overflow-hidden rounded-xl bg-gradient-to-br from-blue-500/10 to-purple-500/5 border border-blue-500/20 hover:border-blue-500/40 transition-all duration-300"
+                    className="group relative overflow-hidden rounded-lg sm:rounded-xl bg-gradient-to-br from-blue-500/10 to-purple-500/5 border border-blue-500/20 hover:border-blue-500/40 transition-all duration-300"
                     onClick={() => setActiveAccountId(activeAccountId === account.id ? null : account.id)}
                   >
                     {/* Percentage bar background */}
@@ -621,9 +621,9 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
                       style={{ width: `${percentage}%` }}
                     />
                     
-                    <div className="relative p-4 flex items-center justify-between">
-                      <div className="flex items-center gap-3 flex-1">
-                        <div className={`h-12 w-12 rounded-xl flex items-center justify-center shadow-lg font-bold text-sm ${
+                    <div className="relative p-2.5 sm:p-4 flex items-center justify-between">
+                      <div className="flex items-center gap-2 sm:gap-3 flex-1">
+                        <div className={`h-9 w-9 sm:h-12 sm:w-12 rounded-lg sm:rounded-xl flex items-center justify-center shadow-lg font-bold text-xs sm:text-sm ${
                           account.asset_type === 'crypto' 
                             ? 'bg-gradient-to-br from-orange-500 to-orange-600 text-white shadow-orange-500/25' 
                             : account.asset_type === 'manual' 
@@ -633,15 +633,15 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
                           {account.symbol?.slice(0, 3).toUpperCase() || account.name.slice(0, 3).toUpperCase()}
                         </div>
                         <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-1">
-                            <p className="font-semibold text-base truncate">
+                          <div className="flex items-center gap-1 sm:gap-2 mb-0.5 sm:mb-1 flex-wrap">
+                            <p className="font-semibold text-sm sm:text-base truncate">
                               {account.symbol || account.name}
                             </p>
-                            <span className="inline-flex items-center justify-center h-5 px-2 rounded-full bg-blue-500/20 text-blue-600 dark:text-blue-400 text-xs font-medium">
+                            <span className="inline-flex items-center justify-center h-4 sm:h-5 px-1.5 sm:px-2 rounded-full bg-blue-500/20 text-blue-600 dark:text-blue-400 text-[10px] sm:text-xs font-medium">
                               {percentage.toFixed(1)}%
                             </span>
                             {account.asset_type !== 'manual' && priceChange !== 0 && (
-                              <span className={`inline-flex items-center justify-center h-5 px-2 rounded-full text-xs font-medium ${
+                              <span className={`inline-flex items-center justify-center h-4 sm:h-5 px-1.5 sm:px-2 rounded-full text-[10px] sm:text-xs font-medium ${
                                 priceChange >= 0 
                                   ? 'bg-green-500/20 text-green-600 dark:text-green-400' 
                                   : 'bg-red-500/20 text-red-600 dark:text-red-400'
@@ -650,8 +650,8 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
                               </span>
                             )}
                           </div>
-                          <div className="flex items-baseline gap-2">
-                            <p className={`text-lg font-bold ${privacyMode === 'hidden' || shouldHideInvestment() ? 'select-none' : ''}`}>
+                          <div className="flex items-baseline gap-1.5 sm:gap-2">
+                            <p className={`text-sm sm:text-lg font-bold ${privacyMode === 'hidden' || shouldHideInvestment() ? 'select-none' : ''}`}>
                               {privacyMode === 'hidden' || shouldHideInvestment() ? (
                                 '••••••'
                               ) : (
@@ -659,7 +659,7 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
                               )}
                             </p>
                             {quote?.regularMarketPrice && (
-                              <p className="text-xs text-muted-foreground">
+                              <p className="text-[10px] sm:text-xs text-muted-foreground">
                                 @ ${quote.regularMarketPrice.toFixed(2)}
                               </p>
                             )}

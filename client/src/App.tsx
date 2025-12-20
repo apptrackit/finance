@@ -401,11 +401,11 @@ function App() {
       <div className="relative">
         {/* Header */}
         <header className="border-b border-border/50 bg-card/50 backdrop-blur-xl sticky top-0 z-50">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 sm:py-4">
+          <div className="max-w-7xl mx-auto px-3 sm:px-6 py-2 sm:py-4">
             <div className="flex items-center justify-between gap-2">
               <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
-                <div className="h-8 w-8 sm:h-10 sm:w-10 rounded-xl bg-gradient-to-br from-primary to-primary/60 flex items-center justify-center shadow-lg shadow-primary/25">
-                  <Wallet className="h-4 w-4 sm:h-5 sm:w-5 text-primary-foreground" />
+                <div className="h-7 w-7 sm:h-10 sm:w-10 rounded-lg sm:rounded-xl bg-gradient-to-br from-primary to-primary/60 flex items-center justify-center shadow-lg shadow-primary/25">
+                  <Wallet className="h-3.5 w-3.5 sm:h-5 sm:w-5 text-primary-foreground" />
                 </div>
                 <div className="hidden sm:block">
                   <h1 className="text-xl font-bold tracking-tight">Finance</h1>
@@ -413,56 +413,56 @@ function App() {
                 </div>
               </div>
               <div className="flex items-center gap-1.5 sm:gap-2">
-                <div className="flex gap-0.5 sm:gap-1 p-0.5 sm:p-1 rounded-xl bg-secondary/50 border border-border/50">
+                <div className="flex gap-0.5 sm:gap-1 p-0.5 sm:p-1 rounded-lg sm:rounded-xl bg-secondary/50 border border-border/50">
                   <button
                     onClick={() => setView('dashboard')}
-                    className={`px-2 sm:px-3 py-1.5 text-xs font-medium rounded-lg transition-all flex items-center gap-1 sm:gap-1.5 ${
+                    className={`px-1.5 sm:px-3 py-1 sm:py-1.5 text-xs font-medium rounded-md sm:rounded-lg transition-all flex items-center gap-1 sm:gap-1.5 ${
                       view === 'dashboard'
                         ? 'bg-primary text-primary-foreground shadow-sm'
                         : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
                     }`}
                   >
-                    <List className="h-3.5 w-3.5" />
+                    <List className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
                     <span className="hidden sm:inline">Dashboard</span>
                   </button>
                   <button
                     onClick={() => setView('analytics')}
-                    className={`px-2 sm:px-3 py-1.5 text-xs font-medium rounded-lg transition-all flex items-center gap-1 sm:gap-1.5 ${
+                    className={`px-1.5 sm:px-3 py-1 sm:py-1.5 text-xs font-medium rounded-md sm:rounded-lg transition-all flex items-center gap-1 sm:gap-1.5 ${
                       view === 'analytics'
                         ? 'bg-primary text-primary-foreground shadow-sm'
                         : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
                     }`}
                   >
-                    <BarChart3 className="h-3.5 w-3.5" />
+                    <BarChart3 className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
                     <span className="hidden sm:inline">Analytics</span>
                   </button>
                   <button
                     onClick={() => setView('investments')}
-                    className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all flex items-center gap-1.5 ${
+                    className={`px-1.5 sm:px-3 py-1 sm:py-1.5 text-xs font-medium rounded-md sm:rounded-lg transition-all flex items-center gap-1 sm:gap-1.5 ${
                       view === 'investments'
                         ? 'bg-primary text-primary-foreground shadow-sm'
                         : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
                     }`}
                   >
-                    <LineChart className="h-3.5 w-3.5" />
-                    Investments
+                    <LineChart className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
+                    <span className="hidden sm:inline">Investments</span>
                   </button>
                   <button
                     onClick={() => setView('settings')}
-                    className={`px-2 sm:px-3 py-1.5 text-xs font-medium rounded-lg transition-all flex items-center gap-1 sm:gap-1.5 ${
+                    className={`px-1.5 sm:px-3 py-1 sm:py-1.5 text-xs font-medium rounded-md sm:rounded-lg transition-all flex items-center gap-1 sm:gap-1.5 ${
                       view === 'settings'
                         ? 'bg-primary text-primary-foreground shadow-sm'
                         : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
                     }`}
                   >
-                    <SettingsIcon className="h-3.5 w-3.5" />
+                    <SettingsIcon className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
                     <span className="hidden sm:inline">Settings</span>
                   </button>
                 </div>
                 {/* Privacy Toggle */}
                 <button
                   onClick={togglePrivacyMode}
-                  className={`p-2 rounded-lg transition-all ${
+                  className={`p-1.5 sm:p-2 rounded-md sm:rounded-lg transition-all ${
                     privacyMode === 'hidden'
                       ? 'bg-primary/10 text-primary'
                       : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
@@ -470,9 +470,9 @@ function App() {
                   title={privacyMode === 'hidden' ? 'Show values' : 'Hide values'}
                 >
                   {privacyMode === 'hidden' ? (
-                    <EyeOff className="h-4 w-4" />
+                    <EyeOff className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                   ) : (
-                    <Eye className="h-4 w-4" />
+                    <Eye className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                   )}
                 </button>
                 <div className="hidden sm:flex items-center gap-2">
@@ -484,24 +484,24 @@ function App() {
           </div>
         </header>
 
-        <main className="max-w-7xl mx-auto px-4 sm:px-6 py-4 sm:py-8">
+        <main className="max-w-7xl mx-auto px-3 sm:px-6 py-3 sm:py-8">
           {view === 'dashboard' && (
             /* Stats Grid - Only on Dashboard */
-            <div className={`grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2 ${showSeparateCashCard ? 'lg:grid-cols-4' : 'lg:grid-cols-3'} mb-4 sm:mb-8`}>
+            <div className={`grid gap-2.5 sm:gap-4 grid-cols-2 ${showSeparateCashCard ? 'lg:grid-cols-4' : 'lg:grid-cols-3'} mb-3 sm:mb-8`}>
               {/* Net Worth Card */}
-              <div className="group relative overflow-hidden rounded-2xl border border-border/50 bg-gradient-to-br from-card to-card/80 p-4 sm:p-6 shadow-xl">
+              <div className="group relative overflow-hidden rounded-xl sm:rounded-2xl border border-border/50 bg-gradient-to-br from-card to-card/80 p-3 sm:p-6 shadow-xl">
                 <div className="absolute top-0 right-0 w-32 h-32 bg-primary/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" />
                 <div className="relative">
-                  <div className="flex items-center justify-between mb-2 sm:mb-4">
-                    <span className="text-xs sm:text-sm font-medium text-muted-foreground">Net Worth</span>
-                    <div className="h-7 w-7 sm:h-8 sm:w-8 rounded-lg bg-primary/10 flex items-center justify-center">
-                      <Activity className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-primary" />
+                  <div className="flex items-center justify-between mb-1.5 sm:mb-4">
+                    <span className="text-[10px] sm:text-sm font-medium text-muted-foreground">Net Worth</span>
+                    <div className="h-6 w-6 sm:h-8 sm:w-8 rounded-lg bg-primary/10 flex items-center justify-center">
+                      <Activity className="h-3 w-3 sm:h-4 sm:w-4 text-primary" />
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <div className="text-2xl sm:text-4xl font-bold tracking-tight text-foreground">
+                  <div className="flex items-center gap-1 sm:gap-2">
+                    <div className="text-lg sm:text-4xl font-bold tracking-tight text-foreground leading-tight">
                       {investmentError ? (
-                        <span className="text-base sm:text-lg text-destructive">Error loading data</span>
+                        <span className="text-xs sm:text-lg text-destructive">Error loading data</span>
                       ) : totalNetWorth !== null ? (
                         <>
                           <span className={privacyMode === 'hidden' || shouldHideInvestment() ? 'select-none' : ''}>
@@ -509,27 +509,27 @@ function App() {
                               ? '••••••' 
                               : totalNetWorth.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})}
                           </span>
-                          <span className="text-muted-foreground text-lg sm:text-2xl ml-1">{masterCurrency}</span>
+                          <span className="text-muted-foreground text-xs sm:text-2xl ml-0.5 sm:ml-1">{masterCurrency}</span>
                         </>
                       ) : (
-                        <div className="h-8 sm:h-10 w-32 bg-muted animate-pulse rounded" />
+                        <div className="h-6 sm:h-10 w-20 sm:w-32 bg-muted animate-pulse rounded" />
                       )}
                     </div>
                     {(privacyMode === 'hidden' || shouldHideInvestment()) && totalNetWorth !== null && !investmentError && (
                       <button
                         onClick={() => setShowNetWorth(!showNetWorth)}
-                        className="ml-2 p-1.5 rounded-lg hover:bg-primary/10 transition-colors"
+                        className="ml-1 sm:ml-2 p-1 sm:p-1.5 rounded-lg hover:bg-primary/10 transition-colors"
                         aria-label={showNetWorth ? "Hide net worth" : "Show net worth"}
                       >
                         {showNetWorth ? (
-                          <EyeOff className="h-4 w-4 text-muted-foreground" />
+                          <EyeOff className="h-3 w-3 sm:h-4 sm:w-4 text-muted-foreground" />
                         ) : (
-                          <Eye className="h-4 w-4 text-muted-foreground" />
+                          <Eye className="h-3 w-3 sm:h-4 sm:w-4 text-muted-foreground" />
                         )}
                       </button>
                     )}
                   </div>
-                  <p className="text-xs text-muted-foreground mt-2">
+                  <p className="text-[9px] sm:text-xs text-muted-foreground mt-1 sm:mt-2">
                     {investmentError ? investmentError : 'Total value'}
                   </p>
                 </div>
@@ -537,14 +537,14 @@ function App() {
 
               {/* Cash Balance Card - Only show if there are investments */}
               {showSeparateCashCard && (
-                <div className="group relative overflow-hidden rounded-2xl border border-border/50 bg-card p-4 sm:p-6 shadow-xl hover:border-emerald-500/30 transition-colors">
-                  <div className="flex items-center justify-between mb-2 sm:mb-4">
-                    <span className="text-xs sm:text-sm font-medium text-muted-foreground">Cash</span>
-                    <div className="h-7 w-7 sm:h-8 sm:w-8 rounded-lg bg-emerald-500/10 flex items-center justify-center">
-                      <Wallet className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-emerald-500" />
+                <div className="group relative overflow-hidden rounded-xl sm:rounded-2xl border border-border/50 bg-card p-3 sm:p-6 shadow-xl hover:border-emerald-500/30 transition-colors">
+                  <div className="flex items-center justify-between mb-1.5 sm:mb-4">
+                    <span className="text-[10px] sm:text-sm font-medium text-muted-foreground">Cash</span>
+                    <div className="h-6 w-6 sm:h-8 sm:w-8 rounded-lg bg-emerald-500/10 flex items-center justify-center">
+                      <Wallet className="h-3 w-3 sm:h-4 sm:w-4 text-emerald-500" />
                     </div>
                   </div>
-                  <div className="text-2xl sm:text-4xl font-bold tracking-tight text-foreground">
+                  <div className="text-lg sm:text-4xl font-bold tracking-tight text-foreground leading-tight">
                     {netWorth !== null ? (
                       <>
                         <span className={privacyMode === 'hidden' ? 'select-none' : ''}>
@@ -552,67 +552,67 @@ function App() {
                             ? '••••••' 
                             : cashBalance.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})}
                         </span>
-                        <span className="text-muted-foreground text-lg sm:text-2xl ml-1">{masterCurrency}</span>
+                        <span className="text-muted-foreground text-xs sm:text-2xl ml-0.5 sm:ml-1">{masterCurrency}</span>
                       </>
                     ) : (
-                      <div className="h-8 sm:h-10 w-32 bg-muted animate-pulse rounded" />
+                      <div className="h-6 sm:h-10 w-20 sm:w-32 bg-muted animate-pulse rounded" />
                     )}
                   </div>
-                  <p className="text-xs text-muted-foreground mt-2">
+                  <p className="text-[9px] sm:text-xs text-muted-foreground mt-1 sm:mt-2">
                     {accounts.filter(a => a.type === 'cash').length} account{accounts.filter(a => a.type === 'cash').length !== 1 ? 's' : ''}
                   </p>
                 </div>
               )}
 
               {/* Income Card */}
-              <div className="group relative overflow-hidden rounded-2xl border border-border/50 bg-card p-4 sm:p-6 shadow-xl hover:border-success/30 transition-colors">
-                <div className="flex items-center justify-between mb-2 sm:mb-4">
-                  <span className="text-xs sm:text-sm font-medium text-muted-foreground">Income</span>
-                  <div className="h-7 w-7 sm:h-8 sm:w-8 rounded-lg bg-success/10 flex items-center justify-center">
-                    <TrendingUp className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-success" />
+              <div className="group relative overflow-hidden rounded-xl sm:rounded-2xl border border-border/50 bg-card p-3 sm:p-6 shadow-xl hover:border-success/30 transition-colors">
+                <div className="flex items-center justify-between mb-1.5 sm:mb-4">
+                  <span className="text-[10px] sm:text-sm font-medium text-muted-foreground">Income</span>
+                  <div className="h-6 w-6 sm:h-8 sm:w-8 rounded-lg bg-success/10 flex items-center justify-center">
+                    <TrendingUp className="h-3 w-3 sm:h-4 sm:w-4 text-success" />
                   </div>
                 </div>
-                <div className="text-xl sm:text-3xl font-bold tracking-tight text-success">
+                <div className="text-base sm:text-3xl font-bold tracking-tight text-success leading-tight">
                   {transactionsLoading ? (
-                    <div className="h-7 sm:h-9 w-32 bg-muted animate-pulse rounded" />
+                    <div className="h-5 sm:h-9 w-20 sm:w-32 bg-muted animate-pulse rounded" />
                   ) : (
                     <>
                       <span className={privacyMode === 'hidden' ? 'select-none' : ''}>
                         +{privacyMode === 'hidden' ? '••••••' : totalIncome.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})}
-                      </span> <span className="text-sm sm:text-base">{masterCurrency}</span>
+                      </span> <span className="text-[10px] sm:text-base">{masterCurrency}</span>
                     </>
                   )}
                 </div>
-                <p className="text-[10px] sm:text-xs text-muted-foreground mt-1 sm:mt-2">This period</p>
+                <p className="text-[9px] sm:text-xs text-muted-foreground mt-1 sm:mt-2">This period</p>
               </div>
 
               {/* Expenses Card */}
-              <div className="group relative overflow-hidden rounded-2xl border border-border/50 bg-card p-4 sm:p-6 shadow-xl hover:border-destructive/30 transition-colors">
-                <div className="flex items-center justify-between mb-2 sm:mb-4">
-                  <span className="text-xs sm:text-sm font-medium text-muted-foreground">Expenses</span>
-                  <div className="h-7 w-7 sm:h-8 sm:w-8 rounded-lg bg-destructive/10 flex items-center justify-center">
-                    <TrendingDown className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-destructive" />
+              <div className="group relative overflow-hidden rounded-xl sm:rounded-2xl border border-border/50 bg-card p-3 sm:p-6 shadow-xl hover:border-destructive/30 transition-colors">
+                <div className="flex items-center justify-between mb-1.5 sm:mb-4">
+                  <span className="text-[10px] sm:text-sm font-medium text-muted-foreground">Expenses</span>
+                  <div className="h-6 w-6 sm:h-8 sm:w-8 rounded-lg bg-destructive/10 flex items-center justify-center">
+                    <TrendingDown className="h-3 w-3 sm:h-4 sm:w-4 text-destructive" />
                   </div>
                 </div>
-                <div className="text-xl sm:text-3xl font-bold tracking-tight text-destructive">
+                <div className="text-base sm:text-3xl font-bold tracking-tight text-destructive leading-tight">
                   {transactionsLoading ? (
-                    <div className="h-7 sm:h-9 w-32 bg-muted animate-pulse rounded" />
+                    <div className="h-5 sm:h-9 w-20 sm:w-32 bg-muted animate-pulse rounded" />
                   ) : (
                     <>
                       <span className={privacyMode === 'hidden' ? 'select-none' : ''}>
                         <span className="mr-0.5">−</span>{privacyMode === 'hidden' ? '••••••' : totalExpenses.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})}
-                      </span> <span className="text-sm sm:text-base">{masterCurrency}</span>
+                      </span> <span className="text-[10px] sm:text-base">{masterCurrency}</span>
                     </>
                   )}
                 </div>
-                <p className="text-[10px] sm:text-xs text-muted-foreground mt-1 sm:mt-2">This period</p>
+                <p className="text-[9px] sm:text-xs text-muted-foreground mt-1 sm:mt-2">This period</p>
               </div>
             </div>
           )}
 
           {view === 'dashboard' ? (
             /* Main Content Grid */
-            <div className="grid gap-4 sm:gap-6 lg:grid-cols-12">
+            <div className="grid gap-3 sm:gap-6 grid-cols-1 lg:grid-cols-12">
               <div className="lg:col-span-4">
                 <AccountList accounts={accounts} onAccountAdded={handleDataChange} loading={transactionsLoading} />
               </div>
