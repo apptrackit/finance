@@ -31,6 +31,7 @@ import { CacheController } from './controllers/cache.controller'
 // Middleware
 import { corsMiddleware } from './middlewares/cors.middleware'
 import { authMiddleware } from './middlewares/auth.middleware'
+import { autoRefreshMiddleware } from './middlewares/auto-refresh.middleware'
 
 // Factory function to create all dependencies per request
 function createDependencies(db: D1Database) {
@@ -79,6 +80,9 @@ app.use('/*', corsMiddleware)
 
 // Apply authentication middleware globally (except OPTIONS which is handled by CORS)
 app.use('*', authMiddleware)
+
+// Apply auto-refresh middleware to check and refresh stale cache
+app.use('*', autoRefreshMiddleware)
 
 // Health check
 app.get('/', (c) => c.text('Finance API is running!'))
