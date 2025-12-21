@@ -43,8 +43,9 @@ export async function fetchPriceFromYahoo(
         return cachedPrice.price
       }
       
-      // Re-throw if we have no cached data
-      throw error
+      // No cached data available - silently return 0 instead of throwing
+      console.warn(`No cached data available for ${symbol}, returning 0`)
+      return 0
     }
     
     // If we got here with price 0, try cached data

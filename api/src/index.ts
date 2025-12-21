@@ -41,7 +41,7 @@ function createDependencies(db: D1Database) {
   const investmentTransactionRepo = new InvestmentTransactionRepository(db)
 
   // Initialize services
-  const accountService = new AccountService(accountRepo, transactionRepo)
+  const accountService = new AccountService(accountRepo, transactionRepo, db)
   const categoryService = new CategoryService(categoryRepo)
   const transactionService = new TransactionService(transactionRepo, accountRepo, investmentTransactionRepo, db)
   const investmentTransactionService = new InvestmentTransactionService(investmentTransactionRepo, accountRepo)

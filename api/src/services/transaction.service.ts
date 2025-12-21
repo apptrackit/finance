@@ -43,13 +43,14 @@ export class TransactionService {
           pricePerUnit = await fetchPriceFromYahoo(account.symbol, dto.date, this.db)
           
           if (!pricePerUnit || pricePerUnit === 0) {
-            throw new Error(`Could not fetch price for ${account.symbol} on ${dto.date}. Please try again or contact support.`)
+            throw new Error(`Could not fetch price for ${account.symbol} on ${dto.date}. Please enter the price manually or try again later.`)
           }
         } catch (error: any) {
           if (error.message === 'RATE_LIMITED') {
-            throw new Error('Yahoo Finance is rate-limiting. Please try again in a few seconds, or enter the price manually.')
+            throw new Error('Yahoo Finance is rate-limiting. Please enter the price manually or try again later.')
           }
-          throw new Error(`Failed to fetch price for ${account.symbol}. Error: ${error.message}`)
+          // For other errors, include the message but make it user-friendly
+          throw new Error(`Could not fetch price for ${account.symbol}. Please enter the price manually.`)
         }
       }
       

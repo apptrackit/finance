@@ -1,12 +1,15 @@
+import { D1Database } from '@cloudflare/workers-types'
 import { Account } from '../models/Account'
 import { AccountRepository } from '../repositories/account.repository'
 import { TransactionRepository } from '../repositories/transaction.repository'
 import { CreateAccountDto, UpdateAccountDto } from '../dtos/account.dto'
+import { fetchPriceFromYahoo } from '../utils/yahoo-finance.util'
 
 export class AccountService {
   constructor(
     private accountRepo: AccountRepository,
-    private transactionRepo: TransactionRepository
+    private transactionRepo: TransactionRepository,
+    private db: D1Database
   ) {}
 
   async getAllAccounts(): Promise<Account[]> {
@@ -33,6 +36,21 @@ export class AccountService {
     }
 
     await this.accountRepo.create(account)
+    
+    // If it's an investment account with a symbol, try to fetch and cache the price
+    if (account.type === 'investment' && account.symbol && account.asset_type !== 'manual') {
+      try {
+        const today = new Date().toISOString().split('T')[0]
+        const price = await fetchPriceFromYahoo(account.symbol, today, this.db)
+        if (price > 0) {
+          console.log(`✓ Cached initial price for ${account.symbol}: $${price}`)
+        }
+      } catch (error) {
+        // Don't fail account creation if price fetch fails - just log it
+        console.warn(`Could not fetch initial price for ${account.symbol}:`, error)
+      }
+    }
+    
     return account
   }
 

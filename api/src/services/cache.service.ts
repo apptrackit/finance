@@ -89,7 +89,8 @@ export class CacheService {
           // Reset delay on success
           delay = 3000
         } else {
-          console.warn(`✗ ${symbol}: Got price 0`)
+          console.warn(`✗ ${symbol}: Got price 0 (no cached data or failed fetch)`)
+          consecutiveRateLimits = 0 // Don't count missing cache as rate limit
         }
       } catch (error: any) {
         if (error.message?.includes('RATE_LIMITED')) {
