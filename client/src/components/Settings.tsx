@@ -157,7 +157,7 @@ export default function Settings() {
     const lastRefresh = localStorage.getItem('finance_last_market_refresh')
     if (lastRefresh) {
       const timeSince = Date.now() - parseInt(lastRefresh, 10)
-      const remainingCooldown = 60000 - timeSince // 60 seconds
+      const remainingCooldown = 300000 - timeSince // 300 seconds (5 minutes)
       if (remainingCooldown > 0) {
         setRefreshCooldown(Math.ceil(remainingCooldown / 1000))
       }
@@ -517,8 +517,8 @@ export default function Settings() {
     const lastRefresh = localStorage.getItem('finance_last_market_refresh')
     if (lastRefresh) {
       const timeSince = Date.now() - parseInt(lastRefresh, 10)
-      if (timeSince < 60000) {
-        const remainingSeconds = Math.ceil((60000 - timeSince) / 1000)
+      if (timeSince < 300000) { // 5 minutes
+        const remainingSeconds = Math.ceil((300000 - timeSince) / 1000)
         showAlert({
           type: 'warning',
           title: 'Please Wait',
@@ -543,7 +543,7 @@ export default function Settings() {
       
       // Set cooldown
       localStorage.setItem('finance_last_market_refresh', Date.now().toString())
-      setRefreshCooldown(60)
+      setRefreshCooldown(300) // 5 minutes
       
       showAlert({
         type: 'success',
@@ -933,9 +933,6 @@ export default function Settings() {
           
           <div className="text-xs text-muted-foreground">
             <p>This will update exchange rates for all your currencies and stock prices for your investment accounts.</p>
-            {refreshCooldown > 0 && (
-              <p className="text-amber-600 mt-1">⏱️ You can refresh again in {refreshCooldown} seconds</p>
-            )}
           </div>
         </CardContent>
       </Card>
