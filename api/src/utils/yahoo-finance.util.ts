@@ -14,20 +14,29 @@ export async function fetchPriceFromYahoo(
     if (!forceRefresh) {
       const cachedPrice = await repo.getStockPrice(symbol)
       
-      // Check if we have cached data and if it's still fresh (within 1 hour)
-      if (cachedPrice && !repo.isStale(cachedPrice.fetchedAt)) {
+      // Use cached price if available, even if stale (to avoid Yahoo Finance rate limits)
+      // Only fetch fresh data if explicitly forced or no cache exists
+      if (cachedPrice) {
+        const ageInHours = (Date.now() - cachedPrice.fetchedAt) / (1000 * 60 * 60)
+        console.log(`Using cached price for ${symbol}: $${cachedPrice.price} (${ageInHours.toFixed(1)}h old)`)
         return cachedPrice.price
       }
     }
     
     // If no cached data or data is stale or force refresh, fetch new data
     try {
+      console.log(`[YahooFinance] Fetching price for ${symbol} on ${date}`)
       const freshPrice = await fetchPriceFromYahooAPI(symbol, date)
+      console.log(`[YahooFinance] Got price ${freshPrice} for ${symbol}`)
       
       // Save to cache if we got a valid price
       if (freshPrice > 0) {
+        console.log(`[YahooFinance] Attempting to save ${symbol} price ${freshPrice} to cache`)
         await repo.saveStockPrice(symbol, freshPrice, Date.now())
+        console.log(`[YahooFinance] ✓ Successfully saved ${symbol} to cache`)
         return freshPrice
+      } else {
+        console.warn(`[YahooFinance] Not saving ${symbol} - price is ${freshPrice}`)
       }
     } catch (error: any) {
       // If rate limited or fetch failed, fall back to cached data

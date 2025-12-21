@@ -7,6 +7,13 @@ export async function authMiddleware(c: Context<{ Bindings: Bindings }>, next: N
     return await next()
   }
 
+  // Skip API key check for public endpoints (health check, version, cache status)
+  const path = c.req.path
+  const publicPaths = ['/', '/version', '/cache/sync-status', '/cache/status']
+  if (publicPaths.includes(path)) {
+    return await next()
+  }
+
   // Check API key
   const apiKey = c.req.header('X-API-Key')
   if (!apiKey || apiKey !== c.env.API_SECRET) {

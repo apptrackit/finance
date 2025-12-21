@@ -54,6 +54,19 @@ export class TransactionService {
         }
       }
       
+      // Save manually entered price to cache for future use
+      if (pricePerUnit > 0 && account.symbol && this.db) {
+        try {
+          const { MarketDataRepository } = await import('../repositories/market-data.repository')
+          const repo = new MarketDataRepository(this.db)
+          await repo.saveStockPrice(account.symbol, pricePerUnit, Date.now())
+          console.log(`✓ Cached manually entered price for ${account.symbol}: ${pricePerUnit}`)
+        } catch (error) {
+          console.error('Failed to cache price:', error)
+          // Don't fail transaction if caching fails
+        }
+      }
+      
       const totalAmount = absQuantity * pricePerUnit
       
       // Create investment_transaction record

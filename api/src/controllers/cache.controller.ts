@@ -33,4 +33,24 @@ export class CacheController {
       return c.json({ error: error.message || 'Failed to get cache status' }, 500)
     }
   }
+
+  async getSyncStatus(c: Context) {
+    try {
+      const result = await this.cacheService.getSyncStatus()
+      return c.json(result, 200)
+    } catch (error: any) {
+      console.error('Error getting sync status:', error)
+      return c.json({ error: error.message || 'Failed to get sync status' }, 500)
+    }
+  }
+
+  async syncMissingData(c: Context) {
+    try {
+      const result = await this.cacheService.syncMissingData()
+      return c.json(result, 200)
+    } catch (error: any) {
+      console.error('Error syncing missing data:', error)
+      return c.json({ error: error.message || 'Failed to sync missing data' }, 500)
+    }
+  }
 }

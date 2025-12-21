@@ -78,10 +78,17 @@ export class MarketDataRepository {
   }
 
   async saveStockPrice(symbol: string, price: number, fetchedAt: number): Promise<void> {
-    await this.db
-      .prepare('INSERT OR REPLACE INTO stock_prices (symbol, price, fetched_at) VALUES (?, ?, ?)')
-      .bind(symbol, price, fetchedAt)
-      .run()
+    console.log(`[MarketDataRepo] Saving stock price: ${symbol} = $${price} at ${fetchedAt}`)
+    try {
+      const result = await this.db
+        .prepare('INSERT OR REPLACE INTO stock_prices (symbol, price, fetched_at) VALUES (?, ?, ?)')
+        .bind(symbol, price, fetchedAt)
+        .run()
+      console.log(`[MarketDataRepo] ✓ Saved stock price for ${symbol}`, result.success ? 'SUCCESS' : 'FAILED')
+    } catch (error) {
+      console.error(`[MarketDataRepo] ✗ Failed to save stock price for ${symbol}:`, error)
+      throw error
+    }
   }
 
   async deleteStockPrices(symbol?: string): Promise<void> {
@@ -95,10 +102,10 @@ export class MarketDataRepository {
     }
   }
 
-  // Check if data is stale (older than 1 hour)
+  // Check if data is stale (older than 7 days)
   isStale(fetchedAt: number): boolean {
-    const oneHourInMs = 60 * 60 * 1000
+    const sevenDaysInMs = 7 * 24 * 60 * 60 * 1000
     const now = Date.now()
-    return (now - fetchedAt) > oneHourInMs
+    return (now - fetchedAt) > sevenDaysInMs
   }
 }

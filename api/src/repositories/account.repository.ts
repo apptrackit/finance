@@ -50,4 +50,14 @@ export class AccountRepository {
   async delete(id: string): Promise<void> {
     await this.db.prepare('DELETE FROM accounts WHERE id = ?').bind(id).run()
   }
+
+  async getDistinctCurrencies(): Promise<string[]> {
+    const { results } = await this.db.prepare('SELECT DISTINCT currency FROM accounts WHERE currency IS NOT NULL').all()
+    return results.map(row => row.currency as string)
+  }
+
+  async getDistinctInvestmentSymbols(): Promise<string[]> {
+    const { results } = await this.db.prepare('SELECT DISTINCT symbol FROM accounts WHERE type = ? AND symbol IS NOT NULL').bind('investment').all()
+    return results.map(row => row.symbol as string)
+  }
 }

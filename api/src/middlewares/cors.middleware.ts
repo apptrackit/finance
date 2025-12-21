@@ -6,9 +6,10 @@ export async function corsMiddleware(c: Context<{ Bindings: Bindings }>, next: N
   const allowedOriginsStr = c.env.ALLOWED_ORIGINS || ''
   const allowedOrigins = allowedOriginsStr.split(',').map(o => o.trim()).filter(o => o)
 
-  // Reject requests without Origin header (non-browser requests)
+  // Allow requests without Origin header (curl, Postman, direct API calls)
   if (!origin) {
-    return c.json({ error: 'Origin header required' }, 403)
+    await next()
+    return
   }
 
   // Check if origin is allowed

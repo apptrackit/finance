@@ -3,6 +3,7 @@ import { MarketDataRepository } from '../repositories/market-data.repository'
 import { getExchangeRates } from '../utils/exchange-rate.util'
 import { fetchPriceFromYahoo } from '../utils/yahoo-finance.util'
 import { AccountRepository } from '../repositories/account.repository'
+import { StartupSyncService } from './startup-sync.service'
 
 export class CacheService {
   constructor(
@@ -62,8 +63,9 @@ export class CacheService {
 
     // Refresh stock prices for all investment accounts
     const today = new Date().toISOString().split('T')[0]
-    let delay = 3000 // Start with 3 second delay
+    let delay = 5000 // Start with 5 second delay
     let consecutiveRateLimits = 0
+    let isFirstRequest = true
     
     console.log(`Starting stock price refresh for ${stockSymbols.size} symbols...`)
     
@@ -74,10 +76,16 @@ export class CacheService {
         break
       }
       
-      const jitter = delay * 0.2 * (Math.random() - 0.5)
-      const actualDelay = delay + jitter
+      // Add delay BEFORE each request (except the first one)
+      if (!isFirstRequest) {
+        const jitter = delay * 0.2 * (Math.random() - 0.5)
+        const actualDelay = delay + jitter
+        console.log(`Waiting ${Math.round(actualDelay)}ms before next request...`)
+        await new Promise(resolve => setTimeout(resolve, actualDelay))
+      }
+      isFirstRequest = false
       
-      console.log(`Fetching ${symbol} (delay: ${Math.round(actualDelay)}ms)...`)
+      console.log(`Fetching ${symbol}...`)
       
       try {
         // Force refresh by passing forceRefresh = true
@@ -87,7 +95,7 @@ export class CacheService {
           consecutiveRateLimits = 0 // Reset on success
           console.log(`✓ ${symbol}: $${price.toFixed(2)}`)
           // Reset delay on success
-          delay = 3000
+          delay = 5000
         } else {
           console.warn(`✗ ${symbol}: Got price 0 (no cached data or failed fetch)`)
           consecutiveRateLimits = 0 // Don't count missing cache as rate limit
@@ -95,17 +103,14 @@ export class CacheService {
       } catch (error: any) {
         if (error.message?.includes('RATE_LIMITED')) {
           consecutiveRateLimits++
-          console.warn(`⚠ Rate limited on ${symbol} (${consecutiveRateLimits}/3), increasing delay from ${delay}ms to ${Math.min(delay * 2, 15000)}ms`)
+          console.warn(`⚠ Rate limited on ${symbol} (${consecutiveRateLimits}/3), increasing delay from ${delay}ms to ${Math.min(delay * 2, 20000)}ms`)
           // Exponential backoff: double the delay
-          delay = Math.min(delay * 2, 15000) // Max 15 seconds
+          delay = Math.min(delay * 2, 20000) // Max 20 seconds
         } else {
           console.error(`✗ Failed to refresh stock price for ${symbol}:`, error.message)
         }
         // Continue with other symbols even if one fails
       }
-      
-      // Add delay with random jitter (±20%) between requests to avoid rate limiting
-      await new Promise(resolve => setTimeout(resolve, actualDelay))
     }
     
     console.log(`Stock price refresh complete: ${stockPricesRefreshed}/${stockSymbols.size} successful`)
@@ -152,6 +157,26 @@ export class CacheService {
       stockPricesCount: (stockPricesResult?.count as number) || 0,
       oldestExchangeRate: (exchangeRatesResult?.oldest as number) || null,
       oldestStockPrice: (stockPricesResult?.oldest as number) || null
+    }
+  }
+
+  async getSyncStatus(): Promise<any> {
+    const marketDataRepo = new MarketDataRepository(this.db)
+    const syncService = new StartupSyncService(this.db, this.accountRepo, marketDataRepo)
+    return await syncService.getSyncStatus()
+  }
+
+  async syncMissingData(): Promise<{ message: string; details: any }> {
+    const marketDataRepo = new MarketDataRepository(this.db)
+    const syncService = new StartupSyncService(this.db, this.accountRepo, marketDataRepo)
+    
+    await syncService.syncMarketData()
+    
+    const status = await syncService.getSyncStatus()
+    
+    return {
+      message: 'Sync completed',
+      details: status
     }
   }
 }

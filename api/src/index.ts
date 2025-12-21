@@ -32,6 +32,7 @@ import { CacheController } from './controllers/cache.controller'
 import { corsMiddleware } from './middlewares/cors.middleware'
 import { authMiddleware } from './middlewares/auth.middleware'
 import { autoRefreshMiddleware } from './middlewares/auto-refresh.middleware'
+import { startupSyncMiddleware } from './middlewares/startup-sync.middleware'
 
 // Factory function to create all dependencies per request
 function createDependencies(db: D1Database) {
@@ -80,6 +81,9 @@ app.use('/*', corsMiddleware)
 
 // Apply authentication middleware globally (except OPTIONS which is handled by CORS)
 app.use('*', authMiddleware)
+
+// Disabled startup sync - let cache populate naturally through app usage
+// app.use('*', startupSyncMiddleware)
 
 // Apply auto-refresh middleware to check and refresh stale cache
 app.use('*', autoRefreshMiddleware)
@@ -137,6 +141,8 @@ app.get('/dashboard/net-worth', (c) => getControllers(c).dashboardController.get
 app.post('/cache/refresh', (c) => getControllers(c).cacheController.refreshMarketData(c))
 app.post('/cache/clear', (c) => getControllers(c).cacheController.clearCache(c))
 app.get('/cache/status', (c) => getControllers(c).cacheController.getCacheStatus(c))
+app.get('/cache/sync-status', (c) => getControllers(c).cacheController.getSyncStatus(c))
+app.post('/cache/sync', (c) => getControllers(c).cacheController.syncMissingData(c))
 
 // Market Data
 app.get('/market/search', (c) => getControllers(c).marketDataController.search(c))

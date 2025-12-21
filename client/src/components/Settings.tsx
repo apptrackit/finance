@@ -157,7 +157,7 @@ export default function Settings() {
     const lastRefresh = localStorage.getItem('finance_last_market_refresh')
     if (lastRefresh) {
       const timeSince = Date.now() - parseInt(lastRefresh, 10)
-      const remainingCooldown = 300000 - timeSince // 300 seconds (5 minutes)
+      const remainingCooldown = 10000 - timeSince // 10 seconds
       if (remainingCooldown > 0) {
         setRefreshCooldown(Math.ceil(remainingCooldown / 1000))
       }
