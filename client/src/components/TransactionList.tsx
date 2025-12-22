@@ -835,7 +835,11 @@ export function TransactionList({
                 }}
               >
                 <Filter className="h-3 w-3 text-muted-foreground" />
-                <span className="hidden sm:inline text-muted-foreground">Category</span>
+                <span className="hidden sm:inline text-muted-foreground">
+                  {categoryFilter === 'all' ? 'Category' : 
+                   categoryFilter === 'transfer' ? 'Transfers' :
+                   categories.find(c => c.id === categoryFilter)?.name || 'Category'}
+                </span>
               </button>
               <select
                 id="category-filter"
@@ -872,7 +876,11 @@ export function TransactionList({
                 }}
               >
                 <ArrowUpDown className="h-3 w-3 text-muted-foreground" />
-                <span className="hidden sm:inline text-muted-foreground">Sort</span>
+                <span className="hidden sm:inline text-muted-foreground">
+                  {sortOrder === 'date' ? 'Sort' :
+                   sortOrder === 'amount-high' ? 'Amount ↓' :
+                   'Amount ↑'}
+                </span>
               </button>
               <select
                 id="sort-order"
