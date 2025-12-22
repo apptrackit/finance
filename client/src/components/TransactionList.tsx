@@ -835,7 +835,7 @@ export function TransactionList({
                 }}
               >
                 <Filter className="h-3 w-3 text-muted-foreground" />
-                <span className="hidden sm:inline text-muted-foreground">
+                <span className="text-muted-foreground">
                   {categoryFilter === 'all' ? 'Category' : 
                    categoryFilter === 'transfer' ? '🔄 Transfers' :
                    (() => {
@@ -879,7 +879,7 @@ export function TransactionList({
                 }}
               >
                 <ArrowUpDown className="h-3 w-3 text-muted-foreground" />
-                <span className="hidden sm:inline text-muted-foreground">
+                <span className="text-muted-foreground">
                   {sortOrder === 'date' ? 'Sort' :
                    sortOrder === 'amount-high' ? 'Amount ↓' :
                    'Amount ↑'}
