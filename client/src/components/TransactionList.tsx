@@ -1446,6 +1446,8 @@ export function TransactionList({
                           }
                         </p>
                         <div className="flex items-center gap-1.5 sm:gap-2 text-[10px] sm:text-xs text-muted-foreground">
+                          <span>{format(new Date(tx.date), 'MMM d')}</span>
+                          <span>•</span>
                           <span>{getAccountName(tx.account_id)}</span>
                           {isTransfer && related && (
                              <>
