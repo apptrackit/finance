@@ -4,7 +4,7 @@ import { Input } from './ui/input'
 import { Label } from './ui/label'
 import { Select } from './ui/select'
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card'
-import { Plus, X, ArrowDownLeft, ArrowUpRight, Receipt, RefreshCw, Pencil, Trash2, Check, ArrowRightLeft, ChevronLeft, ChevronRight, Calendar } from 'lucide-react'
+import { Plus, X, ArrowDownLeft, ArrowUpRight, Receipt, RefreshCw, Pencil, Trash2, Check, ArrowRightLeft, ChevronLeft, ChevronRight, Calendar, Filter } from 'lucide-react'
 import { format, addMonths, subMonths, startOfMonth, endOfMonth, addDays, differenceInDays } from 'date-fns'
 import { API_BASE_URL, apiFetch } from '../config'
 import { usePrivacy } from '../context/PrivacyContext'
@@ -91,6 +91,7 @@ export function TransactionList({
   const [isLoadingRate, setIsLoadingRate] = useState(false)
   const [skipAutoCalc, setSkipAutoCalc] = useState(false)
   const [activeTxId, setActiveTxId] = useState<string | null>(null)
+  const [categoryFilter, setCategoryFilter] = useState<string>('all')
   
   const { confirm } = useAlert()
   const { privacyMode, shouldHideInvestment } = usePrivacy()
@@ -823,6 +824,43 @@ export function TransactionList({
             )}
             </div>
           
+            {/* Category Filter */}
+            <div className="relative">
+              <button
+                className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-1 rounded-md bg-secondary/50 border border-border/50 hover:bg-secondary/70 transition-colors text-[11px] sm:text-xs"
+                onClick={() => {
+                  const select = document.getElementById('category-filter') as HTMLSelectElement
+                  select?.focus()
+                }}
+              >
+                <Filter className="h-3 w-3 text-muted-foreground" />
+                <span className="hidden sm:inline text-muted-foreground">Category</span>
+              </button>
+              <select
+                id="category-filter"
+                value={categoryFilter}
+                onChange={(e) => setCategoryFilter(e.target.value)}
+                className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+              >
+                <option value="all">All Categories</option>
+                {categories.filter(c => c.type === 'expense').length > 0 && (
+                  <optgroup label="Expenses">
+                    {categories.filter(c => c.type === 'expense').map(cat => (
+                      <option key={cat.id} value={cat.id}>{cat.icon} {cat.name}</option>
+                    ))}
+                  </optgroup>
+                )}
+                {categories.filter(c => c.type === 'income').length > 0 && (
+                  <optgroup label="Income">
+                    {categories.filter(c => c.type === 'income').map(cat => (
+                      <option key={cat.id} value={cat.id}>{cat.icon} {cat.name}</option>
+                    ))}
+                  </optgroup>
+                )}
+                <option value="transfer">Transfers</option>
+              </select>
+            </div>
+          
             <Button 
               onClick={() => isAdding ? handleCancel() : handleOpenForm()} 
               size="sm" 
@@ -1208,7 +1246,18 @@ export function TransactionList({
         )}
 
         <div className="space-y-3 sm:space-y-4">
-          {sortedDates.map(date => (
+          {sortedDates.map(date => {
+            // Filter transactions by category
+            const dateTransactions = groupedTransactions[date].filter(tx => {
+              if (categoryFilter === 'all') return true
+              if (categoryFilter === 'transfer') return !!tx.linked_transaction_id
+              return tx.category_id === categoryFilter
+            })
+            
+            // Skip date if no transactions match filter
+            if (dateTransactions.length === 0) return null
+            
+            return (
             <div key={date}>
               <div className="flex items-center gap-1.5 sm:gap-2 mb-1.5 sm:mb-2">
                 <div className="text-[10px] sm:text-xs font-medium text-muted-foreground">
@@ -1217,7 +1266,7 @@ export function TransactionList({
                 <div className="flex-1 h-px bg-border" />
               </div>
               <div className="space-y-1">
-                {processTransactions(groupedTransactions[date]).reverse().map(tx => {
+                {processTransactions(dateTransactions).reverse().map(tx => {
                   const isTransfer = !!tx.linked_transaction_id && !!(tx as any).relatedTx
                   const related = (tx as any).relatedTx as Transaction | undefined
                   
@@ -1325,7 +1374,7 @@ export function TransactionList({
                 )})}
               </div>
             </div>
-          ))}
+          )})}
           
           {transactions.length === 0 && !isAdding && (
             loading ? (
