@@ -837,8 +837,11 @@ export function TransactionList({
                 <Filter className="h-3 w-3 text-muted-foreground" />
                 <span className="hidden sm:inline text-muted-foreground">
                   {categoryFilter === 'all' ? 'Category' : 
-                   categoryFilter === 'transfer' ? 'Transfers' :
-                   categories.find(c => c.id === categoryFilter)?.name || 'Category'}
+                   categoryFilter === 'transfer' ? '🔄 Transfers' :
+                   (() => {
+                     const cat = categories.find(c => c.id === categoryFilter)
+                     return cat ? `${cat.icon} ${cat.name}` : 'Category'
+                   })()}
                 </span>
               </button>
               <select
