@@ -4,7 +4,7 @@ import { Input } from './ui/input'
 import { Label } from './ui/label'
 import { Select } from './ui/select'
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card'
-import { Plus, X, ArrowDownLeft, ArrowUpRight, Receipt, RefreshCw, Pencil, Trash2, Check, ArrowRightLeft, ChevronLeft, ChevronRight, Calendar, Filter } from 'lucide-react'
+import { Plus, X, ArrowDownLeft, ArrowUpRight, Receipt, RefreshCw, Pencil, Trash2, Check, ArrowRightLeft, ChevronLeft, ChevronRight, Calendar, Filter, ArrowUpDown } from 'lucide-react'
 import { format, addMonths, subMonths, startOfMonth, endOfMonth, addDays, differenceInDays } from 'date-fns'
 import { API_BASE_URL, apiFetch } from '../config'
 import { usePrivacy } from '../context/PrivacyContext'
@@ -92,6 +92,7 @@ export function TransactionList({
   const [skipAutoCalc, setSkipAutoCalc] = useState(false)
   const [activeTxId, setActiveTxId] = useState<string | null>(null)
   const [categoryFilter, setCategoryFilter] = useState<string>('all')
+  const [sortOrder, setSortOrder] = useState<'date' | 'amount-high' | 'amount-low'>('date')
   
   const { confirm } = useAlert()
   const { privacyMode, shouldHideInvestment } = usePrivacy()
@@ -860,6 +861,30 @@ export function TransactionList({
                 <option value="transfer">Transfers</option>
               </select>
             </div>
+
+            {/* Sort Order */}
+            <div className="relative">
+              <button
+                className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-1 rounded-md bg-secondary/50 border border-border/50 hover:bg-secondary/70 transition-colors text-[11px] sm:text-xs"
+                onClick={() => {
+                  const select = document.getElementById('sort-order') as HTMLSelectElement
+                  select?.focus()
+                }}
+              >
+                <ArrowUpDown className="h-3 w-3 text-muted-foreground" />
+                <span className="hidden sm:inline text-muted-foreground">Sort</span>
+              </button>
+              <select
+                id="sort-order"
+                value={sortOrder}
+                onChange={(e) => setSortOrder(e.target.value as 'date' | 'amount-high' | 'amount-low')}
+                className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+              >
+                <option value="date">Date (Newest)</option>
+                <option value="amount-high">Amount (High to Low)</option>
+                <option value="amount-low">Amount (Low to High)</option>
+              </select>
+            </div>
           
             <Button 
               onClick={() => isAdding ? handleCancel() : handleOpenForm()} 
@@ -1246,27 +1271,157 @@ export function TransactionList({
         )}
 
         <div className="space-y-3 sm:space-y-4">
-          {sortedDates.map(date => {
-            // Filter transactions by category
-            const dateTransactions = groupedTransactions[date].filter(tx => {
-              if (categoryFilter === 'all') return true
-              if (categoryFilter === 'transfer') return !!tx.linked_transaction_id
-              return tx.category_id === categoryFilter
-            })
-            
-            // Skip date if no transactions match filter
-            if (dateTransactions.length === 0) return null
-            
-            return (
-            <div key={date}>
-              <div className="flex items-center gap-1.5 sm:gap-2 mb-1.5 sm:mb-2">
-                <div className="text-[10px] sm:text-xs font-medium text-muted-foreground">
-                  {format(new Date(date), 'EEEE, MMM d')}
+          {sortOrder === 'date' ? (
+            // Date-based grouping
+            sortedDates.map(date => {
+              // Filter transactions by category
+              const dateTransactions = groupedTransactions[date].filter(tx => {
+                if (categoryFilter === 'all') return true
+                if (categoryFilter === 'transfer') return !!tx.linked_transaction_id
+                return tx.category_id === categoryFilter
+              })
+              
+              // Skip date if no transactions match filter
+              if (dateTransactions.length === 0) return null
+              
+              return (
+              <div key={date}>
+                <div className="flex items-center gap-1.5 sm:gap-2 mb-1.5 sm:mb-2">
+                  <div className="text-[10px] sm:text-xs font-medium text-muted-foreground">
+                    {format(new Date(date), 'EEEE, MMM d')}
+                  </div>
+                  <div className="flex-1 h-px bg-border" />
                 </div>
-                <div className="flex-1 h-px bg-border" />
+                <div className="space-y-1">
+                  {processTransactions(dateTransactions).reverse().map(tx => {
+                    const isTransfer = !!tx.linked_transaction_id && !!(tx as any).relatedTx
+                    const related = (tx as any).relatedTx as Transaction | undefined
+                    
+                    return (
+                    <div 
+                      key={tx.id} 
+                      className="group flex items-center justify-between p-2 sm:p-3 rounded-lg sm:rounded-xl hover:bg-secondary/30 transition-all duration-200"
+                      onClick={() => setActiveTxId(activeTxId === tx.id ? null : tx.id)}
+                    >
+                      <div className="flex items-center gap-2 sm:gap-3" onClick={(e) => e.stopPropagation()}>
+                        <div className={`h-8 w-8 sm:h-10 sm:w-10 rounded-lg sm:rounded-xl flex items-center justify-center text-base sm:text-lg ${
+                          isTransfer ? 'bg-blue-500/10 text-blue-500' :
+                          tx.amount >= 0 ? 'bg-success/10' : 'bg-secondary'
+                        }`}>
+                          {isTransfer ? <ArrowRightLeft className="h-4 w-4 sm:h-5 sm:w-5" /> : getCategoryIcon(tx.category_id)}
+                        </div>
+                        <div>
+                          <p className="font-medium text-xs sm:text-sm">
+                            {isTransfer 
+                              ? `Transfer to ${related ? getAccountName(related.account_id) : 'Unknown'}`
+                              : (tx.description || getCategoryName(tx.category_id))
+                            }
+                          </p>
+                          <div className="flex items-center gap-1.5 sm:gap-2 text-[10px] sm:text-xs text-muted-foreground">
+                            <span>{getAccountName(tx.account_id)}</span>
+                            {isTransfer && related && (
+                               <>
+                                 <span>→</span>
+                                 <span>{getAccountName(related.account_id)}</span>
+                               </>
+                            )}
+                            {tx.is_recurring && (
+                              <>
+                                <span>•</span>
+                                <span className="flex items-center gap-1 text-primary">
+                                  <RefreshCw className="h-2.5 w-2.5 sm:h-3 sm:w-3" />
+                                  Recurring
+                                </span>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex flex-col items-end gap-0.5">
+                        <div className={`font-bold text-xs sm:text-sm ${isTransfer ? 'text-destructive' : (tx.amount >= 0 ? 'text-success' : 'text-destructive')} ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
+                          {(() => {
+                            const account = accounts.find(a => a.id === tx.account_id)
+                            const isInvestmentTx = account?.type === 'investment'
+                            const shouldHide = privacyMode === 'hidden' || (isInvestmentTx && shouldHideInvestment())
+                            
+                            if (shouldHide) {
+                              return '••••••'
+                            }
+                            
+                            if (isInvestmentTx && tx.quantity !== undefined) {
+                              return <>{tx.quantity > 0 ? '+' : ''}{tx.quantity.toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 8})} {getAccountCurrency(tx.account_id)}</>
+                            }
+                            return <>{tx.amount >= 0 ? '+' : '-'}{Math.abs(tx.amount).toLocaleString('hu-HU', {minimumFractionDigits: 2, maximumFractionDigits: 2})} {getAccountCurrency(tx.account_id)}</>
+                          })()}
+                        </div>
+                        {isTransfer && related && (
+                          <div className={`text-[10px] sm:text-xs text-success font-medium ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
+                            {(() => {
+                              const relatedAccount = accounts.find(a => a.id === related.account_id)
+                              const isInvestmentTx = relatedAccount?.type === 'investment'
+                              const shouldHide = privacyMode === 'hidden' || (isInvestmentTx && shouldHideInvestment())
+                              
+                              if (shouldHide) {
+                                return '••••••'
+                              }
+                              return <>+{Math.abs(related.amount).toLocaleString('hu-HU', {minimumFractionDigits: 2, maximumFractionDigits: 2})} {getAccountCurrency(related.account_id)}</>
+                            })()}
+                          </div>
+                        )}
+                        <div className={`flex gap-1 transition-opacity ${activeTxId === tx.id ? 'opacity-100' : 'opacity-0 md:group-hover:opacity-100'}`}>
+                          {!isLocked(tx.account_id) && !(related && isLocked(related.account_id)) && (
+                            <>
+                              <Button 
+                                size="icon" 
+                                variant="ghost" 
+                                className="h-7 w-7 sm:h-8 sm:w-8"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  handleEdit(tx)
+                                }}
+                              >
+                                <Pencil className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
+                              </Button>
+                              <Button 
+                                size="icon" 
+                                variant="ghost" 
+                                className="h-7 w-7 sm:h-8 sm:w-8 text-destructive hover:text-destructive"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  handleDelete(tx.id)
+                                }}
+                              >
+                                <Trash2 className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
+                              </Button>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )})}
+                </div>
               </div>
-              <div className="space-y-1">
-                {processTransactions(dateTransactions).reverse().map(tx => {
+            )})
+          ) : (
+            // Amount-based sorting (flat list)
+            (() => {
+              // Flatten all transactions
+              const allTransactions = transactions.filter(tx => {
+                if (categoryFilter === 'all') return true
+                if (categoryFilter === 'transfer') return !!tx.linked_transaction_id
+                return tx.category_id === categoryFilter
+              })
+              
+              // Sort by amount
+              const sortedTransactions = [...allTransactions].sort((a, b) => 
+                sortOrder === 'amount-high' 
+                  ? Math.abs(b.amount) - Math.abs(a.amount)
+                  : Math.abs(a.amount) - Math.abs(b.amount)
+              )
+              
+              return (
+                <div className="space-y-1">
+                  {processTransactions(sortedTransactions).map(tx => {
                   const isTransfer = !!tx.linked_transaction_id && !!(tx as any).relatedTx
                   const related = (tx as any).relatedTx as Transaction | undefined
                   
@@ -1371,10 +1526,11 @@ export function TransactionList({
                       </div>
                     </div>
                   </div>
-                )})}
-              </div>
-            </div>
-          )})}
+                  )})}
+                </div>
+              )
+            })()
+          )}
           
           {transactions.length === 0 && !isAdding && (
             loading ? (
