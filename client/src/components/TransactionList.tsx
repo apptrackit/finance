@@ -692,7 +692,7 @@ export function TransactionList({
             </Button>
           </div>
           
-          <div className="flex items-center justify-center sm:justify-start gap-2 sm:gap-4">
+          <div className="flex items-center justify-center sm:justify-start gap-2 sm:gap-3 flex-wrap">
             {/* Month Navigation */}
             <div className="flex items-center gap-1 sm:gap-2 relative">
             <Button
@@ -825,6 +825,8 @@ export function TransactionList({
             )}
             </div>
           
+            {/* Filter and Sort Group - kept together */}
+            <div className="flex items-center gap-2">
             {/* Category Filter */}
             <div className="relative">
               <button
@@ -895,6 +897,7 @@ export function TransactionList({
                 <option value="amount-high">Amount (High to Low)</option>
                 <option value="amount-low">Amount (Low to High)</option>
               </select>
+            </div>
             </div>
           
             <Button 
