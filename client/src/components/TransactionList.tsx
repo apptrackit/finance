@@ -835,7 +835,9 @@ export function TransactionList({
               onChange={(e) => setCategoryFilter(e.target.value)}
               className="h-7 sm:h-8 text-[11px] sm:text-xs w-auto min-w-[120px]"
             >
-              <option value="all">All Categories</option>
+              <option value="all">All Transactions</option>
+              <option value="all-expenses">All Expenses</option>
+              <option value="all-income">All Income</option>
               {categories.filter(c => c.type === 'expense').length > 0 && (
                 <optgroup label="Expenses">
                   {categories.filter(c => c.type === 'expense').map(cat => (
@@ -1256,6 +1258,8 @@ export function TransactionList({
               // Filter transactions by category
               const dateTransactions = groupedTransactions[date].filter(tx => {
                 if (categoryFilter === 'all') return true
+                if (categoryFilter === 'all-expenses') return tx.amount < 0 && !tx.linked_transaction_id
+                if (categoryFilter === 'all-income') return tx.amount > 0 && !tx.linked_transaction_id
                 if (categoryFilter === 'transfer') return !!tx.linked_transaction_id
                 return tx.category_id === categoryFilter
               })
@@ -1387,6 +1391,8 @@ export function TransactionList({
               // Flatten all transactions
               const allTransactions = transactions.filter(tx => {
                 if (categoryFilter === 'all') return true
+                if (categoryFilter === 'all-expenses') return tx.amount < 0 && !tx.linked_transaction_id
+                if (categoryFilter === 'all-income') return tx.amount > 0 && !tx.linked_transaction_id
                 if (categoryFilter === 'transfer') return !!tx.linked_transaction_id
                 return tx.category_id === categoryFilter
               })
