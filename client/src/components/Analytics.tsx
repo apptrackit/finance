@@ -121,6 +121,8 @@ type Account = {
   balance: number
   currency: string
   icon?: string
+  exclude_from_net_worth?: boolean
+  exclude_from_cash_balance?: boolean
 }
 
 type TimePeriod = 'thisMonth' | 'lastMonth' | 'thisYear' | 'lastYear' | 'allTime'

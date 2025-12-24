@@ -6,6 +6,8 @@ CREATE TABLE IF NOT EXISTS accounts (
   currency TEXT DEFAULT 'USD',
   symbol TEXT, -- For investment accounts: stock/crypto symbol
   asset_type TEXT, -- For investment accounts: 'stock', 'crypto', 'manual'
+  exclude_from_net_worth BOOLEAN DEFAULT 0, -- For cash accounts: exclude from net worth calculation
+  exclude_from_cash_balance BOOLEAN DEFAULT 0, -- For cash accounts: exclude from cash balance total
   updated_at INTEGER
 );
 

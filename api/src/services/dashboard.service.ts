@@ -25,6 +25,11 @@ export class DashboardService {
         continue
       }
 
+      // Skip accounts excluded from net worth
+      if (account.exclude_from_net_worth) {
+        continue
+      }
+
       let balanceInMasterCurrency = account.balance
 
       // Convert to master currency if account is in a different currency
