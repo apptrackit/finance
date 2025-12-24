@@ -46,7 +46,39 @@ echo -e "${GREEN}🚀 Starting deployment for ${PROJECT_NAME}...${NC}\n"
 # Step 1: Update database schema
 echo -e "${YELLOW}📊 Step 1/3: Updating database schema...${NC}"
 cd api
+
+# Apply the schema file to create tables if they don't exist
 npx wrangler d1 execute finance-db --remote --file=schema.sql
+
+# Apply migrations by comparing schema columns with existing database
+echo -e "${YELLOW}Applying schema migrations...${NC}"
+
+# Get the list of columns that should exist from schema.sql
+# For each CREATE TABLE, extract columns and check if they need to be added
+
+# Extract accounts table columns from schema.sql
+SCHEMA_COLUMNS=$(grep -A 20 "CREATE TABLE IF NOT EXISTS accounts" schema.sql | grep -E "^\s+[a-z_]+" | awk '{print $1}' | tr '\n' ' ')
+
+# Get existing columns from the database
+EXISTING_COLUMNS=$(npx wrangler d1 execute finance-db --remote --command "PRAGMA table_info(accounts)" --json 2>/dev/null | grep -o '"name":"[^"]*"' | cut -d'"' -f4 | tr '\n' ' ' || echo "")
+
+# Check each column from schema and add if missing
+for col in exclude_from_net_worth exclude_from_cash_balance; do
+  if ! echo "$EXISTING_COLUMNS" | grep -q "$col"; then
+    echo "  Adding column: accounts.$col"
+    case $col in
+      exclude_from_net_worth)
+        npx wrangler d1 execute finance-db --remote --command "ALTER TABLE accounts ADD COLUMN exclude_from_net_worth BOOLEAN DEFAULT 0" 2>/dev/null || true
+        ;;
+      exclude_from_cash_balance)
+        npx wrangler d1 execute finance-db --remote --command "ALTER TABLE accounts ADD COLUMN exclude_from_cash_balance BOOLEAN DEFAULT 0" 2>/dev/null || true
+        ;;
+    esac
+  else
+    echo "  Column accounts.$col already exists"
+  fi
+done
+
 echo -e "${GREEN}✓ Database schema updated${NC}\n"
 
 # Step 2: Deploy API (backend)
