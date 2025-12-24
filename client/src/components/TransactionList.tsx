@@ -31,6 +31,8 @@ type Account = {
   type: 'cash' | 'investment'
   symbol?: string
   asset_type?: 'stock' | 'crypto' | 'manual'
+  exclude_from_net_worth?: boolean
+  exclude_from_cash_balance?: boolean
 }
 
 type Category = {

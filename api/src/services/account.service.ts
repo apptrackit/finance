@@ -29,6 +29,8 @@ export class AccountService {
       currency: dto.currency || 'HUF',
       symbol: dto.symbol,
       asset_type: dto.asset_type,
+      exclude_from_net_worth: dto.exclude_from_net_worth,
+      exclude_from_cash_balance: dto.exclude_from_cash_balance,
       updated_at: now
     }
 

@@ -21,6 +21,8 @@ type Account = {
   currency: string
   symbol?: string
   asset_type?: 'stock' | 'crypto' | 'manual'
+  exclude_from_net_worth?: boolean
+  exclude_from_cash_balance?: boolean
   updated_at: number
 }
 
@@ -384,8 +386,14 @@ function App() {
     .filter(t => t.amount < 0 && !t.linked_transaction_id)
     .reduce((sum, t) => sum + Math.abs(convertToMasterCurrency(t.amount, t.account_id)), 0)
   
-  // Calculate cash balance (accounts without investments)
-  const cashBalance = netWorth !== null ? netWorth : 0
+  // Calculate cash balance (excluding accounts marked to be excluded from cash balance)
+  const cashBalance = accounts
+    .filter(a => a.type === 'cash' && !a.exclude_from_cash_balance)
+    .reduce((sum, account) => {
+      const rate = exchangeRates[account.currency] || 1
+      return sum + (account.balance / rate)
+    }, 0)
+  
   // Only show total net worth if we have both cash data and investment is not loading
   const totalNetWorth = netWorth !== null && !investmentLoading ? netWorth + investmentValue : null
   

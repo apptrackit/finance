@@ -4,7 +4,7 @@ import { Input } from './ui/input'
 import { Label } from './ui/label'
 import { Select } from './ui/select'
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card'
-import { Plus, X, Wallet, Building, Pencil, Trash2, Check, Search, Lock, LockOpen } from 'lucide-react'
+import { Plus, X, Wallet, Building, Pencil, Trash2, Check, Search, Lock, LockOpen, EyeOff, Eye, Ban } from 'lucide-react'
 import { API_BASE_URL, apiFetch } from '../config'
 import { usePrivacy } from '../context/PrivacyContext'
 import { useAlert } from '../context/AlertContext'
@@ -18,6 +18,8 @@ type Account = {
   currency: string
   symbol?: string
   asset_type?: 'stock' | 'crypto' | 'manual'
+  exclude_from_net_worth?: boolean
+  exclude_from_cash_balance?: boolean
 }
 
 const currencySymbols: Record<string, string> = {
@@ -47,7 +49,9 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
     currency: 'HUF',
     symbol: '',
     asset_type: 'stock' as 'stock' | 'crypto' | 'manual',
-    adjustWithTransaction: false
+    adjustWithTransaction: false,
+    exclude_from_net_worth: false,
+    exclude_from_cash_balance: false
   })
 
   // For investment account creation
@@ -112,8 +116,11 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
     const cashAccounts = accounts.filter(a => a.type === 'cash')
     const investmentAccounts = accounts.filter(a => a.type === 'investment')
 
-    // Calculate total cash value in USD
+    // Calculate total cash value in USD (excluding accounts marked to be excluded from cash balance)
     const totalCashUSD = cashAccounts.reduce((sum, account) => {
+      if (account.exclude_from_cash_balance) {
+        return sum
+      }
       const rate = exchangeRates[account.currency] || 1
       return sum + (account.balance / rate)
     }, 0)
@@ -159,7 +166,7 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
   const { cashPercentages, investmentPercentages } = calculatePercentages()
 
   const resetForm = () => {
-    setFormData({ name: '', type: 'cash', balance: '', currency: 'HUF', symbol: '', asset_type: 'stock', adjustWithTransaction: false })
+    setFormData({ name: '', type: 'cash', balance: '', currency: 'HUF', symbol: '', asset_type: 'stock', adjustWithTransaction: false, exclude_from_net_worth: false, exclude_from_cash_balance: false })
     setShowSymbolSearch(false)
     setSearchQuery('')
     setSearchResults([])
@@ -269,7 +276,9 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
       currency: account.currency,
       symbol: account.symbol || '',
       asset_type: account.asset_type || 'stock',
-      adjustWithTransaction: false
+      adjustWithTransaction: false,
+      exclude_from_net_worth: account.exclude_from_net_worth || false,
+      exclude_from_cash_balance: account.exclude_from_cash_balance || false
     })
     // Set manual mode if it's a manual asset
     if (account.asset_type === 'manual') {
@@ -319,6 +328,45 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
     } else {
       // Locking doesn't require confirmation
       lockAccount(accountId)
+    }
+  }
+
+  const handleExcludeToggle = async (account: Account) => {
+    // Cycle through 3 states:
+    // 0. Default (both false)
+    // 1. Exclude from cash balance only
+    // 2. Exclude from both cash balance and net worth
+    // 3. Back to default
+    
+    let newExcludeFromCashBalance = false
+    let newExcludeFromNetWorth = false
+
+    if (!account.exclude_from_cash_balance && !account.exclude_from_net_worth) {
+      // State 0 -> State 1: Exclude from cash balance only
+      newExcludeFromCashBalance = true
+      newExcludeFromNetWorth = false
+    } else if (account.exclude_from_cash_balance && !account.exclude_from_net_worth) {
+      // State 1 -> State 2: Exclude from both
+      newExcludeFromCashBalance = true
+      newExcludeFromNetWorth = true
+    } else {
+      // State 2 -> State 0: Reset to default
+      newExcludeFromCashBalance = false
+      newExcludeFromNetWorth = false
+    }
+
+    try {
+      await apiFetch(`${API_BASE_URL}/accounts/${account.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          exclude_from_cash_balance: newExcludeFromCashBalance,
+          exclude_from_net_worth: newExcludeFromNetWorth
+        }),
+      })
+      onAccountAdded()
+    } catch (error) {
+      console.error('Failed to update account exclusions', error)
     }
   }
 
@@ -552,6 +600,36 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
                       <div className={`absolute inset-0 flex items-center justify-center gap-3 transition-opacity z-10 ${
                         activeAccountId === account.id ? 'opacity-100' : 'opacity-0 md:group-hover:opacity-100'
                       }`}>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className={`h-10 w-10 ${
+                            account.exclude_from_cash_balance && account.exclude_from_net_worth
+                              ? 'text-red-500 hover:bg-red-500/20'
+                              : account.exclude_from_cash_balance
+                              ? 'text-orange-500 hover:bg-orange-500/20'
+                              : 'text-muted-foreground hover:bg-emerald-500/20'
+                          }`}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleExcludeToggle(account)
+                          }}
+                          title={
+                            account.exclude_from_cash_balance && account.exclude_from_net_worth
+                              ? 'Excluded from cash balance & net worth'
+                              : account.exclude_from_cash_balance
+                              ? 'Excluded from cash balance only'
+                              : 'Include in all calculations'
+                          }
+                        >
+                          {account.exclude_from_cash_balance && account.exclude_from_net_worth ? (
+                            <Ban className="h-4 w-4" />
+                          ) : account.exclude_from_cash_balance ? (
+                            <EyeOff className="h-4 w-4" />
+                          ) : (
+                            <Eye className="h-4 w-4" />
+                          )}
+                        </Button>
                         <Button
                           size="icon"
                           variant="ghost"

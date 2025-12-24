@@ -11,6 +11,8 @@ export class AccountMapper {
       currency: account.currency,
       symbol: account.symbol,
       asset_type: account.asset_type,
+      exclude_from_net_worth: account.exclude_from_net_worth,
+      exclude_from_cash_balance: account.exclude_from_cash_balance,
       updated_at: account.updated_at
     }
   }
@@ -24,6 +26,8 @@ export class AccountMapper {
       currency: dto.currency || 'HUF',
       symbol: dto.symbol,
       asset_type: dto.asset_type,
+      exclude_from_net_worth: dto.exclude_from_net_worth,
+      exclude_from_cash_balance: dto.exclude_from_cash_balance,
       updated_at
     }
   }

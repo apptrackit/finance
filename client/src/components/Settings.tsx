@@ -44,6 +44,8 @@ type Account = {
   type: string
   balance: number
   currency: string
+  exclude_from_net_worth?: boolean
+  exclude_from_cash_balance?: boolean
   updated_at: number
 }
 
