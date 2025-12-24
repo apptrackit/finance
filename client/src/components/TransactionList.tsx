@@ -4,7 +4,7 @@ import { Input } from './ui/input'
 import { Label } from './ui/label'
 import { Select } from './ui/select'
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card'
-import { Plus, X, ArrowDownLeft, ArrowUpRight, Receipt, RefreshCw, Pencil, Trash2, Check, ArrowRightLeft, ChevronLeft, ChevronRight, Calendar, Filter, ArrowUpDown } from 'lucide-react'
+import { Plus, X, ArrowDownLeft, ArrowUpRight, Receipt, RefreshCw, Pencil, Trash2, Check, ArrowRightLeft, ChevronLeft, ChevronRight, Calendar } from 'lucide-react'
 import { format, addMonths, subMonths, startOfMonth, endOfMonth, addDays, differenceInDays } from 'date-fns'
 import { API_BASE_URL, apiFetch } from '../config'
 import { usePrivacy } from '../context/PrivacyContext'
@@ -830,76 +830,41 @@ export function TransactionList({
             {/* Filter and Sort Group - kept together */}
             <div className="flex items-center gap-2">
             {/* Category Filter */}
-            <div className="relative">
-              <button
-                className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-1 rounded-md bg-secondary/50 border border-border/50 hover:bg-secondary/70 transition-colors text-[11px] sm:text-xs"
-                onClick={() => {
-                  const select = document.getElementById('category-filter') as HTMLSelectElement
-                  select?.focus()
-                }}
-              >
-                <Filter className="h-3 w-3 text-muted-foreground" />
-                <span className="text-muted-foreground">
-                  {categoryFilter === 'all' ? 'Category' : 
-                   categoryFilter === 'transfer' ? '🔄 Transfers' :
-                   (() => {
-                     const cat = categories.find(c => c.id === categoryFilter)
-                     return cat ? `${cat.icon} ${cat.name}` : 'Category'
-                   })()}
-                </span>
-              </button>
-              <select
-                id="category-filter"
-                value={categoryFilter}
-                onChange={(e) => setCategoryFilter(e.target.value)}
-                className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
-              >
-                <option value="all">All Categories</option>
-                {categories.filter(c => c.type === 'expense').length > 0 && (
-                  <optgroup label="Expenses">
-                    {categories.filter(c => c.type === 'expense').map(cat => (
-                      <option key={cat.id} value={cat.id}>{cat.icon} {cat.name}</option>
-                    ))}
-                  </optgroup>
-                )}
-                {categories.filter(c => c.type === 'income').length > 0 && (
-                  <optgroup label="Income">
-                    {categories.filter(c => c.type === 'income').map(cat => (
-                      <option key={cat.id} value={cat.id}>{cat.icon} {cat.name}</option>
-                    ))}
-                  </optgroup>
-                )}
-                <option value="transfer">Transfers</option>
-              </select>
-            </div>
+            <Select
+              value={categoryFilter}
+              onChange={(e) => setCategoryFilter(e.target.value)}
+              className="h-7 sm:h-8 text-[11px] sm:text-xs w-auto min-w-[120px]"
+            >
+              <option value="all">All Transactions</option>
+              <option value="all-expenses">All Expenses</option>
+              <option value="all-income">All Income</option>
+              {categories.filter(c => c.type === 'expense').length > 0 && (
+                <optgroup label="Expenses">
+                  {categories.filter(c => c.type === 'expense').map(cat => (
+                    <option key={cat.id} value={cat.id}>{cat.icon} {cat.name}</option>
+                  ))}
+                </optgroup>
+              )}
+              {categories.filter(c => c.type === 'income').length > 0 && (
+                <optgroup label="Income">
+                  {categories.filter(c => c.type === 'income').map(cat => (
+                    <option key={cat.id} value={cat.id}>{cat.icon} {cat.name}</option>
+                  ))}
+                </optgroup>
+              )}
+              <option value="transfer">🔄 Transfers</option>
+            </Select>
 
             {/* Sort Order */}
-            <div className="relative">
-              <button
-                className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-1 rounded-md bg-secondary/50 border border-border/50 hover:bg-secondary/70 transition-colors text-[11px] sm:text-xs"
-                onClick={() => {
-                  const select = document.getElementById('sort-order') as HTMLSelectElement
-                  select?.focus()
-                }}
-              >
-                <ArrowUpDown className="h-3 w-3 text-muted-foreground" />
-                <span className="text-muted-foreground">
-                  {sortOrder === 'date' ? 'Sort' :
-                   sortOrder === 'amount-high' ? 'Amount ↓' :
-                   'Amount ↑'}
-                </span>
-              </button>
-              <select
-                id="sort-order"
-                value={sortOrder}
-                onChange={(e) => setSortOrder(e.target.value as 'date' | 'amount-high' | 'amount-low')}
-                className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
-              >
-                <option value="date">Date (Newest)</option>
-                <option value="amount-high">Amount (High to Low)</option>
-                <option value="amount-low">Amount (Low to High)</option>
-              </select>
-            </div>
+            <Select
+              value={sortOrder}
+              onChange={(e) => setSortOrder(e.target.value as 'date' | 'amount-high' | 'amount-low')}
+              className="h-7 sm:h-8 text-[11px] sm:text-xs w-auto min-w-[140px]"
+            >
+              <option value="date">Date (Newest)</option>
+              <option value="amount-high">Amount (High to Low)</option>
+              <option value="amount-low">Amount (Low to High)</option>
+            </Select>
             </div>
           
             <Button 
@@ -1293,6 +1258,8 @@ export function TransactionList({
               // Filter transactions by category
               const dateTransactions = groupedTransactions[date].filter(tx => {
                 if (categoryFilter === 'all') return true
+                if (categoryFilter === 'all-expenses') return tx.amount < 0 && !tx.linked_transaction_id
+                if (categoryFilter === 'all-income') return tx.amount > 0 && !tx.linked_transaction_id
                 if (categoryFilter === 'transfer') return !!tx.linked_transaction_id
                 return tx.category_id === categoryFilter
               })
@@ -1424,6 +1391,8 @@ export function TransactionList({
               // Flatten all transactions
               const allTransactions = transactions.filter(tx => {
                 if (categoryFilter === 'all') return true
+                if (categoryFilter === 'all-expenses') return tx.amount < 0 && !tx.linked_transaction_id
+                if (categoryFilter === 'all-income') return tx.amount > 0 && !tx.linked_transaction_id
                 if (categoryFilter === 'transfer') return !!tx.linked_transaction_id
                 return tx.category_id === categoryFilter
               })
