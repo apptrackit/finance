@@ -376,7 +376,8 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
       minimumFractionDigits: currency === 'HUF' ? 0 : 2,
       maximumFractionDigits: currency === 'HUF' ? 0 : 2
     })
-    return currency === 'HUF' ? `${formatted} ${symbol}` : `${symbol}${formatted}`
+ const sign = amount < 0 ? '−' : ''
+    return currency === 'HUF' ? `${sign}${formatted} ${symbol}` : `${sign}${symbol}${formatted}`
   }
 
   return (
