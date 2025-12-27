@@ -861,9 +861,9 @@ export function TransactionList({
               onChange={(e) => setSortOrder(e.target.value as 'date' | 'amount-high' | 'amount-low')}
               className="h-7 sm:h-8 text-[11px] sm:text-xs w-auto min-w-[140px]"
             >
-              <option value="date">Date (Newest)</option>
-              <option value="amount-high">Amount (High to Low)</option>
-              <option value="amount-low">Amount (Low to High)</option>
+              <option value="date">Newest</option>
+              <option value="amount-high">↓ High to Low</option>
+              <option value="amount-low">↑ Low to High</option>
             </Select>
             </div>
           
