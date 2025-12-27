@@ -671,8 +671,8 @@ export function TransactionList({
   return (
     <Card>
       <CardHeader className="pb-3 sm:pb-4">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-          <div className="flex items-center justify-between sm:justify-start">
+        <div className="flex flex-col gap-3">
+          <div className="flex items-center justify-between">
             <div className="flex items-center gap-2 sm:gap-3">
               <div className="h-7 w-7 sm:h-8 sm:w-8 rounded-lg bg-secondary flex items-center justify-center">
                 <Receipt className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-muted-foreground" />
@@ -687,14 +687,14 @@ export function TransactionList({
               onClick={() => isAdding ? handleCancel() : handleOpenForm()} 
               size="sm" 
               variant={isAdding ? "ghost" : "outline"}
-              className="h-7 sm:h-8 text-xs flex-shrink-0 sm:hidden"
+              className="h-7 sm:h-8 text-xs flex-shrink-0"
             >
               {isAdding ? <X className="h-3.5 w-3.5 sm:h-4 sm:w-4" /> : <Plus className="h-3.5 w-3.5 sm:h-4 sm:w-4" />}
               <span className="ml-1">{isAdding ? 'Cancel' : 'Add'}</span>
             </Button>
           </div>
           
-          <div className="flex items-center justify-center sm:justify-start gap-2 sm:gap-3 flex-wrap">
+          <div className="flex items-center justify-center gap-2 sm:gap-3 flex-wrap">
             {/* Month Navigation */}
             <div className="flex items-center gap-1 sm:gap-2 relative">
             <Button
@@ -866,16 +866,6 @@ export function TransactionList({
               <option value="amount-low">↑ Low to High</option>
             </Select>
             </div>
-          
-            <Button 
-              onClick={() => isAdding ? handleCancel() : handleOpenForm()} 
-              size="sm" 
-              variant={isAdding ? "ghost" : "outline"}
-              className="h-7 sm:h-8 text-xs flex-shrink-0 hidden sm:flex"
-            >
-              {isAdding ? <X className="h-3.5 w-3.5 sm:h-4 sm:w-4" /> : <Plus className="h-3.5 w-3.5 sm:h-4 sm:w-4" />}
-              <span className="ml-1">{isAdding ? 'Cancel' : 'Add'}</span>
-            </Button>
           </div>
         </div>
       </CardHeader>
