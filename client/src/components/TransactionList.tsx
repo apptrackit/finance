@@ -95,10 +95,16 @@ export function TransactionList({
   const [activeTxId, setActiveTxId] = useState<string | null>(null)
   const [categoryFilter, setCategoryFilter] = useState<string>('all')
   const [sortOrder, setSortOrder] = useState<'date' | 'amount-high' | 'amount-low'>('date')
+  const [showAllTransactions, setShowAllTransactions] = useState(false)
   
   const { confirm } = useAlert()
   const { privacyMode, shouldHideInvestment } = usePrivacy()
   const { isLocked } = useLockedAccounts()
+
+  // Reset showAllTransactions when filter or sort changes
+  useEffect(() => {
+    setShowAllTransactions(false)
+  }, [categoryFilter, sortOrder])
 
   useEffect(() => {
     apiFetch(`${API_BASE_URL}/categories`)
@@ -1244,18 +1250,38 @@ export function TransactionList({
         <div className="space-y-3 sm:space-y-4">
           {sortOrder === 'date' ? (
             // Date-based grouping
-            sortedDates.map(date => {
-              // Filter transactions by category
-              const dateTransactions = groupedTransactions[date].filter(tx => {
-                if (categoryFilter === 'all') return true
-                if (categoryFilter === 'all-expenses') return tx.amount < 0 && !tx.linked_transaction_id
-                if (categoryFilter === 'all-income') return tx.amount > 0 && !tx.linked_transaction_id
-                if (categoryFilter === 'transfer') return !!tx.linked_transaction_id
-                return tx.category_id === categoryFilter
+            (() => {
+              // Collect all filtered transactions first
+              let allFilteredTransactions: Transaction[] = []
+              sortedDates.forEach(date => {
+                const dateTransactions = groupedTransactions[date].filter(tx => {
+                  if (categoryFilter === 'all') return true
+                  if (categoryFilter === 'all-expenses') return tx.amount < 0 && !tx.linked_transaction_id
+                  if (categoryFilter === 'all-income') return tx.amount > 0 && !tx.linked_transaction_id
+                  if (categoryFilter === 'transfer') return !!tx.linked_transaction_id
+                  return tx.category_id === categoryFilter
+                })
+                allFilteredTransactions = allFilteredTransactions.concat(dateTransactions)
               })
               
-              // Skip date if no transactions match filter
-              if (dateTransactions.length === 0) return null
+              const datesToDisplay = showAllTransactions ? sortedDates : sortedDates.slice(0, Math.min(sortedDates.length, 5))
+              let displayedCount = 0
+              
+              return <>
+                {datesToDisplay.map(date => {
+                  // Filter transactions by category
+                  const dateTransactions = groupedTransactions[date].filter(tx => {
+                    if (categoryFilter === 'all') return true
+                    if (categoryFilter === 'all-expenses') return tx.amount < 0 && !tx.linked_transaction_id
+                    if (categoryFilter === 'all-income') return tx.amount > 0 && !tx.linked_transaction_id
+                    if (categoryFilter === 'transfer') return !!tx.linked_transaction_id
+                    return tx.category_id === categoryFilter
+                  })
+                  
+                  // Skip date if no transactions match filter
+                  if (dateTransactions.length === 0) return null
+                  
+                  displayedCount += dateTransactions.length
               
               return (
               <div key={date}>
@@ -1374,7 +1400,36 @@ export function TransactionList({
                   )})}
                 </div>
               </div>
-            )})
+            )})}
+            
+            {!showAllTransactions && allFilteredTransactions.length > displayedCount && (
+              <div className="text-center pt-2">
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={() => setShowAllTransactions(true)}
+                  className="text-xs sm:text-sm"
+                >
+                  Show All ({allFilteredTransactions.length - displayedCount} more)
+                </Button>
+              </div>
+            )}
+            
+            {showAllTransactions && allFilteredTransactions.length > 5 && (
+              <div className="text-center pt-2">
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={() => setShowAllTransactions(false)}
+                  className="text-xs sm:text-sm"
+                >
+                  Show Less
+                </Button>
+              </div>
+            )}
+          </>
+          }
+          )()
           ) : (
             // Amount-based sorting (flat list)
             (() => {
@@ -1394,9 +1449,12 @@ export function TransactionList({
                   : Math.abs(a.amount) - Math.abs(b.amount)
               )
               
+              const transactionsToDisplay = showAllTransactions ? sortedTransactions : sortedTransactions.slice(0, 5)
+              
               return (
+                <>
                 <div className="space-y-1">
-                  {processTransactions(sortedTransactions).map(tx => {
+                  {processTransactions(transactionsToDisplay).map(tx => {
                   const isTransfer = !!tx.linked_transaction_id && !!(tx as any).relatedTx
                   const related = (tx as any).relatedTx as Transaction | undefined
                   
@@ -1505,6 +1563,33 @@ export function TransactionList({
                   </div>
                   )})}
                 </div>
+                
+                {!showAllTransactions && sortedTransactions.length > 5 && (
+                  <div className="text-center pt-2">
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={() => setShowAllTransactions(true)}
+                      className="text-xs sm:text-sm"
+                    >
+                      Show All ({sortedTransactions.length - 5} more)
+                    </Button>
+                  </div>
+                )}
+                
+                {showAllTransactions && sortedTransactions.length > 5 && (
+                  <div className="text-center pt-2">
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={() => setShowAllTransactions(false)}
+                      className="text-xs sm:text-sm"
+                    >
+                      Show Less
+                    </Button>
+                  </div>
+                )}
+              </>
               )
             })()
           )}
