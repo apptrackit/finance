@@ -38,7 +38,7 @@ type MarketQuote = {
 }
 
 export function AccountList({ accounts, onAccountAdded, loading }: { accounts: Account[], onAccountAdded: () => void, loading?: boolean }) {
-  const { confirm } = useAlert()
+  const { confirm, showAlert } = useAlert()
   const { isLocked, lockAccount, unlockAccount } = useLockedAccounts()
   const [isAdding, setIsAdding] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
