@@ -378,12 +378,18 @@ function App() {
     return amount / rate
   }
 
-  // Calculate stats in master currency
+  // Calculate stats in master currency (exclude investment accounts)
   const totalIncome = transactions
-    .filter(t => t.amount > 0 && !t.linked_transaction_id)
+    .filter(t => {
+      const account = accounts.find(a => a.id === t.account_id)
+      return t.amount > 0 && !t.linked_transaction_id && account?.type !== 'investment'
+    })
     .reduce((sum, t) => sum + convertToMasterCurrency(t.amount, t.account_id), 0)
   const totalExpenses = transactions
-    .filter(t => t.amount < 0 && !t.linked_transaction_id)
+    .filter(t => {
+      const account = accounts.find(a => a.id === t.account_id)
+      return t.amount < 0 && !t.linked_transaction_id && account?.type !== 'investment'
+    })
     .reduce((sum, t) => sum + Math.abs(convertToMasterCurrency(t.amount, t.account_id)), 0)
   
   // Calculate cash balance (excluding accounts marked to be excluded from cash balance)
