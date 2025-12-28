@@ -572,7 +572,11 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
                 return (
                   <div
                     key={account.id}
-                    className="group relative overflow-hidden rounded-lg sm:rounded-xl bg-gradient-to-br from-emerald-500/10 to-emerald-500/5 border border-emerald-500/20 hover:border-emerald-500/40 transition-all duration-300"
+                    className={`group relative overflow-hidden rounded-lg sm:rounded-xl transition-all duration-300 ${
+                      isExcluded
+                        ? 'bg-gradient-to-br from-gray-500/30 to-gray-600/20 border border-gray-500/40 hover:border-gray-500/60 opacity-80'
+                        : 'bg-gradient-to-br from-emerald-500/10 to-emerald-500/5 border border-emerald-500/20 hover:border-emerald-500/40'
+                    }`}
                     onClick={() => setActiveAccountId(activeAccountId === account.id ? null : account.id)}
                   >
                     {/* Percentage bar background (hide if excluded) */}
@@ -585,7 +589,11 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
                     
                     <div className="relative p-2.5 sm:p-4 flex items-center justify-between">
                       <div className="flex items-center gap-2 sm:gap-3 flex-1">
-                        <div className="h-9 w-9 sm:h-12 sm:w-12 rounded-lg sm:rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-600 flex items-center justify-center shadow-lg shadow-emerald-500/25">
+                        <div className={`h-9 w-9 sm:h-12 sm:w-12 rounded-lg sm:rounded-xl flex items-center justify-center shadow-lg ${
+                          isExcluded
+                            ? 'bg-gradient-to-br from-gray-600 to-gray-700 shadow-gray-600/30'
+                            : 'bg-gradient-to-br from-emerald-500 to-emerald-600 shadow-emerald-500/25'
+                        }`}>
                           <Wallet className="h-4 w-4 sm:h-6 sm:w-6 text-white" />
                         </div>
                         <div className="flex-1 min-w-0">
