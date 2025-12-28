@@ -338,7 +338,10 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
   const handleExcludeToggle = async (account: Account) => {
     // Check if account is locked
     if (isLocked(account.id)) {
-      showAlert('Account is locked. Unlock it first to change exclusion settings.', 'error')
+      showAlert({
+        type: 'error',
+        message: 'Account is locked. Unlock it first to change exclusion settings.'
+      })
       return
     }
 
@@ -367,15 +370,18 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
         }),
       })
       onAccountAdded()
-      showAlert(
-        newExcluded
+      showAlert({
+        type: 'success',
+        message: newExcluded
           ? `"${account.name}" excluded from dashboard`
-          : `"${account.name}" included in dashboard`,
-        'success'
-      )
+          : `"${account.name}" included in dashboard`
+      })
     } catch (error) {
       console.error('Failed to update account exclusions', error)
-      showAlert('Failed to update account exclusion settings', 'error')
+      showAlert({
+        type: 'error',
+        message: 'Failed to update account exclusion settings'
+      })
     }
   }
 
