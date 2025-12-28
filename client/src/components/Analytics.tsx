@@ -338,9 +338,11 @@ export function Analytics({
       .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
   }, [transactions, accounts, period, exchangeRates, masterCurrency])
 
-  // Per-account Net Worth Trend data in master currency
+  // Per-account Net Worth Trend data in master currency (exclude investment accounts)
   const perAccountTrendData = useMemo(() => {
-    return accounts.map(account => {
+    return accounts
+      .filter(account => account.type !== 'investment')
+      .map(account => {
       const accountTransactions = transactions.filter(t => t.account_id === account.id)
       
       // Group transactions by date and sum them
