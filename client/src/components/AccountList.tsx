@@ -346,13 +346,16 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
     const newExcluded = !isCurrentlyExcluded
 
     // Show confirmation dialog
-    const message = newExcluded
-      ? `Exclude "${account.name}" from dashboard calculations? It will be hidden from income, expenses, cash balance, and percentages on the dashboard. It will still appear in Analytics.`
-      : `Include "${account.name}" in dashboard calculations?`
+    const confirmed = await confirm({
+      title: newExcluded ? 'Exclude Account' : 'Include Account',
+      message: newExcluded
+        ? `Exclude "${account.name}" from dashboard calculations? It will be hidden from income, expenses, cash balance, and percentages on the dashboard. It will still appear in Analytics.`
+        : `Include "${account.name}" in dashboard calculations?`,
+      confirmText: newExcluded ? 'Exclude' : 'Include',
+      cancelText: 'Cancel'
+    })
     
-    if (!window.confirm(message)) {
-      return
-    }
+    if (!confirmed) return
 
     try {
       await apiFetch(`${API_BASE_URL}/accounts/${account.id}`, {
