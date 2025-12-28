@@ -190,12 +190,16 @@ export function Analytics({
     return amount / rate
   }
 
-  // Filter transactions by period
+  // Filter transactions by period (exclude investment accounts only)
   const filteredTransactions = useMemo(() => {
     const now = new Date()
     
     return transactions.filter(tx => {
       const txDate = new Date(tx.date)
+      const account = accounts.find(a => a.id === tx.account_id)
+      
+      // Exclude investment account transactions
+      if (account?.type === 'investment') return false
       
       switch (period) {
         case 'thisMonth':
@@ -225,7 +229,7 @@ export function Analytics({
           return true
       }
     })
-  }, [transactions, period])
+  }, [transactions, period, accounts])
 
   // Calculate totals in master currency
   const { totalIncome, totalExpenses, netFlow } = useMemo(() => {
@@ -334,9 +338,11 @@ export function Analytics({
       .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
   }, [transactions, accounts, period, exchangeRates, masterCurrency])
 
-  // Per-account Net Worth Trend data in master currency
+  // Per-account Net Worth Trend data in master currency (exclude investment accounts)
   const perAccountTrendData = useMemo(() => {
-    return accounts.map(account => {
+    return accounts
+      .filter(account => account.type !== 'investment')
+      .map(account => {
       const accountTransactions = transactions.filter(t => t.account_id === account.id)
       
       // Group transactions by date and sum them
@@ -425,6 +431,8 @@ export function Analytics({
         
         const weekIncome = transactions
           .filter(tx => {
+            const account = accounts.find(a => a.id === tx.account_id)
+            if (account?.type === 'investment') return false
             const txDate = new Date(tx.date)
             const inDateRange = tx.amount > 0 && !tx.linked_transaction_id && isWithinInterval(txDate, { 
               start: weekStart < monthStart ? monthStart : weekStart, 
@@ -451,6 +459,8 @@ export function Analytics({
       
       // Find the earliest transaction date
       const incomeTransactions = transactions.filter(tx => {
+        const account = accounts.find(a => a.id === tx.account_id)
+        if (account?.type === 'investment') return false
         if (tx.amount <= 0) return false
         if (selectedIncomeCategory === 'all') return true
         return tx.category_id === selectedIncomeCategory
@@ -480,6 +490,8 @@ export function Analytics({
         
         const monthIncome = transactions
           .filter(tx => {
+            const account = accounts.find(a => a.id === tx.account_id)
+            if (account?.type === 'investment') return false
             const txDate = new Date(tx.date)
             const inDateRange = tx.amount > 0 && !tx.linked_transaction_id && isWithinInterval(txDate, { start: monthStart, end: monthEnd })
             if (!inDateRange) return false
@@ -520,6 +532,8 @@ export function Analytics({
         
         const weekExpenses = transactions
           .filter(tx => {
+            const account = accounts.find(a => a.id === tx.account_id)
+            if (account?.type === 'investment') return false
             const txDate = new Date(tx.date)
             const inDateRange = tx.amount < 0 && !tx.linked_transaction_id && isWithinInterval(txDate, { 
               start: weekStart < monthStart ? monthStart : weekStart, 
@@ -546,6 +560,8 @@ export function Analytics({
       
       // Find the earliest transaction date
       const expenseTransactions = transactions.filter(tx => {
+        const account = accounts.find(a => a.id === tx.account_id)
+        if (account?.type === 'investment') return false
         if (tx.amount >= 0) return false
         if (selectedExpenseCategory === 'all') return true
         return tx.category_id === selectedExpenseCategory
@@ -575,6 +591,8 @@ export function Analytics({
         
         const monthExpenses = transactions
           .filter(tx => {
+            const account = accounts.find(a => a.id === tx.account_id)
+            if (account?.type === 'investment') return false
             const txDate = new Date(tx.date)
             const inDateRange = tx.amount < 0 && !tx.linked_transaction_id && isWithinInterval(txDate, { start: monthStart, end: monthEnd })
             if (!inDateRange) return false

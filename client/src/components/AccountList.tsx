@@ -4,7 +4,7 @@ import { Input } from './ui/input'
 import { Label } from './ui/label'
 import { Select } from './ui/select'
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card'
-import { Plus, X, Wallet, Building, Pencil, Trash2, Check, Search, Lock, LockOpen, EyeOff, Eye, Ban } from 'lucide-react'
+import { Plus, X, Wallet, Building, Pencil, Trash2, Check, Search, Lock, LockOpen, CircleCheck, CircleX } from 'lucide-react'
 import { API_BASE_URL, apiFetch } from '../config'
 import { usePrivacy } from '../context/PrivacyContext'
 import { useAlert } from '../context/AlertContext'
@@ -38,7 +38,7 @@ type MarketQuote = {
 }
 
 export function AccountList({ accounts, onAccountAdded, loading }: { accounts: Account[], onAccountAdded: () => void, loading?: boolean }) {
-  const { confirm } = useAlert()
+  const { confirm, showAlert } = useAlert()
   const { isLocked, lockAccount, unlockAccount } = useLockedAccounts()
   const [isAdding, setIsAdding] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -116,9 +116,9 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
     const cashAccounts = accounts.filter(a => a.type === 'cash')
     const investmentAccounts = accounts.filter(a => a.type === 'investment')
 
-    // Calculate total cash value in USD (excluding accounts marked to be excluded from cash balance)
+    // Calculate total cash value in USD (excluding accounts marked to be excluded from all)
     const totalCashUSD = cashAccounts.reduce((sum, account) => {
-      if (account.exclude_from_cash_balance) {
+      if (account.exclude_from_cash_balance && account.exclude_from_net_worth) {
         return sum
       }
       const rate = exchangeRates[account.currency] || 1
@@ -139,9 +139,13 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
       return sum
     }, 0)
 
-    // Calculate percentages
+    // Calculate percentages (skip excluded accounts)
     const cashPercentages: Record<string, number> = {}
     cashAccounts.forEach(account => {
+      if (account.exclude_from_cash_balance && account.exclude_from_net_worth) {
+        cashPercentages[account.id] = 0
+        return
+      }
       const rate = exchangeRates[account.currency] || 1
       const valueUSD = account.balance / rate
       cashPercentages[account.id] = totalCashUSD > 0 ? (valueUSD / totalCashUSD) * 100 : 0
@@ -332,41 +336,52 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
   }
 
   const handleExcludeToggle = async (account: Account) => {
-    // Cycle through 3 states:
-    // 0. Default (both false)
-    // 1. Exclude from cash balance only
-    // 2. Exclude from both cash balance and net worth
-    // 3. Back to default
-    
-    let newExcludeFromCashBalance = false
-    let newExcludeFromNetWorth = false
-
-    if (!account.exclude_from_cash_balance && !account.exclude_from_net_worth) {
-      // State 0 -> State 1: Exclude from cash balance only
-      newExcludeFromCashBalance = true
-      newExcludeFromNetWorth = false
-    } else if (account.exclude_from_cash_balance && !account.exclude_from_net_worth) {
-      // State 1 -> State 2: Exclude from both
-      newExcludeFromCashBalance = true
-      newExcludeFromNetWorth = true
-    } else {
-      // State 2 -> State 0: Reset to default
-      newExcludeFromCashBalance = false
-      newExcludeFromNetWorth = false
+    // Check if account is locked
+    if (isLocked(account.id)) {
+      showAlert({
+        type: 'error',
+        message: 'Account is locked. Unlock it first to change exclusion settings.'
+      })
+      return
     }
+
+    const isCurrentlyExcluded = account.exclude_from_cash_balance && account.exclude_from_net_worth
+    const newExcluded = !isCurrentlyExcluded
+
+    // Show confirmation dialog
+    const confirmed = await confirm({
+      title: newExcluded ? 'Exclude Account' : 'Include Account',
+      message: newExcluded
+        ? `Exclude "${account.name}" from dashboard calculations? It will be hidden from income, expenses, cash balance, and percentages on the dashboard. It will still appear in Analytics.`
+        : `Include "${account.name}" in dashboard calculations?`,
+      confirmText: newExcluded ? 'Exclude' : 'Include',
+      cancelText: 'Cancel'
+    })
+    
+    if (!confirmed) return
 
     try {
       await apiFetch(`${API_BASE_URL}/accounts/${account.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          exclude_from_cash_balance: newExcludeFromCashBalance,
-          exclude_from_net_worth: newExcludeFromNetWorth
+          exclude_from_cash_balance: newExcluded,
+          exclude_from_net_worth: newExcluded
         }),
       })
       onAccountAdded()
+      showAlert({
+        type: 'success',
+        message: newExcluded
+          ? `"${account.name}" excluded from dashboard`
+          : `"${account.name}" included in dashboard`
+      })
     } catch (error) {
       console.error('Failed to update account exclusions', error)
+      showAlert({
+        type: 'error',
+        message: 'Failed to update account exclusion settings'
+      })
     }
   }
 
@@ -561,30 +576,43 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
             <div className="space-y-1.5 sm:space-y-2">
               {accounts.filter(a => a.type === 'cash').map(account => {
                 const percentage = cashPercentages[account.id] || 0
+                const isExcluded = account.exclude_from_cash_balance && account.exclude_from_net_worth
                 
                 return (
                   <div
                     key={account.id}
-                    className="group relative overflow-hidden rounded-lg sm:rounded-xl bg-gradient-to-br from-emerald-500/10 to-emerald-500/5 border border-emerald-500/20 hover:border-emerald-500/40 transition-all duration-300"
+                    className={`group relative overflow-hidden rounded-lg sm:rounded-xl transition-all duration-300 ${
+                      isExcluded
+                        ? 'bg-gradient-to-br from-gray-500/30 to-gray-600/20 border border-gray-500/40 hover:border-gray-500/60 opacity-80'
+                        : 'bg-gradient-to-br from-emerald-500/10 to-emerald-500/5 border border-emerald-500/20 hover:border-emerald-500/40'
+                    }`}
                     onClick={() => setActiveAccountId(activeAccountId === account.id ? null : account.id)}
                   >
-                    {/* Percentage bar background */}
-                    <div 
-                      className="absolute inset-y-0 left-0 bg-gradient-to-r from-emerald-500/20 to-emerald-500/10 transition-all duration-500"
-                      style={{ width: `${percentage}%` }}
-                    />
+                    {/* Percentage bar background (hide if excluded) */}
+                    {!isExcluded && (
+                      <div 
+                        className="absolute inset-y-0 left-0 bg-gradient-to-r from-emerald-500/20 to-emerald-500/10 transition-all duration-500"
+                        style={{ width: `${percentage}%` }}
+                      />
+                    )}
                     
                     <div className="relative p-2.5 sm:p-4 flex items-center justify-between">
                       <div className="flex items-center gap-2 sm:gap-3 flex-1">
-                        <div className="h-9 w-9 sm:h-12 sm:w-12 rounded-lg sm:rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-600 flex items-center justify-center shadow-lg shadow-emerald-500/25">
+                        <div className={`h-9 w-9 sm:h-12 sm:w-12 rounded-lg sm:rounded-xl flex items-center justify-center shadow-lg ${
+                          isExcluded
+                            ? 'bg-gradient-to-br from-gray-600 to-gray-700 shadow-gray-600/30'
+                            : 'bg-gradient-to-br from-emerald-500 to-emerald-600 shadow-emerald-500/25'
+                        }`}>
                           <Wallet className="h-4 w-4 sm:h-6 sm:w-6 text-white" />
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-1.5 sm:gap-2 mb-0.5 sm:mb-1">
                             <p className="font-semibold text-sm sm:text-base truncate">{account.name}</p>
-                            <span className="inline-flex items-center justify-center h-4 sm:h-5 px-1.5 sm:px-2 rounded-full bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-[10px] sm:text-xs font-medium">
-                              {percentage.toFixed(1)}%
-                            </span>
+                            {!isExcluded && (
+                              <span className="inline-flex items-center justify-center h-4 sm:h-5 px-1.5 sm:px-2 rounded-full bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-[10px] sm:text-xs font-medium">
+                                {percentage.toFixed(1)}%
+                              </span>
+                            )}
                           </div>
                           <p className={`text-base sm:text-lg font-bold ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
                             {privacyMode === 'hidden' ? '••••••' : formatCurrency(account.balance, account.currency)}
@@ -605,29 +633,28 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
                           variant="ghost"
                           className={`h-10 w-10 ${
                             account.exclude_from_cash_balance && account.exclude_from_net_worth
-                              ? 'text-red-500 hover:bg-red-500/20'
-                              : account.exclude_from_cash_balance
-                              ? 'text-orange-500 hover:bg-orange-500/20'
-                              : 'text-muted-foreground hover:bg-emerald-500/20'
+                              ? 'text-emerald-500 hover:bg-emerald-500/20'
+                              : 'text-red-500 hover:bg-red-500/20'
+                          } ${
+                            isLocked(account.id) ? 'opacity-50 cursor-not-allowed' : ''
                           }`}
                           onClick={(e) => {
                             e.stopPropagation()
                             handleExcludeToggle(account)
                           }}
                           title={
-                            account.exclude_from_cash_balance && account.exclude_from_net_worth
-                              ? 'Excluded from cash balance & net worth'
-                              : account.exclude_from_cash_balance
-                              ? 'Excluded from cash balance only'
-                              : 'Include in all calculations'
+                            isLocked(account.id)
+                              ? 'Unlock account to change exclusion settings'
+                              : account.exclude_from_cash_balance && account.exclude_from_net_worth
+                              ? 'Excluded from dashboard (click to include)'
+                              : 'Included in dashboard (click to exclude)'
                           }
+                          disabled={isLocked(account.id)}
                         >
                           {account.exclude_from_cash_balance && account.exclude_from_net_worth ? (
-                            <Ban className="h-4 w-4" />
-                          ) : account.exclude_from_cash_balance ? (
-                            <EyeOff className="h-4 w-4" />
+                            <CircleCheck className="h-4 w-4" />
                           ) : (
-                            <Eye className="h-4 w-4" />
+                            <CircleX className="h-4 w-4" />
                           )}
                         </Button>
                         <Button
