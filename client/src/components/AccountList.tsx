@@ -347,8 +347,8 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
 
     // Show confirmation dialog
     const message = newExcluded
-      ? `Exclude "${account.name}" from all analytics and calculations? It will be hidden from dashboard stats, percentages, and analytics.`
-      : `Include "${account.name}" in all analytics and calculations?`
+      ? `Exclude "${account.name}" from dashboard calculations? It will be hidden from income, expenses, cash balance, and percentages on the dashboard. It will still appear in Analytics.`
+      : `Include "${account.name}" in dashboard calculations?`
     
     if (!window.confirm(message)) {
       return
@@ -366,8 +366,8 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
       onAccountAdded()
       showAlert(
         newExcluded
-          ? `"${account.name}" excluded from all analytics`
-          : `"${account.name}" included in all analytics`,
+          ? `"${account.name}" excluded from dashboard`
+          : `"${account.name}" included in dashboard`,
         'success'
       )
     } catch (error) {
@@ -616,8 +616,8 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
                           variant="ghost"
                           className={`h-10 w-10 ${
                             account.exclude_from_cash_balance && account.exclude_from_net_worth
-                              ? 'text-red-500 hover:bg-red-500/20'
-                              : 'text-emerald-500 hover:bg-emerald-500/20'
+                              ? 'text-emerald-500 hover:bg-emerald-500/20'
+                              : 'text-red-500 hover:bg-red-500/20'
                           } ${
                             isLocked(account.id) ? 'opacity-50 cursor-not-allowed' : ''
                           }`}
@@ -629,15 +629,15 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
                             isLocked(account.id)
                               ? 'Unlock account to change exclusion settings'
                               : account.exclude_from_cash_balance && account.exclude_from_net_worth
-                              ? 'Excluded from all analytics (click to include)'
-                              : 'Included in all analytics (click to exclude)'
+                              ? 'Excluded from dashboard (click to include)'
+                              : 'Included in dashboard (click to exclude)'
                           }
                           disabled={isLocked(account.id)}
                         >
                           {account.exclude_from_cash_balance && account.exclude_from_net_worth ? (
-                            <CircleX className="h-4 w-4" />
-                          ) : (
                             <CircleCheck className="h-4 w-4" />
+                          ) : (
+                            <CircleX className="h-4 w-4" />
                           )}
                         </Button>
                         <Button
