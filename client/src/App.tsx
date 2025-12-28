@@ -378,23 +378,25 @@ function App() {
     return amount / rate
   }
 
-  // Calculate stats in master currency (exclude investment accounts)
+  // Calculate stats in master currency (exclude investment accounts and excluded accounts)
   const totalIncome = transactions
     .filter(t => {
       const account = accounts.find(a => a.id === t.account_id)
-      return t.amount > 0 && !t.linked_transaction_id && account?.type !== 'investment'
+      const isExcluded = account?.exclude_from_cash_balance && account?.exclude_from_net_worth
+      return t.amount > 0 && !t.linked_transaction_id && account?.type !== 'investment' && !isExcluded
     })
     .reduce((sum, t) => sum + convertToMasterCurrency(t.amount, t.account_id), 0)
   const totalExpenses = transactions
     .filter(t => {
       const account = accounts.find(a => a.id === t.account_id)
-      return t.amount < 0 && !t.linked_transaction_id && account?.type !== 'investment'
+      const isExcluded = account?.exclude_from_cash_balance && account?.exclude_from_net_worth
+      return t.amount < 0 && !t.linked_transaction_id && account?.type !== 'investment' && !isExcluded
     })
     .reduce((sum, t) => sum + Math.abs(convertToMasterCurrency(t.amount, t.account_id)), 0)
   
-  // Calculate cash balance (excluding accounts marked to be excluded from cash balance)
+  // Calculate cash balance (excluding accounts marked to be excluded from all)
   const cashBalance = accounts
-    .filter(a => a.type === 'cash' && !a.exclude_from_cash_balance)
+    .filter(a => a.type === 'cash' && !(a.exclude_from_cash_balance && a.exclude_from_net_worth))
     .reduce((sum, account) => {
       const rate = exchangeRates[account.currency] || 1
       return sum + (account.balance / rate)
