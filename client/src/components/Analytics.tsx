@@ -172,6 +172,33 @@ export function Analytics({
   
   const { privacyMode } = usePrivacy()
 
+  // Helper function to calculate Y-axis domain for charts
+  const calculateYAxisDomain = (data: { balance: number }[]) => {
+    if (data.length === 0) return [0, 100]
+    
+    const values = data.map(d => d.balance)
+    const min = Math.min(...values)
+    const max = Math.max(...values)
+    
+    // For "All Time", always start from 0
+    if (period === 'allTime') {
+      return [0, max * 1.1]
+    }
+    
+    // For other periods, add 25% padding above and below to show movement better
+    const range = max - min
+    const padding = range * 0.25
+    
+    // If the range is very small, use a minimum padding
+    const minPadding = max * 0.1
+    const actualPadding = Math.max(padding, minPadding)
+    
+    const domainMin = Math.max(0, min - actualPadding)
+    const domainMax = max + actualPadding
+    
+    return [domainMin, domainMax]
+  }
+
   // Fetch exchange rates
   useEffect(() => {
     const fetchRates = async () => {
@@ -848,6 +875,7 @@ export function Analytics({
                           fontSize={10}
                           tickLine={false}
                           axisLine={false}
+                          domain={calculateYAxisDomain(netWorthTrendData)}
                           tickFormatter={(value) => {
                             if (value >= 1000000) return `${(value / 1000000).toFixed(1)}M`
                             if (value >= 1000) return `${(value / 1000).toFixed(0)}K`
@@ -1107,6 +1135,7 @@ export function Analytics({
                             fontSize={9}
                             tickLine={false}
                             axisLine={false}
+                            domain={calculateYAxisDomain(data)}
                             tickFormatter={(value) => {
                               if (value >= 1000000) return `${(value / 1000000).toFixed(1)}M`
                               if (value >= 1000) return `${(value / 1000).toFixed(0)}K`
