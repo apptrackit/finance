@@ -1,5 +1,6 @@
 import { useState, useMemo, useRef, useEffect } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card'
+import { Button } from './ui/button'
 import { 
   BarChart3, 
   PieChart as PieChartIcon, 
@@ -9,6 +10,8 @@ import {
   ArrowUpRight,
   ArrowDownRight,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   Check
 } from 'lucide-react'
 import {
@@ -25,8 +28,9 @@ import {
   BarChart,
   Bar
 } from 'recharts'
-import { format, subMonths, startOfMonth, endOfMonth, isWithinInterval, subYears, startOfYear, endOfYear, isThisMonth, isThisYear, startOfWeek, endOfWeek, addWeeks } from 'date-fns'
+import { format, subMonths, startOfMonth, endOfMonth, isWithinInterval, subYears, startOfYear, endOfYear, isThisMonth, isThisYear, startOfWeek, endOfWeek, addWeeks, addDays, differenceInDays } from 'date-fns'
 import { usePrivacy } from '../context/PrivacyContext'
+import { DateRangePicker } from './DateRangePicker'
 
 // Custom Dropdown Component
 function CustomSelect({ 
@@ -125,7 +129,7 @@ type Account = {
   exclude_from_cash_balance?: boolean
 }
 
-type TimePeriod = 'thisMonth' | 'lastMonth' | 'thisYear' | 'lastYear' | 'allTime'
+type TimePeriod = 'thisYear' | 'lastYear' | 'allTime' | 'custom'
 
 const COLORS = [
   '#8b5cf6', // violet
@@ -156,10 +160,15 @@ export function Analytics({
   accounts: Account[]
   masterCurrency?: string
 }) {
-  const [period, setPeriod] = useState<TimePeriod>('thisMonth')
+  const [period, setPeriod] = useState<TimePeriod>('custom')
   const [selectedExpenseCategory, setSelectedExpenseCategory] = useState<string>('all')
   const [selectedIncomeCategory, setSelectedIncomeCategory] = useState<string>('all')
   const [exchangeRates, setExchangeRates] = useState<Record<string, number>>({})
+  const [customDateRange, setCustomDateRange] = useState({ 
+    startDate: format(startOfMonth(new Date()), 'yyyy-MM-dd'), 
+    endDate: format(endOfMonth(new Date()), 'yyyy-MM-dd') 
+  })
+  const [showDatePicker, setShowDatePicker] = useState(false)
   
   const { privacyMode } = usePrivacy()
 
@@ -202,17 +211,6 @@ export function Analytics({
       if (account?.type === 'investment') return false
       
       switch (period) {
-        case 'thisMonth':
-          return isWithinInterval(txDate, {
-            start: startOfMonth(now),
-            end: endOfMonth(now)
-          })
-        case 'lastMonth':
-          const lastMonth = subMonths(now, 1)
-          return isWithinInterval(txDate, {
-            start: startOfMonth(lastMonth),
-            end: endOfMonth(lastMonth)
-          })
         case 'thisYear':
           return isWithinInterval(txDate, {
             start: startOfYear(now),
@@ -224,12 +222,17 @@ export function Analytics({
             start: startOfYear(lastYear),
             end: endOfYear(lastYear)
           })
+        case 'custom':
+          return isWithinInterval(txDate, {
+            start: new Date(customDateRange.startDate),
+            end: new Date(customDateRange.endDate)
+          })
         case 'allTime':
         default:
           return true
       }
     })
-  }, [transactions, period, accounts])
+  }, [transactions, period, accounts, customDateRange])
 
   // Calculate totals in master currency
   const { totalIncome, totalExpenses, netFlow } = useMemo(() => {
@@ -322,21 +325,22 @@ export function Analytics({
       .filter(d => {
         const txDate = new Date(d.date)
         switch (period) {
-          case 'thisMonth':
-            return isThisMonth(txDate)
-          case 'lastMonth':
-            return txDate >= startOfMonth(subMonths(new Date(), 1)) && txDate < startOfMonth(new Date())
           case 'thisYear':
             return isThisYear(txDate)
           case 'lastYear':
             const lastYear = new Date().getFullYear() - 1
             return txDate.getFullYear() === lastYear
+          case 'custom':
+            return isWithinInterval(txDate, {
+              start: new Date(customDateRange.startDate),
+              end: new Date(customDateRange.endDate)
+            })
           default:
             return true
         }
       })
       .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
-  }, [transactions, accounts, period, exchangeRates, masterCurrency])
+  }, [transactions, accounts, period, exchangeRates, masterCurrency, customDateRange])
 
   // Per-account Net Worth Trend data in master currency (exclude investment accounts)
   const perAccountTrendData = useMemo(() => {
@@ -378,15 +382,16 @@ export function Analytics({
         .filter(d => {
           const txDate = new Date(d.date)
           switch (period) {
-            case 'thisMonth':
-              return isThisMonth(txDate)
-            case 'lastMonth':
-              return txDate >= startOfMonth(subMonths(new Date(), 1)) && txDate < startOfMonth(new Date())
             case 'thisYear':
               return isThisYear(txDate)
             case 'lastYear':
               const lastYear = new Date().getFullYear() - 1
               return txDate.getFullYear() === lastYear
+            case 'custom':
+              return isWithinInterval(txDate, {
+                start: new Date(customDateRange.startDate),
+                end: new Date(customDateRange.endDate)
+              })
             default:
               return true
           }
@@ -398,7 +403,7 @@ export function Analytics({
         data
       }
     })
-  }, [accounts, transactions, period, exchangeRates, masterCurrency])
+  }, [accounts, transactions, period, exchangeRates, masterCurrency, customDateRange])
 
   // Get expense categories for filter
   const expenseCategories = useMemo(() => {
@@ -415,11 +420,10 @@ export function Analytics({
     const data: { key: string; label: string; amount: number }[] = []
     const now = new Date()
     
-    // For thisMonth or lastMonth, show weeks
-    if (period === 'thisMonth' || period === 'lastMonth') {
-      const targetMonth = period === 'thisMonth' ? now : subMonths(now, 1)
-      const monthStart = startOfMonth(targetMonth)
-      const monthEnd = endOfMonth(targetMonth)
+    // For custom range that's 40 days or less, show weeks
+    if (period === 'custom' && differenceInDays(new Date(customDateRange.endDate), new Date(customDateRange.startDate)) <= 40) {
+      const monthStart = new Date(customDateRange.startDate)
+      const monthEnd = new Date(customDateRange.endDate)
       
       // Generate weeks for the month
       let weekStart = startOfWeek(monthStart, { weekStartsOn: 1 })
@@ -484,9 +488,10 @@ export function Analytics({
         const monthEnd = endOfMonth(monthDate)
         const monthKey = format(monthDate, 'yyyy-MM')
         
-        // Filter by year if needed
+        // Filter by period if needed
         if (period === 'thisYear' && !isThisYear(monthDate)) continue
         if (period === 'lastYear' && monthDate.getFullYear() !== now.getFullYear() - 1) continue
+        if (period === 'custom' && !isWithinInterval(monthDate, { start: new Date(customDateRange.startDate), end: new Date(customDateRange.endDate) })) continue
         
         const monthIncome = transactions
           .filter(tx => {
@@ -509,18 +514,17 @@ export function Analytics({
     }
     
     return data
-  }, [transactions, selectedIncomeCategory, period])
+  }, [transactions, selectedIncomeCategory, period, customDateRange, accounts, exchangeRates, masterCurrency])
 
   // Expenses comparison data - weeks for month view, months for year/all view
   const expensesChartData = useMemo(() => {
     const data: { key: string; label: string; amount: number }[] = []
     const now = new Date()
     
-    // For thisMonth or lastMonth, show weeks
-    if (period === 'thisMonth' || period === 'lastMonth') {
-      const targetMonth = period === 'thisMonth' ? now : subMonths(now, 1)
-      const monthStart = startOfMonth(targetMonth)
-      const monthEnd = endOfMonth(targetMonth)
+    // For custom range that's 40 days or less, show weeks
+    if (period === 'custom' && differenceInDays(new Date(customDateRange.endDate), new Date(customDateRange.startDate)) <= 40) {
+      const monthStart = new Date(customDateRange.startDate)
+      const monthEnd = new Date(customDateRange.endDate)
       
       // Generate weeks for the month
       let weekStart = startOfWeek(monthStart, { weekStartsOn: 1 })
@@ -585,9 +589,10 @@ export function Analytics({
         const monthEnd = endOfMonth(monthDate)
         const monthKey = format(monthDate, 'yyyy-MM')
         
-        // Filter by year if needed
+        // Filter by period if needed
         if (period === 'thisYear' && !isThisYear(monthDate)) continue
         if (period === 'lastYear' && monthDate.getFullYear() !== now.getFullYear() - 1) continue
+        if (period === 'custom' && !isWithinInterval(monthDate, { start: new Date(customDateRange.startDate), end: new Date(customDateRange.endDate) })) continue
         
         const monthExpenses = transactions
           .filter(tx => {
@@ -610,15 +615,14 @@ export function Analytics({
     }
     
     return data
-  }, [transactions, selectedExpenseCategory, period])
+  }, [transactions, selectedExpenseCategory, period, customDateRange, accounts, exchangeRates, masterCurrency])
 
   // Period labels
   const periodLabels: Record<TimePeriod, string> = {
-    thisMonth: 'This Month',
-    lastMonth: 'Last Month',
     thisYear: 'This Year',
     lastYear: 'Last Year',
-    allTime: 'All Time'
+    allTime: 'All Time',
+    custom: 'Custom'
   }
 
   const hasData = filteredTransactions.length > 0
@@ -631,21 +635,112 @@ export function Analytics({
           <BarChart3 className="h-5 w-5 text-primary" />
           <h2 className="text-lg font-semibold">Analytics</h2>
         </div>
-        <div className="flex gap-1 p-1 rounded-xl bg-secondary/50 border border-border/50 overflow-x-auto w-full sm:w-auto">
-          {(Object.keys(periodLabels) as TimePeriod[]).map((p) => (
-            <button
-              key={p}
-              onClick={() => setPeriod(p)}
-              className={`px-2 sm:px-3 py-1.5 text-xs font-medium rounded-lg transition-all whitespace-nowrap flex-shrink-0 ${
-                period === p
-                  ? 'bg-primary text-primary-foreground shadow-sm'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
-              }`}
-            >
-              <span className="hidden sm:inline">{periodLabels[p]}</span>
-              <span className="sm:hidden">{p === 'thisMonth' ? 'Month' : p === 'lastMonth' ? 'Last' : p === 'thisYear' ? 'Year' : p === 'lastYear' ? 'Prev' : 'All'}</span>
-            </button>
-          ))}
+        <div className="flex items-center gap-2">
+          <div className="relative">
+            <div className="flex items-center gap-1 sm:gap-2">
+              {period === 'custom' && (
+                <Button
+                  onClick={() => {
+                    // Custom range: shift by the range length
+                    const rangeDays = differenceInDays(new Date(customDateRange.endDate), new Date(customDateRange.startDate)) + 1
+                    const newStart = format(addDays(new Date(customDateRange.startDate), -rangeDays), 'yyyy-MM-dd')
+                    const newEnd = format(addDays(new Date(customDateRange.endDate), -rangeDays), 'yyyy-MM-dd')
+                    setCustomDateRange({ startDate: newStart, endDate: newEnd })
+                  }}
+                  size="sm"
+                  variant="ghost"
+                  className="h-7 w-7 sm:h-8 sm:w-8 p-0"
+                >
+                  <ChevronLeft className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                </Button>
+              )}
+              <button
+                onClick={() => {
+                  if (period === 'custom') {
+                    setShowDatePicker(!showDatePicker)
+                  } else {
+                    // Reset to current month when switching to custom
+                    const now = new Date()
+                    setCustomDateRange({
+                      startDate: format(startOfMonth(now), 'yyyy-MM-dd'),
+                      endDate: format(endOfMonth(now), 'yyyy-MM-dd')
+                    })
+                    setPeriod('custom')
+                    setShowDatePicker(true)
+                  }
+                }}
+                className={`flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-1.5 rounded-md border transition-colors ${
+                  period === 'custom'
+                    ? 'bg-primary text-primary-foreground border-primary'
+                    : 'bg-secondary/50 border-border/50 hover:bg-secondary/70'
+                }`}
+              >
+                <Calendar className="h-3 w-3 text-current" />
+                <span className="text-[11px] sm:text-xs font-medium">
+                  {period === 'custom' 
+                    ? (() => {
+                        const start = new Date(customDateRange.startDate)
+                        const end = new Date(customDateRange.endDate)
+                        const monthStart = startOfMonth(start)
+                        const monthEnd = endOfMonth(start)
+                        
+                        // Check if it's a complete month
+                        if (format(start, 'yyyy-MM-dd') === format(monthStart, 'yyyy-MM-dd') &&
+                            format(end, 'yyyy-MM-dd') === format(monthEnd, 'yyyy-MM-dd')) {
+                          return format(start, 'MMMM yyyy')
+                        }
+                        return `${format(start, 'MMM d')} - ${format(end, 'MMM d')}`
+                      })()
+                    : 'Custom'
+                  }
+                </span>
+              </button>
+              {period === 'custom' && (
+                <Button
+                  onClick={() => {
+                    // Custom range: shift by the range length
+                    const rangeDays = differenceInDays(new Date(customDateRange.endDate), new Date(customDateRange.startDate)) + 1
+                    const newStart = format(addDays(new Date(customDateRange.startDate), rangeDays), 'yyyy-MM-dd')
+                    const newEnd = format(addDays(new Date(customDateRange.endDate), rangeDays), 'yyyy-MM-dd')
+                    setCustomDateRange({ startDate: newStart, endDate: newEnd })
+                  }}
+                  size="sm"
+                  variant="ghost"
+                  className="h-7 w-7 sm:h-8 sm:w-8 p-0"
+                >
+                  <ChevronRight className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                </Button>
+              )}
+            </div>
+            {showDatePicker && (
+              <DateRangePicker
+                startDate={customDateRange.startDate}
+                endDate={customDateRange.endDate}
+                onApply={(range) => {
+                  setCustomDateRange(range)
+                  setPeriod('custom')
+                  setShowDatePicker(false)
+                }}
+                onCancel={() => setShowDatePicker(false)}
+              />
+            )}
+          </div>
+          <div className="flex gap-1 p-1 rounded-xl bg-secondary/50 border border-border/50 overflow-x-auto w-full sm:w-auto">
+            {(Object.keys(periodLabels).filter(p => p !== 'custom') as TimePeriod[]).map((p) => (
+              <button
+                key={p}
+                onClick={() => setPeriod(p)}
+                className={`px-2 sm:px-3 py-1.5 text-xs font-medium rounded-lg transition-all whitespace-nowrap flex-shrink-0 ${
+                  period === p
+                    ? 'bg-primary text-primary-foreground shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
+                }`}
+              >
+                <span className="hidden sm:inline">{periodLabels[p]}</span>
+                <span className="sm:hidden">{p === 'thisYear' ? 'Year' : p === 'lastYear' ? 'Prev' : 'All'}</span>
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 

@@ -10,6 +10,7 @@ import { API_BASE_URL, apiFetch } from '../config'
 import { usePrivacy } from '../context/PrivacyContext'
 import { useAlert } from '../context/AlertContext'
 import { useLockedAccounts } from '../context/LockedAccountsContext'
+import { DateRangePicker } from './DateRangePicker'
 
 type Transaction = {
   id: string
@@ -788,48 +789,15 @@ export function TransactionList({
             
             {/* Custom Date Range Picker */}
             {showDatePicker && (
-              <div className="absolute top-full right-0 mt-2 p-4 bg-background border border-border rounded-lg shadow-lg z-50 min-w-[280px]">
-                <div className="space-y-3">
-                  <div>
-                    <Label className="text-xs">Start Date</Label>
-                    <Input
-                      type="date"
-                      value={customRange.startDate}
-                      onChange={(e) => setCustomRange({ ...customRange, startDate: e.target.value })}
-                      className="mt-1"
-                    />
-                  </div>
-                  <div>
-                    <Label className="text-xs">End Date</Label>
-                    <Input
-                      type="date"
-                      value={customRange.endDate}
-                      onChange={(e) => setCustomRange({ ...customRange, endDate: e.target.value })}
-                      className="mt-1"
-                    />
-                  </div>
-                  <div className="flex gap-2 pt-2">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => setShowDatePicker(false)}
-                      className="flex-1"
-                    >
-                      Cancel
-                    </Button>
-                    <Button
-                      size="sm"
-                      onClick={() => {
-                        onDateRangeChange(customRange)
-                        setShowDatePicker(false)
-                      }}
-                      className="flex-1"
-                    >
-                      Apply
-                    </Button>
-                  </div>
-                </div>
-              </div>
+              <DateRangePicker
+                startDate={customRange.startDate}
+                endDate={customRange.endDate}
+                onApply={(range) => {
+                  onDateRangeChange(range)
+                  setShowDatePicker(false)
+                }}
+                onCancel={() => setShowDatePicker(false)}
+              />
             )}
             </div>
           
