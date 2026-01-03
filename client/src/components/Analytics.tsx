@@ -28,7 +28,7 @@ import {
   BarChart,
   Bar
 } from 'recharts'
-import { format, subMonths, startOfMonth, endOfMonth, isWithinInterval, subYears, startOfYear, endOfYear, isThisMonth, isThisYear, startOfWeek, endOfWeek, addWeeks, addDays, differenceInDays } from 'date-fns'
+import { format, subMonths, startOfMonth, endOfMonth, isWithinInterval, subYears, startOfYear, endOfYear, isThisYear, startOfWeek, endOfWeek, addWeeks, addDays, differenceInDays } from 'date-fns'
 import { usePrivacy } from '../context/PrivacyContext'
 import { DateRangePicker } from './DateRangePicker'
 
