@@ -180,12 +180,7 @@ export function Analytics({
     const min = Math.min(...values)
     const max = Math.max(...values)
     
-    // For "All Time", always start from 0
-    if (period === 'allTime') {
-      return [0, max * 1.1]
-    }
-    
-    // For other periods, add 25% padding above and below to show movement better
+    // Add 25% padding above and below to show movement better
     const range = max - min
     const padding = range * 0.25
     
