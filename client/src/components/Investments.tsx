@@ -153,8 +153,14 @@ export function Investments() {
     
     // Get current market price if available
     let currentPrice = 0
-    if (account.asset_type !== 'manual' && account.symbol && quotes[account.symbol]) {
-      currentPrice = quotes[account.symbol].regularMarketPrice || 0
+    let priceFetchError = false
+    if (account.asset_type !== 'manual' && account.symbol) {
+      if (quotes[account.symbol]) {
+        currentPrice = quotes[account.symbol].regularMarketPrice || 0
+      } else {
+        // Symbol exists but no quote data - price fetch failed
+        priceFetchError = true
+      }
     }
     
     // Calculate current value in USD
@@ -243,7 +249,8 @@ export function Investments() {
       gainLoss,
       gainLossPercent,
       transactions,
-      actualQuantity
+      actualQuantity,
+      priceFetchError
     }
   }
 
@@ -446,7 +453,7 @@ export function Investments() {
                     <div>
                       <div className="font-semibold text-lg flex items-center gap-2">
                         {position.account.symbol || position.account.name}
-                        {position.account.asset_type !== 'manual' && (
+                        {position.account.asset_type !== 'manual' && !position.priceFetchError && quote && (
                           <span className={`text-xs px-2 py-0.5 rounded-full ${priceChange >= 0 ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'}`}>
                             {priceChange >= 0 ? '+' : ''}{priceChange.toFixed(2)}%
                           </span>
@@ -471,9 +478,15 @@ export function Investments() {
                     <div className={`text-sm text-muted-foreground ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
                       {privacyMode === 'hidden' ? '•••• ' : `${position.account.symbol || position.account.name}`} {position.currentPrice > 0 && `@ $${position.currentPrice.toLocaleString()}`}
                     </div>
-                    <div className={`text-sm font-semibold mt-1 flex items-center justify-end gap-1 ${position.gainLoss >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'} ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
-                      {position.gainLoss >= 0 ? <TrendingUp className="h-3.5 w-3.5" /> : <TrendingDown className="h-3.5 w-3.5" />}
-                      {privacyMode === 'hidden' ? '••••' : `${position.gainLoss >= 0 ? '+' : ''}${formatValue(Math.abs(position.gainLoss), position.account)} (${position.gainLossPercent >= 0 ? '+' : ''}${position.gainLossPercent.toFixed(2)}%)`}
+                    <div className={`text-sm font-semibold mt-1 flex items-center justify-end gap-1 ${position.priceFetchError ? 'text-yellow-600 dark:text-yellow-400' : position.gainLoss >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'} ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
+                      {position.priceFetchError ? (
+                        <span className="text-xs">⚠️ Error fetching price</span>
+                      ) : (
+                        <>
+                          {position.gainLoss >= 0 ? <TrendingUp className="h-3.5 w-3.5" /> : <TrendingDown className="h-3.5 w-3.5" />}
+                          {privacyMode === 'hidden' ? '••••' : `${position.gainLoss >= 0 ? '+' : ''}${formatValue(Math.abs(position.gainLoss), position.account)} (${position.gainLossPercent >= 0 ? '+' : ''}${position.gainLossPercent.toFixed(2)}%)`}
+                        </>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -529,8 +542,8 @@ export function Investments() {
                       )}
                       <div>
                         <div className="text-xs text-muted-foreground">Total Return</div>
-                        <div className={`text-lg font-bold ${position.gainLoss >= 0 ? 'text-green-600' : 'text-red-600'} ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
-                          {privacyMode === 'hidden' ? '••••••' : `${position.gainLoss >= 0 ? '+' : ''}${formatValue(Math.abs(position.gainLoss), selectedAccount)} (${position.gainLossPercent >= 0 ? '+' : ''}${position.gainLossPercent.toFixed(2)}%)`}
+                        <div className={`text-lg font-bold ${position.priceFetchError ? 'text-yellow-600 dark:text-yellow-400' : position.gainLoss >= 0 ? 'text-green-600' : 'text-red-600'} ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
+                          {privacyMode === 'hidden' ? '••••••' : position.priceFetchError ? '⚠️ Error fetching price' : `${position.gainLoss >= 0 ? '+' : ''}${formatValue(Math.abs(position.gainLoss), selectedAccount)} (${position.gainLossPercent >= 0 ? '+' : ''}${position.gainLossPercent.toFixed(2)}%)`}
                         </div>
                       </div>
                     </div>
