@@ -80,16 +80,16 @@ For detailed architecture documentation, see [API/ARCHITECTURE.md](api/ARCHITECT
 
 **Backend**
 - **Runtime**: Cloudflare Workers (serverless, edge-deployed)
-- **Framework**: Hono 4 (lightweight web framework)
+- **Framework**: Hono ^4.0 (lightweight web framework)
 - **Database**: Cloudflare D1 (SQLite at the edge)
 - **Market Data**: Yahoo Finance API (yahoo-finance2 ^3.10)
 - **Architecture**: Clean architecture with controllers, services, repositories, DTOs, and mappers
 
 **Frontend**
-- **Framework**: React 19.2 with TypeScript
-- **Build Tool**: Vite 7.2
-- **Styling**: Tailwind CSS 4.1 with custom design system
-- **Charts**: Recharts 3.5 for data visualization
+- **Framework**: React ^19.2 with TypeScript
+- **Build Tool**: Vite ^7.2
+- **Styling**: Tailwind CSS ^4.1 with custom design system
+- **Charts**: Recharts ^3.5 for data visualization
 - **Icons**: Lucide React
 - **State**: React Context API (Privacy, Alerts, Locked Accounts)
 - **PWA**: Progressive Web App with offline support and service workers
