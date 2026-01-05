@@ -1,23 +1,8 @@
-import YahooFinance from 'yahoo-finance2'
+// Yahoo Finance API direct fetch implementation
+// Using direct fetch instead of yahoo-finance2 library for better Cloudflare Workers compatibility
 
-// Configure YahooFinance with browser-like headers to avoid blocking
-// Yahoo Finance blocks requests without proper User-Agent headers
-const yahooFinance = new YahooFinance({
-  queue: {
-    concurrency: 1,  // Reduce to 1 concurrent request to avoid rate limits
-    timeout: 30000   // 30 second timeout
-  },
-  validation: {
-    logErrors: false  // Reduce noise in logs
-  }
-})
-
-// Module-level fetch options with browser User-Agent
-// This needs to be passed to each request
-const fetchOptions = {
-  headers: {
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-  }
+const YAHOO_HEADERS = {
+  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
 }
 
 // Helper function to retry requests with exponential backoff
@@ -53,74 +38,120 @@ async function retryWithBackoff<T>(
 
 export class MarketDataService {
   async searchSymbol(query: string): Promise<any> {
-    return await retryWithBackoff(() => yahooFinance.search(query, {}, { fetchOptions }))
+    return await retryWithBackoff(async () => {
+      const url = `https://query2.finance.yahoo.com/v1/finance/search?` +
+        `q=${encodeURIComponent(query)}` +
+        `&lang=en-US&region=US&quotesCount=6&newsCount=4&enableFuzzyQuery=false` +
+        `&quotesQueryId=tss_match_phrase_query&multiQuoteQueryId=multi_quote_single_token_query` +
+        `&newsQueryId=news_cie_vespa&enableCb=true&enableNavLinks=true&enableEnhancedTrivialQuery=true`
+      
+      const response = await fetch(url, { headers: YAHOO_HEADERS })
+      
+      if (!response.ok) {
+        throw new Error(`Yahoo Finance search failed: ${response.status} ${response.statusText}`)
+      }
+      
+      return await response.json()
+    })
   }
 
   async getQuote(symbol: string): Promise<any> {
-    // Note: yahooFinance.quote() requires a "crumb" which Yahoo Finance often blocks
-    // Instead, use the chart endpoint which doesn't require authentication
-    // and provides current price in the metadata
     return await retryWithBackoff(async () => {
-      const chartData = await yahooFinance.chart(symbol, {
-        period1: new Date(Date.now() - 24 * 60 * 60 * 1000), // Last 24 hours
-        interval: '1d'
-      }, { fetchOptions })
+      const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=1d`
       
-      // Transform chart response to match quote response format
+      const response = await fetch(url, { headers: YAHOO_HEADERS })
+      
+      if (!response.ok) {
+        throw new Error(`Yahoo Finance quote failed: ${response.status} ${response.statusText}`)
+      }
+      
+      const data: any = await response.json()
+      const result = data?.chart?.result?.[0]
+      const meta = result?.meta
+      
+      if (!meta) {
+        throw new Error('No data returned from Yahoo Finance')
+      }
+      
+      // Return in a format similar to yahoo-finance2 quote response
       return {
-        symbol: chartData.meta.symbol,
-        regularMarketPrice: chartData.meta.regularMarketPrice,
-        currency: chartData.meta.currency,
-        shortName: chartData.meta.shortName || chartData.meta.longName,
-        longName: chartData.meta.longName,
-        regularMarketChangePercent: chartData.meta.regularMarketChangePercent,
-        regularMarketChange: chartData.meta.regularMarketChange,
-        regularMarketTime: chartData.meta.regularMarketTime,
-        marketState: chartData.meta.marketState,
-        exchangeName: chartData.meta.exchangeName,
-        quoteType: chartData.meta.instrumentType
+        symbol: meta.symbol,
+        regularMarketPrice: meta.regularMarketPrice,
+        currency: meta.currency,
+        shortName: meta.shortName || meta.longName,
+        longName: meta.longName,
+        regularMarketChangePercent: meta.regularMarketChangePercent,
+        regularMarketChange: meta.regularMarketChange,
+        regularMarketTime: meta.regularMarketTime,
+        marketState: meta.marketState,
+        exchangeName: meta.exchangeName,
+        quoteType: meta.instrumentType
       }
     })
   }
 
   async getChart(symbol: string, range: string = '1mo', interval: string = '1d'): Promise<any> {
-    const now = new Date()
-    let period1 = new Date()
+    return await retryWithBackoff(async () => {
+      const now = new Date()
+      let period1 = new Date()
 
-    switch (range) {
-      case '1d':
-        period1.setDate(now.getDate() - 1)
-        break
-      case '5d':
-        period1.setDate(now.getDate() - 5)
-        break
-      case '1mo':
-        period1.setMonth(now.getMonth() - 1)
-        break
-      case '6mo':
-        period1.setMonth(now.getMonth() - 6)
-        break
-      case '1y':
-        period1.setFullYear(now.getFullYear() - 1)
-        break
-      case '5y':
-        period1.setFullYear(now.getFullYear() - 5)
-        break
-      case 'max':
-        period1 = new Date(0)
-        break
-      default:
-        period1.setMonth(now.getMonth() - 1)
-    }
+      switch (range) {
+        case '1d':
+          period1.setDate(now.getDate() - 1)
+          break
+        case '5d':
+          period1.setDate(now.getDate() - 5)
+          break
+        case '1mo':
+          period1.setMonth(now.getMonth() - 1)
+          break
+        case '6mo':
+          period1.setMonth(now.getMonth() - 6)
+          break
+        case '1y':
+          period1.setFullYear(now.getFullYear() - 1)
+          break
+        case '5y':
+          period1.setFullYear(now.getFullYear() - 5)
+          break
+        case 'max':
+          period1 = new Date(0)
+          break
+        default:
+          period1.setMonth(now.getMonth() - 1)
+      }
 
-    const queryOptions = {
-      period1: Math.floor(period1.getTime() / 1000), // Unix timestamp in seconds
-      interval: interval as any
-    }
+      const period1Ts = Math.floor(period1.getTime() / 1000)
+      const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?` +
+        `interval=${interval}&period1=${period1Ts}`
 
-    const result: any = await retryWithBackoff(() => 
-      yahooFinance.chart(symbol, queryOptions, { fetchOptions })
-    )
-    return { quotes: result.quotes }
+      const response = await fetch(url, { headers: YAHOO_HEADERS })
+      
+      if (!response.ok) {
+        throw new Error(`Yahoo Finance chart failed: ${response.status} ${response.statusText}`)
+      }
+
+      const data: any = await response.json()
+      const result = data?.chart?.result?.[0]
+      
+      if (!result) {
+        throw new Error('No chart data returned from Yahoo Finance')
+      }
+
+      // Transform to match expected format
+      const timestamps = result.timestamp || []
+      const quotes = result.indicators?.quote?.[0]
+      
+      const chartQuotes = timestamps.map((ts: number, i: number) => ({
+        date: new Date(ts * 1000),
+        open: quotes?.open?.[i],
+        high: quotes?.high?.[i],
+        low: quotes?.low?.[i],
+        close: quotes?.close?.[i],
+        volume: quotes?.volume?.[i]
+      }))
+
+      return { quotes: chartQuotes }
+    })
   }
 }
