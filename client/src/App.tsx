@@ -10,7 +10,7 @@ import { usePrivacy } from './context/PrivacyContext'
 import { startOfMonth, endOfMonth, format } from 'date-fns'
 
 
-const APP_VERSION = '1.0.4'
+const APP_VERSION = '1.1.0'
 
 
 type Account = {
