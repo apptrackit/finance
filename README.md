@@ -18,6 +18,7 @@
   - [Transaction Flow](#transaction-flow)
   - [Investment Tracking](#investment-tracking)
   - [Privacy Mode](#privacy-mode)
+  - [Recurring Transactions](#recurring-transactions)
 - [Security](#security)
 - [Development](#development)
   - [Prerequisites](#prerequisites)
@@ -66,21 +67,33 @@ This script handles:
 
 ## Architecture
 
+Finance Manager follows **clean architecture principles** with clear separation of concerns:
+
+- **Backend**: Layered architecture with controllers, services, repositories, DTOs, and mappers
+- **Frontend**: Component-based React architecture with context for global state
+- **Database**: Edge-deployed SQLite (Cloudflare D1) for low-latency data access
+- **Deployment**: Fully automated via deployment script
+
+For detailed architecture documentation, see [API/ARCHITECTURE.md](api/ARCHITECTURE.md).
+
 ### Tech Stack
 
 **Backend**
 - **Runtime**: Cloudflare Workers (serverless, edge-deployed)
-- **Framework**: Hono (lightweight web framework)
+- **Framework**: Hono ^4.0 (lightweight web framework)
 - **Database**: Cloudflare D1 (SQLite at the edge)
-- **Market Data**: Yahoo Finance API v2
+- **Market Data**: Yahoo Finance API (yahoo-finance2 ^3.10)
+- **Architecture**: Clean architecture with controllers, services, repositories, DTOs, and mappers
 
 **Frontend**
-- **Framework**: React 19 with TypeScript
-- **Build Tool**: Vite 7
-- **Styling**: Tailwind CSS 4 with custom design system
-- **Charts**: Recharts for data visualization
+- **Framework**: React ^19.2 with TypeScript
+- **Build Tool**: Vite ^7.2
+- **Styling**: Tailwind CSS ^4.1 with custom design system
+- **Charts**: Recharts ^3.5 for data visualization
 - **Icons**: Lucide React
-- **State**: React Context API (Privacy, Settings)
+- **State**: React Context API (Privacy, Alerts, Locked Accounts)
+- **PWA**: Progressive Web App with offline support and service workers
+- **Date Handling**: date-fns for date formatting and manipulation
 
 ### Project Structure
 
@@ -88,9 +101,21 @@ This script handles:
 finance/
 ├── api/                      # Backend (Cloudflare Workers)
 │   ├── src/
-│   │   └── index.ts         # API routes & business logic
-│   ├── schema.sql           # Database schema
-│   ├── wrangler.toml        # Cloudflare Workers config
+│   │   ├── config/          # Application configuration
+│   │   ├── controllers/     # HTTP request handlers
+│   │   ├── dtos/           # Data Transfer Objects
+│   │   ├── mappers/        # Entity-DTO mapping
+│   │   ├── middlewares/    # CORS & authentication
+│   │   ├── models/         # Domain entities
+│   │   ├── repositories/   # Database access layer
+│   │   ├── routes/         # Route definitions
+│   │   ├── services/       # Business logic layer
+│   │   ├── types/          # TypeScript types
+│   │   ├── utils/          # Utility functions
+│   │   └── index.ts        # Application entry point
+│   ├── schema.sql          # Database schema
+│   ├── wrangler.toml       # Cloudflare Workers config
+│   ├── ARCHITECTURE.md     # Detailed architecture docs
 │   └── package.json
 │
 ├── client/                   # Frontend (React + Vite)
@@ -101,6 +126,7 @@ finance/
 │   │   │   ├── Investments.tsx
 │   │   │   ├── InvestmentChart.tsx
 │   │   │   ├── Analytics.tsx
+│   │   │   ├── DateRangePicker.tsx
 │   │   │   ├── TransferForm.tsx
 │   │   │   ├── Settings.tsx
 │   │   │   └── ui/          # Reusable UI components
@@ -111,6 +137,7 @@ finance/
 │   │   ├── App.tsx          # Main application
 │   │   ├── config.ts        # API configuration
 │   │   └── main.tsx         # Entry point
+│   ├── vite.config.ts       # Vite & PWA configuration
 │   └── package.json
 │
 ├── deploy.sh                 # Automated deployment script
@@ -125,6 +152,7 @@ finance/
 - Cash accounts (checking, savings, wallet)
 - Investment accounts (stocks, crypto, manual assets)
 - Multi-currency support with real-time conversion
+- Account locking (prevent accidental modifications)
 
 📊 **Transaction Tracking**
 - Categorized income & expenses
@@ -148,11 +176,31 @@ finance/
 - Income vs. expenses
 - Category breakdown charts
 - Monthly trends and patterns
+- Date range filtering for custom periods
+- Period selection (7 days, 30 days, 90 days, year, all time, custom)
+
+⚙️ **Settings & Customization**
+- Master currency selection (HUF, EUR, USD, GBP, CHF, PLN, CZK, RON)
+- Category management with custom icons (150+ emoji options)
+- Account exclusion options (exclude from net worth or cash balance)
+- Privacy mode toggle
+- Data export (JSON format)
 
 🌍 **Global Deployment**
 - Edge-deployed on Cloudflare network
 - Sub-50ms response times worldwide
 - Automatic HTTPS and DDoS protection
+
+📱 **Progressive Web App (PWA)**
+- Install on mobile devices and desktop
+- Offline support with service workers
+- Auto-updates and caching
+- Native app-like experience
+
+🔄 **Automated Features**
+- Recurring transactions with scheduled tasks
+- Monthly cron job to clone recurring transactions
+- Auto-refresh investment prices (every 5 minutes)
 
 ---
 
@@ -216,6 +264,20 @@ Privacy mode uses a **React Context** to globally mask sensitive data:
 - Preference saved in **localStorage + cookie**
 - Survives page refresh
 - Applies to: balances, amounts, quantities, charts
+
+### Recurring Transactions
+
+The application supports automated recurring transactions:
+
+1. Mark any transaction as recurring when creating it
+2. A **Cloudflare Cron Trigger** runs monthly (1st of each month)
+3. All recurring transactions are automatically cloned to the current month
+4. Configured in `wrangler.toml`: `crons = ["0 0 1 * *"]`
+
+This enables automated handling of:
+- Regular salary deposits
+- Monthly subscriptions
+- Recurring bills and expenses
 
 ---
 
@@ -321,18 +383,38 @@ VITE_API_DOMAIN=localhost:8787  # or api.yourdomain.com for prod
 |--------|----------|-------------|
 | `GET` | `/` | Health check |
 | `GET` | `/version` | API version |
+| **Accounts** |  |  |
 | `GET` | `/accounts` | List all accounts |
 | `POST` | `/accounts` | Create account |
 | `PUT` | `/accounts/:id` | Update account |
 | `DELETE` | `/accounts/:id` | Delete account |
-| `GET` | `/transactions` | List transactions |
+| **Transactions** |  |  |
+| `GET` | `/transactions` | List all transactions |
+| `GET` | `/transactions/paginated` | Get paginated transactions |
+| `GET` | `/transactions/date-range` | Get transactions by date range |
+| `GET` | `/transactions/from-date` | Get transactions from a specific date |
 | `POST` | `/transactions` | Create transaction |
+| `PUT` | `/transactions/:id` | Update transaction |
 | `DELETE` | `/transactions/:id` | Delete transaction |
+| **Categories** |  |  |
 | `GET` | `/categories` | List categories |
 | `POST` | `/categories` | Create category |
+| `PUT` | `/categories/:id` | Update category |
+| `DELETE` | `/categories/:id` | Delete category |
+| `POST` | `/categories/reset` | Reset categories to defaults |
+| **Investment Transactions** |  |  |
+| `GET` | `/investment-transactions` | List investment transactions |
+| `POST` | `/investment-transactions` | Create investment transaction |
+| `DELETE` | `/investment-transactions/:id` | Delete investment transaction |
+| **Transfers** |  |  |
+| `GET` | `/transfers/exchange-rate` | Get exchange rate between currencies |
+| `POST` | `/transfers` | Create transfer between accounts |
+| **Dashboard** |  |  |
 | `GET` | `/dashboard/net-worth` | Calculate net worth |
-| `GET` | `/market/quote/:symbol` | Get stock/crypto price |
-| `POST` | `/market/refresh-investments` | Refresh all investment prices |
+| **Market Data** |  |  |
+| `GET` | `/market/search` | Search for stocks/crypto symbols |
+| `GET` | `/market/quote` | Get current price quote |
+| `GET` | `/market/chart` | Get historical price chart data |
 
 **Example Request:**
 ```bash
@@ -342,6 +424,16 @@ curl -H "X-API-Key: your-key" \
 
 ---
 
-**Version**: 0.8.5 (Client) | 1.0.1 (API)  
+**API Version**: 1.1.4  
+**Client Version**: 0.0.0  
 **License**: MIT  
 **Maintained by**: apptrackit
+
+---
+
+## Additional Resources
+
+- **[API Architecture Documentation](api/ARCHITECTURE.md)** — Detailed documentation of the clean architecture pattern used in the API
+- **Deployment Script** — Automated deployment with `./deploy.sh`
+- **Database Schema** — See `api/schema.sql` for complete database structure
+- **PWA Configuration** — See `client/vite.config.ts` for Progressive Web App setup
