@@ -82,7 +82,7 @@ For detailed architecture documentation, see [API/ARCHITECTURE.md](api/ARCHITECT
 - **Runtime**: Cloudflare Workers (serverless, edge-deployed)
 - **Framework**: Hono 4 (lightweight web framework)
 - **Database**: Cloudflare D1 (SQLite at the edge)
-- **Market Data**: Yahoo Finance API (yahoo-finance2 v3.10)
+- **Market Data**: Yahoo Finance API (yahoo-finance2 ^3.10)
 - **Architecture**: Clean architecture with controllers, services, repositories, DTOs, and mappers
 
 **Frontend**
@@ -424,7 +424,8 @@ curl -H "X-API-Key: your-key" \
 
 ---
 
-**Version**: 1.1.4 (API) | 0.0.0 (Client)  
+**API Version**: 1.1.4  
+**Client Version**: 0.0.0  
 **License**: MIT  
 **Maintained by**: apptrackit
 
