@@ -57,7 +57,30 @@ export class MarketDataService {
   }
 
   async getQuote(symbol: string): Promise<any> {
-    return await retryWithBackoff(() => yahooFinance.quote(symbol, {}, { fetchOptions }))
+    // Note: yahooFinance.quote() requires a "crumb" which Yahoo Finance often blocks
+    // Instead, use the chart endpoint which doesn't require authentication
+    // and provides current price in the metadata
+    return await retryWithBackoff(async () => {
+      const chartData = await yahooFinance.chart(symbol, {
+        period1: new Date(Date.now() - 24 * 60 * 60 * 1000), // Last 24 hours
+        interval: '1d'
+      }, { fetchOptions })
+      
+      // Transform chart response to match quote response format
+      return {
+        symbol: chartData.meta.symbol,
+        regularMarketPrice: chartData.meta.regularMarketPrice,
+        currency: chartData.meta.currency,
+        shortName: chartData.meta.shortName || chartData.meta.longName,
+        longName: chartData.meta.longName,
+        regularMarketChangePercent: chartData.meta.regularMarketChangePercent,
+        regularMarketChange: chartData.meta.regularMarketChange,
+        regularMarketTime: chartData.meta.regularMarketTime,
+        marketState: chartData.meta.marketState,
+        exchangeName: chartData.meta.exchangeName,
+        quoteType: chartData.meta.instrumentType
+      }
+    })
   }
 
   async getChart(symbol: string, range: string = '1mo', interval: string = '1d'): Promise<any> {
