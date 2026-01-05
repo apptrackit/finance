@@ -14,6 +14,12 @@ export class MarketDataController {
       return c.json(result)
     } catch (error: any) {
       console.error('Yahoo Finance Search Error:', error)
+      
+      // Check if it's a rate limit error
+      if (error.code === 429 || error.message?.includes('Too Many Requests')) {
+        return c.json({ error: 'Yahoo Finance rate limit exceeded. Please try again in a moment.' }, 429)
+      }
+      
       return c.json({ error: 'Failed to fetch market data' }, 500)
     }
   }
@@ -28,6 +34,11 @@ export class MarketDataController {
       return c.json(result)
     } catch (error: any) {
       console.error('Yahoo Finance Quote Error:', error)
+      
+      if (error.code === 429 || error.message?.includes('Too Many Requests')) {
+        return c.json({ error: 'Yahoo Finance rate limit exceeded. Please try again in a moment.' }, 429)
+      }
+      
       return c.json({ error: 'Failed to fetch quote data' }, 500)
     }
   }
@@ -46,6 +57,11 @@ export class MarketDataController {
       return c.json(result)
     } catch (error: any) {
       console.error('Yahoo Finance Chart Error:', error)
+      
+      if (error.code === 429 || error.message?.includes('Too Many Requests')) {
+        return c.json({ error: 'Yahoo Finance rate limit exceeded. Please try again in a moment.' }, 429)
+      }
+      
       return c.json({ error: 'Failed to fetch chart data' }, 500)
     }
   }
