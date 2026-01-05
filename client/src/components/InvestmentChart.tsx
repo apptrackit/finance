@@ -66,13 +66,19 @@ export function InvestmentChart({ symbol, transactions = [] }: InvestmentChartPr
       setError(null)
       try {
         const selectedRange = RANGES.find(r => r.value === range)
-        const res = await apiFetch(
-          `${API_BASE_URL}/market/chart?symbol=${encodeURIComponent(symbol)}&range=${range}&interval=${selectedRange?.interval || '1d'}`
-        )
+        const url = `${API_BASE_URL}/market/chart?symbol=${encodeURIComponent(symbol)}&range=${range}&interval=${selectedRange?.interval || '1d'}`
+        console.log('Fetching chart data:', url)
         
-        if (!res.ok) throw new Error('Failed to fetch chart data')
+        const res = await apiFetch(url)
+        
+        if (!res.ok) {
+          const errorData = await res.json().catch(() => ({}))
+          console.error('Chart API error:', res.status, errorData)
+          throw new Error(errorData.error || `Failed to fetch chart data: ${res.status}`)
+        }
         
         const json = await res.json()
+        console.log('Chart data received:', json)
         
         let points: ChartDataPoint[] = []
         
@@ -127,9 +133,9 @@ export function InvestmentChart({ symbol, transactions = [] }: InvestmentChartPr
         }
         
         setData(points)
-      } catch (err) {
-        console.error(err)
-        setError('Could not load chart data')
+      } catch (err: any) {
+        console.error('Chart fetch error:', err)
+        setError(err.message || 'Could not load chart data')
       } finally {
         setLoading(false)
       }

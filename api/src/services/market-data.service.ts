@@ -122,28 +122,45 @@ export class MarketDataService {
       }
 
       const period1Ts = Math.floor(period1.getTime() / 1000)
+      const period2Ts = Math.floor(now.getTime() / 1000)
       const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?` +
-        `interval=${interval}&period1=${period1Ts}`
+        `interval=${interval}&period1=${period1Ts}&period2=${period2Ts}`
 
+      console.log(`Fetching chart for ${symbol}: ${url}`)
       const response = await fetch(url, { headers: YAHOO_HEADERS })
       
       if (!response.ok) {
+        const errorText = await response.text()
+        console.error(`Yahoo Finance chart error [${response.status}]:`, errorText)
         throw new Error(`Yahoo Finance chart failed: ${response.status} ${response.statusText}`)
       }
 
       const data: any = await response.json()
+      console.log(`Yahoo Finance raw response for ${symbol}:`, JSON.stringify(data).substring(0, 500))
+      
       const result = data?.chart?.result?.[0]
       
       if (!result) {
+        console.error(`No result in chart data for ${symbol}:`, data)
         throw new Error('No chart data returned from Yahoo Finance')
+      }
+
+      if (data?.chart?.error) {
+        console.error(`Yahoo Finance chart error for ${symbol}:`, data.chart.error)
+        throw new Error(`Yahoo Finance error: ${data.chart.error.description || data.chart.error.code}`)
       }
 
       // Transform to match expected format
       const timestamps = result.timestamp || []
       const quotes = result.indicators?.quote?.[0]
       
+      if (!timestamps.length || !quotes) {
+        console.error(`Missing timestamps or quotes for ${symbol}:`, { timestamps, quotes })
+        throw new Error('Invalid chart data structure from Yahoo Finance')
+      }
+      
       const chartQuotes = timestamps.map((ts: number, i: number) => ({
-        date: new Date(ts * 1000),
+        date: new Date(ts * 1000).toISOString(),
         open: quotes?.open?.[i],
         high: quotes?.high?.[i],
         low: quotes?.low?.[i],
@@ -151,6 +168,7 @@ export class MarketDataService {
         volume: quotes?.volume?.[i]
       }))
 
+      console.log(`Chart data processed for ${symbol}: ${chartQuotes.length} points`)
       return { quotes: chartQuotes }
     })
   }
