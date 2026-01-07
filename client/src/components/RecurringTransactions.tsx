@@ -585,31 +585,50 @@ export function RecurringTransactions({
 
   return (
     <div className="space-y-6">
-      {/* Projected Cash Card */}
-      <Card className="p-4 border-emerald-500/20">
-        <div className="flex items-center justify-between mb-2">
-          <span className="text-sm font-medium text-muted-foreground">Projected Cash (End of Month)</span>
-          <Wallet className="h-4 w-4 text-emerald-500" />
-        </div>
-        <div className="flex items-baseline gap-2">
-          <div className="text-2xl font-bold text-foreground">
-            <span className={privacyMode === 'hidden' ? 'select-none' : ''}>
-              {privacyMode === 'hidden' 
-                ? '••••••' 
-                : endOfMonthProjections.projectedCash.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})}
-            </span>
+      {/* Top Row - Projected Cash and Account Status */}
+      <div className="grid gap-4 md:grid-cols-2">
+        <Card className="p-4 border-emerald-500/20">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-sm font-medium text-muted-foreground">Projected Cash (End of Month)</span>
+            <Wallet className="h-4 w-4 text-emerald-500" />
           </div>
-          {endOfMonthProjections.cashChange !== 0 && (
-            <span className={`text-sm font-medium ${endOfMonthProjections.cashChange > 0 ? 'text-success' : 'text-destructive'}`}>
-              {endOfMonthProjections.cashChange > 0 ? '+' : ''}{endOfMonthProjections.cashChange.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})}
-            </span>
-          )}
-        </div>
-        <p className="text-xs text-muted-foreground mt-1">Based on recurring schedules</p>
-      </Card>
+          <div className="flex items-baseline gap-2">
+            <div className="text-2xl font-bold text-foreground">
+              <span className={privacyMode === 'hidden' ? 'select-none' : ''}>
+                {privacyMode === 'hidden' 
+                  ? '••••••' 
+                  : endOfMonthProjections.projectedCash.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})}
+              </span>
+            </div>
+            {endOfMonthProjections.cashChange !== 0 && (
+              <span className={`text-sm font-medium ${endOfMonthProjections.cashChange > 0 ? 'text-success' : 'text-destructive'}`}>
+                {endOfMonthProjections.cashChange > 0 ? '+' : ''}{endOfMonthProjections.cashChange.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})}
+              </span>
+            )}
+          </div>
+          <p className="text-xs text-muted-foreground mt-1">Based on recurring schedules</p>
+        </Card>
 
-      {/* Summary Cards */}
-      <div className="grid gap-4 md:grid-cols-3">
+        <Card className={`p-4 ${insufficientAccounts.length > 0 ? 'border-destructive/50 bg-destructive/5' : 'border-success/20'}`}>
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-sm font-medium text-muted-foreground">Account Status</span>
+            {insufficientAccounts.length > 0 ? (
+              <AlertTriangle className="h-4 w-4 text-destructive" />
+            ) : (
+              <Calendar className="h-4 w-4 text-success" />
+            )}
+          </div>
+          <div className={`text-2xl font-bold ${insufficientAccounts.length > 0 ? 'text-destructive' : 'text-success'}`}>
+            {insufficientAccounts.length > 0 ? `${insufficientAccounts.length} Warning${insufficientAccounts.length > 1 ? 's' : ''}` : 'All Good'}
+          </div>
+          <p className="text-xs text-muted-foreground mt-1">
+            {insufficientAccounts.length > 0 ? 'Insufficient balance projected' : 'All accounts have sufficient funds'}
+          </p>
+        </Card>
+      </div>
+
+      {/* Bottom Row - Expenses and Income */}
+      <div className="grid gap-4 md:grid-cols-2">
         <Card className="p-4 border-destructive/20">
           <div className="flex items-center justify-between mb-2">
             <span className="text-sm font-medium text-muted-foreground">Next 30 Days Expenses</span>
@@ -634,23 +653,6 @@ export function RecurringTransactions({
             </span>
           </div>
           <p className="text-xs text-muted-foreground mt-1">From recurring schedules</p>
-        </Card>
-
-        <Card className={`p-4 ${insufficientAccounts.length > 0 ? 'border-destructive/50 bg-destructive/5' : 'border-success/20'}`}>
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-sm font-medium text-muted-foreground">Account Status</span>
-            {insufficientAccounts.length > 0 ? (
-              <AlertTriangle className="h-4 w-4 text-destructive" />
-            ) : (
-              <Calendar className="h-4 w-4 text-success" />
-            )}
-          </div>
-          <div className={`text-2xl font-bold ${insufficientAccounts.length > 0 ? 'text-destructive' : 'text-success'}`}>
-            {insufficientAccounts.length > 0 ? `${insufficientAccounts.length} Warning${insufficientAccounts.length > 1 ? 's' : ''}` : 'All Good'}
-          </div>
-          <p className="text-xs text-muted-foreground mt-1">
-            {insufficientAccounts.length > 0 ? 'Insufficient balance projected' : 'All accounts have sufficient funds'}
-          </p>
         </Card>
       </div>
 
