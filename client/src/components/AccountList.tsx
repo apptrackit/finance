@@ -9,6 +9,9 @@ import { API_BASE_URL, apiFetch } from '../config'
 import { usePrivacy } from '../context/PrivacyContext'
 import { useAlert } from '../context/AlertContext'
 import { useLockedAccounts } from '../context/LockedAccountsContext'
+import { SplitTransactionModal } from './SplitTransactionModal'
+import type { SplitTransaction } from './SplitTransactionModal'
+import { AdjustmentChoiceModal } from './AdjustmentChoiceModal'
 
 type Account = {
   id: string
@@ -20,6 +23,13 @@ type Account = {
   asset_type?: 'stock' | 'crypto' | 'manual'
   exclude_from_net_worth?: boolean
   exclude_from_cash_balance?: boolean
+}
+
+type Category = {
+  id: string
+  name: string
+  icon?: string
+  type: 'income' | 'expense'
 }
 
 const currencySymbols: Record<string, string> = {
@@ -63,8 +73,31 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
   const [activeAccountId, setActiveAccountId] = useState<string | null>(null)
   const [exchangeRates, setExchangeRates] = useState<Record<string, number>>({})
   const [quotes, setQuotes] = useState<Record<string, MarketQuote>>({})
+  const [categories, setCategories] = useState<Category[]>([])
+  const [showChoiceModal, setShowChoiceModal] = useState(false)
+  const [showSplitModal, setShowSplitModal] = useState(false)
+  const [pendingAdjustment, setPendingAdjustment] = useState<{
+    payload: any,
+    accountId: string,
+    oldBalance: number,
+    newBalance: number
+  } | null>(null)
 
   const { privacyMode, shouldHideInvestment } = usePrivacy()
+
+  // Fetch categories
+  useEffect(() => {
+    const fetchCategories = async () => {
+      try {
+        const res = await apiFetch(`${API_BASE_URL}/categories`)
+        const data = await res.json()
+        setCategories(data)
+      } catch (error) {
+        console.error('Failed to fetch categories:', error)
+      }
+    }
+    fetchCategories()
+  }, [])
 
   // Fetch exchange rates
   useEffect(() => {
@@ -240,6 +273,22 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
       }
 
       if (editingId) {
+        // Check if we need to show adjustment choice modal
+        if (formData.adjustWithTransaction) {
+          const account = accounts.find(a => a.id === editingId)
+          if (account && account.balance !== payload.balance) {
+            // Store pending adjustment and show choice modal
+            setPendingAdjustment({
+              payload,
+              accountId: editingId,
+              oldBalance: account.balance,
+              newBalance: payload.balance
+            })
+            setShowChoiceModal(true)
+            return // Don't proceed yet, wait for user choice
+          }
+        }
+
         // Include the adjustWithTransaction flag when editing
         payload.adjustWithTransaction = formData.adjustWithTransaction
 
@@ -393,6 +442,76 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
     })
  const sign = amount < 0 ? '−' : ''
     return currency === 'HUF' ? `${sign}${formatted} ${symbol}` : `${sign}${symbol}${formatted}`
+  }
+
+  const handleSingleTransaction = async () => {
+    if (!pendingAdjustment) return
+
+    try {
+      const { payload, accountId } = pendingAdjustment
+
+      // Send the payload with single transaction
+      payload.adjustWithTransaction = true
+
+      await apiFetch(`${API_BASE_URL}/accounts/${accountId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+
+      setEditingId(null)
+      setIsAdding(false)
+      resetForm()
+      setPendingAdjustment(null)
+      setShowChoiceModal(false)
+      onAccountAdded()
+      
+      showAlert({
+        type: 'success',
+        message: 'Account updated with adjustment transaction'
+      })
+    } catch (error) {
+      console.error('Failed to save account with adjustment', error)
+      showAlert({
+        type: 'error',
+        message: 'Failed to save account changes'
+      })
+    }
+  }
+
+  const handleSplitTransactionConfirm = async (splits: SplitTransaction[]) => {
+    if (!pendingAdjustment) return
+
+    try {
+      const { payload, accountId } = pendingAdjustment
+
+      // Send the payload with split transactions
+      payload.adjustWithTransaction = true
+      payload.splitTransactions = splits
+
+      await apiFetch(`${API_BASE_URL}/accounts/${accountId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+
+      setEditingId(null)
+      setIsAdding(false)
+      resetForm()
+      setPendingAdjustment(null)
+      onAccountAdded()
+      
+      showAlert({
+        type: 'success',
+        message: `Account updated with ${splits.length} transaction${splits.length > 1 ? 's' : ''}`
+      })
+    } catch (error) {
+      console.error('Failed to save account with split transactions', error)
+      showAlert({
+        type: 'error',
+        message: 'Failed to save account changes'
+      })
+    }
   }
 
   return (
@@ -904,6 +1023,40 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
             </div>
           </div>
         </div>
+      )}
+
+      {/* Adjustment Choice Modal */}
+      {pendingAdjustment && (
+        <AdjustmentChoiceModal
+          isOpen={showChoiceModal}
+          onClose={() => {
+            setShowChoiceModal(false)
+            setPendingAdjustment(null)
+          }}
+          onSingleTransaction={handleSingleTransaction}
+          onSplitTransaction={() => {
+            setShowChoiceModal(false)
+            setShowSplitModal(true)
+          }}
+          adjustmentAmount={pendingAdjustment.newBalance - pendingAdjustment.oldBalance}
+          currency={pendingAdjustment.payload.currency}
+        />
+      )}
+
+      {/* Split Transaction Modal */}
+      {pendingAdjustment && (
+        <SplitTransactionModal
+          isOpen={showSplitModal}
+          onClose={() => {
+            setShowSplitModal(false)
+            setPendingAdjustment(null)
+          }}
+          onConfirm={handleSplitTransactionConfirm}
+          totalAmount={pendingAdjustment.newBalance - pendingAdjustment.oldBalance}
+          accountCurrency={pendingAdjustment.payload.currency}
+          categories={categories}
+          defaultDate={new Date().toISOString().split('T')[0]}
+        />
       )}
     </Card>
   )
