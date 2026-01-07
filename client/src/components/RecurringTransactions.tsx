@@ -68,6 +68,7 @@ export function RecurringTransactions({
   const [isAdding, setIsAdding] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [calendarDate, setCalendarDate] = useState(new Date())
+  const [calendarMode, setCalendarMode] = useState<'30-day' | 'monthly'>('30-day')
 
   const [formData, setFormData] = useState({
     type: 'transaction' as 'transaction' | 'transfer',
@@ -497,117 +498,207 @@ export function RecurringTransactions({
 
   // Calculate calendar data for recurring transactions
   const getCalendarData = () => {
-    const startDate = new Date(calendarDate)
-    startDate.setHours(0, 0, 0, 0)
-    
     const today = new Date()
     today.setHours(0, 0, 0, 0)
     
-    // Calculate 30 days from start date
-    const endDate = new Date(startDate)
-    endDate.setDate(startDate.getDate() + 30)
-    
-    const days: Array<{
-      date: Date | null
-      dayNumber: number | null
-      monthLabel?: string
-      transactions: Array<{ schedule: RecurringSchedule; amount: number; description: string }>
-    }> = []
-    
-    // Add empty cells to align first day with correct day of week (Monday = 0)
-    const firstDayOfWeek = (startDate.getDay() + 6) % 7
-    for (let i = 0; i < firstDayOfWeek; i++) {
-      days.push({ date: null, dayNumber: null, transactions: [] })
-    }
-    
-    // Add all days in the 30-day range
-    let currentDate = new Date(startDate)
-    let lastMonth = -1
-    
-    while (currentDate <= endDate) {
-      const date = new Date(currentDate)
-      const transactions: Array<{ schedule: RecurringSchedule; amount: number; description: string }> = []
+    if (calendarMode === '30-day') {
+      // 30-day rolling view
+      const startDate = new Date(calendarDate)
+      startDate.setHours(0, 0, 0, 0)
       
-      // Add month label for first day of each new month
-      let monthLabel: string | undefined
-      if (date.getMonth() !== lastMonth) {
-        monthLabel = date.toLocaleDateString('en-US', { month: 'short' })
-        lastMonth = date.getMonth()
+      // Calculate 30 days from start date
+      const endDate = new Date(startDate)
+      endDate.setDate(startDate.getDate() + 30)
+      
+      const days: Array<{
+        date: Date | null
+        dayNumber: number | null
+        monthLabel?: string
+        transactions: Array<{ schedule: RecurringSchedule; amount: number; description: string }>
+      }> = []
+      
+      // Add empty cells to align first day with correct day of week (Monday = 0)
+      const firstDayOfWeek = (startDate.getDay() + 6) % 7
+      for (let i = 0; i < firstDayOfWeek; i++) {
+        days.push({ date: null, dayNumber: null, transactions: [] })
       }
       
-      // Only process dates that are today or in the future
-      if (date >= today) {
-        // Check each active schedule to see if it occurs on this date
-        schedules.filter(s => s.is_active).forEach(schedule => {
-          // Check if the schedule was created before or on this date
-          const scheduleCreatedDate = new Date(schedule.created_at)
-          scheduleCreatedDate.setHours(0, 0, 0, 0)
-          
-          if (date < scheduleCreatedDate) {
-            // Don't show transactions before the schedule was created
-            return
-          }
-          
-          const shouldOccur = (() => {
-            if (schedule.frequency === 'daily') {
-              return true
+      // Add all days in the 30-day range
+      let currentDate = new Date(startDate)
+      let lastMonth = -1
+      
+      while (currentDate <= endDate) {
+        const date = new Date(currentDate)
+        const transactions: Array<{ schedule: RecurringSchedule; amount: number; description: string }> = []
+        
+        // Add month label for first day of each new month
+        let monthLabel: string | undefined
+        if (date.getMonth() !== lastMonth) {
+          monthLabel = date.toLocaleDateString('en-US', { month: 'short' })
+          lastMonth = date.getMonth()
+        }
+        
+        // Only process dates that are today or in the future
+        if (date >= today) {
+          // Check each active schedule to see if it occurs on this date
+          schedules.filter(s => s.is_active).forEach(schedule => {
+            // Check if the schedule was created before or on this date
+            const scheduleCreatedDate = new Date(schedule.created_at)
+            scheduleCreatedDate.setHours(0, 0, 0, 0)
+            
+            if (date < scheduleCreatedDate) {
+              // Don't show transactions before the schedule was created
+              return
             }
-            if (schedule.frequency === 'weekly') {
-              return date.getDay() === schedule.day_of_week
-            }
-            if (schedule.frequency === 'monthly') {
-              const lastDayOfMonth = new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate()
-              const targetDay = schedule.day_of_month!
-              if (targetDay > lastDayOfMonth) {
-                return date.getDate() === lastDayOfMonth
+            
+            const shouldOccur = (() => {
+              if (schedule.frequency === 'daily') {
+                return true
               }
-              return date.getDate() === targetDay
-            }
-            return false
-          })()
-          
-          if (shouldOccur) {
-            // Check if this date is after last_processed_date
-            const dateStr = date.toISOString().split('T')[0]
-            if (!schedule.last_processed_date || dateStr > schedule.last_processed_date) {
-              // Check end_date constraint
-              if (schedule.end_date && dateStr > schedule.end_date) {
-                return
+              if (schedule.frequency === 'weekly') {
+                return date.getDay() === schedule.day_of_week
               }
-              
-              transactions.push({
-                schedule,
-                amount: schedule.amount,
-                description: schedule.description || (schedule.type === 'transfer' ? 'Transfer' : 'Transaction')
-              })
+              if (schedule.frequency === 'monthly') {
+                const lastDayOfMonth = new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate()
+                const targetDay = schedule.day_of_month!
+                if (targetDay > lastDayOfMonth) {
+                  return date.getDate() === lastDayOfMonth
+                }
+                return date.getDate() === targetDay
+              }
+              return false
+            })()
+            
+            if (shouldOccur) {
+              // Check if this date is after last_processed_date
+              const dateStr = date.toISOString().split('T')[0]
+              if (!schedule.last_processed_date || dateStr > schedule.last_processed_date) {
+                // Check end_date constraint
+                if (schedule.end_date && dateStr > schedule.end_date) {
+                  return
+                }
+                
+                transactions.push({
+                  schedule,
+                  amount: schedule.amount,
+                  description: schedule.description || (schedule.type === 'transfer' ? 'Transfer' : 'Transaction')
+                })
+              }
             }
-          }
-        })
+          })
+        }
+        
+        days.push({ date, dayNumber: date.getDate(), monthLabel, transactions })
+        currentDate.setDate(currentDate.getDate() + 1)
       }
       
-      days.push({ date, dayNumber: date.getDate(), monthLabel, transactions })
-      currentDate.setDate(currentDate.getDate() + 1)
+      const monthName = `${startDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })} - ${endDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}`
+      return { days, monthName }
+    } else {
+      // Monthly view
+      const year = calendarDate.getFullYear()
+      const month = calendarDate.getMonth()
+      
+      const firstDay = new Date(year, month, 1)
+      const lastDay = new Date(year, month + 1, 0)
+      
+      // Get starting day of week (0 = Sunday, convert to Monday = 0)
+      const startingDayOfWeek = (firstDay.getDay() + 6) % 7
+      
+      // Create calendar grid
+      const daysInMonth = lastDay.getDate()
+      const days: Array<{
+        date: Date | null
+        dayNumber: number | null
+        monthLabel?: string
+        transactions: Array<{ schedule: RecurringSchedule; amount: number; description: string }>
+      }> = []
+      
+      // Add empty cells for days before month starts
+      for (let i = 0; i < startingDayOfWeek; i++) {
+        days.push({ date: null, dayNumber: null, transactions: [] })
+      }
+      
+      // Add days of the month
+      for (let day = 1; day <= daysInMonth; day++) {
+        const date = new Date(year, month, day)
+        const transactions: Array<{ schedule: RecurringSchedule; amount: number; description: string }> = []
+        
+        // Only process dates that are today or in the future
+        if (date >= today) {
+          // Check each active schedule to see if it occurs on this date
+          schedules.filter(s => s.is_active).forEach(schedule => {
+            // Check if the schedule was created before or on this date
+            const scheduleCreatedDate = new Date(schedule.created_at)
+            scheduleCreatedDate.setHours(0, 0, 0, 0)
+            
+            if (date < scheduleCreatedDate) {
+              // Don't show transactions before the schedule was created
+              return
+            }
+            
+            const shouldOccur = (() => {
+              if (schedule.frequency === 'daily') {
+                return true
+              }
+              if (schedule.frequency === 'weekly') {
+                return date.getDay() === schedule.day_of_week
+              }
+              if (schedule.frequency === 'monthly') {
+                const lastDayOfMonth = new Date(year, month + 1, 0).getDate()
+                const targetDay = schedule.day_of_month!
+                if (targetDay > lastDayOfMonth) {
+                  return day === lastDayOfMonth
+                }
+                return day === targetDay
+              }
+              return false
+            })()
+            
+            if (shouldOccur) {
+              // Check if this date is after last_processed_date
+              const dateStr = date.toISOString().split('T')[0]
+              if (!schedule.last_processed_date || dateStr > schedule.last_processed_date) {
+                // Check end_date constraint
+                if (schedule.end_date && dateStr > schedule.end_date) {
+                  return
+                }
+                
+                transactions.push({
+                  schedule,
+                  amount: schedule.amount,
+                  description: schedule.description || (schedule.type === 'transfer' ? 'Transfer' : 'Transaction')
+                })
+              }
+            }
+          })
+        }
+        
+        days.push({ date, dayNumber: day, transactions })
+      }
+      
+      return { days, monthName: firstDay.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) }
     }
-    
-    const monthName = `${startDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })} - ${endDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}`
-    return { days, monthName }
   }
 
   const calendarData = getCalendarData()
 
   const goToPreviousMonth = () => {
+    setCalendarMode('monthly')
     const newDate = new Date(calendarDate)
-    newDate.setDate(newDate.getDate() - 30)
+    newDate.setMonth(newDate.getMonth() - 1, 1)
     setCalendarDate(newDate)
   }
 
   const goToNextMonth = () => {
+    setCalendarMode('monthly')
     const newDate = new Date(calendarDate)
-    newDate.setDate(newDate.getDate() + 30)
+    newDate.setMonth(newDate.getMonth() + 1, 1)
     setCalendarDate(newDate)
   }
 
   const goToToday = () => {
+    setCalendarMode('30-day')
     setCalendarDate(new Date())
   }
 
