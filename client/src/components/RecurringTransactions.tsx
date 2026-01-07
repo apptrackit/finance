@@ -504,8 +504,8 @@ export function RecurringTransactions({
     const firstDay = new Date(year, month, 1)
     const lastDay = new Date(year, month + 1, 0)
     
-    // Get starting day of week (0 = Sunday)
-    const startingDayOfWeek = firstDay.getDay()
+    // Get starting day of week (0 = Sunday, convert to Monday = 0)
+    const startingDayOfWeek = (firstDay.getDay() + 6) % 7
     
     // Create calendar grid
     const daysInMonth = lastDay.getDate()
@@ -1220,7 +1220,7 @@ export function RecurringTransactions({
           {/* Calendar Grid */}
           <div className="grid grid-cols-7 gap-1">
             {/* Day headers */}
-            {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
+            {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(day => (
               <div key={day} className="text-center text-xs font-semibold text-muted-foreground py-2">
                 {day}
               </div>
