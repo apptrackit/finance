@@ -677,8 +677,8 @@ export function RecurringTransactions({
             Manage Schedules
           </h2>
         </div>
-        <Button onClick={() => setIsAdding(!isAdding)}>
-          <Plus className="mr-2 h-4 w-4" />
+        <Button onClick={() => setIsAdding(!isAdding)} variant={isAdding ? 'outline' : 'default'}>
+          {!isAdding && <Plus className="mr-2 h-4 w-4" />}
           {isAdding ? 'Cancel' : 'Add Recurring'}
         </Button>
       </div>
