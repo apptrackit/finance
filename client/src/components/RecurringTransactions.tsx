@@ -496,6 +496,41 @@ export function RecurringTransactions({
     return projectedBalance < 0
   })
 
+  // Helper function to count occurrences between two dates
+  const countOccurrencesBetween = (schedule: RecurringSchedule, startDate: Date, endDate: Date): number => {
+    let count = 0
+    const current = new Date(startDate)
+    current.setHours(0, 0, 0, 0)
+    
+    while (current <= endDate) {
+      const shouldOccur = (() => {
+        if (schedule.frequency === 'daily') {
+          return true
+        }
+        if (schedule.frequency === 'weekly') {
+          return current.getDay() === schedule.day_of_week
+        }
+        if (schedule.frequency === 'monthly') {
+          const lastDayOfMonth = new Date(current.getFullYear(), current.getMonth() + 1, 0).getDate()
+          const targetDay = schedule.day_of_month!
+          if (targetDay > lastDayOfMonth) {
+            return current.getDate() === lastDayOfMonth
+          }
+          return current.getDate() === targetDay
+        }
+        return false
+      })()
+      
+      if (shouldOccur) {
+        count++
+      }
+      
+      current.setDate(current.getDate() + 1)
+    }
+    
+    return count
+  }
+
   // Calculate calendar data for recurring transactions
   const getCalendarData = () => {
     const today = new Date()
@@ -576,6 +611,17 @@ export function RecurringTransactions({
                 // Check end_date constraint
                 if (schedule.end_date && dateStr > schedule.end_date) {
                   return
+                }
+                
+                // Check remaining_occurrences constraint
+                if (schedule.remaining_occurrences !== undefined && schedule.remaining_occurrences !== null) {
+                  // Count how many occurrences have happened from creation date to this date
+                  const occurrencesSoFar = countOccurrencesBetween(schedule, scheduleCreatedDate, date)
+                  // remaining_occurrences represents how many are left after last_processed_date
+                  // If we've gone beyond the remaining count, don't show this occurrence
+                  if (occurrencesSoFar > schedule.remaining_occurrences) {
+                    return
+                  }
                 }
                 
                 transactions.push({
@@ -662,6 +708,17 @@ export function RecurringTransactions({
                 // Check end_date constraint
                 if (schedule.end_date && dateStr > schedule.end_date) {
                   return
+                }
+                
+                // Check remaining_occurrences constraint
+                if (schedule.remaining_occurrences !== undefined && schedule.remaining_occurrences !== null) {
+                  // Count how many occurrences have happened from creation date to this date
+                  const occurrencesSoFar = countOccurrencesBetween(schedule, scheduleCreatedDate, date)
+                  // remaining_occurrences represents how many are left after last_processed_date
+                  // If we've gone beyond the remaining count, don't show this occurrence
+                  if (occurrencesSoFar > schedule.remaining_occurrences) {
+                    return
+                  }
                 }
                 
                 transactions.push({
