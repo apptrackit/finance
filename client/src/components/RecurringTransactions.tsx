@@ -5,7 +5,7 @@ import { Card } from './ui/card'
 import { Input } from './ui/input'
 import { Label } from './ui/label'
 import { Select } from './ui/select'
-import { Plus, Trash2, Edit2, Clock, TrendingDown, TrendingUp, AlertTriangle, Calendar, Activity, Wallet } from 'lucide-react'
+import { Plus, Trash2, Edit2, Clock, TrendingDown, TrendingUp, AlertTriangle, Calendar, Wallet, ChevronLeft, ChevronRight } from 'lucide-react'
 import { useAlert } from '../context/AlertContext'
 import { usePrivacy } from '../context/PrivacyContext'
 
@@ -67,12 +67,14 @@ export function RecurringTransactions({
   const [loading, setLoading] = useState(true)
   const [isAdding, setIsAdding] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
+  const [calendarDate, setCalendarDate] = useState(new Date())
+  const [calendarMode, setCalendarMode] = useState<'30-day' | 'monthly'>('30-day')
 
   const [formData, setFormData] = useState({
     type: 'transaction' as 'transaction' | 'transfer',
     frequency: 'monthly' as 'daily' | 'weekly' | 'monthly',
     day_of_week: 1,
-    day_of_month: 1,
+    day_of_month: '1',
     account_id: '',
     to_account_id: '',
     category_id: '',
@@ -105,14 +107,19 @@ export function RecurringTransactions({
   }
 
   const resetForm = () => {
+    // Find default subscription category for expenses
+    const subscriptionCategory = expenseCategories.find(
+      cat => cat.name.toLowerCase() === 'subscription'
+    )
+    
     setFormData({
       type: 'transaction',
       frequency: 'monthly',
       day_of_week: 1,
-      day_of_month: 1,
+      day_of_month: '1',
       account_id: '',
       to_account_id: '',
-      category_id: '',
+      category_id: subscriptionCategory?.id || '',
       amount: '',
       amount_to: '',
       description: '',
@@ -148,7 +155,13 @@ export function RecurringTransactions({
     if (formData.frequency === 'weekly') {
       payload.day_of_week = formData.day_of_week
     } else if (formData.frequency === 'monthly') {
-      payload.day_of_month = formData.day_of_month
+      const dayOfMonth = parseInt(formData.day_of_month)
+      if (!isNaN(dayOfMonth) && dayOfMonth >= 1 && dayOfMonth <= 31) {
+        payload.day_of_month = dayOfMonth
+      } else {
+        showAlert({ type: 'error', message: 'Please enter a valid day of month (1-31)' })
+        return
+      }
     }
 
     // Add type-specific fields
@@ -223,7 +236,7 @@ export function RecurringTransactions({
       type: schedule.type,
       frequency: schedule.frequency,
       day_of_week: schedule.day_of_week ?? 1,
-      day_of_month: schedule.day_of_month ?? 1,
+      day_of_month: schedule.day_of_month?.toString() ?? '1',
       account_id: schedule.account_id,
       to_account_id: schedule.to_account_id || '',
       category_id: schedule.category_id || '',
@@ -389,7 +402,6 @@ export function RecurringTransactions({
   }
 
   const endOfMonthProjections = calculateEndOfMonthProjections()
-  const hasInvestmentAccounts = accounts.some(a => a.type === 'investment')
 
   // Calculate upcoming recurring amounts for next 30 days
   const calculateUpcomingImpact = () => {
@@ -471,7 +483,7 @@ export function RecurringTransactions({
     // Sort next transactions by date
     nextTransactions.sort((a, b) => a.date.getTime() - b.date.getTime())
 
-    return { accountImpact, totalExpenses, totalIncome, nextTransactions: nextTransactions.slice(0, 5) }
+    return { accountImpact, totalExpenses, totalIncome, nextTransactions }
   }
 
   const { accountImpact, totalExpenses, totalIncome, nextTransactions } = calculateUpcomingImpact()
@@ -484,91 +496,236 @@ export function RecurringTransactions({
     return projectedBalance < 0
   })
 
+  // Calculate calendar data for recurring transactions
+  const getCalendarData = () => {
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    
+    if (calendarMode === '30-day') {
+      // 30-day rolling view
+      const startDate = new Date(calendarDate)
+      startDate.setHours(0, 0, 0, 0)
+      
+      // Calculate 30 days from start date
+      const endDate = new Date(startDate)
+      endDate.setDate(startDate.getDate() + 30)
+      
+      const days: Array<{
+        date: Date | null
+        dayNumber: number | null
+        monthLabel?: string
+        transactions: Array<{ schedule: RecurringSchedule; amount: number; description: string }>
+      }> = []
+      
+      // Add empty cells to align first day with correct day of week (Monday = 0)
+      const firstDayOfWeek = (startDate.getDay() + 6) % 7
+      for (let i = 0; i < firstDayOfWeek; i++) {
+        days.push({ date: null, dayNumber: null, transactions: [] })
+      }
+      
+      // Add all days in the 30-day range
+      let currentDate = new Date(startDate)
+      let lastMonth = -1
+      
+      while (currentDate <= endDate) {
+        const date = new Date(currentDate)
+        const transactions: Array<{ schedule: RecurringSchedule; amount: number; description: string }> = []
+        
+        // Add month label for first day of each new month
+        let monthLabel: string | undefined
+        if (date.getMonth() !== lastMonth) {
+          monthLabel = date.toLocaleDateString('en-US', { month: 'short' })
+          lastMonth = date.getMonth()
+        }
+        
+        // Only process dates that are today or in the future
+        if (date >= today) {
+          // Check each active schedule to see if it occurs on this date
+          schedules.filter(s => s.is_active).forEach(schedule => {
+            // Check if the schedule was created before or on this date
+            const scheduleCreatedDate = new Date(schedule.created_at)
+            scheduleCreatedDate.setHours(0, 0, 0, 0)
+            
+            if (date < scheduleCreatedDate) {
+              // Don't show transactions before the schedule was created
+              return
+            }
+            
+            const shouldOccur = (() => {
+              if (schedule.frequency === 'daily') {
+                return true
+              }
+              if (schedule.frequency === 'weekly') {
+                return date.getDay() === schedule.day_of_week
+              }
+              if (schedule.frequency === 'monthly') {
+                const lastDayOfMonth = new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate()
+                const targetDay = schedule.day_of_month!
+                if (targetDay > lastDayOfMonth) {
+                  return date.getDate() === lastDayOfMonth
+                }
+                return date.getDate() === targetDay
+              }
+              return false
+            })()
+            
+            if (shouldOccur) {
+              // Check if this date is after last_processed_date
+              const dateStr = date.toISOString().split('T')[0]
+              if (!schedule.last_processed_date || dateStr > schedule.last_processed_date) {
+                // Check end_date constraint
+                if (schedule.end_date && dateStr > schedule.end_date) {
+                  return
+                }
+                
+                transactions.push({
+                  schedule,
+                  amount: schedule.amount,
+                  description: schedule.description || (schedule.type === 'transfer' ? 'Transfer' : 'Transaction')
+                })
+              }
+            }
+          })
+        }
+        
+        days.push({ date, dayNumber: date.getDate(), monthLabel, transactions })
+        currentDate.setDate(currentDate.getDate() + 1)
+      }
+      
+      const monthName = `${startDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })} - ${endDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}`
+      return { days, monthName }
+    } else {
+      // Monthly view
+      const year = calendarDate.getFullYear()
+      const month = calendarDate.getMonth()
+      
+      const firstDay = new Date(year, month, 1)
+      const lastDay = new Date(year, month + 1, 0)
+      
+      // Get starting day of week (0 = Sunday, convert to Monday = 0)
+      const startingDayOfWeek = (firstDay.getDay() + 6) % 7
+      
+      // Create calendar grid
+      const daysInMonth = lastDay.getDate()
+      const days: Array<{
+        date: Date | null
+        dayNumber: number | null
+        monthLabel?: string
+        transactions: Array<{ schedule: RecurringSchedule; amount: number; description: string }>
+      }> = []
+      
+      // Add empty cells for days before month starts
+      for (let i = 0; i < startingDayOfWeek; i++) {
+        days.push({ date: null, dayNumber: null, transactions: [] })
+      }
+      
+      // Add days of the month
+      for (let day = 1; day <= daysInMonth; day++) {
+        const date = new Date(year, month, day)
+        const transactions: Array<{ schedule: RecurringSchedule; amount: number; description: string }> = []
+        
+        // Only process dates that are today or in the future
+        if (date >= today) {
+          // Check each active schedule to see if it occurs on this date
+          schedules.filter(s => s.is_active).forEach(schedule => {
+            // Check if the schedule was created before or on this date
+            const scheduleCreatedDate = new Date(schedule.created_at)
+            scheduleCreatedDate.setHours(0, 0, 0, 0)
+            
+            if (date < scheduleCreatedDate) {
+              // Don't show transactions before the schedule was created
+              return
+            }
+            
+            const shouldOccur = (() => {
+              if (schedule.frequency === 'daily') {
+                return true
+              }
+              if (schedule.frequency === 'weekly') {
+                return date.getDay() === schedule.day_of_week
+              }
+              if (schedule.frequency === 'monthly') {
+                const lastDayOfMonth = new Date(year, month + 1, 0).getDate()
+                const targetDay = schedule.day_of_month!
+                if (targetDay > lastDayOfMonth) {
+                  return day === lastDayOfMonth
+                }
+                return day === targetDay
+              }
+              return false
+            })()
+            
+            if (shouldOccur) {
+              // Check if this date is after last_processed_date
+              const dateStr = date.toISOString().split('T')[0]
+              if (!schedule.last_processed_date || dateStr > schedule.last_processed_date) {
+                // Check end_date constraint
+                if (schedule.end_date && dateStr > schedule.end_date) {
+                  return
+                }
+                
+                transactions.push({
+                  schedule,
+                  amount: schedule.amount,
+                  description: schedule.description || (schedule.type === 'transfer' ? 'Transfer' : 'Transaction')
+                })
+              }
+            }
+          })
+        }
+        
+        days.push({ date, dayNumber: day, transactions })
+      }
+      
+      return { days, monthName: firstDay.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) }
+    }
+  }
+
+  const calendarData = getCalendarData()
+
+  const goToPreviousMonth = () => {
+    setCalendarMode('monthly')
+    const newDate = new Date(calendarDate)
+    newDate.setMonth(newDate.getMonth() - 1, 1)
+    setCalendarDate(newDate)
+  }
+
+  const goToNextMonth = () => {
+    setCalendarMode('monthly')
+    const newDate = new Date(calendarDate)
+    newDate.setMonth(newDate.getMonth() + 1, 1)
+    setCalendarDate(newDate)
+  }
+
+  const goToToday = () => {
+    setCalendarMode('30-day')
+    setCalendarDate(new Date())
+  }
+
   return (
     <div className="space-y-6">
-      {/* End of Month Projections - Only show both if there are investment accounts */}
-      {hasInvestmentAccounts && (
-        <div>
-          <div className="flex items-center gap-2 mb-3">
-            <h3 className="text-sm font-medium text-muted-foreground">End of Month Projections</h3>
-            <div className="h-px flex-1 bg-border/50" />
-          </div>
-          <div className="grid gap-4 md:grid-cols-2">
-            {/* Projected Net Worth Card */}
-            <Card className="p-4 border-primary/20">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-sm font-medium text-muted-foreground">Projected Net Worth</span>
-                <Activity className="h-4 w-4 text-primary" />
-              </div>
-              <div className="flex items-baseline gap-2">
-                <div className="text-2xl font-bold text-foreground">
-                  <span className={privacyMode === 'hidden' ? 'select-none' : ''}>
-                    {privacyMode === 'hidden' 
-                      ? '••••••' 
-                      : endOfMonthProjections.projectedNetWorth.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})}
-                  </span>
-                </div>
-                {endOfMonthProjections.netWorthChange !== 0 && (
-                  <span className={`text-sm font-medium ${endOfMonthProjections.netWorthChange > 0 ? 'text-success' : 'text-destructive'}`}>
-                    {endOfMonthProjections.netWorthChange > 0 ? '+' : ''}{endOfMonthProjections.netWorthChange.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})}
-                  </span>
-                )}
-              </div>
-              <p className="text-xs text-muted-foreground mt-1">Based on recurring schedules</p>
-            </Card>
-
-            {/* Projected Cash Card */}
-            <Card className="p-4 border-emerald-500/20">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-sm font-medium text-muted-foreground">Projected Cash</span>
-                <Wallet className="h-4 w-4 text-emerald-500" />
-              </div>
-              <div className="flex items-baseline gap-2">
-                <div className="text-2xl font-bold text-foreground">
-                  <span className={privacyMode === 'hidden' ? 'select-none' : ''}>
-                    {privacyMode === 'hidden' 
-                      ? '••••••' 
-                      : endOfMonthProjections.projectedCash.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})}
-                  </span>
-                </div>
-                {endOfMonthProjections.cashChange !== 0 && (
-                  <span className={`text-sm font-medium ${endOfMonthProjections.cashChange > 0 ? 'text-success' : 'text-destructive'}`}>
-                    {endOfMonthProjections.cashChange > 0 ? '+' : ''}{endOfMonthProjections.cashChange.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})}
-                  </span>
-                )}
-              </div>
-              <p className="text-xs text-muted-foreground mt-1">Based on recurring schedules</p>
-            </Card>
-          </div>
-        </div>
-      )}
-
-      {/* Summary Cards */}
-      <div className="grid gap-4 md:grid-cols-3">
-        <Card className="p-4 border-destructive/20">
+      {/* Top Row - Projected Cash and Account Status */}
+      <div className="grid gap-4 md:grid-cols-2">
+        <Card className="p-4 border-emerald-500/20">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-sm font-medium text-muted-foreground">Next 30 Days Expenses</span>
-            <TrendingDown className="h-4 w-4 text-destructive" />
+            <span className="text-sm font-medium text-muted-foreground">Projected Cash (End of Month)</span>
+            <Wallet className="h-4 w-4 text-emerald-500" />
           </div>
-          <div className="text-2xl font-bold text-destructive">
-            <span className={privacyMode === 'hidden' ? 'select-none' : ''}>
-              {privacyMode === 'hidden' ? '••••••' : totalExpenses.toLocaleString('hu-HU', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
-            </span>
+          <div className="flex items-baseline gap-2">
+            <div className="text-2xl font-bold text-foreground">
+              <span className={privacyMode === 'hidden' ? 'select-none' : ''}>
+                {privacyMode === 'hidden' 
+                  ? '••••••' 
+                  : endOfMonthProjections.projectedCash.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})}
+              </span>
+            </div>
+            {endOfMonthProjections.cashChange !== 0 && (
+              <span className={`text-sm font-medium ${endOfMonthProjections.cashChange > 0 ? 'text-success' : 'text-destructive'}`}>
+                {endOfMonthProjections.cashChange > 0 ? '+' : ''}{endOfMonthProjections.cashChange.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})}
+              </span>
+            )}
           </div>
-          <p className="text-xs text-muted-foreground mt-1">From recurring schedules</p>
-        </Card>
-
-        <Card className="p-4 border-success/20">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-sm font-medium text-muted-foreground">Next 30 Days Income</span>
-            <TrendingUp className="h-4 w-4 text-success" />
-          </div>
-          <div className="text-2xl font-bold text-success">
-            <span className={privacyMode === 'hidden' ? 'select-none' : ''}>
-              {privacyMode === 'hidden' ? '••••••' : totalIncome.toLocaleString('hu-HU', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
-            </span>
-          </div>
-          <p className="text-xs text-muted-foreground mt-1">From recurring schedules</p>
+          <p className="text-xs text-muted-foreground mt-1">Based on recurring schedules</p>
         </Card>
 
         <Card className={`p-4 ${insufficientAccounts.length > 0 ? 'border-destructive/50 bg-destructive/5' : 'border-success/20'}`}>
@@ -586,6 +743,35 @@ export function RecurringTransactions({
           <p className="text-xs text-muted-foreground mt-1">
             {insufficientAccounts.length > 0 ? 'Insufficient balance projected' : 'All accounts have sufficient funds'}
           </p>
+        </Card>
+      </div>
+
+      {/* Bottom Row - Expenses and Income */}
+      <div className="grid gap-4 md:grid-cols-2">
+        <Card className="p-4 border-destructive/20">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-sm font-medium text-muted-foreground">Next 30 Days Expenses</span>
+            <TrendingDown className="h-4 w-4 text-destructive" />
+          </div>
+          <div className="text-2xl font-bold text-destructive">
+            <span className={privacyMode === 'hidden' ? 'select-none' : ''}>
+              {privacyMode === 'hidden' ? '••••••' : (totalExpenses > 0 ? '-' : '') + totalExpenses.toLocaleString('hu-HU', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+            </span>
+          </div>
+          <p className="text-xs text-muted-foreground mt-1">From recurring schedules</p>
+        </Card>
+
+        <Card className="p-4 border-success/20">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-sm font-medium text-muted-foreground">Next 30 Days Income</span>
+            <TrendingUp className="h-4 w-4 text-success" />
+          </div>
+          <div className="text-2xl font-bold text-success">
+            <span className={privacyMode === 'hidden' ? 'select-none' : ''}>
+              {privacyMode === 'hidden' ? '••••••' : (totalIncome > 0 ? '+' : '') + totalIncome.toLocaleString('hu-HU', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+            </span>
+          </div>
+          <p className="text-xs text-muted-foreground mt-1">From recurring schedules</p>
         </Card>
       </div>
 
@@ -611,7 +797,7 @@ export function RecurringTransactions({
                     </div>
                     <div className="text-xs text-muted-foreground">
                       Current: <span className={privacyMode === 'hidden' ? 'select-none' : ''}>
-                        {privacyMode === 'hidden' ? '••••' : account.balance.toFixed(2)}
+                        {privacyMode === 'hidden' ? '••••' : account.balance.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})}
                       </span> {account.currency}
                     </div>
                   </div>
@@ -619,18 +805,18 @@ export function RecurringTransactions({
                     <div className="text-xs space-x-2">
                       {impact.debits > 0 && (
                         <span className="text-destructive">
-                          -{impact.debits.toFixed(0)}
+                          -{impact.debits.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})}
                         </span>
                       )}
                       {impact.credits > 0 && (
                         <span className="text-success">
-                          +{impact.credits.toFixed(0)}
+                          +{impact.credits.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})}
                         </span>
                       )}
                     </div>
                     <div className={`text-sm font-medium ${isInsufficient ? 'text-destructive' : ''}`}>
                       → <span className={privacyMode === 'hidden' ? 'select-none' : ''}>
-                        {privacyMode === 'hidden' ? '••••' : projectedBalance.toFixed(0)}
+                        {privacyMode === 'hidden' ? '••••' : projectedBalance.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})}
                       </span> {account.currency}
                     </div>
                   </div>
@@ -646,7 +832,7 @@ export function RecurringTransactions({
         <Card className="p-4">
           <h3 className="font-semibold mb-3 flex items-center gap-2">
             <Calendar className="h-4 w-4" />
-            Next Upcoming (First 5)
+            Next 30 Days Transactions
           </h3>
           <div className="space-y-2">
             {nextTransactions.map((tx, idx) => (
@@ -660,7 +846,7 @@ export function RecurringTransactions({
                 </div>
                 <span className={`font-medium ${tx.amount < 0 ? 'text-destructive' : 'text-success'}`}>
                   <span className={privacyMode === 'hidden' ? 'select-none' : ''}>
-                    {privacyMode === 'hidden' ? '••••' : `${tx.amount < 0 ? '-' : '+'}${Math.abs(tx.amount).toFixed(0)}`}
+                    {privacyMode === 'hidden' ? '••••' : `${tx.amount < 0 ? '-' : '+'}${Math.abs(tx.amount).toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})}`}
                   </span>
                 </span>
               </div>
@@ -677,8 +863,21 @@ export function RecurringTransactions({
             Manage Schedules
           </h2>
         </div>
-        <Button onClick={() => setIsAdding(!isAdding)}>
-          <Plus className="mr-2 h-4 w-4" />
+        <Button onClick={() => {
+          if (isAdding) {
+            resetForm()
+          } else {
+            setIsAdding(true)
+            // Set default subscription category when opening form
+            const subscriptionCategory = expenseCategories.find(
+              cat => cat.name.toLowerCase() === 'subscription'
+            )
+            if (subscriptionCategory && !editingId) {
+              setFormData(prev => ({ ...prev, category_id: subscriptionCategory.id }))
+            }
+          }
+        }} variant={isAdding ? 'outline' : 'default'}>
+          {!isAdding && <Plus className="mr-2 h-4 w-4" />}
           {isAdding ? 'Cancel' : 'Add Recurring'}
         </Button>
       </div>
@@ -743,9 +942,24 @@ export function RecurringTransactions({
                   min="1"
                   max="31"
                   value={formData.day_of_month}
-                  onChange={e => setFormData({ ...formData, day_of_month: parseInt(e.target.value) || 1 })}
+                  onChange={e => {
+                    const value = e.target.value
+                    // Allow empty or valid numbers 1-31
+                    if (value === '' || (parseInt(value) >= 1 && parseInt(value) <= 31)) {
+                      setFormData({ ...formData, day_of_month: value })
+                    }
+                  }}
+                  onKeyDown={e => {
+                    if (e.key.length === 1 && !/[0-9]/.test(e.key) && !e.ctrlKey && !e.metaKey) {
+                      e.preventDefault()
+                    }
+                  }}
+                  placeholder="Enter day (1-31)"
                   required
                 />
+                <p className="text-xs text-muted-foreground">
+                  If the day doesn't exist in a month (e.g., day 31 in February), it will process on the last day of that month
+                </p>
               </div>
             )}
 
@@ -757,7 +971,22 @@ export function RecurringTransactions({
                     <Select
                       id="transaction_type"
                       value={formData.transaction_type}
-                      onChange={e => setFormData({ ...formData, transaction_type: e.target.value as 'expense' | 'income', category_id: '' })}
+                      onChange={e => {
+                        const newType = e.target.value as 'expense' | 'income'
+                        let defaultCategoryId = ''
+                        
+                        // Set default category to "Subscription" for expenses if it exists
+                        if (newType === 'expense') {
+                          const subscriptionCategory = expenseCategories.find(
+                            cat => cat.name.toLowerCase() === 'subscription'
+                          )
+                          if (subscriptionCategory) {
+                            defaultCategoryId = subscriptionCategory.id
+                          }
+                        }
+                        
+                        setFormData({ ...formData, transaction_type: newType, category_id: defaultCategoryId })
+                      }}
                       required
                     >
                       <option value="expense">Expense</option>
@@ -815,6 +1044,11 @@ export function RecurringTransactions({
                           ? (() => { const [integer, decimal] = value.split('.'); return integer.replace(/\B(?=(\d{3})+(?!\d))/g, ' ') + '.' + decimal })()
                           : value.replace(/\B(?=(\d{3})+(?!\d))/g, ' ')
                         setFormData({ ...formData, amount: formatted })
+                      }}
+                      onKeyDown={e => {
+                        if (e.key.length === 1 && !/[0-9.]/.test(e.key) && !e.ctrlKey && !e.metaKey) {
+                          e.preventDefault()
+                        }
                       }}
                       required
                     />
@@ -877,6 +1111,11 @@ export function RecurringTransactions({
                           : value.replace(/\B(?=(\d{3})+(?!\d))/g, ' ')
                         setFormData({ ...formData, amount: formatted })
                       }}
+                      onKeyDown={e => {
+                        if (e.key.length === 1 && !/[0-9.]/.test(e.key) && !e.ctrlKey && !e.metaKey) {
+                          e.preventDefault()
+                        }
+                      }}
                       required
                     />
                   </div>
@@ -895,6 +1134,11 @@ export function RecurringTransactions({
                           ? (() => { const [integer, decimal] = value.split('.'); return integer.replace(/\B(?=(\d{3})+(?!\d))/g, ' ') + '.' + decimal })()
                           : value.replace(/\B(?=(\d{3})+(?!\d))/g, ' ')
                         setFormData({ ...formData, amount_to: formatted })
+                      }}
+                      onKeyDown={e => {
+                        if (e.key.length === 1 && !/[0-9.]/.test(e.key) && !e.ctrlKey && !e.metaKey) {
+                          e.preventDefault()
+                        }
                       }}
                       placeholder="Leave empty if same currency"
                     />
@@ -930,6 +1174,11 @@ export function RecurringTransactions({
                   min="1"
                   value={formData.remaining_occurrences}
                   onChange={e => setFormData({ ...formData, remaining_occurrences: e.target.value })}
+                  onKeyDown={e => {
+                    if (e.key.length === 1 && !/[0-9]/.test(e.key) && !e.ctrlKey && !e.metaKey) {
+                      e.preventDefault()
+                    }
+                  }}
                   placeholder="e.g., 12 for yearly subscription"
                   required
                 />
@@ -1023,11 +1272,11 @@ export function RecurringTransactions({
                   <div className="flex items-center gap-3">
                     <div className="text-right">
                       <div className={`font-semibold ${schedule.amount < 0 ? 'text-destructive' : 'text-success'}`}>
-                        {schedule.amount < 0 ? '-' : '+'}{Math.abs(schedule.amount).toFixed(2)} {account?.currency}
+                        {schedule.amount < 0 ? '-' : '+'}{Math.abs(schedule.amount).toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})} {account?.currency}
                       </div>
                       {schedule.amount_to && toAccount && (
                         <div className="text-xs text-muted-foreground">
-                          → {schedule.amount_to.toFixed(2)} {toAccount.currency}
+                          → {schedule.amount_to.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})} {toAccount.currency}
                         </div>
                       )}
                     </div>
@@ -1062,6 +1311,105 @@ export function RecurringTransactions({
           })}
         </div>
       )}
+
+      {/* Calendar View */}
+      <Card className="p-6">
+        <div className="mb-4">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold flex items-center gap-2">
+              <Calendar className="h-5 w-5 text-primary" />
+              Recurring Transactions Calendar
+            </h3>
+            <div className="flex items-center gap-2">
+              <Button size="sm" variant="outline" onClick={goToToday}>
+                Today
+              </Button>
+              <Button size="sm" variant="outline" onClick={goToPreviousMonth}>
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              <span className="text-sm font-medium min-w-[150px] text-center">
+                {calendarData.monthName}
+              </span>
+              <Button size="sm" variant="outline" onClick={goToNextMonth}>
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+          
+          {/* Calendar Grid */}
+          <div className="grid grid-cols-7 gap-1">
+            {/* Day headers */}
+            {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(day => (
+              <div key={day} className="text-center text-xs font-semibold text-muted-foreground py-2">
+                {day}
+              </div>
+            ))}
+            
+            {/* Calendar days */}
+            {calendarData.days.map((day, idx) => {
+              const isToday = day.date && 
+                day.date.toDateString() === new Date().toDateString()
+              const isPast = day.date && day.date < new Date(new Date().setHours(0, 0, 0, 0))
+              
+              return (
+                <div
+                  key={idx}
+                  className={`min-h-[80px] border rounded p-1 ${
+                    !day.date ? 'bg-muted/30' : 
+                    isToday ? 'border-primary border-2 bg-primary/5' :
+                    isPast ? 'bg-muted/50 opacity-40' : 'bg-background'
+                  }`}
+                >
+                  {day.dayNumber && (
+                    <>
+                      <div className="flex items-center justify-between mb-1">
+                        <div className={`text-xs font-medium ${
+                          isPast ? 'text-muted-foreground/50' :
+                          isToday ? 'text-primary font-bold' : 'text-muted-foreground'
+                        }`}>
+                          {day.dayNumber}
+                        </div>
+                        {day.monthLabel && (
+                          <div className="text-[10px] font-semibold text-muted-foreground/70 uppercase">
+                            {day.monthLabel}
+                          </div>
+                        )}
+                      </div>
+                      <div className="space-y-0.5">
+                        {day.transactions.map((tx, txIdx) => {
+                          const category = tx.schedule.category_id 
+                            ? categories.find(c => c.id === tx.schedule.category_id)
+                            : null
+                          const account = accounts.find(a => a.id === tx.schedule.account_id)
+                          
+                          return (
+                            <div
+                              key={txIdx}
+                              className={`text-[10px] px-1 py-0.5 rounded truncate ${
+                                tx.amount < 0 
+                                  ? 'bg-destructive/10 text-destructive' 
+                                  : 'bg-success/10 text-success'
+                              }`}
+                              title={`${tx.description} - ${account?.name || ''} - ${
+                                privacyMode === 'hidden' ? '••••' : 
+                                Math.abs(tx.amount).toLocaleString('hu-HU', { minimumFractionDigits: 0, maximumFractionDigits: 0 })
+                              }`}
+                            >
+                              <span className={privacyMode === 'hidden' ? 'select-none' : ''}>
+                                {category?.icon || ''} {privacyMode === 'hidden' ? '••' : Math.abs(tx.amount).toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})}
+                              </span>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      </Card>
     </div>
   )
 }
