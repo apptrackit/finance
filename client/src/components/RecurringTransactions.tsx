@@ -499,6 +499,8 @@ export function RecurringTransactions({
   const getCalendarData = () => {
     const year = calendarDate.getFullYear()
     const month = calendarDate.getMonth()
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
     
     // Get first day of the month and last day of the month
     const firstDay = new Date(year, month, 1)
@@ -525,43 +527,55 @@ export function RecurringTransactions({
       const date = new Date(year, month, day)
       const transactions: Array<{ schedule: RecurringSchedule; amount: number; description: string }> = []
       
-      // Check each active schedule to see if it occurs on this date
-      schedules.filter(s => s.is_active).forEach(schedule => {
-        const shouldOccur = (() => {
-          if (schedule.frequency === 'daily') {
-            return true
+      // Only process dates that are today or in the future
+      if (date >= today) {
+        // Check each active schedule to see if it occurs on this date
+        schedules.filter(s => s.is_active).forEach(schedule => {
+          // Check if the schedule was created before or on this date
+          const scheduleCreatedDate = new Date(schedule.created_at)
+          scheduleCreatedDate.setHours(0, 0, 0, 0)
+          
+          if (date < scheduleCreatedDate) {
+            // Don't show transactions before the schedule was created
+            return
           }
-          if (schedule.frequency === 'weekly') {
-            return date.getDay() === schedule.day_of_week
-          }
-          if (schedule.frequency === 'monthly') {
-            const lastDayOfMonth = new Date(year, month + 1, 0).getDate()
-            const targetDay = schedule.day_of_month!
-            if (targetDay > lastDayOfMonth) {
-              return day === lastDayOfMonth
+          
+          const shouldOccur = (() => {
+            if (schedule.frequency === 'daily') {
+              return true
             }
-            return day === targetDay
-          }
-          return false
-        })()
-        
-        if (shouldOccur) {
-          // Check if this date is after last_processed_date
-          const dateStr = date.toISOString().split('T')[0]
-          if (!schedule.last_processed_date || dateStr > schedule.last_processed_date) {
-            // Check end_date constraint
-            if (schedule.end_date && dateStr > schedule.end_date) {
-              return
+            if (schedule.frequency === 'weekly') {
+              return date.getDay() === schedule.day_of_week
             }
-            
-            transactions.push({
-              schedule,
-              amount: schedule.amount,
-              description: schedule.description || (schedule.type === 'transfer' ? 'Transfer' : 'Transaction')
-            })
+            if (schedule.frequency === 'monthly') {
+              const lastDayOfMonth = new Date(year, month + 1, 0).getDate()
+              const targetDay = schedule.day_of_month!
+              if (targetDay > lastDayOfMonth) {
+                return day === lastDayOfMonth
+              }
+              return day === targetDay
+            }
+            return false
+          })()
+          
+          if (shouldOccur) {
+            // Check if this date is after last_processed_date
+            const dateStr = date.toISOString().split('T')[0]
+            if (!schedule.last_processed_date || dateStr > schedule.last_processed_date) {
+              // Check end_date constraint
+              if (schedule.end_date && dateStr > schedule.end_date) {
+                return
+              }
+              
+              transactions.push({
+                schedule,
+                amount: schedule.amount,
+                description: schedule.description || (schedule.type === 'transfer' ? 'Transfer' : 'Transaction')
+              })
+            }
           }
-        }
-      })
+        })
+      }
       
       days.push({ date, dayNumber: day, transactions })
     }
@@ -1238,12 +1252,15 @@ export function RecurringTransactions({
                   className={`min-h-[80px] border rounded p-1 ${
                     !day.date ? 'bg-muted/30' : 
                     isToday ? 'border-primary border-2 bg-primary/5' :
-                    isPast ? 'bg-muted/50' : 'bg-background'
+                    isPast ? 'bg-muted/50 opacity-40' : 'bg-background'
                   }`}
                 >
                   {day.dayNumber && (
                     <>
-                      <div className={`text-xs font-medium mb-1 ${isToday ? 'text-primary font-bold' : 'text-muted-foreground'}`}>
+                      <div className={`text-xs font-medium mb-1 ${
+                        isPast ? 'text-muted-foreground/50' :
+                        isToday ? 'text-primary font-bold' : 'text-muted-foreground'
+                      }`}>
                         {day.dayNumber}
                       </div>
                       <div className="space-y-0.5">
