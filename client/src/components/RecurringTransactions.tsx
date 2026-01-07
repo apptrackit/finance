@@ -824,6 +824,11 @@ export function RecurringTransactions({
                   max="31"
                   value={formData.day_of_month}
                   onChange={e => setFormData({ ...formData, day_of_month: e.target.value })}
+                  onKeyDown={e => {
+                    if (e.key.length === 1 && !/[0-9]/.test(e.key) && !e.ctrlKey && !e.metaKey) {
+                      e.preventDefault()
+                    }
+                  }}
                   placeholder="Enter day (1-31)"
                   required
                 />
@@ -912,6 +917,11 @@ export function RecurringTransactions({
                           : value.replace(/\B(?=(\d{3})+(?!\d))/g, ' ')
                         setFormData({ ...formData, amount: formatted })
                       }}
+                      onKeyDown={e => {
+                        if (e.key.length === 1 && !/[0-9.]/.test(e.key) && !e.ctrlKey && !e.metaKey) {
+                          e.preventDefault()
+                        }
+                      }}
                       required
                     />
                   </div>
@@ -973,6 +983,11 @@ export function RecurringTransactions({
                           : value.replace(/\B(?=(\d{3})+(?!\d))/g, ' ')
                         setFormData({ ...formData, amount: formatted })
                       }}
+                      onKeyDown={e => {
+                        if (e.key.length === 1 && !/[0-9.]/.test(e.key) && !e.ctrlKey && !e.metaKey) {
+                          e.preventDefault()
+                        }
+                      }}
                       required
                     />
                   </div>
@@ -991,6 +1006,11 @@ export function RecurringTransactions({
                           ? (() => { const [integer, decimal] = value.split('.'); return integer.replace(/\B(?=(\d{3})+(?!\d))/g, ' ') + '.' + decimal })()
                           : value.replace(/\B(?=(\d{3})+(?!\d))/g, ' ')
                         setFormData({ ...formData, amount_to: formatted })
+                      }}
+                      onKeyDown={e => {
+                        if (e.key.length === 1 && !/[0-9.]/.test(e.key) && !e.ctrlKey && !e.metaKey) {
+                          e.preventDefault()
+                        }
                       }}
                       placeholder="Leave empty if same currency"
                     />
@@ -1026,6 +1046,11 @@ export function RecurringTransactions({
                   min="1"
                   value={formData.remaining_occurrences}
                   onChange={e => setFormData({ ...formData, remaining_occurrences: e.target.value })}
+                  onKeyDown={e => {
+                    if (e.key.length === 1 && !/[0-9]/.test(e.key) && !e.ctrlKey && !e.metaKey) {
+                      e.preventDefault()
+                    }
+                  }}
                   placeholder="e.g., 12 for yearly subscription"
                   required
                 />
