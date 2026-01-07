@@ -5,7 +5,7 @@ import { Card } from './ui/card'
 import { Input } from './ui/input'
 import { Label } from './ui/label'
 import { Select } from './ui/select'
-import { Plus, Trash2, Edit2, Clock, TrendingDown, TrendingUp, AlertTriangle, Calendar, Wallet } from 'lucide-react'
+import { Plus, Trash2, Edit2, Clock, TrendingDown, TrendingUp, AlertTriangle, Calendar, Wallet, ChevronLeft, ChevronRight } from 'lucide-react'
 import { useAlert } from '../context/AlertContext'
 import { usePrivacy } from '../context/PrivacyContext'
 
@@ -67,6 +67,7 @@ export function RecurringTransactions({
   const [loading, setLoading] = useState(true)
   const [isAdding, setIsAdding] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
+  const [calendarDate, setCalendarDate] = useState(new Date())
 
   const [formData, setFormData] = useState({
     type: 'transaction' as 'transaction' | 'transfer',
@@ -493,6 +494,94 @@ export function RecurringTransactions({
     const projectedBalance = account.balance - impact.debits + impact.credits
     return projectedBalance < 0
   })
+
+  // Calculate calendar data for recurring transactions
+  const getCalendarData = () => {
+    const year = calendarDate.getFullYear()
+    const month = calendarDate.getMonth()
+    
+    // Get first day of the month and last day of the month
+    const firstDay = new Date(year, month, 1)
+    const lastDay = new Date(year, month + 1, 0)
+    
+    // Get starting day of week (0 = Sunday)
+    const startingDayOfWeek = firstDay.getDay()
+    
+    // Create calendar grid
+    const daysInMonth = lastDay.getDate()
+    const days: Array<{
+      date: Date | null
+      dayNumber: number | null
+      transactions: Array<{ schedule: RecurringSchedule; amount: number; description: string }>
+    }> = []
+    
+    // Add empty cells for days before month starts
+    for (let i = 0; i < startingDayOfWeek; i++) {
+      days.push({ date: null, dayNumber: null, transactions: [] })
+    }
+    
+    // Add days of the month
+    for (let day = 1; day <= daysInMonth; day++) {
+      const date = new Date(year, month, day)
+      const transactions: Array<{ schedule: RecurringSchedule; amount: number; description: string }> = []
+      
+      // Check each active schedule to see if it occurs on this date
+      schedules.filter(s => s.is_active).forEach(schedule => {
+        const shouldOccur = (() => {
+          if (schedule.frequency === 'daily') {
+            return true
+          }
+          if (schedule.frequency === 'weekly') {
+            return date.getDay() === schedule.day_of_week
+          }
+          if (schedule.frequency === 'monthly') {
+            const lastDayOfMonth = new Date(year, month + 1, 0).getDate()
+            const targetDay = schedule.day_of_month!
+            if (targetDay > lastDayOfMonth) {
+              return day === lastDayOfMonth
+            }
+            return day === targetDay
+          }
+          return false
+        })()
+        
+        if (shouldOccur) {
+          // Check if this date is after last_processed_date
+          const dateStr = date.toISOString().split('T')[0]
+          if (!schedule.last_processed_date || dateStr > schedule.last_processed_date) {
+            // Check end_date constraint
+            if (schedule.end_date && dateStr > schedule.end_date) {
+              return
+            }
+            
+            transactions.push({
+              schedule,
+              amount: schedule.amount,
+              description: schedule.description || (schedule.type === 'transfer' ? 'Transfer' : 'Transaction')
+            })
+          }
+        }
+      })
+      
+      days.push({ date, dayNumber: day, transactions })
+    }
+    
+    return { days, monthName: firstDay.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) }
+  }
+
+  const calendarData = getCalendarData()
+
+  const goToPreviousMonth = () => {
+    setCalendarDate(new Date(calendarDate.getFullYear(), calendarDate.getMonth() - 1, 1))
+  }
+
+  const goToNextMonth = () => {
+    setCalendarDate(new Date(calendarDate.getFullYear(), calendarDate.getMonth() + 1, 1))
+  }
+
+  const goToToday = () => {
+    setCalendarDate(new Date())
+  }
 
   return (
     <div className="space-y-6">
@@ -1054,6 +1143,95 @@ export function RecurringTransactions({
           })}
         </div>
       )}
+
+      {/* Calendar View */}
+      <Card className="p-6">
+        <div className="mb-4">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold flex items-center gap-2">
+              <Calendar className="h-5 w-5 text-primary" />
+              Recurring Transactions Calendar
+            </h3>
+            <div className="flex items-center gap-2">
+              <Button size="sm" variant="outline" onClick={goToToday}>
+                Today
+              </Button>
+              <Button size="sm" variant="outline" onClick={goToPreviousMonth}>
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              <span className="text-sm font-medium min-w-[150px] text-center">
+                {calendarData.monthName}
+              </span>
+              <Button size="sm" variant="outline" onClick={goToNextMonth}>
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+          
+          {/* Calendar Grid */}
+          <div className="grid grid-cols-7 gap-1">
+            {/* Day headers */}
+            {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
+              <div key={day} className="text-center text-xs font-semibold text-muted-foreground py-2">
+                {day}
+              </div>
+            ))}
+            
+            {/* Calendar days */}
+            {calendarData.days.map((day, idx) => {
+              const isToday = day.date && 
+                day.date.toDateString() === new Date().toDateString()
+              const isPast = day.date && day.date < new Date(new Date().setHours(0, 0, 0, 0))
+              
+              return (
+                <div
+                  key={idx}
+                  className={`min-h-[80px] border rounded p-1 ${
+                    !day.date ? 'bg-muted/30' : 
+                    isToday ? 'border-primary border-2 bg-primary/5' :
+                    isPast ? 'bg-muted/50' : 'bg-background'
+                  }`}
+                >
+                  {day.dayNumber && (
+                    <>
+                      <div className={`text-xs font-medium mb-1 ${isToday ? 'text-primary font-bold' : 'text-muted-foreground'}`}>
+                        {day.dayNumber}
+                      </div>
+                      <div className="space-y-0.5">
+                        {day.transactions.map((tx, txIdx) => {
+                          const category = tx.schedule.category_id 
+                            ? categories.find(c => c.id === tx.schedule.category_id)
+                            : null
+                          const account = accounts.find(a => a.id === tx.schedule.account_id)
+                          
+                          return (
+                            <div
+                              key={txIdx}
+                              className={`text-[10px] px-1 py-0.5 rounded truncate ${
+                                tx.amount < 0 
+                                  ? 'bg-destructive/10 text-destructive' 
+                                  : 'bg-success/10 text-success'
+                              }`}
+                              title={`${tx.description} - ${account?.name || ''} - ${
+                                privacyMode === 'hidden' ? '••••' : 
+                                Math.abs(tx.amount).toLocaleString('hu-HU', { minimumFractionDigits: 0, maximumFractionDigits: 0 })
+                              }`}
+                            >
+                              <span className={privacyMode === 'hidden' ? 'select-none' : ''}>
+                                {category?.icon || ''} {privacyMode === 'hidden' ? '••' : Math.abs(tx.amount).toFixed(0)}
+                              </span>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      </Card>
     </div>
   )
 }
