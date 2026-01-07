@@ -79,6 +79,25 @@ for col in exclude_from_net_worth exclude_from_cash_balance; do
   fi
 done
 
+# Check recurring_schedules table columns
+RECURRING_COLUMNS=$(npx wrangler d1 execute finance-db --remote --command "PRAGMA table_info(recurring_schedules)" --json 2>/dev/null | grep -o '"name":"[^"]*"' | cut -d'"' -f4 | tr '\n' ' ' || echo "")
+
+for col in remaining_occurrences end_date; do
+  if ! echo "$RECURRING_COLUMNS" | grep -q "$col"; then
+    echo "  Adding column: recurring_schedules.$col"
+    case $col in
+      remaining_occurrences)
+        npx wrangler d1 execute finance-db --remote --command "ALTER TABLE recurring_schedules ADD COLUMN remaining_occurrences INTEGER" 2>/dev/null || true
+        ;;
+      end_date)
+        npx wrangler d1 execute finance-db --remote --command "ALTER TABLE recurring_schedules ADD COLUMN end_date TEXT" 2>/dev/null || true
+        ;;
+    esac
+  else
+    echo "  Column recurring_schedules.$col already exists"
+  fi
+done
+
 echo -e "${GREEN}✓ Database schema updated${NC}\n"
 
 # Step 2: Deploy API (backend)
