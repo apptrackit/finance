@@ -105,6 +105,11 @@ export function RecurringTransactions({
   }
 
   const resetForm = () => {
+    // Find default subscription category for expenses
+    const subscriptionCategory = expenseCategories.find(
+      cat => cat.name.toLowerCase() === 'subscription'
+    )
+    
     setFormData({
       type: 'transaction',
       frequency: 'monthly',
@@ -112,7 +117,7 @@ export function RecurringTransactions({
       day_of_month: '1',
       account_id: '',
       to_account_id: '',
-      category_id: '',
+      category_id: subscriptionCategory?.id || '',
       amount: '',
       amount_to: '',
       description: '',
@@ -764,7 +769,22 @@ export function RecurringTransactions({
                     <Select
                       id="transaction_type"
                       value={formData.transaction_type}
-                      onChange={e => setFormData({ ...formData, transaction_type: e.target.value as 'expense' | 'income', category_id: '' })}
+                      onChange={e => {
+                        const newType = e.target.value as 'expense' | 'income'
+                        let defaultCategoryId = ''
+                        
+                        // Set default category to "Subscription" for expenses if it exists
+                        if (newType === 'expense') {
+                          const subscriptionCategory = expenseCategories.find(
+                            cat => cat.name.toLowerCase() === 'subscription'
+                          )
+                          if (subscriptionCategory) {
+                            defaultCategoryId = subscriptionCategory.id
+                          }
+                        }
+                        
+                        setFormData({ ...formData, transaction_type: newType, category_id: defaultCategoryId })
+                      }}
                       required
                     >
                       <option value="expense">Expense</option>
