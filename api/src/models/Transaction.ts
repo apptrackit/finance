@@ -6,6 +6,5 @@ export interface Transaction {
   description?: string
   date: string
   price?: number // Optional: for investment transactions, frontend can provide the price
-  is_recurring: boolean
   linked_transaction_id?: string
 }

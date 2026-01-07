@@ -71,7 +71,6 @@ export class TransferService {
       amount: -totalDeduction,
       description: outgoingDesc,
       date: dto.date,
-      is_recurring: false,
       linked_transaction_id: incomingId
     })
 
@@ -115,7 +114,7 @@ export class TransferService {
         amount: dto.amount_to,
         description: incomingDesc,
         date: dto.date,
-        is_recurring: false,
+
         linked_transaction_id: outgoingId
       })
       

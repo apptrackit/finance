@@ -151,15 +151,10 @@ export default {
     // Initialize dependencies for scheduled task
     const transactionRepo = new TransactionRepository(env.DB)
     const accountRepo = new AccountRepository(env.DB)
-    const investmentTransactionRepo = new InvestmentTransactionRepository(env.DB)
     const recurringScheduleRepo = new RecurringScheduleRepository(env.DB)
     
-    // Process new recurring schedules
+    // Process recurring schedules
     const recurringScheduleService = new RecurringScheduleService(recurringScheduleRepo, transactionRepo, accountRepo)
     await recurringScheduleService.processRecurringSchedules()
-    
-    // Still process old recurring transactions for backward compatibility
-    const transactionService = new TransactionService(transactionRepo, accountRepo, investmentTransactionRepo)
-    await transactionService.cloneRecurringTransactions()
   }
 }

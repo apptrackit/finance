@@ -12,20 +12,9 @@ export class TransactionRepository {
     return await this.db.prepare('SELECT * FROM transactions WHERE id = ?').bind(id).first<Transaction>()
   }
 
-  async findRecurring(): Promise<Transaction[]> {
-    const { results } = await this.db.prepare('SELECT * FROM transactions WHERE is_recurring = 1').all<Transaction>()
-    return results
-  }
-
-  async findByAccountAndDatePattern(accountId: string, amount: number, description: string | undefined, datePattern: string): Promise<Transaction | null> {
-    return await this.db.prepare(
-      'SELECT id FROM transactions WHERE account_id = ? AND amount = ? AND description = ? AND date LIKE ?'
-    ).bind(accountId, amount, description, datePattern).first<Transaction>()
-  }
-
   async create(transaction: Transaction): Promise<void> {
     await this.db.prepare(
-      'INSERT INTO transactions (id, account_id, category_id, amount, description, date, is_recurring, linked_transaction_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+      'INSERT INTO transactions (id, account_id, category_id, amount, description, date, linked_transaction_id) VALUES (?, ?, ?, ?, ?, ?, ?)'
     ).bind(
       transaction.id,
       transaction.account_id,
@@ -33,7 +22,6 @@ export class TransactionRepository {
       transaction.amount,
       transaction.description || null,
       transaction.date,
-      transaction.is_recurring ? 1 : 0,
       transaction.linked_transaction_id || null
     ).run()
   }

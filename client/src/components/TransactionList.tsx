@@ -20,7 +20,6 @@ type Transaction = {
   quantity?: number
   description?: string
   date: string
-  is_recurring: boolean
   linked_transaction_id?: string
 }
 
@@ -85,7 +84,6 @@ export function TransactionList({
     amount_to: '',
     description: '',
     date: new Date().toISOString().split('T')[0],
-    is_recurring: false,
     type: 'expense' as 'expense' | 'income' | 'transfer',
     manual_price: '' // For investment accounts - manual price override
   })
@@ -371,7 +369,6 @@ export function TransactionList({
       amount_to: '',
       description: '',
       date: new Date().toISOString().split('T')[0],
-      is_recurring: false,
       type: 'expense',
       manual_price: ''
     })
@@ -390,7 +387,6 @@ export function TransactionList({
       amount_to: '',
       description: '',
       date: new Date().toISOString().split('T')[0],
-      is_recurring: false,
       type: 'expense',
       manual_price: ''
     })
@@ -406,8 +402,7 @@ export function TransactionList({
       account_id: defaults.account_id,
       to_account_id: defaults.to_account_id,
       category_id: defaults.category_id,
-      amount_to: defaults.amount_to || '',
-      is_recurring: newType === 'transfer' ? false : formData.is_recurring
+      amount_to: defaults.amount_to || ''
     })
     setExchangeRate(null)
     setSuggestedRate(null)
@@ -458,8 +453,7 @@ export function TransactionList({
               category_id: formData.category_id || null,
               amount: finalAmount,
               description: formData.description,
-              date: formData.date,
-              is_recurring: formData.is_recurring
+              date: formData.date
             }),
           })
           setEditingId(null)
@@ -482,7 +476,6 @@ export function TransactionList({
               amount: finalAmount,
               description: formData.description,
               date: formData.date,
-              is_recurring: formData.is_recurring,
               price: price // Include price for investment accounts
             }),
           })
@@ -541,7 +534,6 @@ export function TransactionList({
       amount_to: '',
       description: tx.description || '',
       date: tx.date,
-      is_recurring: tx.is_recurring,
       type: isIncome ? 'income' : 'expense',
       manual_price: priceValue
     })

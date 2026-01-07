@@ -34,7 +34,6 @@ type Transaction = {
   amount: number
   description?: string
   date: string
-  is_recurring: boolean
   linked_transaction_id?: string
 }
 
@@ -180,7 +179,6 @@ function App() {
               quantity: itx.type === 'buy' ? itx.quantity : -itx.quantity,
               description: itx.notes || `${itx.quantity} shares @ $${itx.price}`,
               date: itx.date,
-              is_recurring: false,
               category_id: undefined,
               linked_transaction_id: undefined
             }))

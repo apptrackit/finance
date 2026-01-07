@@ -188,7 +188,6 @@ export class RecurringScheduleService {
       amount: schedule.amount,
       description: schedule.description,
       date: date,
-      is_recurring: false, // Don't mark as recurring, it's generated from a schedule
       linked_transaction_id: undefined
     }
 
@@ -243,7 +242,6 @@ export class RecurringScheduleService {
       amount: -Math.abs(schedule.amount),
       description: outgoingDesc,
       date: date,
-      is_recurring: false,
       linked_transaction_id: incomingId
     }
 
@@ -254,7 +252,6 @@ export class RecurringScheduleService {
       amount: Math.abs(amountTo),
       description: incomingDesc,
       date: date,
-      is_recurring: false,
       linked_transaction_id: outgoingId
     }
 

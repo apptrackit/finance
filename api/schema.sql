@@ -25,7 +25,6 @@ CREATE TABLE IF NOT EXISTS transactions (
   amount REAL NOT NULL, -- negative for expense, positive for income
   description TEXT,
   date TEXT NOT NULL, -- ISO 8601 YYYY-MM-DD
-  is_recurring BOOLEAN DEFAULT 0, -- Deprecated: kept for backward compatibility
   linked_transaction_id TEXT,
   FOREIGN KEY(account_id) REFERENCES accounts(id)
 );
