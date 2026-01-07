@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { RefreshCw, TrendingUp, TrendingDown, DollarSign } from 'lucide-react'
+import { RefreshCw, TrendingUp, TrendingDown, DollarSign, Wallet, Target } from 'lucide-react'
 import { API_BASE_URL, apiFetch } from '../config'
 import { InvestmentChart } from './InvestmentChart'
 import { usePrivacy } from '../context/PrivacyContext'
@@ -55,6 +55,7 @@ export function Investments() {
   const [loading, setLoading] = useState(true)
   const [selectedAccount, setSelectedAccount] = useState<Account | null>(null)
   const [masterCurrency, setMasterCurrency] = useState('HUF')
+  const [currencyDisplay, setCurrencyDisplay] = useState<'HUF' | 'USD'>('HUF')
   
   const { privacyMode } = usePrivacy()
 
@@ -329,10 +330,57 @@ export function Investments() {
     return rate ? usdValue * rate : usdValue
   }
 
+  const formatDisplayCurrency = (value: number) => {
+    const currencySymbols: Record<string, string> = {
+      HUF: 'Ft',
+      EUR: '€',
+      USD: '$',
+      GBP: '£'
+    }
+    const displayCurrency = currencyDisplay
+    const symbol = currencySymbols[displayCurrency] || displayCurrency
+    const decimals = displayCurrency === 'HUF' ? 0 : 2
+    const formatted = Math.abs(value).toLocaleString('hu-HU', {
+      minimumFractionDigits: decimals,
+      maximumFractionDigits: decimals
+    })
+    return displayCurrency === 'HUF' ? `${formatted} ${symbol}` : `${symbol}${formatted}`
+  }
+
+  const convertToDisplayCurrency = (usdValue: number) => {
+    if (currencyDisplay === 'USD') return usdValue
+    const rate = exchangeRates[masterCurrency]
+    return rate ? usdValue * rate : usdValue
+  }
+
   const stats = calculatePortfolioStats()
 
   return (
     <div className="space-y-6">
+      {/* Currency Toggle */}
+      <div className="flex justify-end gap-2">
+        <button
+          onClick={() => setCurrencyDisplay('HUF')}
+          className={`px-3 py-1 rounded-lg text-sm font-medium transition-colors ${
+            currencyDisplay === 'HUF'
+              ? 'bg-primary text-primary-foreground'
+              : 'bg-secondary text-muted-foreground hover:bg-secondary/80'
+          }`}
+        >
+          HUF
+        </button>
+        <button
+          onClick={() => setCurrencyDisplay('USD')}
+          className={`px-3 py-1 rounded-lg text-sm font-medium transition-colors ${
+            currencyDisplay === 'USD'
+              ? 'bg-primary text-primary-foreground'
+              : 'bg-secondary text-muted-foreground hover:bg-secondary/80'
+          }`}
+        >
+          USD
+        </button>
+      </div>
+
       {/* Portfolio Summary */}
       <div className="grid gap-4 md:grid-cols-3">
         {loading ? (
@@ -358,10 +406,10 @@ export function Investments() {
             <div className="p-6 rounded-2xl bg-gradient-to-br from-primary/10 to-primary/5 border border-primary/20 shadow-lg">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-sm font-medium text-muted-foreground">Total Portfolio Value</h3>
-                <DollarSign className="h-5 w-5 text-primary" />
+                <Wallet className="h-5 w-5 text-primary" />
               </div>
               <div className={`text-4xl font-bold ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
-                {privacyMode === 'hidden' ? '••••••' : formatMasterCurrency(convertToMasterCurrency(stats.totalValue))}
+                {privacyMode === 'hidden' ? '••••••' : formatDisplayCurrency(convertToDisplayCurrency(stats.totalValue))}
               </div>
               <p className="text-xs text-muted-foreground mt-2">
                 {investmentAccounts.length} investment{investmentAccounts.length !== 1 ? 's' : ''}
@@ -371,10 +419,10 @@ export function Investments() {
             <div className="p-6 rounded-2xl bg-card border border-border/50 shadow-sm">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-sm font-medium text-muted-foreground">Total Invested</h3>
-                <DollarSign className="h-5 w-5 text-muted-foreground" />
+                <Target className="h-5 w-5 text-muted-foreground" />
               </div>
               <div className={`text-4xl font-bold ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
-                {privacyMode === 'hidden' ? '••••••' : formatMasterCurrency(convertToMasterCurrency(stats.totalInvested))}
+                {privacyMode === 'hidden' ? '••••••' : formatDisplayCurrency(convertToDisplayCurrency(stats.totalInvested))}
               </div>
               <p className="text-xs text-muted-foreground mt-2">Net deposited</p>
             </div>
@@ -385,7 +433,7 @@ export function Investments() {
                 {stats.totalGainLoss >= 0 ? <TrendingUp className="h-5 w-5 text-green-600" /> : <TrendingDown className="h-5 w-5 text-red-600" />}
               </div>
               <div className={`text-4xl font-bold ${stats.totalGainLoss >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'} ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
-                {privacyMode === 'hidden' ? '••••••' : `${stats.totalGainLoss >= 0 ? '+' : '-'}${formatMasterCurrency(convertToMasterCurrency(Math.abs(stats.totalGainLoss)))}`}
+                {privacyMode === 'hidden' ? '••••••' : `${stats.totalGainLoss >= 0 ? '+' : '-'}${formatDisplayCurrency(convertToDisplayCurrency(Math.abs(stats.totalGainLoss)))}`}
               </div>
               <div className={`text-sm font-medium mt-2 ${stats.totalGainLoss >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'} ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
                 {privacyMode === 'hidden' ? '••••' : `${stats.totalGainLossPercent >= 0 ? '+' : ''}${stats.totalGainLossPercent.toFixed(2)}%`}
