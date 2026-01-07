@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { RefreshCw, TrendingUp, TrendingDown, DollarSign, Wallet, Target } from 'lucide-react'
+import { RefreshCw, TrendingUp, TrendingDown, Wallet, Target } from 'lucide-react'
 import { API_BASE_URL, apiFetch } from '../config'
 import { InvestmentChart } from './InvestmentChart'
 import { usePrivacy } from '../context/PrivacyContext'
@@ -306,28 +306,6 @@ export function Investments() {
       maximumFractionDigits: decimals
     })
     return account.currency === 'HUF' ? `${formatted} ${symbol}` : `${symbol}${formatted}`
-  }
-
-  const formatMasterCurrency = (value: number) => {
-    const currencySymbols: Record<string, string> = {
-      HUF: 'Ft',
-      EUR: '€',
-      USD: '$',
-      GBP: '£'
-    }
-    const symbol = currencySymbols[masterCurrency] || masterCurrency
-    const decimals = masterCurrency === 'HUF' ? 0 : 2
-    const formatted = Math.abs(value).toLocaleString('hu-HU', {
-      minimumFractionDigits: decimals,
-      maximumFractionDigits: decimals
-    })
-    return masterCurrency === 'HUF' ? `${formatted} ${symbol}` : `${symbol}${formatted}`
-  }
-
-  const convertToMasterCurrency = (usdValue: number) => {
-    if (masterCurrency === 'USD') return usdValue
-    const rate = exchangeRates[masterCurrency]
-    return rate ? usdValue * rate : usdValue
   }
 
   const formatDisplayCurrency = (value: number) => {
