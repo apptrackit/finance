@@ -497,35 +497,43 @@ export function RecurringTransactions({
 
   // Calculate calendar data for recurring transactions
   const getCalendarData = () => {
-    const year = calendarDate.getFullYear()
-    const month = calendarDate.getMonth()
+    const startDate = new Date(calendarDate)
+    startDate.setHours(0, 0, 0, 0)
+    
     const today = new Date()
     today.setHours(0, 0, 0, 0)
     
-    // Get first day of the month and last day of the month
-    const firstDay = new Date(year, month, 1)
-    const lastDay = new Date(year, month + 1, 0)
+    // Calculate 30 days from start date
+    const endDate = new Date(startDate)
+    endDate.setDate(startDate.getDate() + 30)
     
-    // Get starting day of week (0 = Sunday, convert to Monday = 0)
-    const startingDayOfWeek = (firstDay.getDay() + 6) % 7
-    
-    // Create calendar grid
-    const daysInMonth = lastDay.getDate()
     const days: Array<{
       date: Date | null
       dayNumber: number | null
+      monthLabel?: string
       transactions: Array<{ schedule: RecurringSchedule; amount: number; description: string }>
     }> = []
     
-    // Add empty cells for days before month starts
-    for (let i = 0; i < startingDayOfWeek; i++) {
+    // Add empty cells to align first day with correct day of week (Monday = 0)
+    const firstDayOfWeek = (startDate.getDay() + 6) % 7
+    for (let i = 0; i < firstDayOfWeek; i++) {
       days.push({ date: null, dayNumber: null, transactions: [] })
     }
     
-    // Add days of the month
-    for (let day = 1; day <= daysInMonth; day++) {
-      const date = new Date(year, month, day)
+    // Add all days in the 30-day range
+    let currentDate = new Date(startDate)
+    let lastMonth = -1
+    
+    while (currentDate <= endDate) {
+      const date = new Date(currentDate)
       const transactions: Array<{ schedule: RecurringSchedule; amount: number; description: string }> = []
+      
+      // Add month label for first day of each new month
+      let monthLabel: string | undefined
+      if (date.getMonth() !== lastMonth) {
+        monthLabel = date.toLocaleDateString('en-US', { month: 'short' })
+        lastMonth = date.getMonth()
+      }
       
       // Only process dates that are today or in the future
       if (date >= today) {
@@ -548,12 +556,12 @@ export function RecurringTransactions({
               return date.getDay() === schedule.day_of_week
             }
             if (schedule.frequency === 'monthly') {
-              const lastDayOfMonth = new Date(year, month + 1, 0).getDate()
+              const lastDayOfMonth = new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate()
               const targetDay = schedule.day_of_month!
               if (targetDay > lastDayOfMonth) {
-                return day === lastDayOfMonth
+                return date.getDate() === lastDayOfMonth
               }
-              return day === targetDay
+              return date.getDate() === targetDay
             }
             return false
           })()
@@ -577,20 +585,26 @@ export function RecurringTransactions({
         })
       }
       
-      days.push({ date, dayNumber: day, transactions })
+      days.push({ date, dayNumber: date.getDate(), monthLabel, transactions })
+      currentDate.setDate(currentDate.getDate() + 1)
     }
     
-    return { days, monthName: firstDay.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) }
+    const monthName = `${startDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })} - ${endDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}`
+    return { days, monthName }
   }
 
   const calendarData = getCalendarData()
 
   const goToPreviousMonth = () => {
-    setCalendarDate(new Date(calendarDate.getFullYear(), calendarDate.getMonth() - 1, 1))
+    const newDate = new Date(calendarDate)
+    newDate.setDate(newDate.getDate() - 30)
+    setCalendarDate(newDate)
   }
 
   const goToNextMonth = () => {
-    setCalendarDate(new Date(calendarDate.getFullYear(), calendarDate.getMonth() + 1, 1))
+    const newDate = new Date(calendarDate)
+    newDate.setDate(newDate.getDate() + 30)
+    setCalendarDate(newDate)
   }
 
   const goToToday = () => {
@@ -1257,11 +1271,18 @@ export function RecurringTransactions({
                 >
                   {day.dayNumber && (
                     <>
-                      <div className={`text-xs font-medium mb-1 ${
-                        isPast ? 'text-muted-foreground/50' :
-                        isToday ? 'text-primary font-bold' : 'text-muted-foreground'
-                      }`}>
-                        {day.dayNumber}
+                      <div className="flex items-center justify-between mb-1">
+                        <div className={`text-xs font-medium ${
+                          isPast ? 'text-muted-foreground/50' :
+                          isToday ? 'text-primary font-bold' : 'text-muted-foreground'
+                        }`}>
+                          {day.dayNumber}
+                        </div>
+                        {day.monthLabel && (
+                          <div className="text-[10px] font-semibold text-muted-foreground/70 uppercase">
+                            {day.monthLabel}
+                          </div>
+                        )}
                       </div>
                       <div className="space-y-0.5">
                         {day.transactions.map((tx, txIdx) => {
