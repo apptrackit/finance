@@ -72,7 +72,7 @@ export function RecurringTransactions({
     type: 'transaction' as 'transaction' | 'transfer',
     frequency: 'monthly' as 'daily' | 'weekly' | 'monthly',
     day_of_week: 1,
-    day_of_month: 1,
+    day_of_month: '1',
     account_id: '',
     to_account_id: '',
     category_id: '',
@@ -109,7 +109,7 @@ export function RecurringTransactions({
       type: 'transaction',
       frequency: 'monthly',
       day_of_week: 1,
-      day_of_month: 1,
+      day_of_month: '1',
       account_id: '',
       to_account_id: '',
       category_id: '',
@@ -148,7 +148,13 @@ export function RecurringTransactions({
     if (formData.frequency === 'weekly') {
       payload.day_of_week = formData.day_of_week
     } else if (formData.frequency === 'monthly') {
-      payload.day_of_month = formData.day_of_month
+      const dayOfMonth = parseInt(formData.day_of_month)
+      if (!isNaN(dayOfMonth) && dayOfMonth >= 1 && dayOfMonth <= 31) {
+        payload.day_of_month = dayOfMonth
+      } else {
+        showAlert({ type: 'error', message: 'Please enter a valid day of month (1-31)' })
+        return
+      }
     }
 
     // Add type-specific fields
@@ -223,7 +229,7 @@ export function RecurringTransactions({
       type: schedule.type,
       frequency: schedule.frequency,
       day_of_week: schedule.day_of_week ?? 1,
-      day_of_month: schedule.day_of_month ?? 1,
+      day_of_month: schedule.day_of_month?.toString() ?? '1',
       account_id: schedule.account_id,
       to_account_id: schedule.to_account_id || '',
       category_id: schedule.category_id || '',
@@ -743,7 +749,8 @@ export function RecurringTransactions({
                   min="1"
                   max="31"
                   value={formData.day_of_month}
-                  onChange={e => setFormData({ ...formData, day_of_month: parseInt(e.target.value) || 1 })}
+                  onChange={e => setFormData({ ...formData, day_of_month: e.target.value })}
+                  placeholder="Enter day (1-31)"
                   required
                 />
               </div>
