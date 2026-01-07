@@ -744,7 +744,20 @@ export function RecurringTransactions({
             Manage Schedules
           </h2>
         </div>
-        <Button onClick={() => setIsAdding(!isAdding)} variant={isAdding ? 'outline' : 'default'}>
+        <Button onClick={() => {
+          if (isAdding) {
+            resetForm()
+          } else {
+            setIsAdding(true)
+            // Set default subscription category when opening form
+            const subscriptionCategory = expenseCategories.find(
+              cat => cat.name.toLowerCase() === 'subscription'
+            )
+            if (subscriptionCategory && !editingId) {
+              setFormData(prev => ({ ...prev, category_id: subscriptionCategory.id }))
+            }
+          }
+        }} variant={isAdding ? 'outline' : 'default'}>
           {!isAdding && <Plus className="mr-2 h-4 w-4" />}
           {isAdding ? 'Cancel' : 'Add Recurring'}
         </Button>
