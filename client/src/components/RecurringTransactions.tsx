@@ -823,7 +823,13 @@ export function RecurringTransactions({
                   min="1"
                   max="31"
                   value={formData.day_of_month}
-                  onChange={e => setFormData({ ...formData, day_of_month: e.target.value })}
+                  onChange={e => {
+                    const value = e.target.value
+                    // Allow empty or valid numbers 1-31
+                    if (value === '' || (parseInt(value) >= 1 && parseInt(value) <= 31)) {
+                      setFormData({ ...formData, day_of_month: value })
+                    }
+                  }}
                   onKeyDown={e => {
                     if (e.key.length === 1 && !/[0-9]/.test(e.key) && !e.ctrlKey && !e.metaKey) {
                       e.preventDefault()
@@ -832,6 +838,9 @@ export function RecurringTransactions({
                   placeholder="Enter day (1-31)"
                   required
                 />
+                <p className="text-xs text-muted-foreground">
+                  If the day doesn't exist in a month (e.g., day 31 in February), it will process on the last day of that month
+                </p>
               </div>
             )}
 
