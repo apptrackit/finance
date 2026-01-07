@@ -53,30 +53,48 @@ export class AccountService {
       updated_at: now
     }
     delete (updates as any).adjustWithTransaction
+    delete (updates as any).splitTransactions
 
     await this.accountRepo.update(id, updates)
 
-    // If adjustWithTransaction is true and balance changed, create a transaction for the difference
+    // If adjustWithTransaction is true and balance changed, create transactions
     if (dto.adjustWithTransaction && oldAccount && dto.balance !== undefined) {
       const oldBalance = oldAccount.balance
       const newBalance = dto.balance
       const difference = newBalance - oldBalance
 
-      // Only create a transaction if there's actually a difference
+      // Only create transactions if there's actually a difference
       if (difference !== 0) {
-        const transactionId = crypto.randomUUID()
-        const description = difference > 0
-          ? `Balance adjustment: +${Math.abs(difference)}`
-          : `Balance adjustment: -${Math.abs(difference)}`
+        // Check if we have split transactions
+        if (dto.splitTransactions && dto.splitTransactions.length > 0) {
+          // Create multiple transactions based on the split
+          for (const split of dto.splitTransactions) {
+            await this.transactionRepo.create({
+              id: split.id,
+              account_id: id,
+              category_id: split.category_id,
+              amount: split.amount,
+              description: split.description,
+              date: split.date,
+              is_recurring: false
+            })
+          }
+        } else {
+          // Create a single adjustment transaction (original behavior)
+          const transactionId = crypto.randomUUID()
+          const description = difference > 0
+            ? `Balance adjustment: +${Math.abs(difference)}`
+            : `Balance adjustment: -${Math.abs(difference)}`
 
-        await this.transactionRepo.create({
-          id: transactionId,
-          account_id: id,
-          amount: difference,
-          description,
-          date: new Date().toISOString().split('T')[0],
-          is_recurring: false
-        })
+          await this.transactionRepo.create({
+            id: transactionId,
+            account_id: id,
+            amount: difference,
+            description,
+            date: new Date().toISOString().split('T')[0],
+            is_recurring: false
+          })
+        }
       }
     }
 

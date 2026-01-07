@@ -1,5 +1,13 @@
 import { AccountType, AssetType } from '../models/Account'
 
+export interface SplitTransactionDto {
+  id: string
+  description: string
+  amount: number
+  category_id: string
+  date: string
+}
+
 export interface CreateAccountDto {
   name: string
   type: AccountType
@@ -21,6 +29,7 @@ export interface UpdateAccountDto {
   exclude_from_net_worth?: boolean
   exclude_from_cash_balance?: boolean
   adjustWithTransaction?: boolean
+  splitTransactions?: SplitTransactionDto[]
 }
 
 export interface AccountResponseDto {
