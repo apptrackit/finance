@@ -5,7 +5,6 @@ export interface CreateTransactionDto {
   description?: string
   date: string
   price?: number
-  is_recurring: boolean
   linked_transaction_id?: string
 }
 
@@ -15,7 +14,6 @@ export interface UpdateTransactionDto {
   amount?: number
   description?: string
   date?: string
-  is_recurring?: boolean
 }
 
 export interface TransactionResponseDto {
@@ -26,6 +24,5 @@ export interface TransactionResponseDto {
   description?: string
   date: string
   price?: number
-  is_recurring: boolean
   linked_transaction_id?: string
 }

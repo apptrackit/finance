@@ -7,6 +7,7 @@ import { AccountRepository } from './repositories/account.repository'
 import { TransactionRepository } from './repositories/transaction.repository'
 import { CategoryRepository } from './repositories/category.repository'
 import { InvestmentTransactionRepository } from './repositories/investment-transaction.repository'
+import { RecurringScheduleRepository } from './repositories/recurring-schedule.repository'
 
 // Services
 import { AccountService } from './services/account.service'
@@ -16,6 +17,7 @@ import { InvestmentTransactionService } from './services/investment-transaction.
 import { TransferService } from './services/transfer.service'
 import { DashboardService } from './services/dashboard.service'
 import { MarketDataService } from './services/market-data.service'
+import { RecurringScheduleService } from './services/recurring-schedule.service'
 
 // Controllers
 import { AccountController } from './controllers/account.controller'
@@ -25,6 +27,7 @@ import { InvestmentTransactionController } from './controllers/investment-transa
 import { TransferController } from './controllers/transfer.controller'
 import { DashboardController } from './controllers/dashboard.controller'
 import { MarketDataController } from './controllers/market-data.controller'
+import { RecurringScheduleController } from './controllers/recurring-schedule.controller'
 
 // Middleware
 import { corsMiddleware } from './middlewares/cors.middleware'
@@ -37,6 +40,7 @@ function createDependencies(db: D1Database) {
   const transactionRepo = new TransactionRepository(db)
   const categoryRepo = new CategoryRepository(db)
   const investmentTransactionRepo = new InvestmentTransactionRepository(db)
+  const recurringScheduleRepo = new RecurringScheduleRepository(db)
 
   // Initialize services
   const accountService = new AccountService(accountRepo, transactionRepo)
@@ -46,6 +50,7 @@ function createDependencies(db: D1Database) {
   const transferService = new TransferService(accountRepo, transactionRepo, investmentTransactionRepo)
   const dashboardService = new DashboardService(accountRepo)
   const marketDataService = new MarketDataService()
+  const recurringScheduleService = new RecurringScheduleService(recurringScheduleRepo, transactionRepo, accountRepo)
 
   // Initialize controllers
   const accountController = new AccountController(accountService)
@@ -55,6 +60,7 @@ function createDependencies(db: D1Database) {
   const transferController = new TransferController(transferService)
   const dashboardController = new DashboardController(dashboardService)
   const marketDataController = new MarketDataController(marketDataService)
+  const recurringScheduleController = new RecurringScheduleController(recurringScheduleService)
 
   return {
     accountController,
@@ -63,7 +69,8 @@ function createDependencies(db: D1Database) {
     investmentTransactionController,
     transferController,
     dashboardController,
-    marketDataController
+    marketDataController,
+    recurringScheduleController
   }
 }
 
@@ -129,18 +136,25 @@ app.get('/market/search', (c) => getControllers(c).marketDataController.search(c
 app.get('/market/quote', (c) => getControllers(c).marketDataController.quote(c))
 app.get('/market/chart', (c) => getControllers(c).marketDataController.chart(c))
 
+// Recurring Schedules
+app.get('/recurring-schedules', (c) => getControllers(c).recurringScheduleController.getAll(c))
+app.get('/recurring-schedules/:id', (c) => getControllers(c).recurringScheduleController.getById(c))
+app.post('/recurring-schedules', (c) => getControllers(c).recurringScheduleController.create(c))
+app.put('/recurring-schedules/:id', (c) => getControllers(c).recurringScheduleController.update(c))
+app.delete('/recurring-schedules/:id', (c) => getControllers(c).recurringScheduleController.delete(c))
+
 export default {
   fetch: app.fetch,
   scheduled: async (event: ScheduledEvent, env: Bindings, ctx: ExecutionContext) => {
-    console.log('Running scheduled task: Cloning recurring transactions')
+    console.log('Running scheduled task: Processing recurring schedules')
 
     // Initialize dependencies for scheduled task
     const transactionRepo = new TransactionRepository(env.DB)
     const accountRepo = new AccountRepository(env.DB)
-    const investmentTransactionRepo = new InvestmentTransactionRepository(env.DB)
-    const transactionService = new TransactionService(transactionRepo, accountRepo, investmentTransactionRepo)
-
-    // Clone recurring transactions
-    await transactionService.cloneRecurringTransactions()
+    const recurringScheduleRepo = new RecurringScheduleRepository(env.DB)
+    
+    // Process recurring schedules
+    const recurringScheduleService = new RecurringScheduleService(recurringScheduleRepo, transactionRepo, accountRepo)
+    await recurringScheduleService.processRecurringSchedules()
   }
 }

@@ -3,14 +3,15 @@ import { AccountList } from './components/AccountList'
 import { TransactionList } from './components/TransactionList'
 import { Analytics } from './components/Analytics'
 import { Investments } from './components/Investments'
-import { Wallet, TrendingUp, TrendingDown, Activity, BarChart3, List, Settings as SettingsIcon, LineChart, Eye, EyeOff } from 'lucide-react'
+import { RecurringTransactions } from './components/RecurringTransactions'
+import { Wallet, TrendingUp, TrendingDown, Activity, BarChart3, List, Settings as SettingsIcon, LineChart, Eye, EyeOff, RefreshCw } from 'lucide-react'
 import { API_BASE_URL, apiFetch } from './config'
 import Settings, { getMasterCurrency } from './components/Settings'
 import { usePrivacy } from './context/PrivacyContext'
 import { startOfMonth, endOfMonth, format } from 'date-fns'
 
 
-const APP_VERSION = '1.1.0'
+const APP_VERSION = '1.1.1'
 
 
 type Account = {
@@ -33,7 +34,6 @@ type Transaction = {
   amount: number
   description?: string
   date: string
-  is_recurring: boolean
   linked_transaction_id?: string
 }
 
@@ -52,7 +52,7 @@ type MarketQuote = {
   regularMarketChangePercent?: number
 }
 
-type View = 'dashboard' | 'analytics' | 'settings' | 'investments'
+type View = 'dashboard' | 'analytics' | 'settings' | 'investments' | 'recurring'
 
 function App() {
   const [netWorth, setNetWorth] = useState<number | null>(null)
@@ -179,7 +179,6 @@ function App() {
               quantity: itx.type === 'buy' ? itx.quantity : -itx.quantity,
               description: itx.notes || `${itx.quantity} shares @ $${itx.price}`,
               date: itx.date,
-              is_recurring: false,
               category_id: undefined,
               linked_transaction_id: undefined
             }))
@@ -464,6 +463,17 @@ function App() {
                     <span className="hidden sm:inline">Investments</span>
                   </button>
                   <button
+                    onClick={() => setView('recurring')}
+                    className={`px-1.5 sm:px-3 py-1 sm:py-1.5 text-xs font-medium rounded-md sm:rounded-lg transition-all flex items-center gap-1 sm:gap-1.5 ${
+                      view === 'recurring'
+                        ? 'bg-primary text-primary-foreground shadow-sm'
+                        : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
+                    }`}
+                  >
+                    <RefreshCw className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
+                    <span className="hidden sm:inline">Recurring</span>
+                  </button>
+                  <button
                     onClick={() => setView('settings')}
                     className={`px-1.5 sm:px-3 py-1 sm:py-1.5 text-xs font-medium rounded-md sm:rounded-lg transition-all flex items-center gap-1 sm:gap-1.5 ${
                       view === 'settings'
@@ -657,6 +667,9 @@ function App() {
           ) : view === 'investments' ? (
             /* Investments View */
             <Investments key={investmentRefreshKey} />
+          ) : view === 'recurring' ? (
+            /* Recurring Transactions View */
+            <RecurringTransactions accounts={accounts} categories={categories} />
           ) : (
             /* Settings View */
             <Settings />

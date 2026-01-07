@@ -4,7 +4,7 @@ import { Input } from './ui/input'
 import { Label } from './ui/label'
 import { Select } from './ui/select'
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card'
-import { Plus, X, ArrowDownLeft, ArrowUpRight, Receipt, RefreshCw, Pencil, Trash2, Check, ArrowRightLeft, ChevronLeft, ChevronRight, Calendar } from 'lucide-react'
+import { Plus, X, ArrowDownLeft, ArrowUpRight, Receipt, Pencil, Trash2, Check, ArrowRightLeft, ChevronLeft, ChevronRight, Calendar } from 'lucide-react'
 import { format, addMonths, subMonths, startOfMonth, endOfMonth, addDays, differenceInDays } from 'date-fns'
 import { API_BASE_URL, apiFetch } from '../config'
 import { usePrivacy } from '../context/PrivacyContext'
@@ -20,7 +20,6 @@ type Transaction = {
   quantity?: number
   description?: string
   date: string
-  is_recurring: boolean
   linked_transaction_id?: string
 }
 
@@ -85,7 +84,6 @@ export function TransactionList({
     amount_to: '',
     description: '',
     date: new Date().toISOString().split('T')[0],
-    is_recurring: false,
     type: 'expense' as 'expense' | 'income' | 'transfer',
     manual_price: '' // For investment accounts - manual price override
   })
@@ -371,7 +369,6 @@ export function TransactionList({
       amount_to: '',
       description: '',
       date: new Date().toISOString().split('T')[0],
-      is_recurring: false,
       type: 'expense',
       manual_price: ''
     })
@@ -390,7 +387,6 @@ export function TransactionList({
       amount_to: '',
       description: '',
       date: new Date().toISOString().split('T')[0],
-      is_recurring: false,
       type: 'expense',
       manual_price: ''
     })
@@ -406,8 +402,7 @@ export function TransactionList({
       account_id: defaults.account_id,
       to_account_id: defaults.to_account_id,
       category_id: defaults.category_id,
-      amount_to: defaults.amount_to || '',
-      is_recurring: newType === 'transfer' ? false : formData.is_recurring
+      amount_to: defaults.amount_to || ''
     })
     setExchangeRate(null)
     setSuggestedRate(null)
@@ -458,8 +453,7 @@ export function TransactionList({
               category_id: formData.category_id || null,
               amount: finalAmount,
               description: formData.description,
-              date: formData.date,
-              is_recurring: formData.is_recurring
+              date: formData.date
             }),
           })
           setEditingId(null)
@@ -482,7 +476,6 @@ export function TransactionList({
               amount: finalAmount,
               description: formData.description,
               date: formData.date,
-              is_recurring: formData.is_recurring,
               price: price // Include price for investment accounts
             }),
           })
@@ -541,7 +534,6 @@ export function TransactionList({
       amount_to: '',
       description: tx.description || '',
       date: tx.date,
-      is_recurring: tx.is_recurring,
       type: isIncome ? 'income' : 'expense',
       manual_price: priceValue
     })
@@ -1192,19 +1184,6 @@ export function TransactionList({
                       placeholder="e.g. Grocery shopping" 
                     />
                   </div>
-                  <div className="col-span-2 flex items-center gap-3 p-3 rounded-lg bg-background/50 border border-border">
-                    <input 
-                      type="checkbox" 
-                      id="recurring" 
-                      checked={formData.is_recurring} 
-                      onChange={e => setFormData({...formData, is_recurring: e.target.checked})}
-                      className="h-4 w-4 rounded border-border bg-background text-primary focus:ring-primary focus:ring-offset-0"
-                    />
-                    <Label htmlFor="recurring" className="flex items-center gap-2 cursor-pointer">
-                      <RefreshCw className="h-4 w-4 text-muted-foreground" />
-                      Recurring monthly
-                    </Label>
-                  </div>
                 </div>
                 <Button type="submit" className="w-full" variant={formData.type === 'income' ? 'success' : 'default'}>
                   {editingId ? <Check className="h-4 w-4 mr-2" /> : <Plus className="h-4 w-4 mr-2" />}
@@ -1291,15 +1270,6 @@ export function TransactionList({
                                  <span>→</span>
                                  <span>{getAccountName(related.account_id)}</span>
                                </>
-                            )}
-                            {tx.is_recurring && (
-                              <>
-                                <span>•</span>
-                                <span className="flex items-center gap-1 text-primary">
-                                  <RefreshCw className="h-2.5 w-2.5 sm:h-3 sm:w-3" />
-                                  Recurring
-                                </span>
-                              </>
                             )}
                           </div>
                         </div>
@@ -1455,15 +1425,6 @@ export function TransactionList({
                                <span>→</span>
                                <span>{getAccountName(related.account_id)}</span>
                              </>
-                          )}
-                          {tx.is_recurring && (
-                            <>
-                              <span>•</span>
-                              <span className="flex items-center gap-1 text-primary">
-                                <RefreshCw className="h-2.5 w-2.5 sm:h-3 sm:w-3" />
-                                Recurring
-                              </span>
-                            </>
                           )}
                         </div>
                       </div>

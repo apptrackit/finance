@@ -107,7 +107,6 @@ type Transaction = {
   amount: number
   description?: string
   date: string
-  is_recurring: boolean
   linked_transaction_id?: string
 }
 

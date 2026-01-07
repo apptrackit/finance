@@ -83,7 +83,6 @@ export class TransactionService {
       amount: dto.amount,
       description: dto.description,
       date: dto.date,
-      is_recurring: dto.is_recurring,
       linked_transaction_id: dto.linked_transaction_id
     }
 
@@ -123,8 +122,7 @@ export class TransactionService {
       category_id: dto.category_id !== undefined ? dto.category_id : oldTx.category_id,
       amount: newAmount,
       description: dto.description !== undefined ? dto.description : oldTx.description,
-      date: dto.date || oldTx.date,
-      is_recurring: dto.is_recurring !== undefined ? dto.is_recurring : oldTx.is_recurring
+      date: dto.date || oldTx.date
     })
 
     // Apply new balance
