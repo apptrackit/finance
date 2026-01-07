@@ -84,7 +84,9 @@ export class RecurringScheduleService {
       description: dto.description,
       is_active: true,
       created_at: Date.now(),
-      last_processed_date: undefined
+      last_processed_date: undefined,
+      remaining_occurrences: dto.remaining_occurrences,
+      end_date: dto.end_date
     }
 
     await this.recurringRepo.create(schedule)
@@ -125,6 +127,22 @@ export class RecurringScheduleService {
     const todayStr = today.toISOString().split('T')[0] // YYYY-MM-DD
 
     for (const schedule of activeSchedules) {
+      // Check if end_date has passed
+      if (schedule.end_date && todayStr > schedule.end_date) {
+        // Deactivate the schedule as it has expired
+        await this.recurringRepo.update(schedule.id, { is_active: false })
+        console.log(`Deactivated expired recurring schedule ${schedule.id} (end_date: ${schedule.end_date})`)
+        continue
+      }
+
+      // Check if remaining_occurrences is 0
+      if (schedule.remaining_occurrences !== undefined && schedule.remaining_occurrences <= 0) {
+        // Deactivate the schedule as it has no remaining occurrences
+        await this.recurringRepo.update(schedule.id, { is_active: false })
+        console.log(`Deactivated recurring schedule ${schedule.id} (no remaining occurrences)`)
+        continue
+      }
+
       // Check if we should process this schedule today
       if (!this.shouldProcessToday(schedule, today)) {
         continue
@@ -143,8 +161,19 @@ export class RecurringScheduleService {
           await this.processRecurringTransfer(schedule, todayStr)
         }
 
-        // Update last processed date
-        await this.recurringRepo.update(schedule.id, { last_processed_date: todayStr })
+        // Update last processed date and decrement remaining_occurrences
+        const updates: Partial<RecurringSchedule> = { last_processed_date: todayStr }
+        
+        if (schedule.remaining_occurrences !== undefined && schedule.remaining_occurrences > 0) {
+          updates.remaining_occurrences = schedule.remaining_occurrences - 1
+          
+          // If this was the last occurrence, deactivate the schedule
+          if (updates.remaining_occurrences === 0) {
+            updates.is_active = false
+          }
+        }
+        
+        await this.recurringRepo.update(schedule.id, updates)
         console.log(`Processed recurring schedule ${schedule.id} for ${todayStr}`)
       } catch (error) {
         console.error(`Failed to process recurring schedule ${schedule.id}:`, error)
@@ -287,7 +316,9 @@ export class RecurringScheduleService {
       description: schedule.description,
       is_active: schedule.is_active,
       created_at: schedule.created_at,
-      last_processed_date: schedule.last_processed_date
+      last_processed_date: schedule.last_processed_date,
+      remaining_occurrences: schedule.remaining_occurrences,
+      end_date: schedule.end_date
     }
   }
 }
