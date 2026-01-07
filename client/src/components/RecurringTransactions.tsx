@@ -755,7 +755,7 @@ export function RecurringTransactions({
           </div>
           <div className="text-2xl font-bold text-destructive">
             <span className={privacyMode === 'hidden' ? 'select-none' : ''}>
-              {privacyMode === 'hidden' ? '••••••' : totalExpenses.toLocaleString('hu-HU', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+              {privacyMode === 'hidden' ? '••••••' : (totalExpenses > 0 ? '-' : '') + totalExpenses.toLocaleString('hu-HU', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
             </span>
           </div>
           <p className="text-xs text-muted-foreground mt-1">From recurring schedules</p>
@@ -768,7 +768,7 @@ export function RecurringTransactions({
           </div>
           <div className="text-2xl font-bold text-success">
             <span className={privacyMode === 'hidden' ? 'select-none' : ''}>
-              {privacyMode === 'hidden' ? '••••••' : totalIncome.toLocaleString('hu-HU', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+              {privacyMode === 'hidden' ? '••••••' : (totalIncome > 0 ? '+' : '') + totalIncome.toLocaleString('hu-HU', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
             </span>
           </div>
           <p className="text-xs text-muted-foreground mt-1">From recurring schedules</p>
