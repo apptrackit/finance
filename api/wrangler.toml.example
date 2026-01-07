@@ -20,4 +20,4 @@ database_name = "finance-db"
 database_id = "YOUR-DATABASE-ID-HERE"  # Replace with your D1 database ID
 
 [triggers]
-crons = ["0 0 1 * *"] # Run monthly on the 1st
+crons = ["0 0 * * *"] # Run daily at midnight to process recurring schedules
