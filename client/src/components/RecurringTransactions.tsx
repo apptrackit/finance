@@ -471,7 +471,7 @@ export function RecurringTransactions({
     // Sort next transactions by date
     nextTransactions.sort((a, b) => a.date.getTime() - b.date.getTime())
 
-    return { accountImpact, totalExpenses, totalIncome, nextTransactions: nextTransactions.slice(0, 5) }
+    return { accountImpact, totalExpenses, totalIncome, nextTransactions }
   }
 
   const { accountImpact, totalExpenses, totalIncome, nextTransactions } = calculateUpcomingImpact()
@@ -646,7 +646,7 @@ export function RecurringTransactions({
         <Card className="p-4">
           <h3 className="font-semibold mb-3 flex items-center gap-2">
             <Calendar className="h-4 w-4" />
-            Next Upcoming (First 5)
+            Next 30 Days Transactions
           </h3>
           <div className="space-y-2">
             {nextTransactions.map((tx, idx) => (
