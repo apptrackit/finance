@@ -28,8 +28,9 @@ export class RecurringScheduleRepository {
     await this.db.prepare(
       `INSERT INTO recurring_schedules 
        (id, type, frequency, day_of_week, day_of_month, account_id, to_account_id, 
-        category_id, amount, amount_to, description, is_active, created_at, last_processed_date) 
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        category_id, amount, amount_to, description, is_active, created_at, last_processed_date, 
+        remaining_occurrences, end_date) 
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).bind(
       schedule.id,
       schedule.type,
@@ -44,7 +45,9 @@ export class RecurringScheduleRepository {
       schedule.description ?? null,
       schedule.is_active ? 1 : 0,
       schedule.created_at,
-      schedule.last_processed_date ?? null
+      schedule.last_processed_date ?? null,
+      schedule.remaining_occurrences ?? null,
+      schedule.end_date ?? null
     ).run()
   }
 
@@ -95,6 +98,14 @@ export class RecurringScheduleRepository {
     if (updates.last_processed_date !== undefined) {
       fields.push('last_processed_date = ?')
       values.push(updates.last_processed_date ?? null)
+    }
+    if (updates.remaining_occurrences !== undefined) {
+      fields.push('remaining_occurrences = ?')
+      values.push(updates.remaining_occurrences ?? null)
+    }
+    if (updates.end_date !== undefined) {
+      fields.push('end_date = ?')
+      values.push(updates.end_date ?? null)
     }
 
     if (fields.length === 0) return

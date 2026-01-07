@@ -5,7 +5,7 @@ import { Card } from './ui/card'
 import { Input } from './ui/input'
 import { Label } from './ui/label'
 import { Select } from './ui/select'
-import { Plus, Trash2, Edit2, RefreshCw, Clock, TrendingDown, TrendingUp, AlertTriangle, Calendar } from 'lucide-react'
+import { Plus, Trash2, Edit2, Clock, TrendingDown, TrendingUp, AlertTriangle, Calendar } from 'lucide-react'
 import { useAlert } from '../context/AlertContext'
 import { usePrivacy } from '../context/PrivacyContext'
 
@@ -39,6 +39,8 @@ type RecurringSchedule = {
   is_active: boolean
   created_at: number
   last_processed_date?: string
+  remaining_occurrences?: number
+  end_date?: string
 }
 
 const DAYS_OF_WEEK = [
@@ -75,7 +77,10 @@ export function RecurringTransactions({
     amount: '',
     amount_to: '',
     description: '',
-    transaction_type: 'expense' as 'expense' | 'income'
+    transaction_type: 'expense' as 'expense' | 'income',
+    limit_type: 'unlimited' as 'unlimited' | 'occurrences' | 'end_date',
+    remaining_occurrences: '',
+    end_date: ''
   })
 
   useEffect(() => {
@@ -109,7 +114,10 @@ export function RecurringTransactions({
       amount: '',
       amount_to: '',
       description: '',
-      transaction_type: 'expense'
+      transaction_type: 'expense',
+      limit_type: 'unlimited',
+      remaining_occurrences: '',
+      end_date: ''
     })
     setIsAdding(false)
     setEditingId(null)
@@ -154,6 +162,16 @@ export function RecurringTransactions({
       }
     }
 
+    // Add limit fields
+    if (formData.limit_type === 'occurrences' && formData.remaining_occurrences) {
+      const occurrences = parseInt(formData.remaining_occurrences)
+      if (!isNaN(occurrences) && occurrences > 0) {
+        payload.remaining_occurrences = occurrences
+      }
+    } else if (formData.limit_type === 'end_date' && formData.end_date) {
+      payload.end_date = formData.end_date
+    }
+
     try {
       if (editingId) {
         const res = await apiFetch(`${API_BASE_URL}/recurring-schedules/${editingId}`, {
@@ -191,6 +209,14 @@ export function RecurringTransactions({
   }
 
   const handleEdit = (schedule: RecurringSchedule) => {
+    // Determine limit_type based on existing data
+    let limit_type: 'unlimited' | 'occurrences' | 'end_date' = 'unlimited'
+    if (schedule.remaining_occurrences !== undefined) {
+      limit_type = 'occurrences'
+    } else if (schedule.end_date) {
+      limit_type = 'end_date'
+    }
+
     setFormData({
       type: schedule.type,
       frequency: schedule.frequency,
@@ -202,7 +228,10 @@ export function RecurringTransactions({
       amount: Math.abs(schedule.amount).toString(),
       amount_to: schedule.amount_to?.toString() || '',
       description: schedule.description || '',
-      transaction_type: schedule.amount < 0 ? 'expense' : 'income'
+      transaction_type: schedule.amount < 0 ? 'expense' : 'income',
+      limit_type: limit_type,
+      remaining_occurrences: schedule.remaining_occurrences?.toString() || '',
+      end_date: schedule.end_date || ''
     })
     setEditingId(schedule.id)
     setIsAdding(true)
@@ -719,6 +748,52 @@ export function RecurringTransactions({
             )}
 
             <div className="space-y-2">
+              <Label htmlFor="limit_type">Duration</Label>
+              <Select
+                id="limit_type"
+                value={formData.limit_type}
+                onChange={e => setFormData({ 
+                  ...formData, 
+                  limit_type: e.target.value as 'unlimited' | 'occurrences' | 'end_date',
+                  remaining_occurrences: '',
+                  end_date: ''
+                })}
+              >
+                <option value="unlimited">Unlimited (runs forever)</option>
+                <option value="occurrences">Limited number of times</option>
+                <option value="end_date">Until specific date</option>
+              </Select>
+            </div>
+
+            {formData.limit_type === 'occurrences' && (
+              <div className="space-y-2">
+                <Label htmlFor="remaining_occurrences">Number of Occurrences</Label>
+                <Input
+                  id="remaining_occurrences"
+                  type="number"
+                  min="1"
+                  value={formData.remaining_occurrences}
+                  onChange={e => setFormData({ ...formData, remaining_occurrences: e.target.value })}
+                  placeholder="e.g., 12 for yearly subscription"
+                  required
+                />
+              </div>
+            )}
+
+            {formData.limit_type === 'end_date' && (
+              <div className="space-y-2">
+                <Label htmlFor="end_date">End Date</Label>
+                <Input
+                  id="end_date"
+                  type="date"
+                  value={formData.end_date}
+                  onChange={e => setFormData({ ...formData, end_date: e.target.value })}
+                  required
+                />
+              </div>
+            )}
+
+            <div className="space-y-2">
               <Label htmlFor="description">Description (optional)</Label>
               <Input
                 id="description"
@@ -774,6 +849,12 @@ export function RecurringTransactions({
                           {formatFrequency(schedule)}
                           {schedule.last_processed_date && (
                             <span className="ml-2">• Last: {schedule.last_processed_date}</span>
+                          )}
+                          {schedule.remaining_occurrences !== undefined && schedule.remaining_occurrences !== null && (
+                            <span className="ml-2">• {schedule.remaining_occurrences} left</span>
+                          )}
+                          {schedule.end_date && (
+                            <span className="ml-2">• Until {schedule.end_date}</span>
                           )}
                         </p>
                       </div>

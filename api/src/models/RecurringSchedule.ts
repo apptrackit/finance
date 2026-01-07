@@ -13,4 +13,6 @@ export interface RecurringSchedule {
   is_active: boolean
   created_at: number
   last_processed_date?: string // Last date when this was processed (YYYY-MM-DD)
+  remaining_occurrences?: number // Number of times left to process (undefined = unlimited)
+  end_date?: string // Date to stop processing (YYYY-MM-DD, undefined = no end date)
 }

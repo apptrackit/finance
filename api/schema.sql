@@ -44,6 +44,8 @@ CREATE TABLE IF NOT EXISTS recurring_schedules (
   is_active BOOLEAN DEFAULT 1,
   created_at INTEGER NOT NULL,
   last_processed_date TEXT, -- Last date when this was processed (YYYY-MM-DD)
+  remaining_occurrences INTEGER, -- Number of times left to process (NULL = unlimited)
+  end_date TEXT, -- Date to stop processing (YYYY-MM-DD, NULL = no end date)
   FOREIGN KEY(account_id) REFERENCES accounts(id) ON DELETE CASCADE,
   FOREIGN KEY(to_account_id) REFERENCES accounts(id) ON DELETE CASCADE
 );
