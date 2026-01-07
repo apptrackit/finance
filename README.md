@@ -1,10 +1,13 @@
 # 💰 Finance Manager
 
-> A full-stack personal finance tracker with multi-currency support, investment portfolio monitoring, and real-time market data integration.
+> A full-stack personal finance tracker with multi-currency support, investment portfolio monitoring, recurring transactions automation, and real-time market data integration.
+
+![Dashboard](screenshots/dashboard-empty.png)
 
 ## Table of Contents
 
 - [Overview](#overview)
+- [Screenshots](#screenshots)
 - [Quick Start](#quick-start)
   - [Backend Deployment](#backend-deployment)
   - [Frontend Deployment](#frontend-deployment)
@@ -19,6 +22,8 @@
   - [Investment Tracking](#investment-tracking)
   - [Privacy Mode](#privacy-mode)
   - [Recurring Transactions](#recurring-transactions)
+  - [Split Transactions](#split-transactions)
+  - [Balance Adjustments](#balance-adjustments)
 - [Security](#security)
 - [Development](#development)
   - [Prerequisites](#prerequisites)
@@ -30,7 +35,27 @@
 
 ## Overview
 
-Finance Manager is a modern, privacy-focused personal finance application that helps you track your net worth, manage multiple accounts, monitor investments, and analyze spending patterns. Built on Cloudflare's edge network for global performance and security.
+Finance Manager is a modern, privacy-focused personal finance application that helps you track your net worth, manage multiple accounts, monitor investments, automate recurring transactions, and analyze spending patterns. Built on Cloudflare's edge network for global performance and security.
+
+## Screenshots
+
+### Dashboard View
+![Dashboard](screenshots/dashboard-empty.png)
+*Main dashboard showing accounts, transactions, and financial overview*
+
+### Analytics View
+![Analytics](screenshots/analytics-empty.png)
+*Detailed analytics with charts and insights*
+
+### Investments View
+![Investments](screenshots/investments-empty.png)
+*Portfolio tracking with real-time market data*
+
+### Recurring Transactions View
+![Recurring](screenshots/recurring-empty.png)
+*Automated recurring transaction management with calendar view*
+
+---
 
 ## Quick Start
 
@@ -90,10 +115,11 @@ For detailed architecture documentation, see [API/ARCHITECTURE.md](api/ARCHITECT
 - **Build Tool**: Vite ^7.2
 - **Styling**: Tailwind CSS ^4.1 with custom design system
 - **Charts**: Recharts ^3.5 for data visualization
-- **Icons**: Lucide React
+- **Icons**: Lucide React ^0.554
 - **State**: React Context API (Privacy, Alerts, Locked Accounts)
 - **PWA**: Progressive Web App with offline support and service workers
-- **Date Handling**: date-fns for date formatting and manipulation
+- **Date Handling**: date-fns ^2.30 for date formatting and manipulation
+- **UI Utilities**: clsx ^2.1, tailwind-merge ^3.4
 
 ### Project Structure
 
@@ -103,6 +129,14 @@ finance/
 │   ├── src/
 │   │   ├── config/          # Application configuration
 │   │   ├── controllers/     # HTTP request handlers
+│   │   │   ├── account.controller.ts
+│   │   │   ├── category.controller.ts
+│   │   │   ├── dashboard.controller.ts
+│   │   │   ├── investment-transaction.controller.ts
+│   │   │   ├── market-data.controller.ts
+│   │   │   ├── recurring-schedule.controller.ts
+│   │   │   ├── transaction.controller.ts
+│   │   │   └── transfer.controller.ts
 │   │   ├── dtos/           # Data Transfer Objects
 │   │   ├── mappers/        # Entity-DTO mapping
 │   │   ├── middlewares/    # CORS & authentication
@@ -128,18 +162,34 @@ finance/
 │   │   │   ├── Analytics.tsx
 │   │   │   ├── DateRangePicker.tsx
 │   │   │   ├── TransferForm.tsx
+│   │   │   ├── RecurringTransactions.tsx
 │   │   │   ├── Settings.tsx
+│   │   │   ├── AdjustmentChoiceModal.tsx
+│   │   │   ├── SplitTransactionModal.tsx
 │   │   │   └── ui/          # Reusable UI components
+│   │   │       ├── button.tsx
+│   │   │       ├── card.tsx
+│   │   │       ├── input.tsx
+│   │   │       ├── label.tsx
+│   │   │       ├── modal.tsx
+│   │   │       └── select.tsx
 │   │   ├── context/
-│   │   │   └── PrivacyContext.tsx
+│   │   │   ├── PrivacyContext.tsx
+│   │   │   ├── AlertContext.tsx
+│   │   │   └── LockedAccountsContext.tsx
 │   │   ├── lib/
 │   │   │   └── utils.ts     # Helper functions
 │   │   ├── App.tsx          # Main application
 │   │   ├── config.ts        # API configuration
 │   │   └── main.tsx         # Entry point
+│   ├── public/              # Static assets
+│   │   ├── icon-192.png     # PWA icon (192x192)
+│   │   ├── icon-512.png     # PWA icon (512x512)
+│   │   └── favicon.svg      # Favicon
 │   ├── vite.config.ts       # Vite & PWA configuration
 │   └── package.json
 │
+├── screenshots/              # Application screenshots
 ├── deploy.sh                 # Automated deployment script
 └── package.json             # Workspace root
 ```
@@ -153,38 +203,63 @@ finance/
 - Investment accounts (stocks, crypto, manual assets)
 - Multi-currency support with real-time conversion
 - Account locking (prevent accidental modifications)
+- Account exclusion options (exclude from net worth or cash balance calculations)
 
 📊 **Transaction Tracking**
 - Categorized income & expenses
-- Recurring transactions
+- Recurring transactions with automated scheduling
 - Linked transfers between accounts
 - Custom categories with emoji icons
+- **Split transactions** - divide a single transaction across multiple categories
+- **Balance adjustments** - reconcile account balances with single or split transactions
+- Transaction filtering by type, category, and date range
+- Monthly transaction views with pagination
 
 📈 **Investment Portfolio**
 - Real-time stock/crypto prices via Yahoo Finance
-- Portfolio value tracking
+- Portfolio value tracking with multi-currency support
 - Transaction history (buy/sell)
 - Performance charts and analytics
+- Auto-refresh prices (every 5 minutes)
+- Manual asset tracking without market data
 
-🔒 **Privacy Mode**
-- Toggle to hide sensitive financial data
-- Persistent user preference (cookie-based)
+🔒 **Privacy & Security**
+- Privacy mode to hide sensitive financial data
+- Persistent user preference (localStorage + cookie)
 - Quick eye icon toggle in header
+- Account locking to prevent accidental changes
+- Alert system for user notifications
+- Three-layer security model (Cloudflare Access, API Key, CORS)
 
 📉 **Analytics Dashboard**
-- Net worth overview
-- Income vs. expenses
+- Net worth overview with real-time calculation
+- Income vs. expenses tracking
 - Category breakdown charts
 - Monthly trends and patterns
 - Date range filtering for custom periods
 - Period selection (7 days, 30 days, 90 days, year, all time, custom)
+- Cash flow visualization
+
+![Analytics View](screenshots/analytics-empty.png)
+
+🔄 **Recurring Transactions**
+- Automated recurring transaction management
+- Daily, weekly, and monthly schedules
+- Projected cash flow (end of month)
+- Next 30 days income/expense forecasting
+- Account status monitoring (sufficient funds alerts)
+- Interactive calendar view of upcoming transactions
+- Cloudflare Cron Triggers for automated processing
+
+![Recurring Transactions](screenshots/recurring-empty.png)
 
 ⚙️ **Settings & Customization**
 - Master currency selection (HUF, EUR, USD, GBP, CHF, PLN, CZK, RON)
 - Category management with custom icons (150+ emoji options)
-- Account exclusion options (exclude from net worth or cash balance)
 - Privacy mode toggle
-- Data export (JSON format)
+- Cache management and force reload
+- Data export (CSV and JSON formats)
+- PWA cache control
 
 🌍 **Global Deployment**
 - Edge-deployed on Cloudflare network
@@ -196,11 +271,7 @@ finance/
 - Offline support with service workers
 - Auto-updates and caching
 - Native app-like experience
-
-🔄 **Automated Features**
-- Recurring transactions with scheduled tasks
-- Monthly cron job to clone recurring transactions
-- Auto-refresh investment prices (every 5 minutes)
+- Custom app icons and splash screens
 
 ---
 
@@ -253,7 +324,7 @@ Investment accounts use a **transaction-based** approach:
 
 ### Privacy Mode
 
-Privacy mode uses a **React Context** to globally mask sensitive data:
+Privacy mode uses **React Context** to globally mask sensitive data:
 
 ```tsx
 // When enabled, transforms:
@@ -264,20 +335,66 @@ Privacy mode uses a **React Context** to globally mask sensitive data:
 - Preference saved in **localStorage + cookie**
 - Survives page refresh
 - Applies to: balances, amounts, quantities, charts
+- Configurable startup behavior (hide on startup option)
+- Quick toggle via eye icon in header
 
 ### Recurring Transactions
 
-The application supports automated recurring transactions:
+The application supports automated recurring transactions with advanced scheduling:
 
 1. Mark any transaction as recurring when creating it
-2. A **Cloudflare Cron Trigger** runs monthly (1st of each month)
-3. All recurring transactions are automatically cloned to the current month
-4. Configured in `wrangler.toml`: `crons = ["0 0 1 * *"]`
+2. Choose frequency: **daily**, **weekly**, or **monthly**
+3. Set specific days (day of week for weekly, day of month for monthly)
+4. A **Cloudflare Cron Trigger** runs daily at midnight
+5. Recurring schedules are automatically processed and transactions created
+6. Configured in `wrangler.toml`: `crons = ["0 0 * * *"]`
+
+**Features:**
+- Projected cash flow calculations (end of month)
+- Next 30 days income/expense forecasting
+- Account status monitoring with insufficient funds alerts
+- Interactive calendar view showing upcoming transactions
+- Support for both single transactions and transfers
 
 This enables automated handling of:
 - Regular salary deposits
 - Monthly subscriptions
 - Recurring bills and expenses
+- Weekly allowances
+- Daily automated transactions
+
+### Split Transactions
+
+Split a single transaction across multiple categories for detailed expense tracking:
+
+1. Choose to split when adjusting an account balance or creating a transaction
+2. Define multiple splits with individual amounts, descriptions, and categories
+3. System ensures total matches the transaction amount
+4. Visual indicators show split vs. allocation progress
+5. Percentage-based splitting for easy distribution
+
+**Use cases:**
+- Shopping trips with groceries, household items, and personal care
+- Utility bills split between housing and utilities categories
+- Mixed business/personal expenses
+- Detailed expense tracking for reimbursements
+
+### Balance Adjustments
+
+Reconcile account balances when they don't match reality:
+
+1. Enter the correct balance in account settings
+2. System calculates the adjustment amount
+3. Choose between:
+   - **Single transaction**: One adjustment entry in a category
+   - **Split transaction**: Distribute adjustment across multiple categories
+4. Account balance updates to match the correct amount
+
+Perfect for:
+- Fixing data entry errors
+- Reconciling with bank statements
+- Adjusting for cash transactions not yet recorded
+- Correcting rounding differences in currency conversions
 
 ---
 
@@ -406,6 +523,13 @@ VITE_API_DOMAIN=localhost:8787  # or api.yourdomain.com for prod
 | `GET` | `/investment-transactions` | List investment transactions |
 | `POST` | `/investment-transactions` | Create investment transaction |
 | `DELETE` | `/investment-transactions/:id` | Delete investment transaction |
+| **Recurring Schedules** |  |  |
+| `GET` | `/recurring-schedules` | List all recurring schedules |
+| `POST` | `/recurring-schedules` | Create recurring schedule |
+| `PUT` | `/recurring-schedules/:id` | Update recurring schedule |
+| `DELETE` | `/recurring-schedules/:id` | Delete recurring schedule |
+| `POST` | `/recurring-schedules/process` | Process recurring schedules (cron) |
+| `GET` | `/recurring-schedules/calendar` | Get calendar view of upcoming transactions |
 | **Transfers** |  |  |
 | `GET` | `/transfers/exchange-rate` | Get exchange rate between currencies |
 | `POST` | `/transfers` | Create transfer between accounts |
@@ -425,7 +549,7 @@ curl -H "X-API-Key: your-key" \
 ---
 
 **API Version**: 1.1.4  
-**Client Version**: 0.0.0  
+**Client Version**: 1.2.3  
 **License**: MIT  
 **Maintained by**: apptrackit
 
