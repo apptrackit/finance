@@ -4,7 +4,7 @@ import { Input } from './ui/input'
 import { Label } from './ui/label'
 import { Select } from './ui/select'
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card'
-import { Plus, X, ArrowDownLeft, ArrowUpRight, Receipt, RefreshCw, Pencil, Trash2, Check, ArrowRightLeft, ChevronLeft, ChevronRight, Calendar } from 'lucide-react'
+import { Plus, X, ArrowDownLeft, ArrowUpRight, Receipt, Pencil, Trash2, Check, ArrowRightLeft, ChevronLeft, ChevronRight, Calendar } from 'lucide-react'
 import { format, addMonths, subMonths, startOfMonth, endOfMonth, addDays, differenceInDays } from 'date-fns'
 import { API_BASE_URL, apiFetch } from '../config'
 import { usePrivacy } from '../context/PrivacyContext'
@@ -1192,19 +1192,6 @@ export function TransactionList({
                       placeholder="e.g. Grocery shopping" 
                     />
                   </div>
-                  <div className="col-span-2 flex items-center gap-3 p-3 rounded-lg bg-background/50 border border-border">
-                    <input 
-                      type="checkbox" 
-                      id="recurring" 
-                      checked={formData.is_recurring} 
-                      onChange={e => setFormData({...formData, is_recurring: e.target.checked})}
-                      className="h-4 w-4 rounded border-border bg-background text-primary focus:ring-primary focus:ring-offset-0"
-                    />
-                    <Label htmlFor="recurring" className="flex items-center gap-2 cursor-pointer">
-                      <RefreshCw className="h-4 w-4 text-muted-foreground" />
-                      Recurring monthly
-                    </Label>
-                  </div>
                 </div>
                 <Button type="submit" className="w-full" variant={formData.type === 'income' ? 'success' : 'default'}>
                   {editingId ? <Check className="h-4 w-4 mr-2" /> : <Plus className="h-4 w-4 mr-2" />}
@@ -1291,15 +1278,6 @@ export function TransactionList({
                                  <span>→</span>
                                  <span>{getAccountName(related.account_id)}</span>
                                </>
-                            )}
-                            {tx.is_recurring && (
-                              <>
-                                <span>•</span>
-                                <span className="flex items-center gap-1 text-primary">
-                                  <RefreshCw className="h-2.5 w-2.5 sm:h-3 sm:w-3" />
-                                  Recurring
-                                </span>
-                              </>
                             )}
                           </div>
                         </div>
@@ -1455,15 +1433,6 @@ export function TransactionList({
                                <span>→</span>
                                <span>{getAccountName(related.account_id)}</span>
                              </>
-                          )}
-                          {tx.is_recurring && (
-                            <>
-                              <span>•</span>
-                              <span className="flex items-center gap-1 text-primary">
-                                <RefreshCw className="h-2.5 w-2.5 sm:h-3 sm:w-3" />
-                                Recurring
-                              </span>
-                            </>
                           )}
                         </div>
                       </div>

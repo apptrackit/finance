@@ -25,9 +25,28 @@ CREATE TABLE IF NOT EXISTS transactions (
   amount REAL NOT NULL, -- negative for expense, positive for income
   description TEXT,
   date TEXT NOT NULL, -- ISO 8601 YYYY-MM-DD
-  is_recurring BOOLEAN DEFAULT 0,
+  is_recurring BOOLEAN DEFAULT 0, -- Deprecated: kept for backward compatibility
   linked_transaction_id TEXT,
   FOREIGN KEY(account_id) REFERENCES accounts(id)
+);
+
+CREATE TABLE IF NOT EXISTS recurring_schedules (
+  id TEXT PRIMARY KEY,
+  type TEXT NOT NULL, -- 'transaction', 'transfer'
+  frequency TEXT NOT NULL, -- 'daily', 'weekly', 'monthly'
+  day_of_week INTEGER, -- 0-6 for weekly (0 = Sunday)
+  day_of_month INTEGER, -- 1-31 for monthly
+  account_id TEXT NOT NULL, -- For transactions: the account; For transfers: from_account
+  to_account_id TEXT, -- Only for transfers
+  category_id TEXT, -- Only for transactions
+  amount REAL NOT NULL,
+  amount_to REAL, -- Only for transfers with different currencies
+  description TEXT,
+  is_active BOOLEAN DEFAULT 1,
+  created_at INTEGER NOT NULL,
+  last_processed_date TEXT, -- Last date when this was processed (YYYY-MM-DD)
+  FOREIGN KEY(account_id) REFERENCES accounts(id) ON DELETE CASCADE,
+  FOREIGN KEY(to_account_id) REFERENCES accounts(id) ON DELETE CASCADE
 );
 
 -- Investment transactions are now tracked via regular transactions table
