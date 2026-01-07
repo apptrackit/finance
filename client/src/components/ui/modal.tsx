@@ -43,16 +43,16 @@ export function Modal({ isOpen, onClose, title, children, className }: ModalProp
       <div className={cn(
         "relative bg-card border border-border/50 rounded-xl shadow-2xl",
         "w-full max-w-2xl max-h-[90vh] overflow-y-auto",
-        "m-4 animate-in fade-in-0 zoom-in-95",
+        "mx-2 my-4 sm:m-4 animate-in fade-in-0 zoom-in-95",
         className
       )}>
         {/* Header */}
         {title && (
-          <div className="flex items-center justify-between p-6 border-b border-border/50">
-            <h2 className="text-xl font-semibold text-foreground">{title}</h2>
+          <div className="flex items-center justify-between p-4 sm:p-6 border-b border-border/50">
+            <h2 className="text-lg sm:text-xl font-semibold text-foreground">{title}</h2>
             <button
               onClick={onClose}
-              className="text-muted-foreground hover:text-foreground transition-colors"
+              className="text-muted-foreground hover:text-foreground transition-colors p-1 -mr-1"
             >
               <X className="h-5 w-5" />
             </button>
@@ -60,7 +60,7 @@ export function Modal({ isOpen, onClose, title, children, className }: ModalProp
         )}
         
         {/* Content */}
-        <div className="p-6">
+        <div className="p-4 sm:p-6">
           {children}
         </div>
       </div>

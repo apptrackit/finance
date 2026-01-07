@@ -150,19 +150,19 @@ export function SplitTransactionModal({
   const filteredCategories = categories.filter(c => c.type === transactionType)
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Split Adjustment Transaction">
-      <div className="space-y-6">
+    <Modal isOpen={isOpen} onClose={onClose} title="Split Adjustment">
+      <div className="space-y-4 sm:space-y-6">
         {/* Info */}
-        <div className="bg-secondary/30 rounded-lg p-4 border border-border/30">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-sm font-medium">Total Adjustment Amount:</span>
-            <span className={`text-lg font-semibold ${totalAmount >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+        <div className="bg-secondary/30 rounded-lg p-3 sm:p-4 border border-border/30">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 mb-2">
+            <span className="text-xs sm:text-sm font-medium">Total Amount:</span>
+            <span className={`text-base sm:text-lg font-semibold ${totalAmount >= 0 ? 'text-green-500' : 'text-red-500'}`}>
               {totalAmount >= 0 ? '+' : ''}{totalAmount.toFixed(2)} {accountCurrency}
             </span>
           </div>
           {Math.abs(remaining) > 0.01 && (
-            <div className="flex items-center gap-2 mt-2 text-sm">
-              <AlertCircle className="h-4 w-4 text-orange-500" />
+            <div className="flex items-center gap-2 mt-2 text-xs sm:text-sm">
+              <AlertCircle className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-orange-500 flex-shrink-0" />
               <span className="text-orange-500 font-medium">
                 Remaining: {remaining >= 0 ? '+' : ''}{remaining.toFixed(2)} {accountCurrency}
               </span>
@@ -196,25 +196,25 @@ export function SplitTransactionModal({
         </div>
 
         {/* Splits */}
-        <div className="space-y-4 max-h-96 overflow-y-auto">
+        <div className="space-y-3 sm:space-y-4 max-h-[60vh] sm:max-h-96 overflow-y-auto">
           {splits.map((split, index) => {
             const percentage = getSplitPercentage(split.amount)
             const absAmount = Math.abs(split.amount)
             const maxSliderValue = Math.abs(totalAmount)
             
             return (
-              <div key={split.id} className="bg-secondary/20 rounded-lg p-4 border border-border/30 space-y-3">
-                <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium text-muted-foreground">Split {index + 1}</span>
-                    <span className="text-xs px-2 py-0.5 bg-primary/10 text-primary rounded-full font-medium">
+              <div key={split.id} className="bg-secondary/20 rounded-lg p-3 sm:p-4 border border-border/30 space-y-2 sm:space-y-3">
+                <div className="flex items-center justify-between mb-1 sm:mb-2">
+                  <div className="flex items-center gap-1.5 sm:gap-2">
+                    <span className="text-xs sm:text-sm font-medium text-muted-foreground">Split {index + 1}</span>
+                    <span className="text-xs px-1.5 sm:px-2 py-0.5 bg-primary/10 text-primary rounded-full font-medium">
                       {percentage.toFixed(1)}%
                     </span>
                   </div>
                   {splits.length > 1 && (
                     <button
                       onClick={() => removeSplit(split.id)}
-                      className="text-red-500 hover:text-red-600 transition-colors"
+                      className="text-red-500 hover:text-red-600 transition-colors p-1 -mr-1 active:scale-95"
                     >
                       <Trash2 className="h-4 w-4" />
                     </button>
@@ -222,10 +222,10 @@ export function SplitTransactionModal({
                 </div>
 
                 {/* Visual Slider */}
-                <div className="space-y-2">
+                <div className="space-y-1.5 sm:space-y-2">
                   <div className="flex items-center justify-between text-xs text-muted-foreground">
-                    <span>Adjust amount</span>
-                    <span className="font-medium text-foreground">
+                    <span className="text-xs">Adjust amount</span>
+                    <span className="font-medium text-foreground text-xs sm:text-sm">
                       {split.amount >= 0 ? '+' : ''}{absAmount.toFixed(2)} {accountCurrency}
                     </span>
                   </div>
@@ -239,7 +239,7 @@ export function SplitTransactionModal({
                       const value = parseFloat(e.target.value)
                       updateSplitAmount(split.id, totalAmount < 0 ? -value : value)
                     }}
-                    className="w-full h-2 bg-secondary rounded-lg appearance-none cursor-pointer accent-primary"
+                    className="w-full h-2.5 sm:h-2 bg-secondary rounded-lg appearance-none cursor-pointer accent-primary touch-manipulation"
                     style={{
                       background: `linear-gradient(to right, hsl(var(--primary)) 0%, hsl(var(--primary)) ${percentage}%, hsl(var(--secondary)) ${percentage}%, hsl(var(--secondary)) 100%)`
                     }}
