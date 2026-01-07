@@ -5,8 +5,9 @@ import { Card } from './ui/card'
 import { Input } from './ui/input'
 import { Label } from './ui/label'
 import { Select } from './ui/select'
-import { Plus, Trash2, Edit2, RefreshCw, Clock } from 'lucide-react'
+import { Plus, Trash2, Edit2, RefreshCw, Clock, TrendingDown, TrendingUp, AlertTriangle, Calendar } from 'lucide-react'
 import { useAlert } from '../context/AlertContext'
+import { usePrivacy } from '../context/PrivacyContext'
 
 type Account = {
   id: string
@@ -260,18 +261,236 @@ export function RecurringTransactions({
   const expenseCategories = categories.filter(c => c.type === 'expense')
   const incomeCategories = categories.filter(c => c.type === 'income')
   const cashAccounts = accounts.filter(a => a.type === 'cash')
+  const { privacyMode } = usePrivacy()
+
+  // Calculate upcoming recurring amounts for next 30 days
+  const calculateUpcomingImpact = () => {
+    const today = new Date()
+    const next30Days = new Date(today)
+    next30Days.setDate(today.getDate() + 30)
+
+    const accountImpact: Record<string, { debits: number; credits: number; currency: string }> = {}
+    let totalExpenses = 0
+    let totalIncome = 0
+    let nextTransactions: Array<{ date: Date; description: string; amount: number; account: string }> = []
+
+    // Initialize account impact
+    cashAccounts.forEach(account => {
+      accountImpact[account.id] = { debits: 0, credits: 0, currency: account.currency }
+    })
+
+    // Calculate occurrences for each schedule in the next 30 days
+    schedules.filter(s => s.is_active).forEach(schedule => {
+      const dates: Date[] = []
+      let currentDate = new Date(today)
+
+      while (currentDate <= next30Days) {
+        const shouldProcess = (() => {
+          if (schedule.frequency === 'daily') return true
+          if (schedule.frequency === 'weekly') return currentDate.getDay() === schedule.day_of_week
+          if (schedule.frequency === 'monthly') {
+            const dayOfMonth = currentDate.getDate()
+            const lastDayOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0).getDate()
+            const targetDay = schedule.day_of_month!
+            if (targetDay > lastDayOfMonth) return dayOfMonth === lastDayOfMonth
+            return dayOfMonth === targetDay
+          }
+          return false
+        })()
+
+        if (shouldProcess && (!schedule.last_processed_date || currentDate.toISOString().split('T')[0] > schedule.last_processed_date)) {
+          dates.push(new Date(currentDate))
+        }
+
+        currentDate.setDate(currentDate.getDate() + 1)
+      }
+
+      // Add impact for each occurrence
+      dates.forEach(date => {
+        if (schedule.type === 'transaction') {
+          const account = accounts.find(a => a.id === schedule.account_id)
+          if (!account) return
+
+          if (schedule.amount < 0) {
+            accountImpact[schedule.account_id].debits += Math.abs(schedule.amount)
+            totalExpenses += Math.abs(schedule.amount)
+          } else {
+            accountImpact[schedule.account_id].credits += schedule.amount
+            totalIncome += schedule.amount
+          }
+
+          nextTransactions.push({
+            date,
+            description: schedule.description || 'Recurring transaction',
+            amount: schedule.amount,
+            account: account.name
+          })
+        } else if (schedule.type === 'transfer' && schedule.to_account_id) {
+          accountImpact[schedule.account_id].debits += Math.abs(schedule.amount)
+          accountImpact[schedule.to_account_id].credits += Math.abs(schedule.amount_to || schedule.amount)
+
+          const fromAccount = accounts.find(a => a.id === schedule.account_id)
+          nextTransactions.push({
+            date,
+            description: `${schedule.description || 'Transfer'} (${fromAccount?.name})`,
+            amount: -Math.abs(schedule.amount),
+            account: fromAccount?.name || ''
+          })
+        }
+      })
+    })
+
+    // Sort next transactions by date
+    nextTransactions.sort((a, b) => a.date.getTime() - b.date.getTime())
+
+    return { accountImpact, totalExpenses, totalIncome, nextTransactions: nextTransactions.slice(0, 5) }
+  }
+
+  const { accountImpact, totalExpenses, totalIncome, nextTransactions } = calculateUpcomingImpact()
+
+  // Check which accounts will be insufficient
+  const insufficientAccounts = cashAccounts.filter(account => {
+    const impact = accountImpact[account.id]
+    if (!impact) return false
+    const projectedBalance = account.balance - impact.debits + impact.credits
+    return projectedBalance < 0
+  })
 
   return (
     <div className="space-y-6">
+      {/* Summary Cards */}
+      <div className="grid gap-4 md:grid-cols-3">
+        <Card className="p-4 border-destructive/20">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-sm font-medium text-muted-foreground">Next 30 Days Expenses</span>
+            <TrendingDown className="h-4 w-4 text-destructive" />
+          </div>
+          <div className="text-2xl font-bold text-destructive">
+            <span className={privacyMode === 'hidden' ? 'select-none' : ''}>
+              {privacyMode === 'hidden' ? '••••••' : totalExpenses.toLocaleString('hu-HU', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+            </span>
+          </div>
+          <p className="text-xs text-muted-foreground mt-1">From recurring schedules</p>
+        </Card>
+
+        <Card className="p-4 border-success/20">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-sm font-medium text-muted-foreground">Next 30 Days Income</span>
+            <TrendingUp className="h-4 w-4 text-success" />
+          </div>
+          <div className="text-2xl font-bold text-success">
+            <span className={privacyMode === 'hidden' ? 'select-none' : ''}>
+              {privacyMode === 'hidden' ? '••••••' : totalIncome.toLocaleString('hu-HU', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+            </span>
+          </div>
+          <p className="text-xs text-muted-foreground mt-1">From recurring schedules</p>
+        </Card>
+
+        <Card className={`p-4 ${insufficientAccounts.length > 0 ? 'border-destructive/50 bg-destructive/5' : 'border-success/20'}`}>
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-sm font-medium text-muted-foreground">Account Status</span>
+            {insufficientAccounts.length > 0 ? (
+              <AlertTriangle className="h-4 w-4 text-destructive" />
+            ) : (
+              <Calendar className="h-4 w-4 text-success" />
+            )}
+          </div>
+          <div className={`text-2xl font-bold ${insufficientAccounts.length > 0 ? 'text-destructive' : 'text-success'}`}>
+            {insufficientAccounts.length > 0 ? `${insufficientAccounts.length} Warning${insufficientAccounts.length > 1 ? 's' : ''}` : 'All Good'}
+          </div>
+          <p className="text-xs text-muted-foreground mt-1">
+            {insufficientAccounts.length > 0 ? 'Insufficient balance projected' : 'All accounts have sufficient funds'}
+          </p>
+        </Card>
+      </div>
+
+      {/* Account Breakdown */}
+      {Object.keys(accountImpact).some(id => accountImpact[id].debits > 0 || accountImpact[id].credits > 0) && (
+        <Card className="p-4">
+          <h3 className="font-semibold mb-3 flex items-center gap-2">
+            <TrendingDown className="h-4 w-4" />
+            Account Impact (Next 30 Days)
+          </h3>
+          <div className="space-y-2">
+            {cashAccounts.filter(account => accountImpact[account.id]?.debits > 0 || accountImpact[account.id]?.credits > 0).map(account => {
+              const impact = accountImpact[account.id]
+              const projectedBalance = account.balance - impact.debits + impact.credits
+              const isInsufficient = projectedBalance < 0
+
+              return (
+                <div key={account.id} className={`flex items-center justify-between p-2 rounded ${isInsufficient ? 'bg-destructive/10' : 'bg-muted/50'}`}>
+                  <div className="flex-1">
+                    <div className="font-medium flex items-center gap-2">
+                      {account.name}
+                      {isInsufficient && <AlertTriangle className="h-3 w-3 text-destructive" />}
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      Current: <span className={privacyMode === 'hidden' ? 'select-none' : ''}>
+                        {privacyMode === 'hidden' ? '••••' : account.balance.toFixed(2)}
+                      </span> {account.currency}
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-xs space-x-2">
+                      {impact.debits > 0 && (
+                        <span className="text-destructive">
+                          -{impact.debits.toFixed(0)}
+                        </span>
+                      )}
+                      {impact.credits > 0 && (
+                        <span className="text-success">
+                          +{impact.credits.toFixed(0)}
+                        </span>
+                      )}
+                    </div>
+                    <div className={`text-sm font-medium ${isInsufficient ? 'text-destructive' : ''}`}>
+                      → <span className={privacyMode === 'hidden' ? 'select-none' : ''}>
+                        {privacyMode === 'hidden' ? '••••' : projectedBalance.toFixed(0)}
+                      </span> {account.currency}
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </Card>
+      )}
+
+      {/* Next Upcoming Transactions */}
+      {nextTransactions.length > 0 && (
+        <Card className="p-4">
+          <h3 className="font-semibold mb-3 flex items-center gap-2">
+            <Calendar className="h-4 w-4" />
+            Next Upcoming (First 5)
+          </h3>
+          <div className="space-y-2">
+            {nextTransactions.map((tx, idx) => (
+              <div key={idx} className="flex items-center justify-between text-sm py-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-muted-foreground w-16">
+                    {tx.date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                  </span>
+                  <span>{tx.description}</span>
+                  <span className="text-xs text-muted-foreground">({tx.account})</span>
+                </div>
+                <span className={`font-medium ${tx.amount < 0 ? 'text-destructive' : 'text-success'}`}>
+                  <span className={privacyMode === 'hidden' ? 'select-none' : ''}>
+                    {privacyMode === 'hidden' ? '••••' : `${tx.amount < 0 ? '-' : '+'}${Math.abs(tx.amount).toFixed(0)}`}
+                  </span>
+                </span>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+
+      {/* Add/Edit Form Section */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold flex items-center gap-2">
-            <RefreshCw className="h-6 w-6 text-primary" />
-            Recurring Transactions
+          <h2 className="text-xl font-semibold flex items-center gap-2">
+            <Clock className="h-5 w-5 text-primary" />
+            Manage Schedules
           </h2>
-          <p className="text-sm text-muted-foreground mt-1">
-            Manage automated recurring transactions and transfers
-          </p>
         </div>
         <Button onClick={() => setIsAdding(!isAdding)}>
           <Plus className="mr-2 h-4 w-4" />
