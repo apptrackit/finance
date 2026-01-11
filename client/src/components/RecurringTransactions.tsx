@@ -238,9 +238,9 @@ export function RecurringTransactions({
   const handleEdit = (schedule: RecurringSchedule) => {
     // Determine limit_type based on existing data
     let limit_type: 'unlimited' | 'occurrences' | 'end_date' = 'unlimited'
-    if (schedule.remaining_occurrences !== undefined) {
+    if (schedule.remaining_occurrences !== undefined && schedule.remaining_occurrences !== null) {
       limit_type = 'occurrences'
-    } else if (schedule.end_date) {
+    } else if (schedule.end_date && schedule.end_date !== null) {
       limit_type = 'end_date'
     }
 

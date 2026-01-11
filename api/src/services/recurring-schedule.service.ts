@@ -135,8 +135,8 @@ export class RecurringScheduleService {
         continue
       }
 
-      // Check if remaining_occurrences is 0
-      if (schedule.remaining_occurrences !== undefined && schedule.remaining_occurrences <= 0) {
+      // Check if remaining_occurrences is 0 (but not null/undefined which means unlimited)
+      if (schedule.remaining_occurrences !== undefined && schedule.remaining_occurrences !== null && schedule.remaining_occurrences <= 0) {
         // Deactivate the schedule as it has no remaining occurrences
         await this.recurringRepo.update(schedule.id, { is_active: false })
         console.log(`Deactivated recurring schedule ${schedule.id} (no remaining occurrences)`)
@@ -164,7 +164,7 @@ export class RecurringScheduleService {
         // Update last processed date and decrement remaining_occurrences
         const updates: Partial<RecurringSchedule> = { last_processed_date: todayStr }
         
-        if (schedule.remaining_occurrences !== undefined && schedule.remaining_occurrences > 0) {
+        if (schedule.remaining_occurrences !== undefined && schedule.remaining_occurrences !== null && schedule.remaining_occurrences > 0) {
           updates.remaining_occurrences = schedule.remaining_occurrences - 1
           
           // If this was the last occurrence, deactivate the schedule
