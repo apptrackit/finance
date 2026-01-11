@@ -95,6 +95,8 @@ export function TransactionList({
   const [categoryFilter, setCategoryFilter] = useState<string>('all')
   const [sortOrder, setSortOrder] = useState<'date' | 'amount-high' | 'amount-low'>('date')
   const [showAllTransactions, setShowAllTransactions] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
   
   const { confirm } = useAlert()
   const { privacyMode, shouldHideInvestment } = usePrivacy()
@@ -410,6 +412,9 @@ export function TransactionList({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (isSubmitting) return
+    
+    setIsSubmitting(true)
     try {
       const amount = parseFloat(formData.amount.replace(/\s/g, ''))
 
@@ -487,6 +492,8 @@ export function TransactionList({
       onTransactionAdded()
     } catch (error) {
       console.error('Failed to save transaction', error)
+    } finally {
+      setIsSubmitting(false)
     }
   }
 
@@ -568,6 +575,7 @@ export function TransactionList({
     
     if (!confirmed) return
     
+    setDeletingId(id)
     try {
       // Find the transaction to determine if it's an investment transaction
       const tx = transactions.find(t => t.id === id)
@@ -585,6 +593,8 @@ export function TransactionList({
       onTransactionAdded()
     } catch (error) {
       console.error('Failed to delete transaction', error)
+    } finally {
+      setDeletingId(null)
     }
   }
 
@@ -1086,9 +1096,9 @@ export function TransactionList({
                   </div>
                 )}
 
-                <Button type="submit" className="w-full">
+                <Button type="submit" className="w-full" disabled={isSubmitting}>
                   <ArrowRightLeft className="h-4 w-4 mr-2" />
-                  Transfer Funds
+                  {isSubmitting ? 'Processing...' : 'Transfer Funds'}
                 </Button>
               </div>
             ) : (
@@ -1185,9 +1195,9 @@ export function TransactionList({
                     />
                   </div>
                 </div>
-                <Button type="submit" className="w-full" variant={formData.type === 'income' ? 'success' : 'default'}>
+                <Button type="submit" className="w-full" variant={formData.type === 'income' ? 'success' : 'default'} disabled={isSubmitting}>
                   {editingId ? <Check className="h-4 w-4 mr-2" /> : <Plus className="h-4 w-4 mr-2" />}
-                  {editingId ? 'Save Changes' : `Add ${formData.type === 'income' ? 'Income' : 'Expense'}`}
+                  {isSubmitting ? 'Saving...' : (editingId ? 'Save Changes' : `Add ${formData.type === 'income' ? 'Income' : 'Expense'}`)}
                 </Button>
               </>
             )}
@@ -1323,6 +1333,7 @@ export function TransactionList({
                                 size="icon" 
                                 variant="ghost" 
                                 className="h-7 w-7 sm:h-8 sm:w-8 text-destructive hover:text-destructive"
+                                disabled={deletingId === tx.id}
                                 onClick={(e) => {
                                   e.stopPropagation()
                                   handleDelete(tx.id)
@@ -1478,6 +1489,7 @@ export function TransactionList({
                               size="icon" 
                               variant="ghost" 
                               className="h-7 w-7 sm:h-8 sm:w-8 text-destructive hover:text-destructive"
+                              disabled={deletingId === tx.id}
                               onClick={(e) => {
                                 e.stopPropagation()
                                 handleDelete(tx.id)

@@ -82,6 +82,8 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
     oldBalance: number,
     newBalance: number
   } | null>(null)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
 
   const { privacyMode, shouldHideInvestment } = usePrivacy()
 
@@ -258,6 +260,9 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (isSubmitting) return
+    
+    setIsSubmitting(true)
     try {
       const balanceValue = formData.balance.replace(/\s/g, '').trim()
       const payload: any = {
@@ -310,6 +315,8 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
       onAccountAdded()
     } catch (error) {
       console.error('Failed to save account', error)
+    } finally {
+      setIsSubmitting(false)
     }
   }
 
@@ -351,11 +358,14 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
     
     if (!confirmed) return
     
+    setDeletingId(id)
     try {
       await apiFetch(`${API_BASE_URL}/accounts/${id}`, { method: 'DELETE' })
       onAccountAdded()
     } catch (error) {
       console.error('Failed to delete account', error)
+    } finally {
+      setDeletingId(null)
     }
   }
 
@@ -682,9 +692,9 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
                 </div>
               )}
             </div>
-            <Button type="submit" className="w-full">
+            <Button type="submit" className="w-full" disabled={isSubmitting}>
               {editingId ? <Check className="h-4 w-4 mr-2" /> : <Plus className="h-4 w-4 mr-2" />}
-              {editingId ? 'Save Changes' : 'Add Account'}
+              {isSubmitting ? 'Saving...' : (editingId ? 'Save Changes' : 'Add Account')}
             </Button>
           </form>
         )}
@@ -806,6 +816,7 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
                               size="icon"
                               variant="ghost"
                               className="h-10 w-10 text-destructive hover:text-destructive hover:bg-red-500/10"
+                              disabled={deletingId === account.id}
                               onClick={(e) => {
                                 e.stopPropagation()
                                 handleDelete(account.id)
@@ -929,6 +940,7 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
                               size="icon"
                               variant="ghost"
                               className="h-10 w-10 text-destructive hover:text-destructive hover:bg-red-500/10"
+                              disabled={deletingId === account.id}
                               onClick={(e) => {
                                 e.stopPropagation()
                                 handleDelete(account.id)

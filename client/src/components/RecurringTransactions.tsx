@@ -69,6 +69,8 @@ export function RecurringTransactions({
   const [editingId, setEditingId] = useState<string | null>(null)
   const [calendarDate, setCalendarDate] = useState(new Date())
   const [calendarMode, setCalendarMode] = useState<'30-day' | 'monthly'>('30-day')
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
 
   const [formData, setFormData] = useState({
     type: 'transaction' as 'transaction' | 'transfer',
@@ -134,12 +136,15 @@ export function RecurringTransactions({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (isSubmitting) return
 
     const amount = parseFloat(formData.amount.replace(/\s/g, ''))
     if (isNaN(amount) || amount <= 0) {
       showAlert({ type: 'error', message: 'Please enter a valid amount' })
       return
     }
+
+    setIsSubmitting(true)
 
     const payload: any = {
       type: formData.type,
@@ -267,6 +272,7 @@ export function RecurringTransactions({
   const handleDelete = async (id: string) => {
     if (!confirm('Are you sure you want to delete this recurring schedule?')) return
 
+    setDeletingId(id)
     try {
       const res = await apiFetch(`${API_BASE_URL}/recurring-schedules/${id}`, {
         method: 'DELETE'
@@ -280,6 +286,8 @@ export function RecurringTransactions({
     } catch (error) {
       showAlert({ type: 'error', message: 'An error occurred' })
       console.error(error)
+    } finally {
+      setDeletingId(null)
     }
   }
 
@@ -1278,8 +1286,8 @@ export function RecurringTransactions({
             </div>
 
             <div className="flex gap-2">
-              <Button type="submit" className="flex-1">
-                {editingId ? 'Update Schedule' : 'Create Schedule'}
+              <Button type="submit" className="flex-1" disabled={isSubmitting}>
+                {isSubmitting ? 'Saving...' : (editingId ? 'Update Schedule' : 'Create Schedule')}
               </Button>
               <Button type="button" variant="outline" onClick={resetForm}>
                 Cancel
@@ -1368,6 +1376,7 @@ export function RecurringTransactions({
                       <Button
                         size="sm"
                         variant="destructive"
+                        disabled={deletingId === schedule.id}
                         onClick={() => handleDelete(schedule.id)}
                       >
                         <Trash2 className="h-4 w-4" />

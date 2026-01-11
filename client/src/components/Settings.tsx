@@ -138,6 +138,7 @@ export default function Settings() {
   const [editCategoryType, setEditCategoryType] = useState<'income' | 'expense'>('expense')
   const [editCategoryIcon, setEditCategoryIcon] = useState('📌')
   const [isUpdatingCategory, setIsUpdatingCategory] = useState(false)
+  const [deletingCategoryId, setDeletingCategoryId] = useState<string | null>(null)
 
   // Emoji picker state
   const [showNewEmojiPicker, setShowNewEmojiPicker] = useState(false)
@@ -296,6 +297,7 @@ export default function Settings() {
       return
     }
     
+    setDeletingCategoryId(id)
     try {
       const res = await apiFetch(`${API_BASE_URL}/categories/${id}`, {
         method: 'DELETE'
@@ -320,6 +322,8 @@ export default function Settings() {
         title: 'Failed to Delete Category',
         message: error instanceof Error ? error.message : 'Failed to delete category'
       })
+    } finally {
+      setDeletingCategoryId(null)
     }
   }
   
@@ -693,6 +697,7 @@ export default function Settings() {
                         <Button
                           variant="ghost"
                           size="sm"
+                          disabled={deletingCategoryId === category.id}
                           onClick={() => handleDeleteCategory(category.id, category.name)}
                           className="text-destructive hover:text-destructive hover:bg-destructive/10"
                         >
@@ -796,6 +801,7 @@ export default function Settings() {
                         <Button
                           variant="ghost"
                           size="sm"
+                          disabled={deletingCategoryId === category.id}
                           onClick={() => handleDeleteCategory(category.id, category.name)}
                           className="text-destructive hover:text-destructive hover:bg-destructive/10"
                         >
