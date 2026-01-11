@@ -178,13 +178,25 @@ export function RecurringTransactions({
     }
 
     // Add limit fields
-    if (formData.limit_type === 'occurrences' && formData.remaining_occurrences) {
-      const occurrences = parseInt(formData.remaining_occurrences)
-      if (!isNaN(occurrences) && occurrences > 0) {
-        payload.remaining_occurrences = occurrences
+    if (formData.limit_type === 'occurrences') {
+      if (formData.remaining_occurrences) {
+        const occurrences = parseInt(formData.remaining_occurrences)
+        if (!isNaN(occurrences) && occurrences > 0) {
+          payload.remaining_occurrences = occurrences
+        }
       }
-    } else if (formData.limit_type === 'end_date' && formData.end_date) {
-      payload.end_date = formData.end_date
+      // Clear end_date when using occurrences
+      payload.end_date = undefined
+    } else if (formData.limit_type === 'end_date') {
+      if (formData.end_date) {
+        payload.end_date = formData.end_date
+      }
+      // Clear remaining_occurrences when using end_date
+      payload.remaining_occurrences = undefined
+    } else {
+      // For unlimited, explicitly clear both fields
+      payload.remaining_occurrences = undefined
+      payload.end_date = undefined
     }
 
     try {
