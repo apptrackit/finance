@@ -178,13 +178,25 @@ export function RecurringTransactions({
     }
 
     // Add limit fields
-    if (formData.limit_type === 'occurrences' && formData.remaining_occurrences) {
-      const occurrences = parseInt(formData.remaining_occurrences)
-      if (!isNaN(occurrences) && occurrences > 0) {
-        payload.remaining_occurrences = occurrences
+    if (formData.limit_type === 'occurrences') {
+      if (formData.remaining_occurrences) {
+        const occurrences = parseInt(formData.remaining_occurrences)
+        if (!isNaN(occurrences) && occurrences > 0) {
+          payload.remaining_occurrences = occurrences
+        }
       }
-    } else if (formData.limit_type === 'end_date' && formData.end_date) {
-      payload.end_date = formData.end_date
+      // Clear end_date when using occurrences
+      payload.end_date = null
+    } else if (formData.limit_type === 'end_date') {
+      if (formData.end_date) {
+        payload.end_date = formData.end_date
+      }
+      // Clear remaining_occurrences when using end_date
+      payload.remaining_occurrences = null
+    } else {
+      // For unlimited, explicitly clear both fields
+      payload.remaining_occurrences = null
+      payload.end_date = null
     }
 
     try {
@@ -226,9 +238,9 @@ export function RecurringTransactions({
   const handleEdit = (schedule: RecurringSchedule) => {
     // Determine limit_type based on existing data
     let limit_type: 'unlimited' | 'occurrences' | 'end_date' = 'unlimited'
-    if (schedule.remaining_occurrences !== undefined) {
+    if (schedule.remaining_occurrences !== undefined && schedule.remaining_occurrences !== null) {
       limit_type = 'occurrences'
-    } else if (schedule.end_date) {
+    } else if (schedule.end_date && schedule.end_date !== null) {
       limit_type = 'end_date'
     }
 

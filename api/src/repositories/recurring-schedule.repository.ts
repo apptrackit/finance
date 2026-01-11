@@ -101,11 +101,11 @@ export class RecurringScheduleRepository {
     }
     if (updates.remaining_occurrences !== undefined) {
       fields.push('remaining_occurrences = ?')
-      values.push(updates.remaining_occurrences ?? null)
+      values.push(updates.remaining_occurrences === null ? null : updates.remaining_occurrences)
     }
     if (updates.end_date !== undefined) {
       fields.push('end_date = ?')
-      values.push(updates.end_date ?? null)
+      values.push(updates.end_date === null ? null : updates.end_date)
     }
 
     if (fields.length === 0) return
