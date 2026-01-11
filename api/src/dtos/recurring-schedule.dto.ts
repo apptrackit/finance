@@ -9,8 +9,8 @@ export interface CreateRecurringScheduleDto {
   amount: number
   amount_to?: number // For transfers with different currencies
   description?: string
-  remaining_occurrences?: number // Number of times to process (undefined = unlimited)
-  end_date?: string // End date YYYY-MM-DD (undefined = no end date)
+  remaining_occurrences?: number | null // Number of times to process (undefined/null = unlimited)
+  end_date?: string | null // End date YYYY-MM-DD (undefined/null = no end date)
 }
 
 export interface UpdateRecurringScheduleDto {
@@ -24,8 +24,8 @@ export interface UpdateRecurringScheduleDto {
   amount_to?: number
   description?: string
   is_active?: boolean
-  remaining_occurrences?: number // Number of times left to process
-  end_date?: string // End date YYYY-MM-DD
+  remaining_occurrences?: number | null // Number of times left to process (null = clear/unlimited)
+  end_date?: string | null // End date YYYY-MM-DD (null = clear/no end date)
 }
 
 export interface RecurringScheduleResponseDto {

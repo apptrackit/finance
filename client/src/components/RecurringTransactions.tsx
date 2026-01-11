@@ -186,17 +186,17 @@ export function RecurringTransactions({
         }
       }
       // Clear end_date when using occurrences
-      payload.end_date = undefined
+      payload.end_date = null
     } else if (formData.limit_type === 'end_date') {
       if (formData.end_date) {
         payload.end_date = formData.end_date
       }
       // Clear remaining_occurrences when using end_date
-      payload.remaining_occurrences = undefined
+      payload.remaining_occurrences = null
     } else {
       // For unlimited, explicitly clear both fields
-      payload.remaining_occurrences = undefined
-      payload.end_date = undefined
+      payload.remaining_occurrences = null
+      payload.end_date = null
     }
 
     try {
