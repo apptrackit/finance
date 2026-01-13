@@ -143,6 +143,20 @@ app.post('/recurring-schedules', (c) => getControllers(c).recurringScheduleContr
 app.put('/recurring-schedules/:id', (c) => getControllers(c).recurringScheduleController.update(c))
 app.delete('/recurring-schedules/:id', (c) => getControllers(c).recurringScheduleController.delete(c))
 
+// Manual trigger for scheduled task (for testing)
+app.post('/test-scheduled-task', async (c) => {
+  console.log('Manually triggering scheduled task: Processing recurring schedules')
+  
+  const transactionRepo = new TransactionRepository(c.env.DB)
+  const accountRepo = new AccountRepository(c.env.DB)
+  const recurringScheduleRepo = new RecurringScheduleRepository(c.env.DB)
+  
+  const recurringScheduleService = new RecurringScheduleService(recurringScheduleRepo, transactionRepo, accountRepo)
+  await recurringScheduleService.processRecurringSchedules()
+  
+  return c.json({ message: 'Scheduled task executed successfully' })
+})
+
 export default {
   fetch: app.fetch,
   scheduled: async (event: ScheduledEvent, env: Bindings, ctx: ExecutionContext) => {

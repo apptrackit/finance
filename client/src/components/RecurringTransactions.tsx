@@ -9,6 +9,14 @@ import { Plus, Trash2, Edit2, Clock, TrendingDown, TrendingUp, AlertTriangle, Ca
 import { useAlert } from '../context/AlertContext'
 import { usePrivacy } from '../context/PrivacyContext'
 
+// Helper function to convert Date to local YYYY-MM-DD string (no timezone conversion)
+function toLocalDateString(date: Date): string {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
 type Account = {
   id: string
   name: string
@@ -71,6 +79,7 @@ export function RecurringTransactions({
   const [calendarMode, setCalendarMode] = useState<'30-day' | 'monthly'>('30-day')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [showAllTransactions, setShowAllTransactions] = useState(false)
 
   const [formData, setFormData] = useState({
     type: 'transaction' as 'transaction' | 'transfer',
@@ -356,9 +365,9 @@ export function RecurringTransactions({
         })()
 
         // Check if we should process this date
-        if (shouldProcess && (!schedule.last_processed_date || currentDate.toISOString().split('T')[0] > schedule.last_processed_date)) {
+        if (shouldProcess && (!schedule.last_processed_date || toLocalDateString(currentDate) > schedule.last_processed_date)) {
           // Check if end_date constraint applies
-          if (schedule.end_date && currentDate.toISOString().split('T')[0] > schedule.end_date) {
+          if (schedule.end_date && toLocalDateString(currentDate) > schedule.end_date) {
             break
           }
           
@@ -439,10 +448,21 @@ export function RecurringTransactions({
       accountImpact[account.id] = { debits: 0, credits: 0, currency: account.currency }
     })
 
+    console.log('[RecurringTransactions] Calculating upcoming impact, today:', toLocalDateString(today))
+    console.log('[RecurringTransactions] Active schedules:', schedules.filter(s => s.is_active))
+
     // Calculate occurrences for each schedule in the next 30 days
     schedules.filter(s => s.is_active).forEach(schedule => {
+      console.log(`[RecurringTransactions] Processing schedule ${schedule.id}:`, {
+        frequency: schedule.frequency,
+        last_processed_date: schedule.last_processed_date,
+        remaining_occurrences: schedule.remaining_occurrences,
+        end_date: schedule.end_date
+      })
+      
       const dates: Date[] = []
       let currentDate = new Date(today)
+      let occurrenceCount = 0
 
       while (currentDate <= next30Days) {
         const shouldProcess = (() => {
@@ -458,11 +478,33 @@ export function RecurringTransactions({
           return false
         })()
 
-        if (shouldProcess && (!schedule.last_processed_date || currentDate.toISOString().split('T')[0] > schedule.last_processed_date)) {
+        const dateStr = toLocalDateString(currentDate)
+        
+        if (shouldProcess && (!schedule.last_processed_date || dateStr > schedule.last_processed_date)) {
+          // Check end_date constraint
+          if (schedule.end_date && dateStr > schedule.end_date) {
+            console.log(`[RecurringTransactions] Breaking due to end_date: ${dateStr} > ${schedule.end_date}`)
+            break
+          }
+          
+          // Check remaining_occurrences constraint
+          if (schedule.remaining_occurrences !== undefined && schedule.remaining_occurrences !== null) {
+            occurrenceCount++
+            if (occurrenceCount > schedule.remaining_occurrences) {
+              console.log(`[RecurringTransactions] Breaking due to remaining_occurrences: ${occurrenceCount} > ${schedule.remaining_occurrences}`)
+              break
+            }
+          }
+          
           dates.push(new Date(currentDate))
         }
 
         currentDate.setDate(currentDate.getDate() + 1)
+      }
+      
+      console.log(`[RecurringTransactions] Found ${dates.length} upcoming dates for schedule ${schedule.id}`)
+      if (dates.length > 0) {
+        console.log(`[RecurringTransactions] First 5 dates:`, dates.slice(0, 5).map(d => toLocalDateString(d)))
       }
 
       // Add impact for each occurrence
@@ -626,7 +668,7 @@ export function RecurringTransactions({
             
             if (shouldOccur) {
               // Check if this date is after last_processed_date
-              const dateStr = date.toISOString().split('T')[0]
+              const dateStr = toLocalDateString(date)
               if (!schedule.last_processed_date || dateStr > schedule.last_processed_date) {
                 // Check end_date constraint
                 if (schedule.end_date && dateStr > schedule.end_date) {
@@ -635,11 +677,18 @@ export function RecurringTransactions({
                 
                 // Check remaining_occurrences constraint
                 if (schedule.remaining_occurrences !== undefined && schedule.remaining_occurrences !== null) {
-                  // Count how many occurrences have happened from creation date to this date
-                  const occurrencesSoFar = countOccurrencesBetween(schedule, scheduleCreatedDate, date)
-                  // remaining_occurrences represents how many are left after last_processed_date
-                  // If we've gone beyond the remaining count, don't show this occurrence
-                  if (occurrencesSoFar > schedule.remaining_occurrences) {
+                  // Count occurrences from last processed date (or creation date if never processed) to this date
+                  const startCountingFrom = schedule.last_processed_date 
+                    ? new Date(schedule.last_processed_date)
+                    : scheduleCreatedDate
+                  
+                  // Start counting from the day AFTER last processed
+                  startCountingFrom.setDate(startCountingFrom.getDate() + 1)
+                  
+                  const occurrencesFromLastProcessed = countOccurrencesBetween(schedule, startCountingFrom, date)
+                  
+                  // If this occurrence number exceeds remaining count, don't show it
+                  if (occurrencesFromLastProcessed > schedule.remaining_occurrences) {
                     return
                   }
                 }
@@ -723,7 +772,7 @@ export function RecurringTransactions({
             
             if (shouldOccur) {
               // Check if this date is after last_processed_date
-              const dateStr = date.toISOString().split('T')[0]
+              const dateStr = toLocalDateString(date)
               if (!schedule.last_processed_date || dateStr > schedule.last_processed_date) {
                 // Check end_date constraint
                 if (schedule.end_date && dateStr > schedule.end_date) {
@@ -732,11 +781,18 @@ export function RecurringTransactions({
                 
                 // Check remaining_occurrences constraint
                 if (schedule.remaining_occurrences !== undefined && schedule.remaining_occurrences !== null) {
-                  // Count how many occurrences have happened from creation date to this date
-                  const occurrencesSoFar = countOccurrencesBetween(schedule, scheduleCreatedDate, date)
-                  // remaining_occurrences represents how many are left after last_processed_date
-                  // If we've gone beyond the remaining count, don't show this occurrence
-                  if (occurrencesSoFar > schedule.remaining_occurrences) {
+                  // Count occurrences from last processed date (or creation date if never processed) to this date
+                  const startCountingFrom = schedule.last_processed_date 
+                    ? new Date(schedule.last_processed_date)
+                    : scheduleCreatedDate
+                  
+                  // Start counting from the day AFTER last processed
+                  startCountingFrom.setDate(startCountingFrom.getDate() + 1)
+                  
+                  const occurrencesFromLastProcessed = countOccurrencesBetween(schedule, startCountingFrom, date)
+                  
+                  // If this occurrence number exceeds remaining count, don't show it
+                  if (occurrencesFromLastProcessed > schedule.remaining_occurrences) {
                     return
                   }
                 }
@@ -912,7 +968,7 @@ export function RecurringTransactions({
             Next 30 Days Transactions
           </h3>
           <div className="space-y-2">
-            {nextTransactions.map((tx, idx) => (
+            {(showAllTransactions ? nextTransactions : nextTransactions.slice(0, 5)).map((tx, idx) => (
               <div key={idx} className="flex items-center justify-between text-sm py-1">
                 <div className="flex items-center gap-2">
                   <span className="text-xs text-muted-foreground w-16">
@@ -929,6 +985,18 @@ export function RecurringTransactions({
               </div>
             ))}
           </div>
+          {nextTransactions.length > 5 && (
+            <div className="mt-3 pt-3 border-t">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowAllTransactions(!showAllTransactions)}
+                className="w-full"
+              >
+                {showAllTransactions ? 'Show Less' : `Show All (${nextTransactions.length})`}
+              </Button>
+            </div>
+          )}
         </Card>
       )}
 
