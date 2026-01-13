@@ -71,6 +71,7 @@ export function RecurringTransactions({
   const [calendarMode, setCalendarMode] = useState<'30-day' | 'monthly'>('30-day')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [showAllTransactions, setShowAllTransactions] = useState(false)
 
   const [formData, setFormData] = useState({
     type: 'transaction' as 'transaction' | 'transfer',
@@ -912,7 +913,7 @@ export function RecurringTransactions({
             Next 30 Days Transactions
           </h3>
           <div className="space-y-2">
-            {nextTransactions.map((tx, idx) => (
+            {(showAllTransactions ? nextTransactions : nextTransactions.slice(0, 5)).map((tx, idx) => (
               <div key={idx} className="flex items-center justify-between text-sm py-1">
                 <div className="flex items-center gap-2">
                   <span className="text-xs text-muted-foreground w-16">
@@ -929,6 +930,18 @@ export function RecurringTransactions({
               </div>
             ))}
           </div>
+          {nextTransactions.length > 5 && (
+            <div className="mt-3 pt-3 border-t">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowAllTransactions(!showAllTransactions)}
+                className="w-full"
+              >
+                {showAllTransactions ? 'Show Less' : `Show All (${nextTransactions.length})`}
+              </Button>
+            </div>
+          )}
         </Card>
       )}
 
