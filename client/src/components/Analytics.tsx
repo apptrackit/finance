@@ -871,6 +871,7 @@ export function Analytics({
                           axisLine={false}
                           domain={calculateYAxisDomain(netWorthTrendData)}
                           tickFormatter={(value) => {
+                            if (privacyMode === 'hidden') return '••••'
                             if (value >= 1000000) return `${(value / 1000000).toFixed(1)}M`
                             if (value >= 1000) return `${(value / 1000).toFixed(0)}K`
                             return value.toFixed(0)
@@ -883,8 +884,8 @@ export function Analytics({
                               return (
                                 <div className="bg-card border border-border rounded-lg p-2 sm:p-3 shadow-xl text-xs sm:text-sm">
                                   <p className="text-xs text-muted-foreground mb-1">{label}</p>
-                                  <p className="font-medium text-primary">
-                                    {(payload[0].value as number).toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})} {masterCurrency}
+                                  <p className={`font-medium text-primary ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
+                                    {privacyMode === 'hidden' ? '••••••' : (payload[0].value as number).toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})} {masterCurrency}
                                   </p>
                                 </div>
                               )
@@ -954,6 +955,7 @@ export function Analytics({
                           tickLine={false}
                           axisLine={false}
                           tickFormatter={(value) => {
+                            if (privacyMode === 'hidden') return '••••'
                             if (value >= 1000000) return `${(value / 1000000).toFixed(1)}M`
                             if (value >= 1000) return `${(value / 1000).toFixed(0)}K`
                             return value.toFixed(0)
@@ -975,13 +977,12 @@ export function Analytics({
                               return (
                                 <div className="bg-card border border-border rounded-lg p-2 sm:p-3 shadow-xl text-xs sm:text-sm">
                                   <p className="text-xs text-muted-foreground mb-1">{label}</p>
-                                  <p className="font-medium text-success">
-                                    +{currentAmount.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})} {masterCurrency}
+                                  <p className={`font-medium text-success ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
+                                    {privacyMode === 'hidden' ? '+••••••' : `+${currentAmount.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})}`} {masterCurrency}
                                   </p>
                                   {prevPeriod && (
-                                    <p className={`text-xs mt-1 ${diff >= 0 ? 'text-success' : 'text-destructive'}`}>
-                                      {diff >= 0 ? '↑' : '↓'} {Math.abs(diff).toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})}
-                                      {diffPercent && ` (${diff >= 0 ? '+' : ''}${diffPercent}%)`}
+                                    <p className={`text-xs mt-1 ${diff >= 0 ? 'text-success' : 'text-destructive'} ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
+                                      {privacyMode === 'hidden' ? '••••' : `${diff >= 0 ? '↑' : '↓'} ${Math.abs(diff).toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})}${diffPercent ? ` (${diff >= 0 ? '+' : ''}${diffPercent}%)` : ''}`}
                                     </p>
                                   )}
                                 </div>
@@ -1044,6 +1045,7 @@ export function Analytics({
                           tickLine={false}
                           axisLine={false}
                           tickFormatter={(value) => {
+                            if (privacyMode === 'hidden') return '••••'
                             if (value >= 1000000) return `${(value / 1000000).toFixed(1)}M`
                             if (value >= 1000) return `${(value / 1000).toFixed(0)}K`
                             return value.toFixed(0)
@@ -1065,13 +1067,12 @@ export function Analytics({
                               return (
                                 <div className="bg-card border border-border rounded-lg p-2 sm:p-3 shadow-xl text-xs sm:text-sm">
                                   <p className="text-xs text-muted-foreground mb-1">{label}</p>
-                                  <p className="font-medium text-destructive">
-                                    -{currentAmount.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})} {masterCurrency}
+                                  <p className={`font-medium text-destructive ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
+                                    {privacyMode === 'hidden' ? '-••••••' : `-${currentAmount.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})}`} {masterCurrency}
                                   </p>
                                   {prevPeriod && (
-                                    <p className={`text-xs mt-1 ${diff <= 0 ? 'text-success' : 'text-destructive'}`}>
-                                      {diff > 0 ? '↑' : '↓'} {Math.abs(diff).toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})}
-                                      {diffPercent && ` (${diff > 0 ? '+' : ''}${diffPercent}%)`}
+                                    <p className={`text-xs mt-1 ${diff <= 0 ? 'text-success' : 'text-destructive'} ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
+                                      {privacyMode === 'hidden' ? '••••' : `${diff > 0 ? '↑' : '↓'} ${Math.abs(diff).toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})}${diffPercent ? ` (${diff > 0 ? '+' : ''}${diffPercent}%)` : ''}`}
                                     </p>
                                   )}
                                 </div>
@@ -1099,8 +1100,8 @@ export function Analytics({
                   <div className="flex items-center gap-2">
                     <span className="text-base sm:text-lg">{account.icon || '💳'}</span>
                     <CardTitle className="text-sm sm:text-base truncate flex-1">{account.name}</CardTitle>
-                    <span className="text-xs text-muted-foreground flex-shrink-0">
-                      {convertToMasterCurrency(account.balance, account.id).toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})} {masterCurrency}
+                    <span className={`text-xs text-muted-foreground flex-shrink-0 ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
+                      {privacyMode === 'hidden' ? '••••••' : convertToMasterCurrency(account.balance, account.id).toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})} {masterCurrency}
                     </span>
                   </div>
                 </CardHeader>
@@ -1131,6 +1132,7 @@ export function Analytics({
                             axisLine={false}
                             domain={calculateYAxisDomain(data)}
                             tickFormatter={(value) => {
+                              if (privacyMode === 'hidden') return '••••'
                               if (value >= 1000000) return `${(value / 1000000).toFixed(1)}M`
                               if (value >= 1000) return `${(value / 1000).toFixed(0)}K`
                               return value.toFixed(0)
@@ -1143,8 +1145,8 @@ export function Analytics({
                                 return (
                                   <div className="bg-card border border-border rounded-lg p-2 shadow-xl text-xs">
                                     <p className="text-xs text-muted-foreground mb-1">{label}</p>
-                                    <p className="font-medium" style={{ color: COLORS[index % COLORS.length] }}>
-                                      {(payload[0].value as number).toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})} {masterCurrency}
+                                    <p className={`font-medium ${privacyMode === 'hidden' ? 'select-none' : ''}`} style={{ color: COLORS[index % COLORS.length] }}>
+                                      {privacyMode === 'hidden' ? '••••••' : (payload[0].value as number).toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})} {masterCurrency}
                                     </p>
                                   </div>
                                 )
@@ -1202,7 +1204,7 @@ export function Analytics({
                             ))}
                           </Pie>
                           <Tooltip 
-                            formatter={(value: number) => `${value.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})} ${masterCurrency}`}
+                            formatter={(value: number) => privacyMode === 'hidden' ? '••••••' : `${value.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})} ${masterCurrency}`}
                             contentStyle={{
                               backgroundColor: 'hsl(var(--card))',
                               border: '1px solid hsl(var(--border))',
@@ -1231,8 +1233,8 @@ export function Analytics({
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center justify-between gap-2">
                               <span className="text-xs sm:text-sm font-medium truncate">{cat.name}</span>
-                              <span className="text-xs sm:text-sm text-muted-foreground flex-shrink-0">
-                                {cat.value.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})} {masterCurrency}
+                              <span className={`text-xs sm:text-sm text-muted-foreground flex-shrink-0 ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
+                                {privacyMode === 'hidden' ? '••••••' : cat.value.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})} {masterCurrency}
                               </span>
                             </div>
                             <div className="mt-1 h-1 sm:h-1.5 rounded-full bg-secondary overflow-hidden">
@@ -1295,8 +1297,8 @@ export function Analytics({
                             {format(new Date(tx.date), 'MMM d')}
                           </p>
                         </div>
-                        <div className="text-xs sm:text-sm font-bold text-destructive flex-shrink-0">
-                          -{convertedAmount.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})}
+                        <div className={`text-xs sm:text-sm font-bold text-destructive flex-shrink-0 ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
+                          {privacyMode === 'hidden' ? '-••••••' : `-${convertedAmount.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})}`}
                         </div>
                       </div>
                     )
