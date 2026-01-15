@@ -70,7 +70,7 @@ export function RecurringTransactions({
   accounts: Account[]
   categories: Category[]
 }) {
-  const { showAlert } = useAlert()
+  const { confirm, showAlert } = useAlert()
   const [schedules, setSchedules] = useState<RecurringSchedule[]>([])
   const [loading, setLoading] = useState(true)
   const [isAdding, setIsAdding] = useState(false)
@@ -279,7 +279,14 @@ export function RecurringTransactions({
   }
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this recurring schedule?')) return
+    const confirmed = await confirm({
+      title: 'Delete Recurring Schedule',
+      message: 'Are you sure you want to delete this recurring schedule? This action cannot be undone.',
+      confirmText: 'Delete',
+      cancelText: 'Cancel'
+    })
+    
+    if (!confirmed) return
 
     setDeletingId(id)
     try {
