@@ -704,7 +704,14 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
           <div className="space-y-2 sm:space-y-3 mb-4 sm:mb-6">
             <h4 className="text-[10px] sm:text-xs font-semibold text-muted-foreground uppercase tracking-wider px-1">Cash Accounts</h4>
             <div className="space-y-1.5 sm:space-y-2">
-              {accounts.filter(a => a.type === 'cash').map(account => {
+              {accounts.filter(a => a.type === 'cash').sort((a, b) => {
+                // Convert balances to USD for comparison
+                const aRate = exchangeRates[a.currency] || 1
+                const bRate = exchangeRates[b.currency] || 1
+                const aValueUSD = a.balance / aRate
+                const bValueUSD = b.balance / bRate
+                return bValueUSD - aValueUSD // Sort descending (most to least)
+              }).map(account => {
                 const percentage = cashPercentages[account.id] || 0
                 const isExcluded = account.exclude_from_cash_balance && account.exclude_from_net_worth
                 
@@ -840,7 +847,29 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
           <div className="space-y-2 sm:space-y-3">
             <h4 className="text-[10px] sm:text-xs font-semibold text-muted-foreground uppercase tracking-wider px-1">Investment Accounts</h4>
             <div className="space-y-1.5 sm:space-y-2">
-              {accounts.filter(a => a.type === 'investment').map(account => {
+              {accounts.filter(a => a.type === 'investment').sort((a, b) => {
+                // Calculate USD value for each investment account
+                let aValueUSD = 0
+                let bValueUSD = 0
+                
+                if (a.asset_type === 'manual') {
+                  const aRate = exchangeRates[a.currency] || 1
+                  aValueUSD = a.balance / aRate
+                } else if (a.symbol && quotes[a.symbol]) {
+                  const aPrice = quotes[a.symbol].regularMarketPrice || 0
+                  aValueUSD = a.balance * aPrice
+                }
+                
+                if (b.asset_type === 'manual') {
+                  const bRate = exchangeRates[b.currency] || 1
+                  bValueUSD = b.balance / bRate
+                } else if (b.symbol && quotes[b.symbol]) {
+                  const bPrice = quotes[b.symbol].regularMarketPrice || 0
+                  bValueUSD = b.balance * bPrice
+                }
+                
+                return bValueUSD - aValueUSD // Sort descending (most to least)
+              }).map(account => {
                 const percentage = investmentPercentages[account.id] || 0
                 const quote = account.symbol ? quotes[account.symbol] : null
                 const priceChange = quote?.regularMarketChangePercent || 0

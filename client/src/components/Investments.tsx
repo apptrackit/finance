@@ -270,12 +270,15 @@ export function Investments() {
     })
     console.log('======================')
     
+    // Sort positions by current value (descending, most to least)
+    const sortedPositions = [...positions].sort((a, b) => b.currentValue - a.currentValue)
+    
     const totalValue = positions.reduce((sum, pos) => sum + pos.currentValue, 0)
     const totalInvested = positions.reduce((sum, pos) => sum + pos.netInvested, 0)
     const totalGainLoss = totalValue - totalInvested
     const totalGainLossPercent = totalInvested > 0 ? (totalGainLoss / totalInvested) * 100 : 0
     
-    return { totalValue, totalInvested, totalGainLoss, totalGainLossPercent, positions }
+    return { totalValue, totalInvested, totalGainLoss, totalGainLossPercent, positions: sortedPositions }
   }
 
   const handleOpenDetail = (account: Account) => {
