@@ -368,7 +368,27 @@ export function Analytics({
     return accounts
       .filter(account => account.type !== 'investment')
       .map(account => {
-      const accountTransactions = transactions.filter(t => t.account_id === account.id)
+      const accountTransactions = transactions.filter(t => {
+        const txDate = new Date(t.date)
+        const matchesAccount = t.account_id === account.id
+        if (!matchesAccount) return false
+        
+        // Filter by date range
+        switch (period) {
+          case 'thisYear':
+            return isThisYear(txDate)
+          case 'lastYear':
+            const lastYear = new Date().getFullYear() - 1
+            return txDate.getFullYear() === lastYear
+          case 'custom':
+            return isWithinInterval(txDate, {
+              start: new Date(customDateRange.startDate),
+              end: new Date(customDateRange.endDate)
+            })
+          default:
+            return true
+        }
+      })
       
       // Group transactions by date and sum them
       const transactionsByDate: Record<string, number> = {}
@@ -381,7 +401,29 @@ export function Analytics({
       let runningBalance = account.balance
       
       const today = format(new Date(), 'yyyy-MM-dd')
-      dateBalances[today] = account.balance
+      
+      // Only add today's balance if it's within the date range
+      const todayInRange = (() => {
+        const todayDate = new Date(today)
+        switch (period) {
+          case 'thisYear':
+            return isThisYear(todayDate)
+          case 'lastYear':
+            const lastYear = new Date().getFullYear() - 1
+            return todayDate.getFullYear() === lastYear
+          case 'custom':
+            return isWithinInterval(todayDate, {
+              start: new Date(customDateRange.startDate),
+              end: new Date(customDateRange.endDate)
+            })
+          default:
+            return true
+        }
+      })()
+      
+      if (todayInRange) {
+        dateBalances[today] = account.balance
+      }
       
       // Get unique dates sorted newest first
       const uniqueDates = Object.keys(transactionsByDate).sort(
@@ -400,30 +442,15 @@ export function Analytics({
           formattedDate: format(new Date(date), 'MMM d'),
           balance: convertToMasterCurrency(balance, account.id)
         }))
-        .filter(d => {
-          const txDate = new Date(d.date)
-          switch (period) {
-            case 'thisYear':
-              return isThisYear(txDate)
-            case 'lastYear':
-              const lastYear = new Date().getFullYear() - 1
-              return txDate.getFullYear() === lastYear
-            case 'custom':
-              return isWithinInterval(txDate, {
-                start: new Date(customDateRange.startDate),
-                end: new Date(customDateRange.endDate)
-              })
-            default:
-              return true
-          }
-        })
         .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
       
       return {
         account,
-        data
+        data,
+        hasTransactions: accountTransactions.length > 0
       }
     })
+    .filter(({ hasTransactions }) => hasTransactions) // Only show accounts with transactions in the date range
   }, [accounts, transactions, period, exchangeRates, masterCurrency, customDateRange])
 
   // Get expense categories for filter
@@ -1106,7 +1133,7 @@ export function Analytics({
                   </div>
                 </CardHeader>
                 <CardContent className="px-2 sm:px-6">
-                  {data.length > 1 ? (
+                  {data.length > 0 ? (
                     <div className="h-36 sm:h-48">
                       <ResponsiveContainer width="100%" height="100%">
                         <AreaChart data={data} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
@@ -1168,7 +1195,7 @@ export function Analytics({
                     </div>
                   ) : (
                     <div className="h-36 sm:h-48 flex items-center justify-center text-muted-foreground text-sm">
-                      Need more data points
+                      No transaction data in this period
                     </div>
                   )}
                 </CardContent>
