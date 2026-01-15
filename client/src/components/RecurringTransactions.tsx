@@ -944,13 +944,13 @@ export function RecurringTransactions({
                   <div className="text-right">
                     <div className="text-xs space-x-2">
                       {impact.debits > 0 && (
-                        <span className="text-destructive">
-                          -{impact.debits.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})}
+                        <span className={`text-destructive ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
+                          {privacyMode === 'hidden' ? '-••••' : `-${impact.debits.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})}`}
                         </span>
                       )}
                       {impact.credits > 0 && (
-                        <span className="text-success">
-                          +{impact.credits.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})}
+                        <span className={`text-success ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
+                          {privacyMode === 'hidden' ? '+••••' : `+${impact.credits.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})}`}
                         </span>
                       )}
                     </div>
@@ -1423,12 +1423,15 @@ export function RecurringTransactions({
 
                   <div className="flex items-center gap-3">
                     <div className="text-right">
-                      <div className={`font-semibold ${schedule.amount < 0 ? 'text-destructive' : 'text-success'}`}>
-                        {schedule.amount < 0 ? '-' : '+'}{Math.abs(schedule.amount).toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})} {account?.currency}
+                      <div className={`font-semibold ${schedule.amount < 0 ? 'text-destructive' : 'text-success'} ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
+                        {privacyMode === 'hidden' 
+                          ? `${schedule.amount < 0 ? '-' : '+'}••••` 
+                          : `${schedule.amount < 0 ? '-' : '+'}${Math.abs(schedule.amount).toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})}`
+                        } {account?.currency}
                       </div>
                       {schedule.amount_to && toAccount && (
-                        <div className="text-xs text-muted-foreground">
-                          → {schedule.amount_to.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})} {toAccount.currency}
+                        <div className={`text-xs text-muted-foreground ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
+                          → {privacyMode === 'hidden' ? '••••' : schedule.amount_to.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})} {toAccount.currency}
                         </div>
                       )}
                     </div>
