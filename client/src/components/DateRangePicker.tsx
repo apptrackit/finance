@@ -19,7 +19,6 @@ export function DateRangePicker({ startDate, endDate, onApply, onCancel }: DateR
     // Check if picker would go off-screen and adjust positioning
     if (pickerRef.current) {
       const rect = pickerRef.current.getBoundingClientRect()
-      const viewportWidth = window.innerWidth
       
       // If picker goes off the left edge, switch to left-aligned
       if (rect.left < 8) {
