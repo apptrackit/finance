@@ -434,64 +434,64 @@ function App() {
                 <div className="flex gap-0.5 sm:gap-1 p-0.5 sm:p-1 rounded-lg sm:rounded-xl bg-secondary/50 border border-border/50">
                   <button
                     onClick={() => setView('dashboard')}
-                    className={`px-1.5 md:px-3 py-1 md:py-1.5 text-xs font-medium rounded-md md:rounded-lg transition-all flex items-center gap-1 md:gap-1.5 ${
+                    className={`px-1.5 lg:px-3 py-1 lg:py-1.5 text-xs font-medium rounded-md lg:rounded-lg transition-all flex items-center gap-1 lg:gap-1.5 ${
                       view === 'dashboard'
                         ? 'bg-primary text-primary-foreground shadow-sm'
                         : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
                     }`}
                   >
-                    <List className="h-3 w-3 md:h-3.5 md:w-3.5" />
-                    <span className="hidden md:inline">Dashboard</span>
+                    <List className="h-3 w-3 lg:h-3.5 lg:w-3.5" />
+                    <span className="hidden lg:inline">Dashboard</span>
                   </button>
                   <button
                     onClick={() => setView('analytics')}
-                    className={`px-1.5 md:px-3 py-1 md:py-1.5 text-xs font-medium rounded-md md:rounded-lg transition-all flex items-center gap-1 md:gap-1.5 ${
+                    className={`px-1.5 lg:px-3 py-1 lg:py-1.5 text-xs font-medium rounded-md lg:rounded-lg transition-all flex items-center gap-1 lg:gap-1.5 ${
                       view === 'analytics'
                         ? 'bg-primary text-primary-foreground shadow-sm'
                         : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
                     }`}
                   >
-                    <BarChart3 className="h-3 w-3 md:h-3.5 md:w-3.5" />
-                    <span className="hidden md:inline">Analytics</span>
+                    <BarChart3 className="h-3 w-3 lg:h-3.5 lg:w-3.5" />
+                    <span className="hidden lg:inline">Analytics</span>
                   </button>
                   <button
                     onClick={() => setView('investments')}
-                    className={`px-1.5 md:px-3 py-1 md:py-1.5 text-xs font-medium rounded-md md:rounded-lg transition-all flex items-center gap-1 md:gap-1.5 ${
+                    className={`px-1.5 lg:px-3 py-1 lg:py-1.5 text-xs font-medium rounded-md lg:rounded-lg transition-all flex items-center gap-1 lg:gap-1.5 ${
                       view === 'investments'
                         ? 'bg-primary text-primary-foreground shadow-sm'
                         : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
                     }`}
                   >
-                    <LineChart className="h-3 w-3 md:h-3.5 md:w-3.5" />
-                    <span className="hidden md:inline">Investments</span>
+                    <LineChart className="h-3 w-3 lg:h-3.5 lg:w-3.5" />
+                    <span className="hidden lg:inline">Investments</span>
                   </button>
                   <button
                     onClick={() => setView('recurring')}
-                    className={`px-1.5 md:px-3 py-1 md:py-1.5 text-xs font-medium rounded-md md:rounded-lg transition-all flex items-center gap-1 md:gap-1.5 ${
+                    className={`px-1.5 lg:px-3 py-1 lg:py-1.5 text-xs font-medium rounded-md lg:rounded-lg transition-all flex items-center gap-1 lg:gap-1.5 ${
                       view === 'recurring'
                         ? 'bg-primary text-primary-foreground shadow-sm'
                         : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
                     }`}
                   >
-                    <RefreshCw className="h-3 w-3 md:h-3.5 md:w-3.5" />
-                    <span className="hidden md:inline">Recurring</span>
+                    <RefreshCw className="h-3 w-3 lg:h-3.5 lg:w-3.5" />
+                    <span className="hidden lg:inline">Recurring</span>
                   </button>
                   <button
                     onClick={() => setView('settings')}
-                    className={`px-1.5 md:px-3 py-1 md:py-1.5 text-xs font-medium rounded-md md:rounded-lg transition-all flex items-center gap-1 md:gap-1.5 ${
+                    className={`px-1.5 lg:px-3 py-1 lg:py-1.5 text-xs font-medium rounded-md lg:rounded-lg transition-all flex items-center gap-1 lg:gap-1.5 ${
                       view === 'settings'
                         ? 'bg-primary text-primary-foreground shadow-sm'
                         : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
                     }`}
                   >
-                    <SettingsIcon className="h-3 w-3 md:h-3.5 md:w-3.5" />
-                    <span className="hidden md:inline">Settings</span>
+                    <SettingsIcon className="h-3 w-3 lg:h-3.5 lg:w-3.5" />
+                    <span className="hidden lg:inline">Settings</span>
                   </button>
                 </div>
                 {/* Privacy Toggle */}
                 <button
                   onClick={togglePrivacyMode}
-                  className={`p-1.5 md:p-2 rounded-md md:rounded-lg transition-all ${
+                  className={`p-1.5 lg:p-2 rounded-md lg:rounded-lg transition-all ${
                     privacyMode === 'hidden'
                       ? 'bg-primary/10 text-primary'
                       : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
@@ -499,12 +499,12 @@ function App() {
                   title={privacyMode === 'hidden' ? 'Show values' : 'Hide values'}
                 >
                   {privacyMode === 'hidden' ? (
-                    <EyeOff className="h-3.5 w-3.5 md:h-4 md:w-4" />
+                    <EyeOff className="h-3.5 w-3.5 lg:h-4 lg:w-4" />
                   ) : (
-                    <Eye className="h-3.5 w-3.5 md:h-4 md:w-4" />
+                    <Eye className="h-3.5 w-3.5 lg:h-4 lg:w-4" />
                   )}
                 </button>
-                <div className="hidden md:flex items-center gap-2">
+                <div className="hidden lg:flex items-center gap-2">
                   <div className="h-2 w-2 rounded-full bg-primary animate-pulse" />
                   <span className="text-xs text-muted-foreground">Synced</span>
                 </div>
