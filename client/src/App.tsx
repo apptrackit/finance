@@ -11,7 +11,7 @@ import { usePrivacy } from './context/PrivacyContext'
 import { startOfMonth, endOfMonth, format } from 'date-fns'
 
 
-const APP_VERSION = '1.3.5'
+const APP_VERSION = '1.3.6'
 
 
 
