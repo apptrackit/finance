@@ -19,7 +19,7 @@ export function DateRangePicker({ startDate, endDate, onApply, onCancel }: DateR
       <div className="fixed inset-0 bg-black/20 z-40 md:hidden" onClick={onCancel} />
       
       {/* Picker container */}
-      <div className="fixed md:absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 md:top-full md:right-0 md:left-auto md:translate-x-0 md:translate-y-0 mt-0 md:mt-2 p-4 bg-background border border-border rounded-lg shadow-lg z-50 min-w-[280px] max-w-[90vw]">
+      <div className="fixed md:absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 md:top-full md:right-0 md:left-auto md:translate-x-0 md:translate-y-0 mt-0 md:mt-2 p-4 bg-background border border-border rounded-lg shadow-lg z-50 w-[min(320px,calc(100vw-2rem))] md:w-auto md:min-w-[280px]">
         <div className="space-y-3">
           <div>
             <Label className="text-xs">Start Date</Label>
@@ -27,7 +27,7 @@ export function DateRangePicker({ startDate, endDate, onApply, onCancel }: DateR
               type="date"
               value={customRange.startDate}
               onChange={(e) => setCustomRange({ ...customRange, startDate: e.target.value })}
-              className="mt-1"
+              className="mt-1 w-full max-w-full [-webkit-appearance:none]"
             />
           </div>
           <div>
@@ -36,7 +36,7 @@ export function DateRangePicker({ startDate, endDate, onApply, onCancel }: DateR
               type="date"
               value={customRange.endDate}
               onChange={(e) => setCustomRange({ ...customRange, endDate: e.target.value })}
-              className="mt-1"
+              className="mt-1 w-full max-w-full [-webkit-appearance:none]"
             />
           </div>
           <div className="flex gap-2 pt-2">

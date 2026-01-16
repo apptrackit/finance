@@ -4,7 +4,7 @@ import { Label } from './ui/label'
 import { Select } from './ui/select'
 import { Input } from './ui/input'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card'
-import { Settings as SettingsIcon, Save, Download, Plus, Trash2, Tag, Pencil, Check, X, Eye, EyeOff, RefreshCw, Clock } from 'lucide-react'
+import { Settings as SettingsIcon, Save, Download, Plus, Trash2, Tag, Pencil, Check, X, Eye, EyeOff, RefreshCw, Clock, ChevronDown } from 'lucide-react'
 import { API_BASE_URL, apiFetch } from '../config'
 import { usePrivacy } from '../context/PrivacyContext'
 import { useAlert } from '../context/AlertContext'
@@ -144,6 +144,10 @@ export default function Settings() {
   // Emoji picker state
   const [showNewEmojiPicker, setShowNewEmojiPicker] = useState(false)
   const [showEditEmojiPicker, setShowEditEmojiPicker] = useState<string | null>(null)
+  
+  // Collapse state for category lists
+  const [showIncomeCategoryList, setShowIncomeCategoryList] = useState(false)
+  const [showExpenseCategoryList, setShowExpenseCategoryList] = useState(false)
 
   useEffect(() => {
     // Load saved currency from localStorage
@@ -652,12 +656,25 @@ export default function Settings() {
 
           {/* Income Categories */}
           <div className="space-y-3">
-            <h3 className="text-sm font-medium text-green-600">Income Categories</h3>
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-medium text-green-600">Income Categories</h3>
+              {!isLoadingCategories && incomeCategories.length > 0 && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setShowIncomeCategoryList(!showIncomeCategoryList)}
+                  className="text-xs"
+                >
+                  {showIncomeCategoryList ? 'Collapse' : 'Expand List'}
+                  <ChevronDown className={`ml-1 h-3 w-3 transition-transform ${showIncomeCategoryList ? 'rotate-180' : ''}`} />
+                </Button>
+              )}
+            </div>
             {isLoadingCategories ? (
               <p className="text-sm text-muted-foreground">Loading...</p>
             ) : incomeCategories.length === 0 ? (
               <p className="text-sm text-muted-foreground">No income categories yet</p>
-            ) : (
+            ) : showIncomeCategoryList ? (
               <div className="space-y-2">
                 {incomeCategories.map(category => (
                   editingCategoryId === category.id ? (
@@ -751,17 +768,30 @@ export default function Settings() {
                   )
                 ))}
               </div>
-            )}
+            ) : null}
           </div>
 
           {/* Expense Categories */}
           <div className="space-y-3">
-            <h3 className="text-sm font-medium text-red-600">Expense Categories</h3>
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-medium text-red-600">Expense Categories</h3>
+              {!isLoadingCategories && expenseCategories.length > 0 && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setShowExpenseCategoryList(!showExpenseCategoryList)}
+                  className="text-xs"
+                >
+                  {showExpenseCategoryList ? 'Collapse' : 'Expand List'}
+                  <ChevronDown className={`ml-1 h-3 w-3 transition-transform ${showExpenseCategoryList ? 'rotate-180' : ''}`} />
+                </Button>
+              )}
+            </div>
             {isLoadingCategories ? (
               <p className="text-sm text-muted-foreground">Loading...</p>
             ) : expenseCategories.length === 0 ? (
               <p className="text-sm text-muted-foreground">No expense categories yet</p>
-            ) : (
+            ) : showExpenseCategoryList ? (
               <div className="space-y-2">
                 {expenseCategories.map(category => (
                   editingCategoryId === category.id ? (
@@ -855,7 +885,7 @@ export default function Settings() {
                   )
                 ))}
               </div>
-            )}
+            ) : null}
           </div>
         </CardContent>
       </Card>
