@@ -2,7 +2,6 @@
 
 > A full-stack personal finance tracker with multi-currency support, investment portfolio monitoring, recurring transactions automation, and real-time market data integration.
 
-![Dashboard](screenshots/dashboard-empty.png)
 
 ## Table of Contents
 
@@ -36,24 +35,6 @@
 ## Overview
 
 Finance Manager is a modern, privacy-focused personal finance application that helps you track your net worth, manage multiple accounts, monitor investments, automate recurring transactions, and analyze spending patterns. Built on Cloudflare's edge network for global performance and security.
-
-## Screenshots
-
-### Dashboard View
-![Dashboard](screenshots/dashboard-empty.png)
-*Main dashboard showing accounts, transactions, and financial overview*
-
-### Analytics View
-![Analytics](screenshots/analytics-empty.png)
-*Detailed analytics with charts and insights*
-
-### Investments View
-![Investments](screenshots/investments-empty.png)
-*Portfolio tracking with real-time market data*
-
-### Recurring Transactions View
-![Recurring](screenshots/recurring-empty.png)
-*Automated recurring transaction management with calendar view*
 
 ---
 
@@ -189,7 +170,6 @@ finance/
 │   ├── vite.config.ts       # Vite & PWA configuration
 │   └── package.json
 │
-├── screenshots/              # Application screenshots
 ├── deploy.sh                 # Automated deployment script
 └── package.json             # Workspace root
 ```
