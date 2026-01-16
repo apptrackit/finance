@@ -90,7 +90,7 @@ function EmojiPicker({
   return (
     <div 
       ref={pickerRef}
-      className="absolute z-50 mt-1 p-3 bg-popover border rounded-lg shadow-lg w-64"
+      className="absolute z-50 mt-1 p-3 bg-popover border rounded-lg shadow-lg w-64 max-w-[calc(100vw-2rem)] left-0 right-auto"
       style={{ maxHeight: '300px', overflowY: 'auto' }}
     >
       <div className="grid grid-cols-8 gap-1">
