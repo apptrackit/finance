@@ -1469,34 +1469,34 @@ export function RecurringTransactions({
       )}
 
       {/* Calendar View */}
-      <Card className="p-6">
+      <Card className="p-3 md:p-6">
         <div className="mb-4">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold flex items-center gap-2">
-              <Calendar className="h-5 w-5 text-primary" />
+          <div className="flex flex-col md:flex-row items-start md:items-center justify-between mb-4 gap-3">
+            <h3 className="text-base md:text-lg font-semibold flex items-center gap-2">
+              <Calendar className="h-4 w-4 md:h-5 md:w-5 text-primary" />
               Recurring Transactions Calendar
             </h3>
-            <div className="flex items-center gap-2">
-              <Button size="sm" variant="outline" onClick={goToToday}>
+            <div className="flex items-center gap-1 md:gap-2 w-full md:w-auto">
+              <Button size="sm" variant="outline" onClick={goToToday} className="text-xs md:text-sm px-2 md:px-3">
                 Today
               </Button>
-              <Button size="sm" variant="outline" onClick={goToPreviousMonth}>
-                <ChevronLeft className="h-4 w-4" />
+              <Button size="sm" variant="outline" onClick={goToPreviousMonth} className="px-2 md:px-3">
+                <ChevronLeft className="h-3 w-3 md:h-4 md:w-4" />
               </Button>
-              <span className="text-sm font-medium min-w-[150px] text-center">
+              <span className="text-xs md:text-sm font-medium min-w-[120px] md:min-w-[150px] text-center">
                 {calendarData.monthName}
               </span>
-              <Button size="sm" variant="outline" onClick={goToNextMonth}>
-                <ChevronRight className="h-4 w-4" />
+              <Button size="sm" variant="outline" onClick={goToNextMonth} className="px-2 md:px-3">
+                <ChevronRight className="h-3 w-3 md:h-4 md:w-4" />
               </Button>
             </div>
           </div>
           
           {/* Calendar Grid */}
-          <div className="grid grid-cols-7 gap-1">
+          <div className="grid grid-cols-7 gap-0.5 md:gap-1">
             {/* Day headers */}
             {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(day => (
-              <div key={day} className="text-center text-xs font-semibold text-muted-foreground py-2">
+              <div key={day} className="text-center text-[10px] md:text-xs font-semibold text-muted-foreground py-1 md:py-2">
                 {day}
               </div>
             ))}
@@ -1510,7 +1510,7 @@ export function RecurringTransactions({
               return (
                 <div
                   key={idx}
-                  className={`min-h-[80px] border rounded p-1 ${
+                  className={`min-h-[60px] md:min-h-[80px] border rounded p-0.5 md:p-1 ${
                     !day.date ? 'bg-muted/30' : 
                     isToday ? 'border-primary border-2 bg-primary/5' :
                     isPast ? 'bg-muted/50 opacity-40' : 'bg-background'
@@ -1518,15 +1518,15 @@ export function RecurringTransactions({
                 >
                   {day.dayNumber && (
                     <>
-                      <div className="flex items-center justify-between mb-1">
-                        <div className={`text-xs font-medium ${
+                      <div className="flex items-center justify-between mb-0.5 md:mb-1">
+                        <div className={`text-[11px] md:text-xs font-medium ${
                           isPast ? 'text-muted-foreground/50' :
                           isToday ? 'text-primary font-bold' : 'text-muted-foreground'
                         }`}>
                           {day.dayNumber}
                         </div>
                         {day.monthLabel && (
-                          <div className="text-[10px] font-semibold text-muted-foreground/70 uppercase">
+                          <div className="text-[9px] md:text-[10px] font-semibold text-muted-foreground/70 uppercase">
                             {day.monthLabel}
                           </div>
                         )}
@@ -1538,10 +1538,31 @@ export function RecurringTransactions({
                             : null
                           const account = accounts.find(a => a.id === tx.schedule.account_id)
                           
+                          // On mobile, show icon only for first 2 transactions, then show count
+                          const isMobile = window.innerWidth < 768
+                          const showAsIcon = isMobile && txIdx < 2
+                          const showCount = isMobile && txIdx === 2 && day.transactions.length > 2
+                          
+                          if (showCount) {
+                            return (
+                              <div
+                                key={txIdx}
+                                className="text-[9px] md:text-[10px] px-0.5 md:px-1 py-0.5 rounded text-center bg-muted text-muted-foreground font-semibold"
+                                title={`${day.transactions.length - 2} more transactions`}
+                              >
+                                +{day.transactions.length - 2}
+                              </div>
+                            )
+                          }
+                          
+                          if (isMobile && txIdx > 2) {
+                            return null
+                          }
+                          
                           return (
                             <div
                               key={txIdx}
-                              className={`text-[10px] px-1 py-0.5 rounded truncate ${
+                              className={`text-[9px] md:text-[10px] px-0.5 md:px-1 py-0.5 rounded truncate flex items-center justify-center ${
                                 tx.amount < 0 
                                   ? 'bg-destructive/10 text-destructive' 
                                   : 'bg-success/10 text-success'
@@ -1551,8 +1572,16 @@ export function RecurringTransactions({
                                 Math.abs(tx.amount).toLocaleString('hu-HU', { minimumFractionDigits: 0, maximumFractionDigits: 0 })
                               }`}
                             >
-                              <span className={privacyMode === 'hidden' ? 'select-none' : ''}>
-                                {category?.icon || ''} {privacyMode === 'hidden' ? '••' : Math.abs(tx.amount).toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})}
+                              <span className={`${privacyMode === 'hidden' ? 'select-none' : ''} truncate`}>
+                                {showAsIcon ? (
+                                  <span className="text-xs md:text-sm">{category?.icon || '📝'}</span>
+                                ) : (
+                                  <>
+                                    <span className="hidden md:inline">{category?.icon || ''} </span>
+                                    <span className="hidden md:inline">{privacyMode === 'hidden' ? '••' : Math.abs(tx.amount).toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})}</span>
+                                    <span className="md:hidden text-xs">{category?.icon || '📝'}</span>
+                                  </>
+                                )}
                               </span>
                             </div>
                           )
