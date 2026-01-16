@@ -77,7 +77,7 @@ function CustomSelect({
       </button>
       
       {isOpen && (
-        <div className="absolute right-0 top-full mt-1 z-50 min-w-[140px] bg-card border border-border rounded-lg shadow-xl py-1 animate-in fade-in-0 zoom-in-95">
+        <div className="absolute right-0 left-auto top-full mt-1 z-50 min-w-[140px] max-w-[calc(100vw-2rem)] bg-card border border-border rounded-lg shadow-xl py-1 animate-in fade-in-0 zoom-in-95">
           {options.map((option) => (
             <button
               key={option.value}
@@ -678,12 +678,12 @@ export function Analytics({
   return (
     <div className="space-y-6">
       {/* Period Selector */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+      <div className="flex flex-col items-start gap-3">
         <div className="flex items-center gap-2">
           <BarChart3 className="h-5 w-5 text-primary" />
           <h2 className="text-lg font-semibold">Analytics</h2>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
           <div className="relative">
             <div className="flex items-center gap-1 sm:gap-2">
               {period === 'custom' && (
@@ -773,12 +773,12 @@ export function Analytics({
               />
             )}
           </div>
-          <div className="flex gap-1 p-1 rounded-xl bg-secondary/50 border border-border/50 overflow-x-auto w-full sm:w-auto">
+          <div className="flex gap-1 p-1 rounded-xl bg-secondary/50 border border-border/50 w-full sm:w-auto">
             {(Object.keys(periodLabels).filter(p => p !== 'custom') as TimePeriod[]).map((p) => (
               <button
                 key={p}
                 onClick={() => setPeriod(p)}
-                className={`px-2 sm:px-3 py-1.5 text-xs font-medium rounded-lg transition-all whitespace-nowrap flex-shrink-0 ${
+                className={`flex-1 sm:flex-none px-2 sm:px-3 py-1.5 text-xs font-medium rounded-lg transition-all whitespace-nowrap ${
                   period === p
                     ? 'bg-primary text-primary-foreground shadow-sm'
                     : 'text-muted-foreground hover:text-foreground hover:bg-background/50'

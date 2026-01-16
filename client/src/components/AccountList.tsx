@@ -718,12 +718,17 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
                 return (
                   <div
                     key={account.id}
-                    className={`group relative overflow-hidden rounded-lg sm:rounded-xl transition-all duration-300 ${
+                    className={`group relative overflow-hidden rounded-lg sm:rounded-xl transition-all duration-300 cursor-pointer ${
                       isExcluded
                         ? 'bg-gradient-to-br from-gray-500/30 to-gray-600/20 border border-gray-500/40 hover:border-gray-500/60 opacity-80'
                         : 'bg-gradient-to-br from-emerald-500/10 to-emerald-500/5 border border-emerald-500/20 hover:border-emerald-500/40'
                     }`}
-                    onClick={() => setActiveAccountId(activeAccountId === account.id ? null : account.id)}
+                    onClick={() => {
+                      // On mobile, first click shows options, hover works on desktop
+                      if (window.innerWidth < 768) {
+                        setActiveAccountId(activeAccountId === account.id ? null : account.id)
+                      }
+                    }}
                   >
                     {/* Percentage bar background (hide if excluded) */}
                     {!isExcluded && (
@@ -734,7 +739,7 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
                     )}
                     
                     <div className="relative p-2.5 sm:p-4 flex items-center justify-between">
-                      <div className="flex items-center gap-2 sm:gap-3 flex-1">
+                      <div className="flex items-center gap-2 sm:gap-3 flex-1 pointer-events-none">
                         <div className={`h-9 w-9 sm:h-12 sm:w-12 rounded-lg sm:rounded-xl flex items-center justify-center shadow-lg ${
                           isExcluded
                             ? 'bg-gradient-to-br from-gray-600 to-gray-700 shadow-gray-600/30'
@@ -758,12 +763,12 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
                       </div>
                       
                       {/* Blur background overlay */}
-                      <div className={`absolute inset-0 backdrop-blur-sm bg-background/30 rounded-xl transition-opacity pointer-events-none ${
-                        activeAccountId === account.id || 'opacity-0 md:group-hover:opacity-100'
-                      } ${activeAccountId === account.id ? 'opacity-100' : ''}`} />
+                      <div className={`absolute inset-0 backdrop-blur-sm bg-background/30 rounded-xl transition-opacity ${
+                        activeAccountId === account.id ? 'opacity-100 pointer-events-auto' : 'opacity-0 md:group-hover:opacity-100 pointer-events-none md:group-hover:pointer-events-auto'
+                      }`} />
                       
-                      <div className={`absolute inset-0 flex items-center justify-center gap-3 transition-opacity z-10 ${
-                        activeAccountId === account.id ? 'opacity-100' : 'opacity-0 md:group-hover:opacity-100'
+                      <div className={`absolute inset-0 flex items-center justify-center gap-3 transition-opacity ${
+                        activeAccountId === account.id ? 'opacity-100 pointer-events-auto z-20' : 'opacity-0 md:group-hover:opacity-100 pointer-events-none md:group-hover:pointer-events-auto z-10'
                       }`}>
                         <Button
                           size="icon"
@@ -777,6 +782,9 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
                           }`}
                           onClick={(e) => {
                             e.stopPropagation()
+                            if (window.innerWidth < 768 && activeAccountId !== account.id) {
+                              return
+                            }
                             handleExcludeToggle(account)
                           }}
                           title={
@@ -800,6 +808,9 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
                           className={`h-10 w-10 ${isLocked(account.id) ? 'text-amber-500 hover:bg-amber-500/20' : 'hover:bg-emerald-500/20'}`}
                           onClick={(e) => {
                             e.stopPropagation()
+                            if (window.innerWidth < 768 && activeAccountId !== account.id) {
+                              return
+                            }
                             handleLockToggle(account.id)
                           }}
                           title={isLocked(account.id) ? 'Unlock account' : 'Lock account'}
@@ -814,6 +825,9 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
                               className="h-10 w-10 hover:bg-emerald-500/20"
                               onClick={(e) => {
                                 e.stopPropagation()
+                                if (window.innerWidth < 768 && activeAccountId !== account.id) {
+                                  return
+                                }
                                 handleEdit(account)
                               }}
                             >
@@ -877,8 +891,13 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
                 return (
                   <div
                     key={account.id}
-                    className="group relative overflow-hidden rounded-lg sm:rounded-xl bg-gradient-to-br from-blue-500/10 to-purple-500/5 border border-blue-500/20 hover:border-blue-500/40 transition-all duration-300"
-                    onClick={() => setActiveAccountId(activeAccountId === account.id ? null : account.id)}
+                    className="group relative overflow-hidden rounded-lg sm:rounded-xl bg-gradient-to-br from-blue-500/10 to-purple-500/5 border border-blue-500/20 hover:border-blue-500/40 transition-all duration-300 cursor-pointer"
+                    onClick={() => {
+                      // On mobile, first click shows options, hover works on desktop
+                      if (window.innerWidth < 768) {
+                        setActiveAccountId(activeAccountId === account.id ? null : account.id)
+                      }
+                    }}
                   >
                     {/* Percentage bar background */}
                     <div 
@@ -887,7 +906,7 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
                     />
                     
                     <div className="relative p-2.5 sm:p-4 flex items-center justify-between">
-                      <div className="flex items-center gap-2 sm:gap-3 flex-1">
+                      <div className="flex items-center gap-2 sm:gap-3 flex-1 pointer-events-none">
                         <div className={`h-9 w-9 sm:h-12 sm:w-12 rounded-lg sm:rounded-xl flex items-center justify-center shadow-lg font-bold text-xs sm:text-sm ${
                           account.asset_type === 'crypto' 
                             ? 'bg-gradient-to-br from-orange-500 to-orange-600 text-white shadow-orange-500/25' 
@@ -933,12 +952,12 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
                       </div>
                       
                       {/* Blur background overlay */}
-                      <div className={`absolute inset-0 backdrop-blur-sm bg-background/30 rounded-xl transition-opacity pointer-events-none ${
-                        activeAccountId === account.id || 'opacity-0 md:group-hover:opacity-100'
-                      } ${activeAccountId === account.id ? 'opacity-100' : ''}`} />
+                      <div className={`absolute inset-0 backdrop-blur-sm bg-background/30 rounded-xl transition-opacity ${
+                        activeAccountId === account.id ? 'opacity-100 pointer-events-auto' : 'opacity-0 md:group-hover:opacity-100 pointer-events-none md:group-hover:pointer-events-auto'
+                      }`} />
                       
-                      <div className={`absolute inset-0 flex items-center justify-center gap-3 transition-opacity z-10 ${
-                        activeAccountId === account.id ? 'opacity-100' : 'opacity-0 md:group-hover:opacity-100'
+                      <div className={`absolute inset-0 flex items-center justify-center gap-3 transition-opacity ${
+                        activeAccountId === account.id ? 'opacity-100 pointer-events-auto z-20' : 'opacity-0 md:group-hover:opacity-100 pointer-events-none md:group-hover:pointer-events-auto z-10'
                       }`}>
                         <Button
                           size="icon"
@@ -946,6 +965,9 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
                           className={`h-10 w-10 ${isLocked(account.id) ? 'text-amber-500 hover:bg-amber-500/20' : 'hover:bg-blue-500/20'}`}
                           onClick={(e) => {
                             e.stopPropagation()
+                            if (window.innerWidth < 768 && activeAccountId !== account.id) {
+                              return
+                            }
                             handleLockToggle(account.id)
                           }}
                           title={isLocked(account.id) ? 'Unlock account' : 'Lock account'}
@@ -960,6 +982,9 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
                               className="h-10 w-10 hover:bg-blue-500/20"
                               onClick={(e) => {
                                 e.stopPropagation()
+                                if (window.innerWidth < 768 && activeAccountId !== account.id) {
+                                  return
+                                }
                                 handleEdit(account)
                               }}
                             >
@@ -972,6 +997,9 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
                               disabled={deletingId === account.id}
                               onClick={(e) => {
                                 e.stopPropagation()
+                                if (window.innerWidth < 768 && activeAccountId !== account.id) {
+                                  return
+                                }
                                 handleDelete(account.id)
                               }}
                             >
