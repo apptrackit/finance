@@ -809,7 +809,7 @@ export function TransactionList({
             <Select
               value={categoryFilter}
               onChange={(e) => setCategoryFilter(e.target.value)}
-              className="h-7 sm:h-8 text-[11px] sm:text-xs w-auto min-w-[120px]"
+              className="h-8 sm:h-9 text-xs sm:text-sm w-auto min-w-[140px] sm:min-w-[160px]"
             >
               <option value="all">All Transactions</option>
               <option value="all-expenses">All Expenses</option>
@@ -835,7 +835,7 @@ export function TransactionList({
             <Select
               value={sortOrder}
               onChange={(e) => setSortOrder(e.target.value as 'date' | 'amount-high' | 'amount-low')}
-              className="h-7 sm:h-8 text-[11px] sm:text-xs w-auto min-w-[140px]"
+              className="h-8 sm:h-9 text-xs sm:text-sm w-auto min-w-[100px] sm:min-w-[120px]"
             >
               <option value="date">Newest</option>
               <option value="amount-high">↓ High to Low</option>
