@@ -12,7 +12,7 @@ import { startOfMonth, endOfMonth, format } from 'date-fns'
 
 
 
-const APP_VERSION = '1.3.8'
+const APP_VERSION = '1.3.9'
 
 
 
