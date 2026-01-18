@@ -149,12 +149,23 @@ export default function Settings() {
   const [showIncomeCategoryList, setShowIncomeCategoryList] = useState(false)
   const [showExpenseCategoryList, setShowExpenseCategoryList] = useState(false)
 
+  // Spending estimate settings
+  const [enableSpendingEstimates, setEnableSpendingEstimates] = useState(false)
+  const [includeRecurringInEstimates, setIncludeRecurringInEstimates] = useState(true)
+
   useEffect(() => {
     // Load saved currency from localStorage
     const saved = localStorage.getItem(STORAGE_KEY)
     if (saved) {
       setMasterCurrency(saved)
     }
+    
+    // Load spending estimate settings
+    const enabledEstimates = localStorage.getItem('finance_enable_spending_estimates')
+    setEnableSpendingEstimates(enabledEstimates === 'true')
+    
+    const includeRecurring = localStorage.getItem('finance_include_recurring_estimates')
+    setIncludeRecurringInEstimates(includeRecurring !== 'false') // Default true
     
     // Load categories
     loadCategories()
@@ -924,6 +935,65 @@ export default function Settings() {
                   Accounts in other currencies will be automatically converted.
                 </p>
               </div>
+            </div>
+
+            <div>
+              <h3 className="text-sm font-medium mb-3">Spending Estimates</h3>
+              <div className="flex items-center justify-between p-4 rounded-lg border bg-secondary/20">
+                <div className="space-y-1">
+                  <div className="font-medium">Enable spending estimates</div>
+                  <div className="text-sm text-muted-foreground">
+                    Show AI-powered spending predictions in Analytics based on your transaction history.
+                  </div>
+                </div>
+                <button
+                  onClick={() => {
+                    const newValue = !enableSpendingEstimates
+                    setEnableSpendingEstimates(newValue)
+                    localStorage.setItem('finance_enable_spending_estimates', newValue ? 'true' : 'false')
+                  }}
+                  className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 ${
+                    enableSpendingEstimates ? 'bg-primary' : 'bg-muted'
+                  }`}
+                  role="switch"
+                  aria-checked={enableSpendingEstimates}
+                >
+                  <span
+                    className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                      enableSpendingEstimates ? 'translate-x-5' : 'translate-x-0'
+                    }`}
+                  />
+                </button>
+              </div>
+
+              {enableSpendingEstimates && (
+                <div className="flex items-center justify-between p-4 rounded-lg border bg-secondary/20 ml-6 mt-2">
+                  <div className="space-y-1">
+                    <div className="font-medium">Include recurring transactions</div>
+                    <div className="text-sm text-muted-foreground">
+                      Factor in your recurring expenses when calculating estimates.
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => {
+                      const newValue = !includeRecurringInEstimates
+                      setIncludeRecurringInEstimates(newValue)
+                      localStorage.setItem('finance_include_recurring_estimates', newValue ? 'true' : 'false')
+                    }}
+                    className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 ${
+                      includeRecurringInEstimates ? 'bg-primary' : 'bg-muted'
+                    }`}
+                    role="switch"
+                    aria-checked={includeRecurringInEstimates}
+                  >
+                    <span
+                      className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                        includeRecurringInEstimates ? 'translate-x-5' : 'translate-x-0'
+                      }`}
+                    />
+                  </button>
+                </div>
+              )}
             </div>
           </div>
 

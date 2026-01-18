@@ -71,6 +71,7 @@ export function setupRoutes(
 
   // Dashboard
   app.get('/dashboard/net-worth', (c) => dashboardController.getNetWorth(c))
+  app.get('/dashboard/spending-estimate', (c) => dashboardController.getSpendingEstimate(c))
 
   // Market Data
   app.get('/market/search', (c) => marketDataController.search(c))

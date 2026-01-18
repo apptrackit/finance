@@ -12,7 +12,8 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
-  Check
+  Check,
+  Sparkles
 } from 'lucide-react'
 import {
   AreaChart,
@@ -31,6 +32,8 @@ import {
 import { format, subMonths, startOfMonth, endOfMonth, isWithinInterval, subYears, startOfYear, endOfYear, isThisYear, startOfWeek, endOfWeek, addWeeks, addDays, differenceInDays } from 'date-fns'
 import { usePrivacy } from '../context/PrivacyContext'
 import { DateRangePicker } from './DateRangePicker'
+import { API_BASE_URL } from '../config'
+import { apiFetch } from '../config'
 
 // Custom Dropdown Component
 function CustomSelect({ 
@@ -169,7 +172,22 @@ export function Analytics({
   })
   const [showDatePicker, setShowDatePicker] = useState(false)
   
+  // Spending estimate state
+  const [weekEstimate, setWeekEstimate] = useState<any>(null)
+  const [monthEstimate, setMonthEstimate] = useState<any>(null)
+  const [enableSpendingEstimates, setEnableSpendingEstimates] = useState(false)
+  const [includeRecurringInEstimates, setIncludeRecurringInEstimates] = useState(true)
+  
   const { privacyMode } = usePrivacy()
+
+  // Load spending estimate settings
+  useEffect(() => {
+    const enabled = localStorage.getItem('finance_enable_spending_estimates')
+    setEnableSpendingEstimates(enabled === 'true')
+    
+    const includeRecurring = localStorage.getItem('finance_include_recurring_estimates')
+    setIncludeRecurringInEstimates(includeRecurring !== 'false')
+  }, [])
 
   // Helper function to calculate Y-axis domain for charts
   const calculateYAxisDomain = (data: { balance: number }[]) => {
@@ -208,6 +226,38 @@ export function Analytics({
     }
     fetchRates()
   }, [masterCurrency])
+
+  // Fetch spending estimates
+  useEffect(() => {
+    const fetchEstimates = async () => {
+      if (!enableSpendingEstimates) {
+        setWeekEstimate(null)
+        setMonthEstimate(null)
+        return
+      }
+      
+      try {
+        const [weekRes, monthRes] = await Promise.all([
+            apiFetch(`${API_BASE_URL}/dashboard/spending-estimate?period=week&currency=${masterCurrency}&includeRecurring=${includeRecurringInEstimates}`),
+            apiFetch(`${API_BASE_URL}/dashboard/spending-estimate?period=month&currency=${masterCurrency}&includeRecurring=${includeRecurringInEstimates}`)
+        ])
+        
+        if (weekRes.ok) {
+          const weekData = await weekRes.json()
+          setWeekEstimate(weekData)
+        }
+        
+        if (monthRes.ok) {
+          const monthData = await monthRes.json()
+          setMonthEstimate(monthData)
+        }
+      } catch (error) {
+        console.error('Failed to fetch spending estimates:', error)
+      }
+    }
+    
+    fetchEstimates()
+  }, [masterCurrency, enableSpendingEstimates, includeRecurringInEstimates])
 
   // Convert amount to master currency
   const convertToMasterCurrency = (amount: number, accountId: string): number => {
@@ -860,6 +910,97 @@ export function Analytics({
               </CardContent>
             </Card>
           </div>
+
+          {/* Spending Estimates */}
+          {enableSpendingEstimates && (weekEstimate || monthEstimate) && (
+            <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2">
+              {/* Next Week Estimate */}
+              {weekEstimate && (
+                <Card className="bg-gradient-to-br from-violet-500/10 to-transparent border-violet-500/20">
+                  <CardHeader className="pb-2 px-4 sm:px-6">
+                    <div className="flex items-center gap-2">
+                      <Sparkles className="h-4 w-4 text-violet-500" />
+                      <CardTitle className="text-sm sm:text-base">Next Week Estimate</CardTitle>
+                    </div>
+                    <p className="text-xs text-muted-foreground">Week {weekEstimate.week_of_month} of month</p>
+                  </CardHeader>
+                  <CardContent className="px-4 sm:px-6">
+                    <div className="space-y-3">
+                      <div>
+                        <p className={`text-2xl sm:text-3xl font-bold text-violet-500 ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
+                          {privacyMode === 'hidden' ? '••••••' : `${weekEstimate.estimate_amount.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})}`} <span className="text-base sm:text-lg">{masterCurrency}</span>
+                        </p>
+                        <div className="flex items-center gap-2 mt-1">
+                          <span className="text-xs text-muted-foreground">Confidence: {weekEstimate.confidence_level}%</span>
+                          <span className={`text-xs ${weekEstimate.variance_percentage > 0 ? 'text-amber-500' : 'text-success'}`}>
+                            {weekEstimate.variance_percentage > 0 ? '↑' : '↓'} {Math.abs(weekEstimate.variance_percentage).toFixed(1)}% vs avg
+                          </span>
+                        </div>
+                      </div>
+                      
+                      <div className="grid grid-cols-2 gap-2 text-xs">
+                        <div className="p-2 rounded-lg bg-secondary/50">
+                          <p className="text-muted-foreground">Recurring</p>
+                          <p className={`font-semibold ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
+                            {privacyMode === 'hidden' ? '••••' : weekEstimate.breakdown.recurring.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})}
+                          </p>
+                        </div>
+                        <div className="p-2 rounded-lg bg-secondary/50">
+                          <p className="text-muted-foreground">One-time</p>
+                          <p className={`font-semibold ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
+                            {privacyMode === 'hidden' ? '••••' : weekEstimate.breakdown.non_recurring.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Next Month Estimate */}
+              {monthEstimate && (
+                <Card className="bg-gradient-to-br from-indigo-500/10 to-transparent border-indigo-500/20">
+                  <CardHeader className="pb-2 px-4 sm:px-6">
+                    <div className="flex items-center gap-2">
+                      <Sparkles className="h-4 w-4 text-indigo-500" />
+                      <CardTitle className="text-sm sm:text-base">Next Month Estimate</CardTitle>
+                    </div>
+                    <p className="text-xs text-muted-foreground">Based on historical patterns</p>
+                  </CardHeader>
+                  <CardContent className="px-4 sm:px-6">
+                    <div className="space-y-3">
+                      <div>
+                        <p className={`text-2xl sm:text-3xl font-bold text-indigo-500 ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
+                          {privacyMode === 'hidden' ? '••••••' : `${monthEstimate.estimate_amount.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})}`} <span className="text-base sm:text-lg">{masterCurrency}</span>
+                        </p>
+                        <div className="flex items-center gap-2 mt-1">
+                          <span className="text-xs text-muted-foreground">Confidence: {monthEstimate.confidence_level}%</span>
+                          <span className={`text-xs ${monthEstimate.variance_percentage > 0 ? 'text-amber-500' : 'text-success'}`}>
+                            {monthEstimate.variance_percentage > 0 ? '↑' : '↓'} {Math.abs(monthEstimate.variance_percentage).toFixed(1)}% vs avg
+                          </span>
+                        </div>
+                      </div>
+                      
+                      <div className="grid grid-cols-2 gap-2 text-xs">
+                        <div className="p-2 rounded-lg bg-secondary/50">
+                          <p className="text-muted-foreground">Recurring</p>
+                          <p className={`font-semibold ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
+                            {privacyMode === 'hidden' ? '••••' : monthEstimate.breakdown.recurring.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})}
+                          </p>
+                        </div>
+                        <div className="p-2 rounded-lg bg-secondary/50">
+                          <p className="text-muted-foreground">One-time</p>
+                          <p className={`font-semibold ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
+                            {privacyMode === 'hidden' ? '••••' : monthEstimate.breakdown.non_recurring.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+            </div>
+          )}
 
           {/* Charts Grid */}
           <div className="grid gap-4 sm:gap-6 grid-cols-1 lg:grid-cols-2">
