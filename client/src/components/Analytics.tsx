@@ -930,8 +930,20 @@ export function Analytics({
                         <p className={`text-2xl sm:text-3xl font-bold text-primary ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
                           {privacyMode === 'hidden' ? '••••••' : `${weekEstimate.estimate_amount.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})}`} <span className="text-base sm:text-lg text-muted-foreground">{masterCurrency}</span>
                         </p>
-                        <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground">
-                          <span>Confidence: {weekEstimate.confidence_level}%</span>
+                        <div className="flex flex-col gap-0.5 mt-1 text-xs text-muted-foreground">
+                          <div className="flex items-center gap-2">
+                            <span>Confidence: {weekEstimate.confidence_level}%</span>
+                          </div>
+                          {weekEstimate.current_period_actual > 0 && (
+                            <div className={privacyMode === 'hidden' ? 'select-none' : ''}>
+                              This week so far: {privacyMode === 'hidden' ? '••••' : weekEstimate.current_period_actual.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})} {masterCurrency}
+                            </div>
+                          )}
+                          {weekEstimate.previous_period_actual > 0 && (
+                            <div className={privacyMode === 'hidden' ? 'select-none' : ''}>
+                              Last week: {privacyMode === 'hidden' ? '••••' : weekEstimate.previous_period_actual.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})} {masterCurrency}
+                            </div>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -959,8 +971,20 @@ export function Analytics({
                         <p className={`text-2xl sm:text-3xl font-bold text-primary ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
                           {privacyMode === 'hidden' ? '••••••' : `${monthEstimate.estimate_amount.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})}`} <span className="text-base sm:text-lg text-muted-foreground">{masterCurrency}</span>
                         </p>
-                        <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground">
-                          <span>Confidence: {monthEstimate.confidence_level}%</span>
+                        <div className="flex flex-col gap-0.5 mt-1 text-xs text-muted-foreground">
+                          <div className="flex items-center gap-2">
+                            <span>Confidence: {monthEstimate.confidence_level}%</span>
+                          </div>
+                          {monthEstimate.current_period_actual > 0 && (
+                            <div className={privacyMode === 'hidden' ? 'select-none' : ''}>
+                              This month so far: {privacyMode === 'hidden' ? '••••' : monthEstimate.current_period_actual.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})} {masterCurrency}
+                            </div>
+                          )}
+                          {monthEstimate.previous_period_actual > 0 && (
+                            <div className={privacyMode === 'hidden' ? 'select-none' : ''}>
+                              Last month: {privacyMode === 'hidden' ? '••••' : monthEstimate.previous_period_actual.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})} {masterCurrency}
+                            </div>
+                          )}
                         </div>
                       </div>
                     </div>

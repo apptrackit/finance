@@ -82,8 +82,11 @@ export class DashboardService {
 
     const today = new Date()
     
-    // Calculate week of month (1-4+)
-    const weekOfMonth = Math.ceil(today.getDate() / 7)
+    // Calculate week of month based on how many full weeks have passed since month start
+    // This ensures consistency across months that start on different days
+    const startOfCurrentMonth = this.getStartOfMonth(today)
+    const daysSinceMonthStart = Math.floor((today.getTime() - startOfCurrentMonth.getTime()) / (1000 * 60 * 60 * 24))
+    const weekOfMonth = Math.floor(daysSinceMonthStart / 7) + 1
     
     // For recurring calculations, use start of NEXT period (since we're estimating future spending)
     const periodStartDate = period === 'week'
@@ -124,19 +127,22 @@ export class DashboardService {
 
     // Combine recent and full history (70% recent, 30% baseline)
     const baseEstimate = (recentAvg * 0.7) + (fullAvg * 0.3)
+    const totalEstimate = Math.abs(baseEstimate)
 
-    // Get recurring transactions for the period
-    let recurringAmount = 0
-    if (this.recurringScheduleRepo) {
-      recurringAmount = await this.calculateRecurringForPeriod(
-        period,
-        currency,
-        rates,
-        categoryId,
-        periodStartStr,
-        weekOfMonth
-      )
-    }
+    // Calculate actual spending in current period (so far)
+    const currentPeriodActual = await this.calculateCurrentPeriodSpending(
+      convertedTransactions,
+      period,
+      today
+    )
+
+    // Calculate actual spending in previous period
+    const previousPeriodActual = await this.calculatePreviousPeriodSpending(
+      convertedTransactions,
+      period,
+      weekOfMonth,
+      today
+    )
 
     // Calculate category breakdown
     const categoryBreakdown = await this.calculateCategoryBreakdown(
@@ -146,7 +152,6 @@ export class DashboardService {
       currency
     )
 
-    const totalEstimate = Math.abs(baseEstimate) + recurringAmount
     const variancePercentage = fullAvg !== 0 
       ? ((totalEstimate - Math.abs(fullAvg)) / Math.abs(fullAvg)) * 100 
       : 0
@@ -159,10 +164,12 @@ export class DashboardService {
       historical_average_recent: Math.abs(recentAvg),
       historical_average_full: Math.abs(fullAvg),
       variance_percentage: variancePercentage,
+      current_period_actual: currentPeriodActual,
+      previous_period_actual: previousPeriodActual,
       week_of_month: period === 'week' ? weekOfMonth : undefined,
       breakdown: {
-        recurring: recurringAmount,
-        non_recurring: Math.abs(baseEstimate)
+        recurring: 0, // Recurring is already included in historical averages
+        non_recurring: totalEstimate
       },
       category_breakdown: categoryBreakdown
     }
@@ -250,6 +257,53 @@ export class DashboardService {
     return { recentAvg, fullAvg, confidence }
   }
 
+  private async calculateCurrentPeriodSpending(
+    transactions: Array<Transaction & { convertedAmount: number }>,
+    period: 'week' | 'month',
+    today: Date
+  ): Promise<number> {
+    const currentPeriodStart = period === 'week'
+      ? this.getStartOfWeek(today)
+      : this.getStartOfMonth(today)
+    const currentPeriodStartStr = this.formatDate(currentPeriodStart)
+    const todayStr = this.formatDate(today)
+
+    // Filter transactions in current period up to today
+    const currentPeriodTxs = transactions.filter(t => {
+      return t.date >= currentPeriodStartStr && t.date <= todayStr
+    })
+
+    // Sum the absolute value of expenses
+    const total = currentPeriodTxs.reduce((sum, t) => sum + Math.abs(t.convertedAmount), 0)
+    return total
+  }
+
+  private async calculatePreviousPeriodSpending(
+    transactions: Array<Transaction & { convertedAmount: number }>,
+    period: 'week' | 'month',
+    weekOfMonth: number,
+    today: Date
+  ): Promise<number> {
+    const previousPeriodStart = period === 'week'
+      ? this.getStartOfPreviousWeek(today)
+      : this.getStartOfPreviousMonth(today)
+    const previousPeriodEnd = period === 'week'
+      ? this.getStartOfWeek(today)
+      : this.getStartOfMonth(today)
+
+    const previousPeriodStartStr = this.formatDate(previousPeriodStart)
+    const previousPeriodEndStr = this.formatDate(previousPeriodEnd)
+
+    // Filter transactions in previous period
+    const previousPeriodTxs = transactions.filter(t => {
+      return t.date >= previousPeriodStartStr && t.date < previousPeriodEndStr
+    })
+
+    // Sum the absolute value of expenses
+    const total = previousPeriodTxs.reduce((sum, t) => sum + Math.abs(t.convertedAmount), 0)
+    return total
+  }
+
   private calculateMonthlyAverage(
     allTransactions: Array<Transaction & { convertedAmount: number }>,
     recentTransactions: Array<Transaction & { convertedAmount: number }>
@@ -285,108 +339,6 @@ export class DashboardService {
       }
     })
     return weekSet.size
-  }
-
-  private async calculateRecurringForPeriod(
-    period: 'week' | 'month',
-    currency: string,
-    rates: Record<string, number>,
-    categoryId: string | undefined,
-    startDate: string,
-    weekOfMonth: number
-  ): Promise<number> {
-    if (!this.recurringScheduleRepo) return 0
-
-    const activeSchedules = await this.recurringScheduleRepo.findActive()
-    
-    // Filter expense schedules (negative amounts for transactions, or transfers which represent outgoing cash flow)
-    let expenseSchedules = activeSchedules.filter(s => 
-      (s.type === 'transaction' && s.amount < 0) || s.type === 'transfer'
-    )
-
-    // Filter by category if specified (only applies to transactions, not transfers)
-    if (categoryId) {
-      expenseSchedules = expenseSchedules.filter(s => s.category_id === categoryId)
-    }
-
-    const accounts = await this.accountRepo.findAll()
-    const accountCurrencyMap = new Map(accounts.map(a => [a.id, a.currency]))
-
-    const windowDays = period === 'week' ? 7 : 30
-    let totalRecurring = 0
-
-    for (const schedule of expenseSchedules) {
-      const occurrences = this.countOccurrencesInWindow(schedule, startDate, windowDays, weekOfMonth)
-      if (occurrences === 0) continue
-
-      let amount: number
-      let accountCurrency: string
-
-      if (schedule.type === 'transfer') {
-        // For transfers, use the outgoing amount (from the source account)
-        amount = Math.abs(schedule.amount) * occurrences
-        accountCurrency = accountCurrencyMap.get(schedule.account_id) || currency
-      } else {
-        // For transactions, use the transaction amount
-        amount = Math.abs(schedule.amount) * occurrences
-        accountCurrency = accountCurrencyMap.get(schedule.account_id) || currency
-      }
-
-      // Convert to target currency
-      if (accountCurrency !== currency) {
-        const rate = rates[accountCurrency]
-        if (rate) {
-          amount = amount / rate
-        }
-      }
-
-      totalRecurring += amount
-    }
-
-    return totalRecurring
-  }
-
-  private countOccurrencesInWindow(
-    schedule: RecurringSchedule,
-    startDate: string,
-    windowDays: number,
-    weekOfMonth: number
-  ): number {
-    // Parse date parts to avoid timezone issues
-    const [year, month, day] = startDate.split('-').map(Number)
-    const start = new Date(year, month - 1, day, 0, 0, 0, 0)
-    const end = new Date(start)
-    end.setDate(end.getDate() + windowDays - 1)
-
-    // End date check
-    if (schedule.end_date && schedule.end_date < startDate) {
-      return 0
-    }
-    // Check remaining occurrences (null or undefined means unlimited)
-    if (schedule.remaining_occurrences !== null && schedule.remaining_occurrences !== undefined && schedule.remaining_occurrences <= 0) {
-      return 0
-    }
-
-    if (schedule.frequency === 'daily') {
-      return windowDays
-    }
-
-    if (schedule.frequency === 'weekly') {
-      return Math.ceil(windowDays / 7)
-    }
-
-    if (schedule.frequency === 'monthly') {
-      if (!schedule.day_of_month) return 0
-      const candidate = new Date(start)
-      candidate.setDate(schedule.day_of_month)
-      if (candidate < start) {
-        candidate.setMonth(candidate.getMonth() + 1)
-      }
-      return candidate >= start && candidate <= end ? 1 : 0
-    }
-
-    // Fallback: treat as no occurrences
-    return 0
   }
 
   private async calculateCategoryBreakdown(
@@ -446,6 +398,13 @@ export class DashboardService {
     return new Date(d.getFullYear(), d.getMonth(), diff, 0, 0, 0, 0)
   }
 
+  private getStartOfPreviousWeek(date: Date): Date {
+    const startOfCurrentWeek = this.getStartOfWeek(date)
+    const startOfPreviousWeek = new Date(startOfCurrentWeek)
+    startOfPreviousWeek.setDate(startOfPreviousWeek.getDate() - 7)
+    return startOfPreviousWeek
+  }
+
   private getStartOfNextWeek(date: Date): Date {
     const startOfCurrentWeek = this.getStartOfWeek(date)
     const startOfNextWeek = new Date(startOfCurrentWeek)
@@ -455,6 +414,10 @@ export class DashboardService {
 
   private getStartOfMonth(date: Date): Date {
     return new Date(date.getFullYear(), date.getMonth(), 1, 0, 0, 0, 0)
+  }
+
+  private getStartOfPreviousMonth(date: Date): Date {
+    return new Date(date.getFullYear(), date.getMonth() - 1, 1, 0, 0, 0, 0)
   }
 
   private getStartOfNextMonth(date: Date): Date {
