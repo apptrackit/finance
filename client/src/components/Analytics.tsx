@@ -176,7 +176,6 @@ export function Analytics({
   const [weekEstimate, setWeekEstimate] = useState<any>(null)
   const [monthEstimate, setMonthEstimate] = useState<any>(null)
   const [enableSpendingEstimates, setEnableSpendingEstimates] = useState(false)
-  const [includeRecurringInEstimates, setIncludeRecurringInEstimates] = useState(true)
   
   const { privacyMode } = usePrivacy()
 
@@ -184,9 +183,6 @@ export function Analytics({
   useEffect(() => {
     const enabled = localStorage.getItem('finance_enable_spending_estimates')
     setEnableSpendingEstimates(enabled === 'true')
-    
-    const includeRecurring = localStorage.getItem('finance_include_recurring_estimates')
-    setIncludeRecurringInEstimates(includeRecurring !== 'false')
   }, [])
 
   // Helper function to calculate Y-axis domain for charts
@@ -238,8 +234,8 @@ export function Analytics({
       
       try {
         const [weekRes, monthRes] = await Promise.all([
-            apiFetch(`${API_BASE_URL}/dashboard/spending-estimate?period=week&currency=${masterCurrency}&includeRecurring=${includeRecurringInEstimates}`),
-            apiFetch(`${API_BASE_URL}/dashboard/spending-estimate?period=month&currency=${masterCurrency}&includeRecurring=${includeRecurringInEstimates}`)
+            apiFetch(`${API_BASE_URL}/dashboard/spending-estimate?period=week&currency=${masterCurrency}`),
+            apiFetch(`${API_BASE_URL}/dashboard/spending-estimate?period=month&currency=${masterCurrency}`)
         ])
         
         if (weekRes.ok) {
@@ -257,7 +253,7 @@ export function Analytics({
     }
     
     fetchEstimates()
-  }, [masterCurrency, enableSpendingEstimates, includeRecurringInEstimates])
+  }, [masterCurrency, enableSpendingEstimates])
 
   // Convert amount to master currency
   const convertToMasterCurrency = (amount: number, accountId: string): number => {
@@ -916,40 +912,26 @@ export function Analytics({
             <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2">
               {/* Next Week Estimate */}
               {weekEstimate && (
-                <Card className="bg-gradient-to-br from-violet-500/10 to-transparent border-violet-500/20">
+                <Card className="border border-border/60 bg-gradient-to-b from-background/60 via-background/30 to-background/10">
                   <CardHeader className="pb-2 px-4 sm:px-6">
                     <div className="flex items-center gap-2">
-                      <Sparkles className="h-4 w-4 text-violet-500" />
-                      <CardTitle className="text-sm sm:text-base">Next Week Estimate</CardTitle>
+                      <div className="h-7 w-7 rounded-md bg-primary/10 flex items-center justify-center">
+                        <Sparkles className="h-4 w-4 text-primary" />
+                      </div>
+                      <div className="flex flex-col">
+                        <CardTitle className="text-sm sm:text-base">Next Week Estimate</CardTitle>
+                        <span className="text-xs text-muted-foreground">Week {weekEstimate.week_of_month} of month</span>
+                      </div>
                     </div>
-                    <p className="text-xs text-muted-foreground">Week {weekEstimate.week_of_month} of month</p>
                   </CardHeader>
                   <CardContent className="px-4 sm:px-6">
                     <div className="space-y-3">
                       <div>
-                        <p className={`text-2xl sm:text-3xl font-bold text-violet-500 ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
-                          {privacyMode === 'hidden' ? '••••••' : `${weekEstimate.estimate_amount.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})}`} <span className="text-base sm:text-lg">{masterCurrency}</span>
+                        <p className={`text-2xl sm:text-3xl font-bold text-primary ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
+                          {privacyMode === 'hidden' ? '••••••' : `${weekEstimate.estimate_amount.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})}`} <span className="text-base sm:text-lg text-muted-foreground">{masterCurrency}</span>
                         </p>
-                        <div className="flex items-center gap-2 mt-1">
-                          <span className="text-xs text-muted-foreground">Confidence: {weekEstimate.confidence_level}%</span>
-                          <span className={`text-xs ${weekEstimate.variance_percentage > 0 ? 'text-amber-500' : 'text-success'}`}>
-                            {weekEstimate.variance_percentage > 0 ? '↑' : '↓'} {Math.abs(weekEstimate.variance_percentage).toFixed(1)}% vs avg
-                          </span>
-                        </div>
-                      </div>
-                      
-                      <div className="grid grid-cols-2 gap-2 text-xs">
-                        <div className="p-2 rounded-lg bg-secondary/50">
-                          <p className="text-muted-foreground">Recurring</p>
-                          <p className={`font-semibold ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
-                            {privacyMode === 'hidden' ? '••••' : weekEstimate.breakdown.recurring.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})}
-                          </p>
-                        </div>
-                        <div className="p-2 rounded-lg bg-secondary/50">
-                          <p className="text-muted-foreground">One-time</p>
-                          <p className={`font-semibold ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
-                            {privacyMode === 'hidden' ? '••••' : weekEstimate.breakdown.non_recurring.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})}
-                          </p>
+                        <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground">
+                          <span>Confidence: {weekEstimate.confidence_level}%</span>
                         </div>
                       </div>
                     </div>
@@ -959,40 +941,26 @@ export function Analytics({
 
               {/* Next Month Estimate */}
               {monthEstimate && (
-                <Card className="bg-gradient-to-br from-indigo-500/10 to-transparent border-indigo-500/20">
+                <Card className="border border-border/60 bg-gradient-to-b from-background/60 via-background/30 to-background/10">
                   <CardHeader className="pb-2 px-4 sm:px-6">
                     <div className="flex items-center gap-2">
-                      <Sparkles className="h-4 w-4 text-indigo-500" />
-                      <CardTitle className="text-sm sm:text-base">Next Month Estimate</CardTitle>
+                      <div className="h-7 w-7 rounded-md bg-primary/10 flex items-center justify-center">
+                        <Sparkles className="h-4 w-4 text-primary" />
+                      </div>
+                      <div className="flex flex-col">
+                        <CardTitle className="text-sm sm:text-base">Next Month Estimate</CardTitle>
+                        <span className="text-xs text-muted-foreground">Based on historical patterns</span>
+                      </div>
                     </div>
-                    <p className="text-xs text-muted-foreground">Based on historical patterns</p>
                   </CardHeader>
                   <CardContent className="px-4 sm:px-6">
                     <div className="space-y-3">
                       <div>
-                        <p className={`text-2xl sm:text-3xl font-bold text-indigo-500 ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
-                          {privacyMode === 'hidden' ? '••••••' : `${monthEstimate.estimate_amount.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})}`} <span className="text-base sm:text-lg">{masterCurrency}</span>
+                        <p className={`text-2xl sm:text-3xl font-bold text-primary ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
+                          {privacyMode === 'hidden' ? '••••••' : `${monthEstimate.estimate_amount.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})}`} <span className="text-base sm:text-lg text-muted-foreground">{masterCurrency}</span>
                         </p>
-                        <div className="flex items-center gap-2 mt-1">
-                          <span className="text-xs text-muted-foreground">Confidence: {monthEstimate.confidence_level}%</span>
-                          <span className={`text-xs ${monthEstimate.variance_percentage > 0 ? 'text-amber-500' : 'text-success'}`}>
-                            {monthEstimate.variance_percentage > 0 ? '↑' : '↓'} {Math.abs(monthEstimate.variance_percentage).toFixed(1)}% vs avg
-                          </span>
-                        </div>
-                      </div>
-                      
-                      <div className="grid grid-cols-2 gap-2 text-xs">
-                        <div className="p-2 rounded-lg bg-secondary/50">
-                          <p className="text-muted-foreground">Recurring</p>
-                          <p className={`font-semibold ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
-                            {privacyMode === 'hidden' ? '••••' : monthEstimate.breakdown.recurring.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})}
-                          </p>
-                        </div>
-                        <div className="p-2 rounded-lg bg-secondary/50">
-                          <p className="text-muted-foreground">One-time</p>
-                          <p className={`font-semibold ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
-                            {privacyMode === 'hidden' ? '••••' : monthEstimate.breakdown.non_recurring.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})}
-                          </p>
+                        <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground">
+                          <span>Confidence: {monthEstimate.confidence_level}%</span>
                         </div>
                       </div>
                     </div>

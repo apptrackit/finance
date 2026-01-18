@@ -74,18 +74,23 @@ export class DashboardService {
   async getSpendingEstimate(
     period: 'week' | 'month',
     currency: string = 'HUF',
-    categoryId?: string,
-    includeRecurring: boolean = true
+    categoryId?: string
   ): Promise<SpendingEstimateResponseDto> {
     if (!this.transactionRepo || !this.recurringScheduleRepo || !this.categoryRepo) {
       throw new Error('Required repositories not initialized for spending estimates')
     }
 
     const today = new Date()
-    const todayStr = today.toISOString().split('T')[0]
     
     // Calculate week of month (1-4+)
     const weekOfMonth = Math.ceil(today.getDate() / 7)
+    
+    // For recurring calculations, use start of NEXT period (since we're estimating future spending)
+    const periodStartDate = period === 'week'
+      ? this.getStartOfNextWeek(today)
+      : this.getStartOfNextMonth(today)
+    // Format date as YYYY-MM-DD in local time to avoid timezone issues
+    const periodStartStr = this.formatDate(periodStartDate)
 
     // Fetch all historical transactions
     const allTransactions = await this.transactionRepo.findAll()
@@ -122,13 +127,13 @@ export class DashboardService {
 
     // Get recurring transactions for the period
     let recurringAmount = 0
-    if (includeRecurring && this.recurringScheduleRepo) {
+    if (this.recurringScheduleRepo) {
       recurringAmount = await this.calculateRecurringForPeriod(
         period,
         currency,
         rates,
         categoryId,
-        todayStr,
+        periodStartStr,
         weekOfMonth
       )
     }
@@ -294,12 +299,12 @@ export class DashboardService {
 
     const activeSchedules = await this.recurringScheduleRepo.findActive()
     
-    // Filter expense schedules (negative amounts)
+    // Filter expense schedules (negative amounts for transactions, or transfers which represent outgoing cash flow)
     let expenseSchedules = activeSchedules.filter(s => 
-      s.type === 'transaction' && s.amount < 0
+      (s.type === 'transaction' && s.amount < 0) || s.type === 'transfer'
     )
 
-    // Filter by category if specified
+    // Filter by category if specified (only applies to transactions, not transfers)
     if (categoryId) {
       expenseSchedules = expenseSchedules.filter(s => s.category_id === categoryId)
     }
@@ -307,75 +312,81 @@ export class DashboardService {
     const accounts = await this.accountRepo.findAll()
     const accountCurrencyMap = new Map(accounts.map(a => [a.id, a.currency]))
 
+    const windowDays = period === 'week' ? 7 : 30
     let totalRecurring = 0
 
     for (const schedule of expenseSchedules) {
-      // Check if schedule will trigger in the target period
-      const willTrigger = this.scheduleTriggersInPeriod(schedule, period, weekOfMonth, startDate)
-      
-      if (willTrigger) {
-        const accountCurrency = accountCurrencyMap.get(schedule.account_id) || currency
-        let amount = Math.abs(schedule.amount)
+      const occurrences = this.countOccurrencesInWindow(schedule, startDate, windowDays, weekOfMonth)
+      if (occurrences === 0) continue
 
-        // Convert to target currency
-        if (accountCurrency !== currency) {
-          const rate = rates[accountCurrency]
-          if (rate) {
-            amount = amount / rate
-          }
-        }
+      let amount: number
+      let accountCurrency: string
 
-        totalRecurring += amount
+      if (schedule.type === 'transfer') {
+        // For transfers, use the outgoing amount (from the source account)
+        amount = Math.abs(schedule.amount) * occurrences
+        accountCurrency = accountCurrencyMap.get(schedule.account_id) || currency
+      } else {
+        // For transactions, use the transaction amount
+        amount = Math.abs(schedule.amount) * occurrences
+        accountCurrency = accountCurrencyMap.get(schedule.account_id) || currency
       }
+
+      // Convert to target currency
+      if (accountCurrency !== currency) {
+        const rate = rates[accountCurrency]
+        if (rate) {
+          amount = amount / rate
+        }
+      }
+
+      totalRecurring += amount
     }
 
     return totalRecurring
   }
 
-  private scheduleTriggersInPeriod(
+  private countOccurrencesInWindow(
     schedule: RecurringSchedule,
-    period: 'week' | 'month',
-    weekOfMonth: number,
-    startDate: string
-  ): boolean {
-    const now = new Date(startDate)
+    startDate: string,
+    windowDays: number,
+    weekOfMonth: number
+  ): number {
+    // Parse date parts to avoid timezone issues
+    const [year, month, day] = startDate.split('-').map(Number)
+    const start = new Date(year, month - 1, day, 0, 0, 0, 0)
+    const end = new Date(start)
+    end.setDate(end.getDate() + windowDays - 1)
 
-    // Check end date
+    // End date check
     if (schedule.end_date && schedule.end_date < startDate) {
-      return false
+      return 0
+    }
+    // Check remaining occurrences (null or undefined means unlimited)
+    if (schedule.remaining_occurrences !== null && schedule.remaining_occurrences !== undefined && schedule.remaining_occurrences <= 0) {
+      return 0
     }
 
-    // Check remaining occurrences
-    if (schedule.remaining_occurrences !== undefined && schedule.remaining_occurrences <= 0) {
-      return false
+    if (schedule.frequency === 'daily') {
+      return windowDays
     }
 
-    if (period === 'week') {
-      // For weekly estimates, check if schedule triggers in this week type
-      if (schedule.frequency === 'daily') {
-        return true // Daily schedules always trigger
-      } else if (schedule.frequency === 'weekly') {
-        // Weekly schedules trigger once per week
-        return true
-      } else if (schedule.frequency === 'monthly') {
-        // Monthly schedules only trigger if day_of_month falls in this week
-        if (schedule.day_of_month) {
-          const scheduleWeekOfMonth = Math.ceil(schedule.day_of_month / 7)
-          return scheduleWeekOfMonth === weekOfMonth
-        }
+    if (schedule.frequency === 'weekly') {
+      return Math.ceil(windowDays / 7)
+    }
+
+    if (schedule.frequency === 'monthly') {
+      if (!schedule.day_of_month) return 0
+      const candidate = new Date(start)
+      candidate.setDate(schedule.day_of_month)
+      if (candidate < start) {
+        candidate.setMonth(candidate.getMonth() + 1)
       }
-    } else {
-      // For monthly estimates, all active schedules contribute
-      if (schedule.frequency === 'daily') {
-        return true // Will trigger ~30 times
-      } else if (schedule.frequency === 'weekly') {
-        return true // Will trigger ~4 times
-      } else if (schedule.frequency === 'monthly') {
-        return true // Will trigger once
-      }
+      return candidate >= start && candidate <= end ? 1 : 0
     }
 
-    return false
+    // Fallback: treat as no occurrences
+    return 0
   }
 
   private async calculateCategoryBreakdown(
@@ -426,5 +437,34 @@ export class DashboardService {
     breakdown.sort((a, b) => b.estimate_amount - a.estimate_amount)
 
     return breakdown
+  }
+
+  private getStartOfWeek(date: Date): Date {
+    const d = new Date(date)
+    const day = d.getDay()
+    const diff = d.getDate() - day + (day === 0 ? -6 : 1) // Adjust when day is Sunday
+    return new Date(d.getFullYear(), d.getMonth(), diff, 0, 0, 0, 0)
+  }
+
+  private getStartOfNextWeek(date: Date): Date {
+    const startOfCurrentWeek = this.getStartOfWeek(date)
+    const startOfNextWeek = new Date(startOfCurrentWeek)
+    startOfNextWeek.setDate(startOfNextWeek.getDate() + 7)
+    return startOfNextWeek
+  }
+
+  private getStartOfMonth(date: Date): Date {
+    return new Date(date.getFullYear(), date.getMonth(), 1, 0, 0, 0, 0)
+  }
+
+  private getStartOfNextMonth(date: Date): Date {
+    return new Date(date.getFullYear(), date.getMonth() + 1, 1, 0, 0, 0, 0)
+  }
+
+  private formatDate(date: Date): string {
+    const year = date.getFullYear()
+    const month = String(date.getMonth() + 1).padStart(2, '0')
+    const day = String(date.getDate()).padStart(2, '0')
+    return `${year}-${month}-${day}`
   }
 }
