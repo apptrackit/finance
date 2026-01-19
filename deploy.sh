@@ -98,6 +98,22 @@ for col in remaining_occurrences end_date; do
   fi
 done
 
+# Check transactions table columns
+TRANSACTIONS_COLUMNS=$(npx wrangler d1 execute finance-db --remote --command "PRAGMA table_info(transactions)" --json 2>/dev/null | grep -o '"name":"[^"]*"' | cut -d'"' -f4 | tr '\n' ' ' || echo "")
+
+for col in exclude_from_estimate; do
+  if ! echo "$TRANSACTIONS_COLUMNS" | grep -q "$col"; then
+    echo "  Adding column: transactions.$col"
+    case $col in
+      exclude_from_estimate)
+        npx wrangler d1 execute finance-db --remote --command "ALTER TABLE transactions ADD COLUMN exclude_from_estimate BOOLEAN DEFAULT 0" 2>/dev/null || true
+        ;;
+    esac
+  else
+    echo "  Column transactions.$col already exists"
+  fi
+done
+
 echo -e "${GREEN}✓ Database schema updated${NC}\n"
 
 # Step 2: Deploy API (backend)
