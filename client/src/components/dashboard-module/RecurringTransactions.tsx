@@ -1,13 +1,13 @@
 import { useState, useEffect } from 'react'
-import { API_BASE_URL, apiFetch } from '../config'
-import { Button } from './ui/button'
-import { Card } from './ui/card'
-import { Input } from './ui/input'
-import { Label } from './ui/label'
-import { Select } from './ui/select'
+import { API_BASE_URL, apiFetch } from '../../config'
+import { Button } from '../common/button'
+import { Card } from '../common/card'
+import { Input } from '../common/input'
+import { Label } from '../common/label'
+import { Select } from '../common/select'
 import { Plus, Trash2, Edit2, Clock, TrendingDown, TrendingUp, AlertTriangle, Calendar, Wallet, ChevronLeft, ChevronRight } from 'lucide-react'
-import { useAlert } from '../context/AlertContext'
-import { usePrivacy } from '../context/PrivacyContext'
+import { useAlert } from '../../context/AlertContext'
+import { usePrivacy } from '../../context/PrivacyContext'
 
 // Helper function to convert Date to local YYYY-MM-DD string (no timezone conversion)
 function toLocalDateString(date: Date): string {

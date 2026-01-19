@@ -33,7 +33,7 @@
 import { createContext, useContext, useState } from 'react'
 import type { ReactNode } from 'react'
 import { AlertCircle, CheckCircle, Info, X, XCircle } from 'lucide-react'
-import { Button } from '../components/ui/button'
+import { Button } from '../components/common/button'
 
 type AlertType = 'info' | 'success' | 'warning' | 'error' | 'confirm'
 

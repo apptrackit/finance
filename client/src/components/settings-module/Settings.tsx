@@ -1,13 +1,13 @@
 import { useState, useEffect, useRef } from 'react'
-import { Button } from './ui/button'
-import { Label } from './ui/label'
-import { Select } from './ui/select'
-import { Input } from './ui/input'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card'
+import { Button } from '../common/button'
+import { Label } from '../common/label'
+import { Select } from '../common/select'
+import { Input } from '../common/input'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../common/card'
 import { Settings as SettingsIcon, Save, Download, Plus, Trash2, Tag, Pencil, Check, X, Eye, EyeOff, RefreshCw, Clock, ChevronDown } from 'lucide-react'
-import { API_BASE_URL, apiFetch } from '../config'
-import { usePrivacy } from '../context/PrivacyContext'
-import { useAlert } from '../context/AlertContext'
+import { API_BASE_URL, apiFetch } from '../../config'
+import { usePrivacy } from '../../context/PrivacyContext'
+import { useAlert } from '../../context/AlertContext'
 
 const CURRENCIES = [
   { code: 'HUF', name: 'Hungarian Forint', symbol: 'Ft' },

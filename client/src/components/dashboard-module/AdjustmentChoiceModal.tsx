@@ -1,5 +1,5 @@
-import { Modal } from './ui/modal'
-import { Button } from './ui/button'
+import { Modal } from '../common/modal'
+import { Button } from '../common/button'
 import { Split, Plus } from 'lucide-react'
 
 interface AdjustmentChoiceModalProps {

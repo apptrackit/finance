@@ -1,12 +1,12 @@
 import { useState, useEffect } from 'react'
-import { Button } from './ui/button'
-import { Input } from './ui/input'
-import { Label } from './ui/label'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card'
-import { Select } from './ui/select'
-import { API_BASE_URL, apiFetch } from '../config'
-import { useAlert } from '../context/AlertContext'
-import { useLockedAccounts } from '../context/LockedAccountsContext'
+import { Button } from '../common/button'
+import { Input } from '../common/input'
+import { Label } from '../common/label'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../common/card'
+import { Select } from '../common/select'
+import { API_BASE_URL, apiFetch } from '../../config'
+import { useAlert } from '../../context/AlertContext'
+import { useLockedAccounts } from '../../context/LockedAccountsContext'
 
 interface Account {
   id: string

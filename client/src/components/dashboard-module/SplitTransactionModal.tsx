@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react'
-import { Modal } from './ui/modal'
-import { Button } from './ui/button'
-import { Input } from './ui/input'
-import { Label } from './ui/label'
-import { Select } from './ui/select'
+import { Modal } from '../common/modal'
+import { Button } from '../common/button'
+import { Input } from '../common/input'
+import { Label } from '../common/label'
+import { Select } from '../common/select'
 import { Plus, Trash2, AlertCircle, Percent } from 'lucide-react'
 
 type Category = {
