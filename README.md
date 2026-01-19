@@ -427,7 +427,10 @@ Perfect for:
    cp wrangler.toml.example wrangler.toml
    # Edit wrangler.toml:
    # - Set database_id (create D1 database first)
-   # - Configure API_SECRET and ALLOWED_ORIGINS
+   
+   # Create .dev.vars for local development secrets:
+   echo "API_SECRET=your-secret-key" > .dev.vars
+   echo "ALLOWED_ORIGINS=http://localhost:5173" >> .dev.vars
    ```
 
 3. **Initialize database:**
@@ -453,18 +456,35 @@ Perfect for:
 
 ### Environment Variables
 
-**API (wrangler.toml secrets):**
-```toml
-[vars]
-API_SECRET = "your-secret-key"
-ALLOWED_ORIGINS = "http://localhost:5173,https://finance.yourdomain.com"
+**API Secrets:**
+
+For **local development**, create `.dev.vars` file (not committed to git):
+```bash
+API_SECRET=your-secret-key
+ALLOWED_ORIGINS=http://localhost:5173
 ```
 
-**Client (.env.local):**
+For **production**, use Wrangler CLI to set secrets:
+```bash
+wrangler secret put API_SECRET
+wrangler secret put ALLOWED_ORIGINS
+```
+
+**Client Environment Variables:**
+
+For **local development**, create `.env.local` file:
 ```bash
 VITE_API_KEY=your-secret-key
-VITE_API_DOMAIN=localhost:8787  # or api.yourdomain.com for prod
+VITE_API_DOMAIN=localhost:8787
 ```
+
+For **production build**, create `.env.production.local` or set during build:
+```bash
+VITE_API_KEY=your-production-key
+VITE_API_DOMAIN=finance-api.yourdomain.workers.dev
+```
+
+**Important:** Client environment variables are baked into the JavaScript bundle at build time. The `.env` files are never deployed - only the built artifacts.
 
 ---
 

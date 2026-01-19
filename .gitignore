@@ -122,6 +122,11 @@ dev-dist
 .dev.vars
 api/wrangler.toml  # Each developer has their own config
 
+# Database backups (may contain sensitive data)
+*.sql
+production-backup.sql
+api/production-backup.sql
+
 # Environment files (each developer has their own)
 client/.env.local
 client/.env.production
