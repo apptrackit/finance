@@ -596,7 +596,7 @@ export default function Settings() {
           {/* Add New Category */}
           <div className="space-y-4">
             <h3 className="text-sm font-medium">Add New Category</h3>
-            <div className="grid grid-cols-[auto_1fr_auto_auto] gap-2 items-end">
+            <div className="flex flex-col sm:grid sm:grid-cols-[auto_1fr_auto_auto] gap-3 sm:gap-2 sm:items-end">
               <div className="space-y-2 relative">
                 <Label htmlFor="category-icon">Icon</Label>
                 <div className="relative">
@@ -647,6 +647,7 @@ export default function Settings() {
               <Button 
                 onClick={handleAddCategory}
                 disabled={isAddingCategory || !newCategoryName.trim()}
+                className="w-full sm:w-auto"
               >
                 <Plus className="h-4 w-4 mr-2" />
                 Add
