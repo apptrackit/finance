@@ -134,4 +134,5 @@ client/.env.production
 # OS metadata
 .DS_Store
 Thumbs.db
+sw.js
 
