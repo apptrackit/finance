@@ -21,6 +21,7 @@ type Transaction = {
   description?: string
   date: string
   linked_transaction_id?: string
+  exclude_from_estimate?: boolean
 }
 
 type Account = {
@@ -85,7 +86,8 @@ export function TransactionList({
     description: '',
     date: new Date().toISOString().split('T')[0],
     type: 'expense' as 'expense' | 'income' | 'transfer',
-    manual_price: '' // For investment accounts - manual price override
+    manual_price: '', // For investment accounts - manual price override
+    exclude_from_estimate: false
   })
   const [exchangeRate, setExchangeRate] = useState<number | null>(null)
   const [suggestedRate, setSuggestedRate] = useState<number | null>(null)
@@ -372,7 +374,8 @@ export function TransactionList({
       description: '',
       date: new Date().toISOString().split('T')[0],
       type: 'expense',
-      manual_price: ''
+      manual_price: '',
+      exclude_from_estimate: false
     })
     setExchangeRate(null)
     setSuggestedRate(null)
@@ -390,7 +393,8 @@ export function TransactionList({
       description: '',
       date: new Date().toISOString().split('T')[0],
       type: 'expense',
-      manual_price: ''
+      manual_price: '',
+      exclude_from_estimate: false
     })
     setIsAdding(true)
   }
@@ -458,7 +462,8 @@ export function TransactionList({
               category_id: formData.category_id || null,
               amount: finalAmount,
               description: formData.description,
-              date: formData.date
+              date: formData.date,
+              exclude_from_estimate: formData.type === 'expense' ? formData.exclude_from_estimate : false
             }),
           })
           setEditingId(null)
@@ -481,7 +486,8 @@ export function TransactionList({
               amount: finalAmount,
               description: formData.description,
               date: formData.date,
-              price: price // Include price for investment accounts
+              price: price, // Include price for investment accounts
+              exclude_from_estimate: formData.type === 'expense' ? formData.exclude_from_estimate : false
             }),
           })
         }
@@ -542,7 +548,8 @@ export function TransactionList({
       description: tx.description || '',
       date: tx.date,
       type: isIncome ? 'income' : 'expense',
-      manual_price: priceValue
+      manual_price: priceValue,
+      exclude_from_estimate: !!tx.exclude_from_estimate
     })
     setEditingId(tx.id)
     setIsAdding(true)
@@ -1194,6 +1201,21 @@ export function TransactionList({
                       placeholder="e.g. Grocery shopping" 
                     />
                   </div>
+                  {formData.type === 'expense' && (
+                    <div className="col-span-2">
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={formData.exclude_from_estimate}
+                          onChange={e => setFormData({...formData, exclude_from_estimate: e.target.checked})}
+                          className="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary"
+                        />
+                        <span className="text-sm text-muted-foreground">
+                          Exclude from estimate calculation (one-time expense)
+                        </span>
+                      </label>
+                    </div>
+                  )}
                 </div>
                 <Button type="submit" className="w-full" variant={formData.type === 'income' ? 'success' : 'default'} disabled={isSubmitting}>
                   {editingId ? <Check className="h-4 w-4 mr-2" /> : <Plus className="h-4 w-4 mr-2" />}

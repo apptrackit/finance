@@ -3,18 +3,26 @@ import { Transaction } from '../models/Transaction'
 export class TransactionRepository {
   constructor(private db: D1Database) {}
 
+  private mapTransaction(raw: any): Transaction {
+    return {
+      ...raw,
+      exclude_from_estimate: raw.exclude_from_estimate === 1
+    }
+  }
+
   async findAll(): Promise<Transaction[]> {
-    const { results } = await this.db.prepare('SELECT * FROM transactions ORDER BY date DESC').all<Transaction>()
-    return results
+    const { results } = await this.db.prepare('SELECT * FROM transactions ORDER BY date DESC').all<any>()
+    return results.map(r => this.mapTransaction(r))
   }
 
   async findById(id: string): Promise<Transaction | null> {
-    return await this.db.prepare('SELECT * FROM transactions WHERE id = ?').bind(id).first<Transaction>()
+    const result = await this.db.prepare('SELECT * FROM transactions WHERE id = ?').bind(id).first<any>()
+    return result ? this.mapTransaction(result) : null
   }
 
   async create(transaction: Transaction): Promise<void> {
     await this.db.prepare(
-      'INSERT INTO transactions (id, account_id, category_id, amount, description, date, linked_transaction_id) VALUES (?, ?, ?, ?, ?, ?, ?)'
+      'INSERT INTO transactions (id, account_id, category_id, amount, description, date, linked_transaction_id, exclude_from_estimate) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
     ).bind(
       transaction.id,
       transaction.account_id,
@@ -22,7 +30,8 @@ export class TransactionRepository {
       transaction.amount,
       transaction.description || null,
       transaction.date,
-      transaction.linked_transaction_id || null
+      transaction.linked_transaction_id || null,
+      transaction.exclude_from_estimate ? 1 : 0
     ).run()
   }
 
@@ -50,9 +59,9 @@ export class TransactionRepository {
       fields.push('date = ?')
       values.push(updates.date)
     }
-    if (updates.is_recurring !== undefined) {
-      fields.push('is_recurring = ?')
-      values.push(updates.is_recurring ? 1 : 0)
+    if (updates.exclude_from_estimate !== undefined) {
+      fields.push('exclude_from_estimate = ?')
+      values.push(updates.exclude_from_estimate ? 1 : 0)
     }
 
     values.push(id)
@@ -77,8 +86,8 @@ export class TransactionRepository {
     
     const { results } = await this.db.prepare(
       `SELECT * FROM transactions ORDER BY ${field} ${order} LIMIT ? OFFSET ?`
-    ).bind(limit, offset).all<Transaction>()
-    return results
+    ).bind(limit, offset).all<any>()
+    return results.map(r => this.mapTransaction(r))
   }
 
   async count(): Promise<number> {
@@ -102,8 +111,8 @@ export class TransactionRepository {
 
     query += ' ORDER BY date DESC'
 
-    const { results } = await this.db.prepare(query).bind(...params).all<Transaction>()
-    return results
+    const { results } = await this.db.prepare(query).bind(...params).all<any>()
+    return results.map(r => this.mapTransaction(r))
   }
 
   async findFromDate(startDate: string, accountId?: string, categoryId?: string): Promise<Transaction[]> {
@@ -122,7 +131,19 @@ export class TransactionRepository {
 
     query += ' ORDER BY date DESC'
 
-    const { results } = await this.db.prepare(query).bind(...params).all<Transaction>()
-    return results
+    const { results } = await this.db.prepare(query).bind(...params).all<any>()
+    return results.map(r => this.mapTransaction(r))
+  }
+
+  async findRecurring(): Promise<Transaction[]> {
+    const { results } = await this.db.prepare('SELECT * FROM transactions WHERE is_recurring = 1').all<any>()
+    return results.map(r => this.mapTransaction(r))
+  }
+
+  async findByAccountAndDatePattern(accountId: string, amount: number, description: string, datePattern: string): Promise<Transaction | null> {
+    const result = await this.db.prepare(
+      'SELECT * FROM transactions WHERE account_id = ? AND amount = ? AND description = ? AND date LIKE ?'
+    ).bind(accountId, amount, description, datePattern).first<any>()
+    return result ? this.mapTransaction(result) : null
   }
 }

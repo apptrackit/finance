@@ -99,8 +99,9 @@ export class DashboardService {
     const allTransactions = await this.transactionRepo.findAll()
     
     // Filter expense transactions (negative amounts, excluding transfers)
+    // Also exclude transactions marked as exclude_from_estimate
     const expenseTransactions = allTransactions.filter(t => 
-      t.amount < 0 && !t.linked_transaction_id
+      t.amount < 0 && !t.linked_transaction_id && !t.exclude_from_estimate
     )
 
     // Filter by category if specified

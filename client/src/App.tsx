@@ -38,6 +38,7 @@ type Transaction = {
   description?: string
   date: string
   linked_transaction_id?: string
+  exclude_from_estimate?: boolean
 }
 
 type Category = {

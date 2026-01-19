@@ -26,6 +26,7 @@ CREATE TABLE IF NOT EXISTS transactions (
   description TEXT,
   date TEXT NOT NULL, -- ISO 8601 YYYY-MM-DD
   linked_transaction_id TEXT,
+  exclude_from_estimate BOOLEAN DEFAULT 0, -- Exclude expense from estimate calculation (not from analytics)
   FOREIGN KEY(account_id) REFERENCES accounts(id)
 );
 
