@@ -175,15 +175,8 @@ export function Analytics({
   // Spending estimate state
   const [weekEstimate, setWeekEstimate] = useState<any>(null)
   const [monthEstimate, setMonthEstimate] = useState<any>(null)
-  const [enableSpendingEstimates, setEnableSpendingEstimates] = useState(false)
   
   const { privacyMode } = usePrivacy()
-
-  // Load spending estimate settings
-  useEffect(() => {
-    const enabled = localStorage.getItem('finance_enable_spending_estimates')
-    setEnableSpendingEstimates(enabled === 'true')
-  }, [])
 
   // Helper function to calculate Y-axis domain for charts
   const calculateYAxisDomain = (data: { balance: number }[]) => {
@@ -226,12 +219,6 @@ export function Analytics({
   // Fetch spending estimates
   useEffect(() => {
     const fetchEstimates = async () => {
-      if (!enableSpendingEstimates) {
-        setWeekEstimate(null)
-        setMonthEstimate(null)
-        return
-      }
-      
       try {
         const [weekRes, monthRes] = await Promise.all([
             apiFetch(`${API_BASE_URL}/dashboard/spending-estimate?period=week&currency=${masterCurrency}`),
@@ -253,7 +240,7 @@ export function Analytics({
     }
     
     fetchEstimates()
-  }, [masterCurrency, enableSpendingEstimates])
+  }, [masterCurrency])
 
   // Convert amount to master currency
   const convertToMasterCurrency = (amount: number, accountId: string): number => {
@@ -908,7 +895,7 @@ export function Analytics({
           </div>
 
           {/* Spending Estimates */}
-          {enableSpendingEstimates && (weekEstimate || monthEstimate) && (
+          {(weekEstimate || monthEstimate) && (
             <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2">
               {/* Next Week Estimate */}
               {weekEstimate && (
