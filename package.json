@@ -8,7 +8,7 @@
   "scripts": {
     "dev": "concurrently \"npm run dev -w client\" \"npm run dev -w api\"",
     "build": "npm run build --workspaces",
-    "deploy": "npm run deploy --workspaces"
+    "deploy": "./deploy.sh"
   },
   "devDependencies": {
     "concurrently": "^8.2.2"
