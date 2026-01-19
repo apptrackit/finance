@@ -682,10 +682,12 @@ export function Analytics({
               />
             ))}
 
-            <CategoryBreakdownChart 
-              data={categoryData}
-              masterCurrency={masterCurrency}
-            />
+            <div className={perAccountTrendData.length % 2 === 0 ? 'lg:col-span-2' : ''}>
+              <CategoryBreakdownChart 
+                data={categoryData}
+                masterCurrency={masterCurrency}
+              />
+            </div>
           </div>
 
           <SpendingEstimates 
