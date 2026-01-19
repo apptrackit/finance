@@ -1,4 +1,4 @@
-import { Card, CardContent, CardHeader, CardTitle } from '../ui/card'
+import { Card, CardContent, CardHeader, CardTitle } from '../common/card'
 import { Sparkles } from 'lucide-react'
 import { usePrivacy } from '../../context/PrivacyContext'
 import type { SpendingEstimate } from './types'

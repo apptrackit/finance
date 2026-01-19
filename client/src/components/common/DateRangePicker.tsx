@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
-import { Button } from './ui/button'
-import { Input } from './ui/input'
-import { Label } from './ui/label'
+import { Button } from './button'
+import { Input } from './input'
+import { Label } from './label'
 
 type DateRangePickerProps = {
   startDate: string

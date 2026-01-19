@@ -11,7 +11,7 @@ import {
 } from 'recharts'
 import { format } from 'date-fns'
 import { Loader2, TrendingUp, TrendingDown } from 'lucide-react'
-import { API_BASE_URL, apiFetch } from '../config'
+import { API_BASE_URL, apiFetch } from '../../config'
 
 type Transaction = {
   id: string

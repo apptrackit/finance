@@ -1,4 +1,4 @@
-import { Card, CardContent, CardHeader, CardTitle } from '../ui/card'
+import { Card, CardContent, CardHeader, CardTitle } from '../common/card'
 import { TrendingDown } from 'lucide-react'
 import { format } from 'date-fns'
 import { usePrivacy } from '../../context/PrivacyContext'

@@ -1,6 +1,6 @@
 import type { Account, Category, Transaction } from './types'
 import { formatValue, calculatePosition } from './utils'
-import { InvestmentChart } from '../InvestmentChart'
+import { InvestmentChart } from './InvestmentChart'
 
 type Props = {
   account: Account | null

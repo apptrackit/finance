@@ -1,4 +1,4 @@
-import { Card, CardContent } from '../ui/card'
+import { Card, CardContent } from '../common/card'
 import { TrendingUp, TrendingDown, ArrowUpRight, ArrowDownRight } from 'lucide-react'
 import { usePrivacy } from '../../context/PrivacyContext'
 

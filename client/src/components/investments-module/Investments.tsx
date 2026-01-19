@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { API_BASE_URL, apiFetch } from '../../config'
 import { usePrivacy } from '../../context/PrivacyContext'
-import { getMasterCurrency } from '../Settings'
+import { getMasterCurrency } from '../settings-module/Settings'
 import type { Account, Transaction, MarketQuote, Category, PortfolioStats } from './types'
 import { calculatePosition, convertToDisplayCurrency } from './utils'
 import { PortfolioSummary } from './PortfolioSummary'
