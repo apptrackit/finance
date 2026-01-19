@@ -649,12 +649,6 @@ export function Analytics({
             masterCurrency={masterCurrency}
           />
 
-          <SpendingEstimates 
-            weekEstimate={weekEstimate}
-            monthEstimate={monthEstimate}
-            masterCurrency={masterCurrency}
-          />
-
           <div className="grid gap-4 sm:gap-6 grid-cols-1 lg:grid-cols-2">
             <NetWorthTrendChart 
               data={netWorthTrendData}
@@ -693,6 +687,12 @@ export function Analytics({
               masterCurrency={masterCurrency}
             />
           </div>
+
+          <SpendingEstimates 
+            weekEstimate={weekEstimate}
+            monthEstimate={monthEstimate}
+            masterCurrency={masterCurrency}
+          />
 
           <TopExpensesList 
             transactions={filteredTransactions}
