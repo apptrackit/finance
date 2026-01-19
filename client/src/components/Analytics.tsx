@@ -716,7 +716,7 @@ export function Analytics({
           <BarChart3 className="h-5 w-5 text-primary" />
           <h2 className="text-lg font-semibold">Analytics</h2>
         </div>
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
+        <div className="flex flex-col sm:flex-row items-center justify-center gap-2 w-full sm:w-auto">
           <div className="relative">
             <div className="flex items-center gap-1 sm:gap-2">
               {period === 'custom' && (
@@ -817,8 +817,7 @@ export function Analytics({
                     : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
                 }`}
               >
-                <span className="hidden sm:inline">{periodLabels[p]}</span>
-                <span className="sm:hidden">{p === 'thisYear' ? 'Year' : p === 'lastYear' ? 'Prev' : 'All'}</span>
+                {p === 'thisYear' ? '2026' : p === 'lastYear' ? '2025' : 'All Time'}
               </button>
             ))}
           </div>
