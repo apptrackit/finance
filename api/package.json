@@ -1,7 +1,8 @@
 {
   "name": "api",
   "scripts": {
-    "dev": "wrangler dev src/index.ts",
+    "setup-db": "bash setup-local-db.sh",
+    "dev": "npm run setup-db && wrangler dev src/index.ts",
     "deploy": "wrangler deploy --minify src/index.ts"
   },
   "dependencies": {
