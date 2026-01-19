@@ -11,8 +11,9 @@ export class TransactionMapper {
       description: transaction.description,
       date: transaction.date,
       price: transaction.price,
-      is_recurring: transaction.is_recurring,
-      linked_transaction_id: transaction.linked_transaction_id
+      linked_transaction_id: transaction.linked_transaction_id,
+      exclude_from_estimate: transaction.exclude_from_estimate,
+      is_recurring: transaction.is_recurring
     }
   }
 }

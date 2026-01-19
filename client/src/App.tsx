@@ -12,7 +12,7 @@ import { startOfMonth, endOfMonth, format } from 'date-fns'
 
 
 
-const APP_VERSION = '1.3.9'
+const APP_VERSION = '1.3.11'
 
 
 
@@ -38,6 +38,7 @@ type Transaction = {
   description?: string
   date: string
   linked_transaction_id?: string
+  exclude_from_estimate?: boolean
 }
 
 type Category = {

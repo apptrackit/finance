@@ -6,6 +6,7 @@ export interface CreateTransactionDto {
   date: string
   price?: number
   linked_transaction_id?: string
+  exclude_from_estimate?: boolean
 }
 
 export interface UpdateTransactionDto {
@@ -14,6 +15,7 @@ export interface UpdateTransactionDto {
   amount?: number
   description?: string
   date?: string
+  exclude_from_estimate?: boolean
 }
 
 export interface TransactionResponseDto {
@@ -25,4 +27,6 @@ export interface TransactionResponseDto {
   date: string
   price?: number
   linked_transaction_id?: string
+  exclude_from_estimate?: boolean
+  is_recurring?: boolean
 }

@@ -83,7 +83,8 @@ export class TransactionService {
       amount: dto.amount,
       description: dto.description,
       date: dto.date,
-      linked_transaction_id: dto.linked_transaction_id
+      linked_transaction_id: dto.linked_transaction_id,
+      exclude_from_estimate: dto.exclude_from_estimate
     }
 
     await this.transactionRepo.create(transaction)
@@ -122,7 +123,8 @@ export class TransactionService {
       category_id: dto.category_id !== undefined ? dto.category_id : oldTx.category_id,
       amount: newAmount,
       description: dto.description !== undefined ? dto.description : oldTx.description,
-      date: dto.date || oldTx.date
+      date: dto.date || oldTx.date,
+      exclude_from_estimate: dto.exclude_from_estimate !== undefined ? dto.exclude_from_estimate : oldTx.exclude_from_estimate
     })
 
     // Apply new balance
@@ -188,7 +190,7 @@ export class TransactionService {
       const existing = await this.transactionRepo.findByAccountAndDatePattern(
         tx.account_id,
         tx.amount,
-        tx.description,
+        tx.description || '',
         `${currentMonth}%`
       )
 

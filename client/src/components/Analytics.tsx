@@ -12,7 +12,8 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
-  Check
+  Check,
+  Sparkles
 } from 'lucide-react'
 import {
   AreaChart,
@@ -31,6 +32,8 @@ import {
 import { format, subMonths, startOfMonth, endOfMonth, isWithinInterval, subYears, startOfYear, endOfYear, isThisYear, startOfWeek, endOfWeek, addWeeks, addDays, differenceInDays } from 'date-fns'
 import { usePrivacy } from '../context/PrivacyContext'
 import { DateRangePicker } from './DateRangePicker'
+import { API_BASE_URL } from '../config'
+import { apiFetch } from '../config'
 
 // Custom Dropdown Component
 function CustomSelect({ 
@@ -169,6 +172,10 @@ export function Analytics({
   })
   const [showDatePicker, setShowDatePicker] = useState(false)
   
+  // Spending estimate state
+  const [weekEstimate, setWeekEstimate] = useState<any>(null)
+  const [monthEstimate, setMonthEstimate] = useState<any>(null)
+  
   const { privacyMode } = usePrivacy()
 
   // Helper function to calculate Y-axis domain for charts
@@ -207,6 +214,32 @@ export function Analytics({
       }
     }
     fetchRates()
+  }, [masterCurrency])
+
+  // Fetch spending estimates
+  useEffect(() => {
+    const fetchEstimates = async () => {
+      try {
+        const [weekRes, monthRes] = await Promise.all([
+            apiFetch(`${API_BASE_URL}/dashboard/spending-estimate?period=week&currency=${masterCurrency}`),
+            apiFetch(`${API_BASE_URL}/dashboard/spending-estimate?period=month&currency=${masterCurrency}`)
+        ])
+        
+        if (weekRes.ok) {
+          const weekData = await weekRes.json()
+          setWeekEstimate(weekData)
+        }
+        
+        if (monthRes.ok) {
+          const monthData = await monthRes.json()
+          setMonthEstimate(monthData)
+        }
+      } catch (error) {
+        console.error('Failed to fetch spending estimates:', error)
+      }
+    }
+    
+    fetchEstimates()
   }, [masterCurrency])
 
   // Convert amount to master currency
@@ -860,6 +893,93 @@ export function Analytics({
               </CardContent>
             </Card>
           </div>
+
+          {/* Spending Estimates */}
+          {(weekEstimate || monthEstimate) && (
+            <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2">
+              {/* Next Week Estimate */}
+              {weekEstimate && (
+                <Card className="border border-border/60 bg-gradient-to-b from-background/60 via-background/30 to-background/10">
+                  <CardHeader className="pb-2 px-4 sm:px-6">
+                    <div className="flex items-center gap-2">
+                      <div className="h-7 w-7 rounded-md bg-primary/10 flex items-center justify-center">
+                        <Sparkles className="h-4 w-4 text-primary" />
+                      </div>
+                      <div className="flex flex-col">
+                        <CardTitle className="text-sm sm:text-base">Next Week Estimate</CardTitle>
+                        <span className="text-xs text-muted-foreground">Week {weekEstimate.week_of_month} of month</span>
+                      </div>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="px-4 sm:px-6">
+                    <div className="space-y-3">
+                      <div>
+                        <p className={`text-2xl sm:text-3xl font-bold text-primary ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
+                          {privacyMode === 'hidden' ? '••••••' : `${weekEstimate.estimate_amount.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})}`} <span className="text-base sm:text-lg text-muted-foreground">{masterCurrency}</span>
+                        </p>
+                        <div className="flex flex-col gap-0.5 mt-1 text-xs text-muted-foreground">
+                          <div className="flex items-center gap-2">
+                            <span>Confidence: {weekEstimate.confidence_level}%</span>
+                          </div>
+                          {weekEstimate.current_period_actual > 0 && (
+                            <div className={privacyMode === 'hidden' ? 'select-none' : ''}>
+                              This week so far: {privacyMode === 'hidden' ? '••••' : weekEstimate.current_period_actual.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})} {masterCurrency}
+                            </div>
+                          )}
+                          {weekEstimate.previous_period_actual > 0 && (
+                            <div className={privacyMode === 'hidden' ? 'select-none' : ''}>
+                              Last week: {privacyMode === 'hidden' ? '••••' : weekEstimate.previous_period_actual.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})} {masterCurrency}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Next Month Estimate */}
+              {monthEstimate && (
+                <Card className="border border-border/60 bg-gradient-to-b from-background/60 via-background/30 to-background/10">
+                  <CardHeader className="pb-2 px-4 sm:px-6">
+                    <div className="flex items-center gap-2">
+                      <div className="h-7 w-7 rounded-md bg-primary/10 flex items-center justify-center">
+                        <Sparkles className="h-4 w-4 text-primary" />
+                      </div>
+                      <div className="flex flex-col">
+                        <CardTitle className="text-sm sm:text-base">Next Month Estimate</CardTitle>
+                        <span className="text-xs text-muted-foreground">Based on historical patterns</span>
+                      </div>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="px-4 sm:px-6">
+                    <div className="space-y-3">
+                      <div>
+                        <p className={`text-2xl sm:text-3xl font-bold text-primary ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
+                          {privacyMode === 'hidden' ? '••••••' : `${monthEstimate.estimate_amount.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})}`} <span className="text-base sm:text-lg text-muted-foreground">{masterCurrency}</span>
+                        </p>
+                        <div className="flex flex-col gap-0.5 mt-1 text-xs text-muted-foreground">
+                          <div className="flex items-center gap-2">
+                            <span>Confidence: {monthEstimate.confidence_level}%</span>
+                          </div>
+                          {monthEstimate.current_period_actual > 0 && (
+                            <div className={privacyMode === 'hidden' ? 'select-none' : ''}>
+                              This month so far: {privacyMode === 'hidden' ? '••••' : monthEstimate.current_period_actual.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})} {masterCurrency}
+                            </div>
+                          )}
+                          {monthEstimate.previous_period_actual > 0 && (
+                            <div className={privacyMode === 'hidden' ? 'select-none' : ''}>
+                              Last month: {privacyMode === 'hidden' ? '••••' : monthEstimate.previous_period_actual.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})} {masterCurrency}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+            </div>
+          )}
 
           {/* Charts Grid */}
           <div className="grid gap-4 sm:gap-6 grid-cols-1 lg:grid-cols-2">

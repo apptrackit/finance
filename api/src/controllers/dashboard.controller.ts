@@ -9,4 +9,21 @@ export class DashboardController {
     const result = await this.dashboardService.getNetWorth(currency)
     return c.json(result)
   }
+
+  async getSpendingEstimate(c: Context) {
+    const period = c.req.query('period') as 'week' | 'month' || 'month'
+    const currency = c.req.query('currency') || 'HUF'
+    const categoryId = c.req.query('categoryId')
+
+    if (period !== 'week' && period !== 'month') {
+      return c.json({ error: 'Invalid period. Must be "week" or "month"' }, 400)
+    }
+
+    const result = await this.dashboardService.getSpendingEstimate(
+      period,
+      currency,
+      categoryId
+    )
+    return c.json(result)
+  }
 }
