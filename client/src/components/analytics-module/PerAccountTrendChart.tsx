@@ -11,13 +11,14 @@ type PerAccountTrendChartProps = {
   index: number
   masterCurrency: string
   convertToMasterCurrency: (amount: number, accountId: string) => number
+  className?: string
 }
 
-export function PerAccountTrendChart({ account, data, index, masterCurrency, convertToMasterCurrency }: PerAccountTrendChartProps) {
+export function PerAccountTrendChart({ account, data, index, masterCurrency, convertToMasterCurrency, className }: PerAccountTrendChartProps) {
   const { privacyMode } = usePrivacy()
 
   return (
-    <Card>
+    <Card className={className}>
       <CardHeader className="pb-2 px-4 sm:px-6">
         <div className="flex items-center gap-2">
           <span className="text-base sm:text-lg">{account.icon || '💳'}</span>

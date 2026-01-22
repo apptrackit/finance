@@ -705,6 +705,7 @@ export function Analytics({
                 index={index}
                 masterCurrency={masterCurrency}
                 convertToMasterCurrency={convertToMasterCurrency}
+                className={perAccountTrendData.length % 2 !== 0 && index === perAccountTrendData.length - 1 ? 'lg:col-span-2' : ''}
               />
             ))}
 
