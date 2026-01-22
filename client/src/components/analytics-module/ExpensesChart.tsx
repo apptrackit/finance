@@ -15,6 +15,9 @@ type ExpensesChartProps = {
 
 export function ExpensesChart({ data, selectedCategory, onCategoryChange, categories, masterCurrency }: ExpensesChartProps) {
   const { privacyMode } = usePrivacy()
+  
+  // Calculate total sum
+  const totalSum = data.reduce((sum, item) => sum + item.amount, 0)
 
   return (
     <Card>
@@ -22,7 +25,12 @@ export function ExpensesChart({ data, selectedCategory, onCategoryChange, catego
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <TrendingDown className="h-4 w-4 text-destructive" />
-            <CardTitle className="text-sm sm:text-base">Expenses</CardTitle>
+            <div className="flex flex-col">
+              <CardTitle className="text-sm sm:text-base">Expenses</CardTitle>
+              <p className={`text-xs text-destructive font-semibold ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
+                {privacyMode === 'hidden' ? '••••••' : `Total: ${totalSum.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})} ${masterCurrency}`}
+              </p>
+            </div>
           </div>
           <CustomSelect
             value={selectedCategory}
