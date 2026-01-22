@@ -13,6 +13,7 @@ import { IncomeChart } from './IncomeChart'
 import { ExpensesChart } from './ExpensesChart'
 import { PerAccountTrendChart } from './PerAccountTrendChart'
 import { CategoryBreakdownChart } from './CategoryBreakdownChart'
+import { IncomeBreakdownChart } from './IncomeBreakdownChart'
 import { TopExpensesList } from './TopExpensesList'
 import type { Transaction, Category, Account, TimePeriod, SpendingEstimate, ChartDataPoint, TrendDataPoint } from './types'
 
@@ -162,6 +163,31 @@ export function Analytics({
       })
       .sort((a, b) => b.value - a.value)
   }, [filteredTransactions, categories, totalExpenses, exchangeRates, accounts, masterCurrency])
+
+  // Income by category data in master currency
+  const incomeCategoryData = useMemo(() => {
+    const incomeByCategory: Record<string, number> = {}
+    
+    filteredTransactions
+      .filter(t => t.amount > 0 && !t.linked_transaction_id)
+      .forEach(t => {
+        const categoryId = t.category_id || 'uncategorized'
+        const convertedAmount = convertToMasterCurrency(t.amount, t.account_id)
+        incomeByCategory[categoryId] = (incomeByCategory[categoryId] || 0) + convertedAmount
+      })
+
+    return Object.entries(incomeByCategory)
+      .map(([categoryId, amount]) => {
+        const category = categories.find(c => c.id === categoryId)
+        return {
+          name: category?.name || 'Other',
+          icon: category?.icon || '📦',
+          value: amount,
+          percentage: totalIncome > 0 ? (amount / totalIncome) * 100 : 0
+        }
+      })
+      .sort((a, b) => b.value - a.value)
+  }, [filteredTransactions, categories, totalIncome, exchangeRates, accounts, masterCurrency])
 
   // Net Worth Trend data - shows total balance over time in master currency
   const netWorthTrendData = useMemo((): TrendDataPoint[] => {
@@ -682,12 +708,15 @@ export function Analytics({
               />
             ))}
 
-            <div className={perAccountTrendData.length % 2 === 0 ? 'lg:col-span-2' : ''}>
-              <CategoryBreakdownChart 
-                data={categoryData}
-                masterCurrency={masterCurrency}
-              />
-            </div>
+            <IncomeBreakdownChart 
+              data={incomeCategoryData}
+              masterCurrency={masterCurrency}
+            />
+
+            <CategoryBreakdownChart 
+              data={categoryData}
+              masterCurrency={masterCurrency}
+            />
           </div>
 
           <SpendingEstimates 
