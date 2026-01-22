@@ -20,7 +20,7 @@ export function CategoryBreakdownChart({ data, masterCurrency }: CategoryBreakdo
   const { privacyMode } = usePrivacy()
 
   return (
-    <Card>
+    <Card className="border-[0.5px] border-destructive hover:border-destructive">
       <CardHeader className="pb-2 px-4 sm:px-6">
         <div className="flex items-center gap-2">
           <PieChartIcon className="h-4 w-4 text-muted-foreground" />
