@@ -37,6 +37,7 @@ const currencySymbols: Record<string, string> = {
   USD: '$',
   EUR: '€',
   GBP: '£',
+  CHF: 'CHF',
 }
 
 type MarketQuote = {
@@ -581,6 +582,7 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
                     <option value="EUR">🇪🇺 EUR</option>
                     <option value="USD">🇺🇸 USD</option>
                     <option value="GBP">🇬🇧 GBP</option>
+                    <option value="CHF">🇨🇭 CHF</option>
                   </Select>
                 </div>
               )}
@@ -654,6 +656,7 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
                       <option value="EUR">🇪🇺 EUR</option>
                       <option value="USD">🇺🇸 USD</option>
                       <option value="GBP">🇬🇧 GBP</option>
+                      <option value="CHF">🇨🇭 CHF</option>
                     </Select>
                   </div>
                   <div className="space-y-2">
