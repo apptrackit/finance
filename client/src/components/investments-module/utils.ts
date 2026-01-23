@@ -9,7 +9,8 @@ export const formatValue = (value: number, account?: Account) => {
     HUF: 'Ft',
     EUR: '€',
     USD: '$',
-    GBP: '£'
+    GBP: '£',
+    CHF: 'CHF'
   }
   const symbol = currencySymbols[account.currency] || account.currency
   const decimals = account.currency === 'HUF' ? 0 : 2
@@ -25,7 +26,8 @@ export const formatDisplayCurrency = (value: number, displayCurrency: 'HUF' | 'U
     HUF: 'Ft',
     EUR: '€',
     USD: '$',
-    GBP: '£'
+    GBP: '£',
+    CHF: 'CHF'
   }
   const symbol = currencySymbols[displayCurrency] || displayCurrency
   const decimals = displayCurrency === 'HUF' ? 0 : 2

@@ -20,13 +20,14 @@ export class AccountService {
   async createAccount(dto: CreateAccountDto): Promise<Account> {
     const id = crypto.randomUUID()
     const now = Date.now()
+    const currency = dto.currency?.trim() || 'HUF'
 
     const account: Account = {
       id,
       name: dto.name,
       type: dto.type,
       balance: dto.balance,
-      currency: dto.currency || 'HUF',
+      currency: currency.toUpperCase(),
       symbol: dto.symbol,
       asset_type: dto.asset_type,
       exclude_from_net_worth: dto.exclude_from_net_worth,
@@ -54,6 +55,13 @@ export class AccountService {
     }
     delete (updates as any).adjustWithTransaction
     delete (updates as any).splitTransactions
+
+    const currency = dto.currency?.trim()
+    if (currency) {
+      updates.currency = currency.toUpperCase()
+    } else {
+      delete (updates as any).currency
+    }
 
     await this.accountRepo.update(id, updates)
 
