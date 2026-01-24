@@ -27,7 +27,7 @@ export class RecurringScheduleService {
 
   async createSchedule(dto: CreateRecurringScheduleDto): Promise<RecurringScheduleResponseDto> {
     // Validate inputs
-    if (!['daily', 'weekly', 'monthly'].includes(dto.frequency)) {
+    if (!['daily', 'weekly', 'monthly', 'yearly'].includes(dto.frequency)) {
       throw new Error('Invalid frequency')
     }
 
@@ -42,6 +42,14 @@ export class RecurringScheduleService {
 
     if (dto.frequency === 'monthly' && (dto.day_of_month === undefined || dto.day_of_month < 1 || dto.day_of_month > 31)) {
       throw new Error('day_of_month must be between 1-31 for monthly frequency')
+    }
+
+    if (dto.frequency === 'yearly' && (dto.day_of_month === undefined || dto.day_of_month < 1 || dto.day_of_month > 31)) {
+      throw new Error('day_of_month must be between 1-31 for yearly frequency')
+    }
+
+    if (dto.frequency === 'yearly' && (dto.month === undefined || dto.month < 0 || dto.month > 11)) {
+      throw new Error('month must be between 0-11 for yearly frequency')
     }
 
     // Validate type-specific fields
@@ -76,6 +84,7 @@ export class RecurringScheduleService {
       frequency: dto.frequency,
       day_of_week: dto.day_of_week,
       day_of_month: dto.day_of_month,
+      month: dto.month,
       account_id: dto.account_id,
       to_account_id: dto.to_account_id,
       category_id: dto.category_id,
@@ -85,8 +94,8 @@ export class RecurringScheduleService {
       is_active: true,
       created_at: Date.now(),
       last_processed_date: undefined,
-      remaining_occurrences: dto.remaining_occurrences,
-      end_date: dto.end_date
+      remaining_occurrences: dto.remaining_occurrences ?? undefined,
+      end_date: dto.end_date ?? undefined
     }
 
     await this.recurringRepo.create(schedule)
@@ -108,7 +117,22 @@ export class RecurringScheduleService {
       throw new Error('day_of_month must be between 1-31 for monthly frequency')
     }
 
-    await this.recurringRepo.update(id, dto)
+    if (dto.frequency === 'yearly' && dto.day_of_month !== undefined && (dto.day_of_month < 1 || dto.day_of_month > 31)) {
+      throw new Error('day_of_month must be between 1-31 for yearly frequency')
+    }
+
+    if (dto.frequency === 'yearly' && dto.month !== undefined && (dto.month < 0 || dto.month > 11)) {
+      throw new Error('month must be between 0-11 for yearly frequency')
+    }
+
+    // Convert null to undefined for fields that don't accept null
+    const updateData: Partial<RecurringSchedule> = {
+      ...dto,
+      remaining_occurrences: dto.remaining_occurrences ?? undefined,
+      end_date: dto.end_date ?? undefined
+    }
+
+    await this.recurringRepo.update(id, updateData)
     const updated = await this.recurringRepo.findById(id)
     return this.toDto(updated!)
   }
@@ -198,6 +222,22 @@ export class RecurringScheduleService {
           return dayOfMonth === lastDayOfMonth
         }
         return dayOfMonth === targetDay
+      case 'yearly':
+        // Check if today matches the yearly schedule date
+        const month = today.getMonth() // 0-11
+        const targetMonth = schedule.month !== undefined ? schedule.month : new Date(schedule.created_at).getMonth()
+        
+        if (month !== targetMonth) {
+          return false
+        }
+        
+        // Handle edge case: if day_of_month is 31 but month has fewer days, process on last day
+        const lastDayOfTargetMonth = new Date(today.getFullYear(), month + 1, 0).getDate()
+        const yearlyTargetDay = schedule.day_of_month!
+        if (yearlyTargetDay > lastDayOfTargetMonth) {
+          return dayOfMonth === lastDayOfTargetMonth
+        }
+        return dayOfMonth === yearlyTargetDay
       default:
         return false
     }
