@@ -1,9 +1,10 @@
 export interface RecurringSchedule {
   id: string
   type: 'transaction' | 'transfer'
-  frequency: 'daily' | 'weekly' | 'monthly'
+  frequency: 'daily' | 'weekly' | 'monthly' | 'yearly'
   day_of_week?: number // 0-6 for weekly (0 = Sunday)
-  day_of_month?: number // 1-31 for monthly
+  day_of_month?: number // 1-31 for monthly and yearly
+  month?: number // 0-11 for yearly (0 = January)
   account_id: string // For transactions: the account; For transfers: from_account
   to_account_id?: string // Only for transfers
   category_id?: string // Only for transactions

@@ -37,9 +37,10 @@ type Category = {
 type RecurringSchedule = {
   id: string
   type: 'transaction' | 'transfer'
-  frequency: 'daily' | 'weekly' | 'monthly'
+  frequency: 'daily' | 'weekly' | 'monthly' | 'yearly'
   day_of_week?: number
   day_of_month?: number
+  month?: number
   account_id: string
   to_account_id?: string
   category_id?: string
@@ -83,9 +84,10 @@ export function RecurringTransactions({
 
   const [formData, setFormData] = useState({
     type: 'transaction' as 'transaction' | 'transfer',
-    frequency: 'monthly' as 'daily' | 'weekly' | 'monthly',
+    frequency: 'monthly' as 'daily' | 'weekly' | 'monthly' | 'yearly',
     day_of_week: 1,
     day_of_month: '1',
+    month: new Date().getMonth(),
     account_id: '',
     to_account_id: '',
     category_id: '',
@@ -128,6 +130,7 @@ export function RecurringTransactions({
       frequency: 'monthly',
       day_of_week: 1,
       day_of_month: '1',
+      month: new Date().getMonth(),
       account_id: '',
       to_account_id: '',
       category_id: subscriptionCategory?.id || '',
@@ -168,13 +171,17 @@ export function RecurringTransactions({
     // Add frequency-specific fields
     if (formData.frequency === 'weekly') {
       payload.day_of_week = formData.day_of_week
-    } else if (formData.frequency === 'monthly') {
+    } else if (formData.frequency === 'monthly' || formData.frequency === 'yearly') {
       const dayOfMonth = parseInt(formData.day_of_month)
       if (!isNaN(dayOfMonth) && dayOfMonth >= 1 && dayOfMonth <= 31) {
         payload.day_of_month = dayOfMonth
       } else {
         showAlert({ type: 'error', message: 'Please enter a valid day of month (1-31)' })
         return
+      }
+      
+      if (formData.frequency === 'yearly') {
+        payload.month = formData.month
       }
     }
 
@@ -263,6 +270,7 @@ export function RecurringTransactions({
       frequency: schedule.frequency,
       day_of_week: schedule.day_of_week ?? 1,
       day_of_month: schedule.day_of_month?.toString() ?? '1',
+      month: schedule.month ?? new Date().getMonth(),
       account_id: schedule.account_id,
       to_account_id: schedule.to_account_id || '',
       category_id: schedule.category_id || '',
@@ -335,6 +343,11 @@ export function RecurringTransactions({
     if (schedule.frequency === 'monthly') {
       return `Monthly on day ${schedule.day_of_month}`
     }
+    if (schedule.frequency === 'yearly') {
+      const targetMonth = schedule.month !== undefined ? schedule.month : new Date(schedule.created_at).getMonth()
+      const monthName = new Date(2000, targetMonth, 1).toLocaleDateString('en-US', { month: 'long' })
+      return `Yearly on ${monthName} ${schedule.day_of_month}`
+    }
     return schedule.frequency
   }
 
@@ -366,6 +379,18 @@ export function RecurringTransactions({
             const lastDayOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0).getDate()
             const targetDay = schedule.day_of_month!
             if (targetDay > lastDayOfMonth) return dayOfMonth === lastDayOfMonth
+            return dayOfMonth === targetDay
+          }
+          if (schedule.frequency === 'yearly') {
+            const month = currentDate.getMonth()
+            const targetMonth = schedule.month !== undefined ? schedule.month : new Date(schedule.created_at).getMonth()
+            
+            if (month !== targetMonth) return false
+            
+            const dayOfMonth = currentDate.getDate()
+            const lastDayOfTargetMonth = new Date(currentDate.getFullYear(), month + 1, 0).getDate()
+            const targetDay = schedule.day_of_month!
+            if (targetDay > lastDayOfTargetMonth) return dayOfMonth === lastDayOfTargetMonth
             return dayOfMonth === targetDay
           }
           return false
@@ -482,6 +507,18 @@ export function RecurringTransactions({
             if (targetDay > lastDayOfMonth) return dayOfMonth === lastDayOfMonth
             return dayOfMonth === targetDay
           }
+          if (schedule.frequency === 'yearly') {
+            const month = currentDate.getMonth()
+            const targetMonth = schedule.month !== undefined ? schedule.month : new Date(schedule.created_at).getMonth()
+            
+            if (month !== targetMonth) return false
+            
+            const dayOfMonth = currentDate.getDate()
+            const lastDayOfTargetMonth = new Date(currentDate.getFullYear(), month + 1, 0).getDate()
+            const targetDay = schedule.day_of_month!
+            if (targetDay > lastDayOfTargetMonth) return dayOfMonth === lastDayOfTargetMonth
+            return dayOfMonth === targetDay
+          }
           return false
         })()
 
@@ -587,6 +624,19 @@ export function RecurringTransactions({
           }
           return current.getDate() === targetDay
         }
+        if (schedule.frequency === 'yearly') {
+          const month = current.getMonth()
+          const targetMonth = schedule.month !== undefined ? schedule.month : new Date(schedule.created_at).getMonth()
+          
+          if (month !== targetMonth) return false
+          
+          const lastDayOfTargetMonth = new Date(current.getFullYear(), month + 1, 0).getDate()
+          const targetDay = schedule.day_of_month!
+          if (targetDay > lastDayOfTargetMonth) {
+            return current.getDate() === lastDayOfTargetMonth
+          }
+          return current.getDate() === targetDay
+        }
         return false
       })()
       
@@ -667,6 +717,19 @@ export function RecurringTransactions({
                 const targetDay = schedule.day_of_month!
                 if (targetDay > lastDayOfMonth) {
                   return date.getDate() === lastDayOfMonth
+                }
+                return date.getDate() === targetDay
+              }
+              if (schedule.frequency === 'yearly') {
+                const month = date.getMonth()
+                const targetMonth = schedule.month !== undefined ? schedule.month : new Date(schedule.created_at).getMonth()
+                
+                if (month !== targetMonth) return false
+                
+                const lastDayOfTargetMonth = new Date(date.getFullYear(), month + 1, 0).getDate()
+                const targetDay = schedule.day_of_month!
+                if (targetDay > lastDayOfTargetMonth) {
+                  return date.getDate() === lastDayOfTargetMonth
                 }
                 return date.getDate() === targetDay
               }
@@ -771,6 +834,18 @@ export function RecurringTransactions({
                 const targetDay = schedule.day_of_month!
                 if (targetDay > lastDayOfMonth) {
                   return day === lastDayOfMonth
+                }
+                return day === targetDay
+              }
+              if (schedule.frequency === 'yearly') {
+                const targetMonth = schedule.month !== undefined ? schedule.month : new Date(schedule.created_at).getMonth()
+                
+                if (month !== targetMonth) return false
+                
+                const lastDayOfTargetMonth = new Date(year, month + 1, 0).getDate()
+                const targetDay = schedule.day_of_month!
+                if (targetDay > lastDayOfTargetMonth) {
+                  return day === lastDayOfTargetMonth
                 }
                 return day === targetDay
               }
@@ -1065,6 +1140,7 @@ export function RecurringTransactions({
                   <option value="daily">Daily</option>
                   <option value="weekly">Weekly</option>
                   <option value="monthly">Monthly</option>
+                  <option value="yearly">Yearly</option>
                 </Select>
               </div>
             </div>
@@ -1113,6 +1189,59 @@ export function RecurringTransactions({
                   If the day doesn't exist in a month (e.g., day 31 in February), it will process on the last day of that month
                 </p>
               </div>
+            )}
+
+            {formData.frequency === 'yearly' && (
+              <>
+                <div className="space-y-2">
+                  <Label htmlFor="month_yearly">Month</Label>
+                  <Select
+                    id="month_yearly"
+                    value={formData.month.toString()}
+                    onChange={e => setFormData({ ...formData, month: parseInt(e.target.value) })}
+                    required
+                  >
+                    <option value="0">January</option>
+                    <option value="1">February</option>
+                    <option value="2">March</option>
+                    <option value="3">April</option>
+                    <option value="4">May</option>
+                    <option value="5">June</option>
+                    <option value="6">July</option>
+                    <option value="7">August</option>
+                    <option value="8">September</option>
+                    <option value="9">October</option>
+                    <option value="10">November</option>
+                    <option value="11">December</option>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="day_of_month_yearly">Day of Month</Label>
+                  <Input
+                    id="day_of_month_yearly"
+                    type="number"
+                    min="1"
+                    max="31"
+                    value={formData.day_of_month}
+                    onChange={e => {
+                      const value = e.target.value
+                      if (value === '' || (parseInt(value) >= 1 && parseInt(value) <= 31)) {
+                        setFormData({ ...formData, day_of_month: value })
+                      }
+                    }}
+                    onKeyDown={e => {
+                      if (e.key.length === 1 && !/[0-9]/.test(e.key) && !e.ctrlKey && !e.metaKey) {
+                        e.preventDefault()
+                      }
+                    }}
+                    placeholder="Enter day (1-31)"
+                    required
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    The schedule will repeat on this day and month every year. If the day doesn't exist (e.g., Feb 31), it will process on the last day of that month.
+                  </p>
+                </div>
+              </>
             )}
 
             {formData.type === 'transaction' && (
