@@ -94,8 +94,8 @@ export class RecurringScheduleService {
       is_active: true,
       created_at: Date.now(),
       last_processed_date: undefined,
-      remaining_occurrences: dto.remaining_occurrences,
-      end_date: dto.end_date
+      remaining_occurrences: dto.remaining_occurrences ?? undefined,
+      end_date: dto.end_date ?? undefined
     }
 
     await this.recurringRepo.create(schedule)
@@ -125,7 +125,14 @@ export class RecurringScheduleService {
       throw new Error('month must be between 0-11 for yearly frequency')
     }
 
-    await this.recurringRepo.update(id, dto)
+    // Convert null to undefined for fields that don't accept null
+    const updateData: Partial<RecurringSchedule> = {
+      ...dto,
+      remaining_occurrences: dto.remaining_occurrences ?? undefined,
+      end_date: dto.end_date ?? undefined
+    }
+
+    await this.recurringRepo.update(id, updateData)
     const updated = await this.recurringRepo.findById(id)
     return this.toDto(updated!)
   }
