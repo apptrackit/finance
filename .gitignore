@@ -123,7 +123,6 @@ dev-dist
 api/wrangler.toml  # Each developer has their own config
 
 # Database backups (may contain sensitive data)
-*.sql
 production-backup.sql
 api/production-backup.sql
 
