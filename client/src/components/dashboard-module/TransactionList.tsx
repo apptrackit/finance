@@ -4,13 +4,15 @@ import { Input } from '../common/input'
 import { Label } from '../common/label'
 import { Select } from '../common/select'
 import { Card, CardContent, CardHeader, CardTitle } from '../common/card'
-import { Plus, X, ArrowDownLeft, ArrowUpRight, Receipt, Pencil, Trash2, Check, ArrowRightLeft, ChevronLeft, ChevronRight, Calendar } from 'lucide-react'
+import { Modal } from '../common/modal'
+import { Plus, X, ArrowDownLeft, ArrowUpRight, Receipt, Pencil, Trash2, Check, ArrowRightLeft, ChevronLeft, ChevronRight, Calendar, Layers } from 'lucide-react'
 import { format, addMonths, subMonths, startOfMonth, endOfMonth, addDays, differenceInDays } from 'date-fns'
 import { API_BASE_URL, apiFetch } from '../../config'
 import { usePrivacy } from '../../context/PrivacyContext'
 import { useAlert } from '../../context/AlertContext'
 import { useLockedAccounts } from '../../context/LockedAccountsContext'
 import { DateRangePicker } from '../common/DateRangePicker'
+import { BulkTransactionModal, type BulkTransaction } from './BulkTransactionModal'
 
 type Transaction = {
   id: string
@@ -74,6 +76,7 @@ export function TransactionList({
 }) {
   const [isAdding, setIsAdding] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
+  const [showBulkModal, setShowBulkModal] = useState(false)
   const [categories, setCategories] = useState<Category[]>([])
   const [showDatePicker, setShowDatePicker] = useState(false)
   const [customRange, setCustomRange] = useState({ startDate: dateRange.startDate, endDate: dateRange.endDate })
@@ -611,6 +614,30 @@ export function TransactionList({
     resetForm()
   }
 
+  const handleBulkTransactionConfirm = async (bulkTransactions: BulkTransaction[]) => {
+    // Create all transactions one by one
+    for (const tx of bulkTransactions) {
+      const amount = parseFloat(tx.amount.replace(/\s/g, ''))
+      const finalAmount = tx.type === 'expense' ? -Math.abs(amount) : Math.abs(amount)
+      
+      await apiFetch(`${API_BASE_URL}/transactions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          account_id: tx.account_id,
+          category_id: tx.category_id || null,
+          amount: finalAmount,
+          description: tx.description,
+          date: tx.date,
+          exclude_from_estimate: tx.type === 'expense' ? tx.exclude_from_estimate : false
+        }),
+      })
+    }
+    
+    setShowBulkModal(false)
+    onTransactionAdded()
+  }
+
   const getCategoryName = (id?: string) => {
     if (!id) return 'Uncategorized'
     const cat = categories.find(c => c.id === id)
@@ -699,15 +726,27 @@ export function TransactionList({
               </div>
             </div>
             
-            <Button 
-              onClick={() => isAdding ? handleCancel() : handleOpenForm()} 
-              size="sm" 
-              variant={isAdding ? "ghost" : "outline"}
-              className="h-7 sm:h-8 text-xs flex-shrink-0"
-            >
-              {isAdding ? <X className="h-3.5 w-3.5 sm:h-4 sm:w-4" /> : <Plus className="h-3.5 w-3.5 sm:h-4 sm:w-4" />}
-              <span className="ml-1">{isAdding ? 'Cancel' : 'Add'}</span>
-            </Button>
+            <div className="flex items-center gap-1.5">
+              <Button 
+                onClick={() => setShowBulkModal(true)} 
+                size="sm" 
+                variant="outline"
+                className="h-7 sm:h-8 text-xs flex-shrink-0"
+                title="Bulk add transactions"
+              >
+                <Layers className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                <span className="ml-1 hidden sm:inline">Bulk</span>
+              </Button>
+              <Button 
+                onClick={() => isAdding ? handleCancel() : handleOpenForm()} 
+                size="sm" 
+                variant={isAdding ? "ghost" : "outline"}
+                className="h-7 sm:h-8 text-xs flex-shrink-0"
+              >
+                {isAdding ? <X className="h-3.5 w-3.5 sm:h-4 sm:w-4" /> : <Plus className="h-3.5 w-3.5 sm:h-4 sm:w-4" />}
+                <span className="ml-1">{isAdding ? 'Cancel' : 'Add'}</span>
+              </Button>
+            </div>
           </div>
           
           <div className="flex items-center justify-center gap-2 sm:gap-3 flex-wrap">
@@ -852,9 +891,13 @@ export function TransactionList({
           </div>
         </div>
       </CardHeader>
-      <CardContent className="space-y-3 sm:space-y-4">
-        {isAdding && (
-          <form onSubmit={handleSubmit} className="p-4 rounded-xl bg-secondary/50 border border-border/50 space-y-4 animate-in slide-in-from-top-2 duration-200">
+      
+      <Modal 
+        isOpen={isAdding} 
+        onClose={handleCancel} 
+        title={editingId ? 'Edit Transaction' : (formData.type === 'transfer' ? 'Add Transfer' : formData.type === 'income' ? 'Add Income' : 'Add Transaction')}
+      >
+        <form onSubmit={handleSubmit} className="space-y-4">
             {/* Transaction Type Selector - 3 options now */}
             <div className="grid grid-cols-3 gap-2">
               <button
@@ -1224,8 +1267,9 @@ export function TransactionList({
               </>
             )}
           </form>
-        )}
+      </Modal>
 
+      <CardContent className="space-y-3 sm:space-y-4">
         <div className="space-y-3 sm:space-y-4">
           {sortOrder === 'date' ? (
             // Date-based grouping
@@ -1576,6 +1620,16 @@ export function TransactionList({
           )}
         </div>
       </CardContent>
+
+      {/* Bulk Transaction Modal */}
+      <BulkTransactionModal
+        isOpen={showBulkModal}
+        onClose={() => setShowBulkModal(false)}
+        onConfirm={handleBulkTransactionConfirm}
+        accounts={accounts}
+        categories={categories}
+        defaultDate={new Date().toISOString().split('T')[0]}
+      />
     </Card>
   )
 }
