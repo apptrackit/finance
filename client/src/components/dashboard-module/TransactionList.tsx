@@ -4,6 +4,7 @@ import { Input } from '../common/input'
 import { Label } from '../common/label'
 import { Select } from '../common/select'
 import { Card, CardContent, CardHeader, CardTitle } from '../common/card'
+import { Modal } from '../common/modal'
 import { Plus, X, ArrowDownLeft, ArrowUpRight, Receipt, Pencil, Trash2, Check, ArrowRightLeft, ChevronLeft, ChevronRight, Calendar } from 'lucide-react'
 import { format, addMonths, subMonths, startOfMonth, endOfMonth, addDays, differenceInDays } from 'date-fns'
 import { API_BASE_URL, apiFetch } from '../../config'
@@ -852,9 +853,13 @@ export function TransactionList({
           </div>
         </div>
       </CardHeader>
-      <CardContent className="space-y-3 sm:space-y-4">
-        {isAdding && (
-          <form onSubmit={handleSubmit} className="p-4 rounded-xl bg-secondary/50 border border-border/50 space-y-4 animate-in slide-in-from-top-2 duration-200">
+      
+      <Modal 
+        isOpen={isAdding} 
+        onClose={handleCancel} 
+        title={editingId ? 'Edit Transaction' : (formData.type === 'transfer' ? 'Add Transfer' : formData.type === 'income' ? 'Add Income' : 'Add Transaction')}
+      >
+        <form onSubmit={handleSubmit} className="space-y-4">
             {/* Transaction Type Selector - 3 options now */}
             <div className="grid grid-cols-3 gap-2">
               <button
@@ -1224,8 +1229,9 @@ export function TransactionList({
               </>
             )}
           </form>
-        )}
+      </Modal>
 
+      <CardContent className="space-y-3 sm:space-y-4">
         <div className="space-y-3 sm:space-y-4">
           {sortOrder === 'date' ? (
             // Date-based grouping

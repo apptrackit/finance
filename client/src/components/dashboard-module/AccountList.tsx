@@ -4,6 +4,7 @@ import { Input } from '../common/input'
 import { Label } from '../common/label'
 import { Select } from '../common/select'
 import { Card, CardContent, CardHeader, CardTitle } from '../common/card'
+import { Modal } from '../common/modal'
 import { Plus, X, Wallet, Building, Pencil, Trash2, Check, Search, Lock, LockOpen, CircleCheck, CircleX } from 'lucide-react'
 import { API_BASE_URL, apiFetch } from '../../config'
 import { usePrivacy } from '../../context/PrivacyContext'
@@ -544,9 +545,8 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
           <span className="ml-1">{isAdding ? 'Cancel' : 'Add'}</span>
         </Button>
       </CardHeader>
-      <CardContent className="space-y-3 sm:space-y-4">
-        {isAdding && (
-          <form onSubmit={handleSubmit} className="p-4 rounded-xl bg-secondary/50 border border-border/50 space-y-4 animate-in slide-in-from-top-2 duration-200">
+      <Modal isOpen={isAdding} onClose={handleCancel} title={editingId ? 'Edit Account' : 'Add Account'}>
+        <form onSubmit={handleSubmit} className="space-y-4">
             <div className="grid grid-cols-2 gap-3">
               <div className="col-span-2 space-y-2">
                 <Label htmlFor="name">Account Name</Label>
@@ -700,8 +700,9 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
               {isSubmitting ? 'Saving...' : (editingId ? 'Save Changes' : 'Add Account')}
             </Button>
           </form>
-        )}
+      </Modal>
 
+      <CardContent className="space-y-3 sm:space-y-4">
         {/* Cash Accounts Section */}
         {accounts.filter(a => a.type === 'cash').length > 0 && (
           <div className="space-y-2 sm:space-y-3 mb-4 sm:mb-6">
