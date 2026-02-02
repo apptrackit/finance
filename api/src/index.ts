@@ -76,7 +76,48 @@ function createDependencies(db: D1Database) {
 
 const app = new Hono<{ Bindings: Bindings }>()
 
-// Apply CORS middleware globally
+// Public API endpoint - bypasses CORS, only requires API key
+// This endpoint can be accessed via curl with X-API-Key header
+app.get('/public/recent-expenses', async (c) => {
+  // Check API key (uses dedicated PUBLIC_API_KEY)
+  const apiKey = c.req.header('X-API-Key')
+  if (!apiKey || !c.env.PUBLIC_API_KEY || apiKey !== c.env.PUBLIC_API_KEY) {
+    return c.json({ error: 'Unauthorized' }, 401)
+  }
+
+  const now = new Date()
+  const currentYear = now.getFullYear()
+  const currentMonth = now.getMonth()
+  
+  // Start of last month
+  const lastMonth = currentMonth === 0 ? 11 : currentMonth - 1
+  const lastMonthYear = currentMonth === 0 ? currentYear - 1 : currentYear
+  const startDate = `${lastMonthYear}-${String(lastMonth + 1).padStart(2, '0')}-01`
+  
+  // End of current month
+  const endOfMonth = new Date(currentYear, currentMonth + 1, 0)
+  const endDate = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(endOfMonth.getDate()).padStart(2, '0')}`
+
+  const transactionRepo = new TransactionRepository(c.env.DB)
+  const transactions = await transactionRepo.findRecentExpensesFromCashAccounts(startDate, endDate)
+
+  // Return only essential transaction data with names
+  const result = transactions.map(t => ({
+    amount: t.amount,
+    description: t.description,
+    date: t.date,
+    account: t.account_name,
+    category: t.category_name || null
+  }))
+
+  return c.json({
+    period: { start: startDate, end: endDate },
+    count: result.length,
+    transactions: result
+  })
+})
+
+// Apply CORS middleware globally (except for public endpoints defined above)
 app.use('/*', corsMiddleware)
 
 // Apply authentication middleware globally (except OPTIONS which is handled by CORS)

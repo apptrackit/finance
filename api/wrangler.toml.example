@@ -21,3 +21,9 @@ database_id = "YOUR-DATABASE-ID-HERE"  # Replace with your D1 database ID
 
 [triggers]
 crons = ["0 0 * * *"] # Run daily at midnight to process recurring schedules
+
+# Local development environment variables
+[vars]
+API_SECRET = "your-api-secret-here"
+ALLOWED_ORIGINS = "https://your-frontend-domain.com"
+PUBLIC_API_KEY = "your-public-api-key-here"  # For curl access to /public/* endpoints
