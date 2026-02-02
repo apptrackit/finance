@@ -26,4 +26,6 @@ crons = ["0 0 * * *"] # Run daily at midnight to process recurring schedules
 [vars]
 API_SECRET = "your-api-secret-here"
 ALLOWED_ORIGINS = "https://your-frontend-domain.com"
-PUBLIC_API_KEY = "your-public-api-key-here"  # For curl access to /public/* endpoints
+# PUBLIC_API_KEY enables /public/* endpoints for curl access
+# Set to a secure random string to enable, or "off"/"disabled"/empty to disable
+PUBLIC_API_KEY = "off"  # Change to a secure key to enable public API endpoints

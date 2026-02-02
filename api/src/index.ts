@@ -76,12 +76,25 @@ function createDependencies(db: D1Database) {
 
 const app = new Hono<{ Bindings: Bindings }>()
 
+// Helper to check if the public API feature is enabled
+function isPublicApiEnabled(apiKey: string | undefined): boolean {
+  if (!apiKey) return false
+  const disabledValues = ['', 'off', 'disabled', 'none', 'your-public-api-key-here']
+  return !disabledValues.includes(apiKey.toLowerCase())
+}
+
 // Public API endpoint - bypasses CORS, only requires API key
 // This endpoint can be accessed via curl with X-API-Key header
+// Set PUBLIC_API_KEY to 'off' or leave empty to disable this feature
 app.get('/public/recent-expenses', async (c) => {
+  // Check if public API feature is enabled
+  if (!isPublicApiEnabled(c.env.PUBLIC_API_KEY)) {
+    return c.json({ error: 'Public API is disabled' }, 404)
+  }
+
   // Check API key (uses dedicated PUBLIC_API_KEY)
   const apiKey = c.req.header('X-API-Key')
-  if (!apiKey || !c.env.PUBLIC_API_KEY || apiKey !== c.env.PUBLIC_API_KEY) {
+  if (!apiKey || apiKey !== c.env.PUBLIC_API_KEY) {
     return c.json({ error: 'Unauthorized' }, 401)
   }
 
