@@ -13,7 +13,7 @@ import { Budget } from './components/budget-module/Budget'
 
  
 
-const APP_VERSION = '1.5.3'
+const APP_VERSION = '1.5.4'
 const MENU_STORAGE_KEY = 'finance_visible_menus'
 
 

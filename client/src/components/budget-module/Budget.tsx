@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { PiggyBank, Plus, RefreshCw } from 'lucide-react'
-import { Card, CardContent, CardHeader, CardTitle } from '../common/card'
+import { Card, CardContent } from '../common/card'
 import { Button } from '../common/button'
 import { API_BASE_URL, apiFetch } from '../../config'
 import { BudgetCard } from './BudgetCard'
@@ -134,40 +134,6 @@ export function Budget({ accounts, categories, transactions, masterCurrency }: B
     const today = new Date().toISOString().slice(0, 10)
     return budgets.filter(budget => budget.start_date <= today && budget.end_date >= today)
   }, [budgets])
-
-  const summary = useMemo(() => {
-    const totalBudgeted = activeBudgets.reduce((sum, budget) => sum + budget.amount, 0)
-    
-    // Calculate total spent by counting unique transactions across all active budgets
-    // to avoid double-counting when budgets overlap
-    const processedTxIds = new Set<string>()
-    let totalSpent = 0
-    
-    activeBudgets.forEach(budget => {
-      const accountIds = new Set(getBudgetAccountIds(budget))
-      const categoryIds = new Set(getBudgetCategoryIds(budget))
-      
-      transactions
-        .filter(tx => tx.amount < 0 && !tx.linked_transaction_id)
-        .filter(tx => tx.date >= budget.start_date && tx.date <= budget.end_date)
-        .filter(tx => accountIds.has(tx.account_id))
-        .filter(tx => {
-          if (budget.category_scope === 'selected') {
-            return tx.category_id ? categoryIds.has(tx.category_id) : false
-          }
-          return true
-        })
-        .forEach(tx => {
-          if (!processedTxIds.has(tx.id)) {
-            processedTxIds.add(tx.id)
-            totalSpent += Math.abs(convertToMasterCurrency(tx.amount, tx.account_id))
-          }
-        })
-    })
-    
-    const utilization = totalBudgeted > 0 ? Math.min(totalSpent / totalBudgeted, 1.5) : 0
-    return { totalBudgeted, totalSpent, utilization }
-  }, [activeBudgets, budgetSpendMap, transactions, accounts, exchangeRates, masterCurrency])
 
   const handleSaveBudget = async (payload: {
     name?: string
