@@ -4,15 +4,16 @@ import { TransactionList } from './components/dashboard-module/TransactionList'
 import { Analytics } from './components/analytics-module/Analytics'
 import { Investments } from './components/investments-module/Investments'
 import { RecurringTransactions } from './components/dashboard-module/RecurringTransactions'
-import { Wallet, TrendingUp, TrendingDown, Activity, BarChart3, List, Settings as SettingsIcon, LineChart, Eye, EyeOff, RefreshCw } from 'lucide-react'
+import { Wallet, TrendingUp, TrendingDown, Activity, BarChart3, List, Settings as SettingsIcon, LineChart, Eye, EyeOff, RefreshCw, PiggyBank } from 'lucide-react'
 import { API_BASE_URL, apiFetch } from './config'
 import Settings, { getMasterCurrency } from './components/settings-module/Settings'
 import { usePrivacy } from './context/PrivacyContext'
 import { startOfMonth, endOfMonth, format } from 'date-fns'
+import { Budget } from './components/budget-module/Budget'
 
  
 
-const APP_VERSION = '1.4.0'
+const APP_VERSION = '1.5.0'
 
 
 
@@ -56,7 +57,7 @@ type MarketQuote = {
   regularMarketChangePercent?: number
 }
 
-type View = 'dashboard' | 'analytics' | 'settings' | 'investments' | 'recurring'
+type View = 'dashboard' | 'analytics' | 'settings' | 'investments' | 'recurring' | 'budget'
 
 function App() {
   const [netWorth, setNetWorth] = useState<number | null>(null)
@@ -478,6 +479,17 @@ function App() {
                     <span className="hidden lg:inline">Recurring</span>
                   </button>
                   <button
+                    onClick={() => setView('budget')}
+                    className={`px-2.5 lg:px-3 py-2 lg:py-1.5 text-xs font-medium rounded-md lg:rounded-lg transition-all flex items-center gap-1 lg:gap-1.5 ${
+                      view === 'budget'
+                        ? 'bg-primary text-primary-foreground shadow-sm'
+                        : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
+                    }`}
+                  >
+                    <PiggyBank className="h-4 w-4 lg:h-3.5 lg:w-3.5" />
+                    <span className="hidden lg:inline">Budget</span>
+                  </button>
+                  <button
                     onClick={() => setView('settings')}
                     className={`px-2.5 lg:px-3 py-2 lg:py-1.5 text-xs font-medium rounded-md lg:rounded-lg transition-all flex items-center gap-1 lg:gap-1.5 ${
                       view === 'settings'
@@ -674,6 +686,14 @@ function App() {
           ) : view === 'recurring' ? (
             /* Recurring Transactions View */
             <RecurringTransactions accounts={accounts} categories={categories} />
+          ) : view === 'budget' ? (
+            /* Budget View */
+            <Budget
+              accounts={accounts}
+              categories={categories}
+              transactions={allTransactions}
+              masterCurrency={masterCurrency}
+            />
           ) : (
             /* Settings View */
             <Settings />

@@ -8,6 +8,7 @@ import { TransactionRepository } from './repositories/transaction.repository'
 import { CategoryRepository } from './repositories/category.repository'
 import { InvestmentTransactionRepository } from './repositories/investment-transaction.repository'
 import { RecurringScheduleRepository } from './repositories/recurring-schedule.repository'
+import { BudgetRepository } from './repositories/budget.repository'
 
 // Services
 import { AccountService } from './services/account.service'
@@ -18,6 +19,7 @@ import { TransferService } from './services/transfer.service'
 import { DashboardService } from './services/dashboard.service'
 import { MarketDataService } from './services/market-data.service'
 import { RecurringScheduleService } from './services/recurring-schedule.service'
+import { BudgetService } from './services/budget.service'
 
 // Controllers
 import { AccountController } from './controllers/account.controller'
@@ -28,6 +30,7 @@ import { TransferController } from './controllers/transfer.controller'
 import { DashboardController } from './controllers/dashboard.controller'
 import { MarketDataController } from './controllers/market-data.controller'
 import { RecurringScheduleController } from './controllers/recurring-schedule.controller'
+import { BudgetController } from './controllers/budget.controller'
 
 // Middleware
 import { corsMiddleware } from './middlewares/cors.middleware'
@@ -41,6 +44,7 @@ function createDependencies(db: D1Database) {
   const categoryRepo = new CategoryRepository(db)
   const investmentTransactionRepo = new InvestmentTransactionRepository(db)
   const recurringScheduleRepo = new RecurringScheduleRepository(db)
+  const budgetRepo = new BudgetRepository(db)
 
   // Initialize services
   const accountService = new AccountService(accountRepo, transactionRepo)
@@ -51,6 +55,7 @@ function createDependencies(db: D1Database) {
   const dashboardService = new DashboardService(accountRepo, transactionRepo, recurringScheduleRepo, categoryRepo)
   const marketDataService = new MarketDataService()
   const recurringScheduleService = new RecurringScheduleService(recurringScheduleRepo, transactionRepo, accountRepo)
+  const budgetService = new BudgetService(budgetRepo, accountRepo, categoryRepo)
 
   // Initialize controllers
   const accountController = new AccountController(accountService)
@@ -61,6 +66,7 @@ function createDependencies(db: D1Database) {
   const dashboardController = new DashboardController(dashboardService)
   const marketDataController = new MarketDataController(marketDataService)
   const recurringScheduleController = new RecurringScheduleController(recurringScheduleService)
+  const budgetController = new BudgetController(budgetService)
 
   return {
     accountController,
@@ -70,7 +76,8 @@ function createDependencies(db: D1Database) {
     transferController,
     dashboardController,
     marketDataController,
-    recurringScheduleController
+    recurringScheduleController,
+    budgetController
   }
 }
 
@@ -197,6 +204,13 @@ app.get('/recurring-schedules/:id', (c) => getControllers(c).recurringScheduleCo
 app.post('/recurring-schedules', (c) => getControllers(c).recurringScheduleController.create(c))
 app.put('/recurring-schedules/:id', (c) => getControllers(c).recurringScheduleController.update(c))
 app.delete('/recurring-schedules/:id', (c) => getControllers(c).recurringScheduleController.delete(c))
+
+// Budgets
+app.get('/budgets', (c) => getControllers(c).budgetController.getAll(c))
+app.get('/budgets/:id', (c) => getControllers(c).budgetController.getById(c))
+app.post('/budgets', (c) => getControllers(c).budgetController.create(c))
+app.put('/budgets/:id', (c) => getControllers(c).budgetController.update(c))
+app.delete('/budgets/:id', (c) => getControllers(c).budgetController.delete(c))
 
 // Manual trigger for scheduled task (for testing)
 app.post('/test-scheduled-task', async (c) => {

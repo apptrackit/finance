@@ -8,6 +8,7 @@ import { InvestmentTransactionController } from '../controllers/investment-trans
 import { TransferController } from '../controllers/transfer.controller'
 import { DashboardController } from '../controllers/dashboard.controller'
 import { MarketDataController } from '../controllers/market-data.controller'
+import { BudgetController } from '../controllers/budget.controller'
 
 export function setupRoutes(
   app: Hono<{ Bindings: Bindings }>,
@@ -19,6 +20,7 @@ export function setupRoutes(
     transferController: TransferController
     dashboardController: DashboardController
     marketDataController: MarketDataController
+    budgetController: BudgetController
   }
 ) {
   const {
@@ -28,7 +30,8 @@ export function setupRoutes(
     investmentTransactionController,
     transferController,
     dashboardController,
-    marketDataController
+    marketDataController,
+    budgetController
   } = controllers
 
   // Health check
@@ -77,4 +80,11 @@ export function setupRoutes(
   app.get('/market/search', (c) => marketDataController.search(c))
   app.get('/market/quote', (c) => marketDataController.quote(c))
   app.get('/market/chart', (c) => marketDataController.chart(c))
+
+  // Budgets
+  app.get('/budgets', (c) => budgetController.getAll(c))
+  app.get('/budgets/:id', (c) => budgetController.getById(c))
+  app.post('/budgets', (c) => budgetController.create(c))
+  app.put('/budgets/:id', (c) => budgetController.update(c))
+  app.delete('/budgets/:id', (c) => budgetController.delete(c))
 }
