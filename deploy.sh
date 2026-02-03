@@ -65,7 +65,8 @@ if [ -d "migrations" ]; then
       
       
       # Check if this migration has already been run
-      ALREADY_RUN=$(npx wrangler d1 execute finance-db --remote --command "SELECT migration_name FROM migration_history WHERE migration_name = '${migration_name}'" --json | grep -c "\"migration_name\":\"${migration_name}\"" || true)
+      COUNT_JSON=$(npx wrangler d1 execute finance-db --remote --command "SELECT COUNT(*) AS count FROM migration_history WHERE migration_name = '${migration_name}'" --json || true)
+      ALREADY_RUN=$(echo "$COUNT_JSON" | grep -o '"count":[0-9]\+' | head -n1 | sed 's/[^0-9]//g')
       ALREADY_RUN=${ALREADY_RUN:-0}
       
       if [ "$ALREADY_RUN" = "0" ]; then
@@ -74,7 +75,8 @@ if [ -d "migrations" ]; then
         # Execute the migration file
         if npx wrangler d1 execute finance-db --remote --file="$migration_file"; then
           # Record the migration as executed only if it succeeded
-          npx wrangler d1 execute finance-db --remote --command "INSERT INTO migration_history (id, migration_name) VALUES ('${migration_name}', '${migration_name}')"
+          migration_id="${migration_name}_$(date +%s)"
+          npx wrangler d1 execute finance-db --remote --command "INSERT OR IGNORE INTO migration_history (id, migration_name) VALUES ('${migration_id}', '${migration_name}')"
         else
           echo -e "${RED}Migration failed: ${migration_name}${NC}"
           exit 1
