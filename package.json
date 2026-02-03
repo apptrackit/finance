@@ -7,7 +7,7 @@
   ],
   "scripts": {
     "dev": "concurrently \"npm run dev -w client\" \"npm run dev -w api\"",
-    "build": "npm run build --workspaces",
+    "build": "npm run build -w client",
     "deploy": "./deploy.sh"
   },
   "devDependencies": {
