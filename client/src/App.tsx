@@ -13,7 +13,8 @@ import { Budget } from './components/budget-module/Budget'
 
  
 
-const APP_VERSION = '1.5.0'
+const APP_VERSION = '1.5.1'
+const MENU_STORAGE_KEY = 'finance_visible_menus'
 
 
 
@@ -58,6 +59,26 @@ type MarketQuote = {
 }
 
 type View = 'dashboard' | 'analytics' | 'settings' | 'investments' | 'recurring' | 'budget'
+type MenuKey = Exclude<View, 'settings'>
+
+const DEFAULT_MENU_VISIBILITY: Record<MenuKey, boolean> = {
+  dashboard: true,
+  analytics: true,
+  investments: true,
+  recurring: true,
+  budget: true
+}
+
+const getVisibleMenus = (): Record<MenuKey, boolean> => {
+  try {
+    const stored = localStorage.getItem(MENU_STORAGE_KEY)
+    if (!stored) return DEFAULT_MENU_VISIBILITY
+    const parsed = JSON.parse(stored) as Partial<Record<MenuKey, boolean>>
+    return { ...DEFAULT_MENU_VISIBILITY, ...parsed }
+  } catch {
+    return DEFAULT_MENU_VISIBILITY
+  }
+}
 
 function App() {
   const [netWorth, setNetWorth] = useState<number | null>(null)
@@ -82,6 +103,7 @@ function App() {
   const [apiVersion, setApiVersion] = useState<string | null>(null)
   const [showNetWorth, setShowNetWorth] = useState(false)
   const [investmentRefreshKey, setInvestmentRefreshKey] = useState(0)
+  const [visibleMenus, setVisibleMenus] = useState<Record<MenuKey, boolean>>(getVisibleMenus)
   const { privacyMode, togglePrivacyMode, shouldHideInvestment } = usePrivacy()
   
   // Date range state for transactions
@@ -94,6 +116,20 @@ function App() {
   useEffect(() => {
     setMasterCurrency(getMasterCurrency())
   }, [])
+
+  useEffect(() => {
+    const handler = () => setVisibleMenus(getVisibleMenus())
+    window.addEventListener('finance:menu-visibility', handler)
+    return () => window.removeEventListener('finance:menu-visibility', handler)
+  }, [])
+
+  useEffect(() => {
+    const menuOrder: MenuKey[] = ['dashboard', 'analytics', 'investments', 'recurring', 'budget']
+    if (view !== 'settings' && !visibleMenus[view]) {
+      const next = menuOrder.find(key => visibleMenus[key]) || 'dashboard'
+      setView(next)
+    }
+  }, [visibleMenus, view])
 
   const fetchData = async () => {
     setTransactionsLoading(true)
@@ -434,61 +470,71 @@ function App() {
               </div>
               <div className="flex items-center gap-1.5 sm:gap-2">
                 <div className="flex gap-0.5 sm:gap-1 p-0.5 sm:p-1 rounded-lg sm:rounded-xl bg-secondary/50 border border-border/50">
-                  <button
-                    onClick={() => setView('dashboard')}
-                    className={`px-2.5 lg:px-3 py-3 lg:py-1.5 text-xs font-medium rounded-md lg:rounded-lg transition-all flex items-center gap-1 lg:gap-1.5 ${
-                      view === 'dashboard'
-                        ? 'bg-primary text-primary-foreground shadow-sm'
-                        : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
-                    }`}
-                  >
-                    <List className="h-4 w-4 lg:h-3.5 lg:w-3.5" />
-                    <span className="hidden lg:inline">Dashboard</span>
-                  </button>
-                  <button
-                    onClick={() => setView('analytics')}
-                    className={`px-2.5 lg:px-3 py-2 lg:py-1.5 text-xs font-medium rounded-md lg:rounded-lg transition-all flex items-center gap-1 lg:gap-1.5 ${
-                      view === 'analytics'
-                        ? 'bg-primary text-primary-foreground shadow-sm'
-                        : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
-                    }`}
-                  >
-                    <BarChart3 className="h-4 w-4 lg:h-3.5 lg:w-3.5" />
-                    <span className="hidden lg:inline">Analytics</span>
-                  </button>
-                  <button
-                    onClick={() => setView('investments')}
-                    className={`px-2.5 lg:px-3 py-2 lg:py-1.5 text-xs font-medium rounded-md lg:rounded-lg transition-all flex items-center gap-1 lg:gap-1.5 ${
-                      view === 'investments'
-                        ? 'bg-primary text-primary-foreground shadow-sm'
-                        : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
-                    }`}
-                  >
-                    <LineChart className="h-4 w-4 lg:h-3.5 lg:w-3.5" />
-                    <span className="hidden lg:inline">Investments</span>
-                  </button>
-                  <button
-                    onClick={() => setView('recurring')}
-                    className={`px-1.5 lg:px-3 py-2 lg:py-1.5 text-xs font-medium rounded-md lg:rounded-lg transition-all flex items-center gap-1 lg:gap-1.5 ${
-                      view === 'recurring'
-                        ? 'bg-primary text-primary-foreground shadow-sm'
-                        : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
-                    }`}
-                  >
-                    <RefreshCw className="h-4 w-4 lg:h-3.5 lg:w-3.5" />
-                    <span className="hidden lg:inline">Recurring</span>
-                  </button>
-                  <button
-                    onClick={() => setView('budget')}
-                    className={`px-2.5 lg:px-3 py-2 lg:py-1.5 text-xs font-medium rounded-md lg:rounded-lg transition-all flex items-center gap-1 lg:gap-1.5 ${
-                      view === 'budget'
-                        ? 'bg-primary text-primary-foreground shadow-sm'
-                        : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
-                    }`}
-                  >
-                    <PiggyBank className="h-4 w-4 lg:h-3.5 lg:w-3.5" />
-                    <span className="hidden lg:inline">Budget</span>
-                  </button>
+                  {visibleMenus.dashboard && (
+                    <button
+                      onClick={() => setView('dashboard')}
+                      className={`px-2.5 lg:px-3 py-3 lg:py-1.5 text-xs font-medium rounded-md lg:rounded-lg transition-all flex items-center gap-1 lg:gap-1.5 ${
+                        view === 'dashboard'
+                          ? 'bg-primary text-primary-foreground shadow-sm'
+                          : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
+                      }`}
+                    >
+                      <List className="h-4 w-4 lg:h-3.5 lg:w-3.5" />
+                      <span className="hidden lg:inline">Dashboard</span>
+                    </button>
+                  )}
+                  {visibleMenus.analytics && (
+                    <button
+                      onClick={() => setView('analytics')}
+                      className={`px-2.5 lg:px-3 py-2 lg:py-1.5 text-xs font-medium rounded-md lg:rounded-lg transition-all flex items-center gap-1 lg:gap-1.5 ${
+                        view === 'analytics'
+                          ? 'bg-primary text-primary-foreground shadow-sm'
+                          : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
+                      }`}
+                    >
+                      <BarChart3 className="h-4 w-4 lg:h-3.5 lg:w-3.5" />
+                      <span className="hidden lg:inline">Analytics</span>
+                    </button>
+                  )}
+                  {visibleMenus.investments && (
+                    <button
+                      onClick={() => setView('investments')}
+                      className={`px-2.5 lg:px-3 py-2 lg:py-1.5 text-xs font-medium rounded-md lg:rounded-lg transition-all flex items-center gap-1 lg:gap-1.5 ${
+                        view === 'investments'
+                          ? 'bg-primary text-primary-foreground shadow-sm'
+                          : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
+                      }`}
+                    >
+                      <LineChart className="h-4 w-4 lg:h-3.5 lg:w-3.5" />
+                      <span className="hidden lg:inline">Investments</span>
+                    </button>
+                  )}
+                  {visibleMenus.recurring && (
+                    <button
+                      onClick={() => setView('recurring')}
+                      className={`px-1.5 lg:px-3 py-2 lg:py-1.5 text-xs font-medium rounded-md lg:rounded-lg transition-all flex items-center gap-1 lg:gap-1.5 ${
+                        view === 'recurring'
+                          ? 'bg-primary text-primary-foreground shadow-sm'
+                          : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
+                      }`}
+                    >
+                      <RefreshCw className="h-4 w-4 lg:h-3.5 lg:w-3.5" />
+                      <span className="hidden lg:inline">Recurring</span>
+                    </button>
+                  )}
+                  {visibleMenus.budget && (
+                    <button
+                      onClick={() => setView('budget')}
+                      className={`px-2.5 lg:px-3 py-2 lg:py-1.5 text-xs font-medium rounded-md lg:rounded-lg transition-all flex items-center gap-1 lg:gap-1.5 ${
+                        view === 'budget'
+                          ? 'bg-primary text-primary-foreground shadow-sm'
+                          : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
+                      }`}
+                    >
+                      <PiggyBank className="h-4 w-4 lg:h-3.5 lg:w-3.5" />
+                      <span className="hidden lg:inline">Budget</span>
+                    </button>
+                  )}
                   <button
                     onClick={() => setView('settings')}
                     className={`px-2.5 lg:px-3 py-2 lg:py-1.5 text-xs font-medium rounded-md lg:rounded-lg transition-all flex items-center gap-1 lg:gap-1.5 ${
