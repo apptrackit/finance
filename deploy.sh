@@ -55,7 +55,7 @@ npx wrangler d1 execute finance-db --remote --command "CREATE TABLE IF NOT EXIST
   id TEXT PRIMARY KEY,
   migration_name TEXT NOT NULL UNIQUE,
   executed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-)" 2>/dev/null || true
+)"
 
 # Find and run all migration files in order
 if [ -d "migrations" ]; then
@@ -63,17 +63,24 @@ if [ -d "migrations" ]; then
     if [ -f "$migration_file" ]; then
       migration_name=$(basename "$migration_file" .sql)
       
+      
       # Check if this migration has already been run
-      ALREADY_RUN=$(npx wrangler d1 execute finance-db --remote --command "SELECT migration_name FROM migration_history WHERE migration_name = '${migration_name}'" --json 2>/dev/null | grep -c "$migration_name" || echo "0")
+      COUNT_JSON=$(npx wrangler d1 execute finance-db --remote --command "SELECT COUNT(*) AS count FROM migration_history WHERE migration_name = '${migration_name}'" --json || true)
+      ALREADY_RUN=$(echo "$COUNT_JSON" | grep -o '"count":[0-9]\+' | head -n1 | sed 's/[^0-9]//g')
+      ALREADY_RUN=${ALREADY_RUN:-0}
       
       if [ "$ALREADY_RUN" = "0" ]; then
         echo "  Running migration: $migration_name"
         
         # Execute the migration file
-        npx wrangler d1 execute finance-db --remote --file="$migration_file" 2>/dev/null || true
-        
-        # Record the migration as executed
-        npx wrangler d1 execute finance-db --remote --command "INSERT INTO migration_history (id, migration_name) VALUES ('${migration_name}', '${migration_name}')" 2>/dev/null || true
+        if npx wrangler d1 execute finance-db --remote --file="$migration_file"; then
+          # Record the migration as executed only if it succeeded
+          migration_id="${migration_name}_$(date +%s)"
+          npx wrangler d1 execute finance-db --remote --command "INSERT OR IGNORE INTO migration_history (id, migration_name) VALUES ('${migration_id}', '${migration_name}')"
+        else
+          echo -e "${RED}Migration failed: ${migration_name}${NC}"
+          exit 1
+        fi
       else
         echo "  Migration already applied: $migration_name"
       fi
