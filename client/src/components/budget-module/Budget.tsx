@@ -137,10 +137,37 @@ export function Budget({ accounts, categories, transactions, masterCurrency }: B
 
   const summary = useMemo(() => {
     const totalBudgeted = activeBudgets.reduce((sum, budget) => sum + budget.amount, 0)
-    const totalSpent = activeBudgets.reduce((sum, budget) => sum + (budgetSpendMap.get(budget.id) || 0), 0)
+    
+    // Calculate total spent by counting unique transactions across all active budgets
+    // to avoid double-counting when budgets overlap
+    const processedTxIds = new Set<string>()
+    let totalSpent = 0
+    
+    activeBudgets.forEach(budget => {
+      const accountIds = new Set(getBudgetAccountIds(budget))
+      const categoryIds = new Set(getBudgetCategoryIds(budget))
+      
+      transactions
+        .filter(tx => tx.amount < 0 && !tx.linked_transaction_id)
+        .filter(tx => tx.date >= budget.start_date && tx.date <= budget.end_date)
+        .filter(tx => accountIds.has(tx.account_id))
+        .filter(tx => {
+          if (budget.category_scope === 'selected') {
+            return tx.category_id ? categoryIds.has(tx.category_id) : false
+          }
+          return true
+        })
+        .forEach(tx => {
+          if (!processedTxIds.has(tx.id)) {
+            processedTxIds.add(tx.id)
+            totalSpent += Math.abs(convertToMasterCurrency(tx.amount, tx.account_id))
+          }
+        })
+    })
+    
     const utilization = totalBudgeted > 0 ? Math.min(totalSpent / totalBudgeted, 1.5) : 0
     return { totalBudgeted, totalSpent, utilization }
-  }, [activeBudgets, budgetSpendMap])
+  }, [activeBudgets, budgetSpendMap, transactions, accounts, exchangeRates, masterCurrency])
 
   const handleSaveBudget = async (payload: {
     name?: string
@@ -205,49 +232,26 @@ export function Budget({ accounts, categories, transactions, masterCurrency }: B
 
   return (
     <div className="space-y-6">
-      <Card className="border border-primary/20 bg-gradient-to-br from-primary/10 via-card to-card">
-        <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-center gap-3">
-            <div className="h-10 w-10 rounded-xl bg-primary/15 flex items-center justify-center">
-              <PiggyBank className="h-5 w-5 text-primary" />
-            </div>
-            <div>
-              <CardTitle>Budgets</CardTitle>
-              <p className="text-sm text-muted-foreground">
-                Set monthly or yearly targets per account and category.
-              </p>
-            </div>
-          </div>
-          <div className="flex gap-2">
-            <Button variant="secondary" onClick={fetchBudgets}>
-              <RefreshCw className="h-4 w-4" />
-              Refresh
-            </Button>
-            <Button onClick={() => { setEditingBudget(null); setIsModalOpen(true) }}>
-              <Plus className="h-4 w-4" />
-              New Budget
-            </Button>
-          </div>
-        </CardHeader>
-        <CardContent className="grid gap-3 sm:grid-cols-3">
-          <div className="rounded-lg border border-border/60 bg-background/70 p-3">
-            <p className="text-xs text-muted-foreground">Active budgets</p>
-            <p className="text-lg font-semibold">{activeBudgets.length}</p>
-          </div>
-          <div className="rounded-lg border border-border/60 bg-background/70 p-3">
-            <p className="text-xs text-muted-foreground">Budgeted this period</p>
-            <p className="text-lg font-semibold">
-              {summary.totalBudgeted.toLocaleString('hu-HU', { maximumFractionDigits: 0 })} {masterCurrency}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <PiggyBank className="h-5 w-5 text-primary" />
+          <div>
+            <h2 className="text-2xl font-bold tracking-tight">Budgets</h2>
+            <p className="text-sm text-muted-foreground/70">
+              {activeBudgets.length} {activeBudgets.length === 1 ? 'budget' : 'budgets'} active
             </p>
           </div>
-          <div className="rounded-lg border border-border/60 bg-background/70 p-3">
-            <p className="text-xs text-muted-foreground">Used</p>
-            <p className="text-lg font-semibold">
-              {summary.totalSpent.toLocaleString('hu-HU', { maximumFractionDigits: 0 })} {masterCurrency}
-            </p>
-          </div>
-        </CardContent>
-      </Card>
+        </div>
+        <div className="flex gap-2">
+          <Button variant="ghost" size="icon" onClick={fetchBudgets} className="h-9 w-9">
+            <RefreshCw className="h-4 w-4" />
+          </Button>
+          <Button onClick={() => { setEditingBudget(null); setIsModalOpen(true) }} className="gap-2">
+            <Plus className="h-4 w-4" />
+            New Budget
+          </Button>
+        </div>
+      </div>
 
       {error && (
         <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
