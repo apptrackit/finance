@@ -65,17 +65,31 @@ export function PerAccountTrendChart({ account, data, index, masterCurrency, con
                 <Tooltip 
                   content={({ active, payload, label }) => {
                     if (active && payload && payload.length) {
+                      const balanceEntry = payload.find(p => p.dataKey === 'balance')
+                      const value = balanceEntry?.value ?? payload[0].value
                       return (
                         <div className="bg-card border border-border rounded-lg p-2 shadow-lg">
                           <p className="text-xs text-muted-foreground mb-1">{label}</p>
                           <p className={`text-sm font-bold ${privacyMode === 'hidden' ? 'select-none' : ''}`} style={{ color: COLORS[index % COLORS.length] }}>
-                            {privacyMode === 'hidden' ? '••••••' : `${payload[0].value?.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})} ${masterCurrency}`}
+                            {privacyMode === 'hidden' ? '••••••' : `${Number(value)?.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})} ${masterCurrency}`}
                           </p>
                         </div>
                       )
                     }
                     return null
                   }}
+                />
+                <Area
+                  type="monotone"
+                  dataKey="smoothed"
+                  name="Trend"
+                  stroke="hsl(var(--muted-foreground))"
+                  strokeWidth={1.5}
+                  strokeDasharray="6 3"
+                  fillOpacity={0}
+                  fill="none"
+                  dot={false}
+                  activeDot={false}
                 />
                 <Area
                   type="monotone"

@@ -329,14 +329,27 @@ export function Analytics({
           runningBalance -= transactionsByDate[date]
         })
         
-        const data: TrendDataPoint[] = Object.entries(dateBalances)
+        const rawData: TrendDataPoint[] = Object.entries(dateBalances)
           .map(([date, balance]) => ({
             date,
             formattedDate: format(new Date(date), 'MMM d'),
             balance: convertToMasterCurrency(balance, account.id)
           }))
           .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
-        
+
+        // Calculate EMA (Exponential Moving Average) as a smoothed baseline
+        let data = rawData
+        if (rawData.length > 0) {
+          const span = Math.max(3, Math.min(Math.round(rawData.length * 0.3), 20))
+          const k = 2 / (span + 1)
+          let ema = rawData[0].balance
+          data = rawData.map((point, i) => {
+            if (i === 0) return { ...point, smoothed: ema }
+            ema = point.balance * k + ema * (1 - k)
+            return { ...point, smoothed: ema }
+          })
+        }
+
         return {
           account,
           data,

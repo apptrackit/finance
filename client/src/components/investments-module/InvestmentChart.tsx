@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { 
   XAxis, 
   YAxis, 
@@ -144,6 +144,19 @@ export function InvestmentChart({ symbol, transactions = [] }: InvestmentChartPr
     fetchData()
   }, [symbol, range, transactions])
 
+  // Compute EMA (Exponential Moving Average) smoothed baseline for the price chart
+  const chartData = useMemo(() => {
+    if (data.length === 0) return data
+    const span = Math.max(3, Math.min(Math.round(data.length * 0.3), 20))
+    const k = 2 / (span + 1)
+    let ema = data[0].close
+    return data.map((point, i) => {
+      if (i === 0) return { ...point, smoothed: ema }
+      ema = point.close * k + ema * (1 - k)
+      return { ...point, smoothed: ema }
+    })
+  }, [data])
+
   const currentPrice = data.length > 0 ? data[data.length - 1].close : 0
   const startPrice = data.length > 0 ? data[0].close : 0
   const priceChange = currentPrice - startPrice
@@ -220,7 +233,7 @@ export function InvestmentChart({ symbol, transactions = [] }: InvestmentChartPr
         ) : (
           <ResponsiveContainer width="100%" height="100%">
             <ComposedChart
-              data={data}
+              data={chartData}
               onMouseMove={(e: any) => {
                 if (e.activePayload) {
                   setHoveredPrice(e.activePayload[0].payload.close)
@@ -245,6 +258,17 @@ export function InvestmentChart({ symbol, transactions = [] }: InvestmentChartPr
               />
               <Tooltip content={<CustomTooltip />} />
               
+              <Area
+                type="monotone"
+                dataKey="smoothed"
+                stroke="hsl(var(--muted-foreground))"
+                strokeWidth={1.5}
+                strokeDasharray="6 3"
+                fillOpacity={0}
+                fill="none"
+                dot={false}
+                activeDot={false}
+              />
               <Area
                 type="monotone"
                 dataKey="close"
