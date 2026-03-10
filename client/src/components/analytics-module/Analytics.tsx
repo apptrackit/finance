@@ -189,39 +189,43 @@ export function Analytics({
       .sort((a, b) => b.value - a.value)
   }, [filteredTransactions, categories, totalIncome, exchangeRates, accounts, masterCurrency])
 
-  // Net Worth Trend data - shows total balance over time in master currency
-  const netWorthTrendData = useMemo((): TrendDataPoint[] => {
-    const currentTotalBalance = accounts.reduce((sum, acc) => {
-      const convertedBalance = convertToMasterCurrency(acc.balance, acc.id)
-      return sum + convertedBalance
-    }, 0)
-    
-    const sortedTransactions = [...transactions].sort(
-      (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
+  // Cash Balance Trend data - only cash accounts (excludes investment and exclude_from_net_worth)
+  const cashBalanceTrendData = useMemo((): TrendDataPoint[] => {
+    const cashAccounts = accounts.filter(
+      acc => acc.type !== 'investment' && !acc.exclude_from_net_worth
     )
-    
+    const cashAccountIds = new Set(cashAccounts.map(a => a.id))
+
+    const currentCashBalance = cashAccounts.reduce((sum, acc) => {
+      return sum + convertToMasterCurrency(acc.balance, acc.id)
+    }, 0)
+
+    const sortedTransactions = [...transactions]
+      .filter(tx => cashAccountIds.has(tx.account_id))
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+
     const transactionsByDate: Record<string, number> = {}
     sortedTransactions.forEach(tx => {
       const convertedAmount = convertToMasterCurrency(tx.amount, tx.account_id)
       transactionsByDate[tx.date] = (transactionsByDate[tx.date] || 0) + convertedAmount
     })
-    
+
     const dateBalances: Record<string, number> = {}
-    let runningBalance = currentTotalBalance
-    
+    let runningBalance = currentCashBalance
+
     const today = format(new Date(), 'yyyy-MM-dd')
-    dateBalances[today] = currentTotalBalance
-    
+    dateBalances[today] = currentCashBalance
+
     const uniqueDates = Object.keys(transactionsByDate).sort(
       (a, b) => new Date(b).getTime() - new Date(a).getTime()
     )
-    
+
     uniqueDates.forEach(date => {
       dateBalances[date] = runningBalance
       runningBalance -= transactionsByDate[date]
     })
-    
-    return Object.entries(dateBalances)
+
+    const rawData = Object.entries(dateBalances)
       .map(([date, balance]) => ({
         date,
         formattedDate: format(new Date(date), 'MMM d'),
@@ -245,6 +249,17 @@ export function Analytics({
         }
       })
       .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+
+    // Calculate EMA (Exponential Moving Average) as a smoothed baseline
+    if (rawData.length === 0) return rawData
+    const span = Math.max(3, Math.min(Math.round(rawData.length * 0.3), 20))
+    const k = 2 / (span + 1)
+    let ema = rawData[0].balance
+    return rawData.map((point, i) => {
+      if (i === 0) return { ...point, smoothed: ema }
+      ema = point.balance * k + ema * (1 - k)
+      return { ...point, smoothed: ema }
+    })
   }, [transactions, accounts, period, exchangeRates, masterCurrency, customDateRange])
 
   // Per-account Net Worth Trend data in master currency (exclude investment accounts)
@@ -677,8 +692,9 @@ export function Analytics({
 
           <div className="grid gap-4 sm:gap-6 grid-cols-1 lg:grid-cols-2">
             <NetWorthTrendChart 
-              data={netWorthTrendData}
+              data={cashBalanceTrendData}
               masterCurrency={masterCurrency}
+              title="Cash Balance Trend"
             />
 
             <IncomeChart 

@@ -46,4 +46,5 @@ export type TrendDataPoint = {
   date: string
   formattedDate: string
   balance: number
+  smoothed?: number
 }

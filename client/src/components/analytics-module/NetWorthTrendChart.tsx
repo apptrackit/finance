@@ -8,9 +8,10 @@ import type { TrendDataPoint } from './types'
 type NetWorthTrendChartProps = {
   data: TrendDataPoint[]
   masterCurrency: string
+  title?: string
 }
 
-export function NetWorthTrendChart({ data, masterCurrency }: NetWorthTrendChartProps) {
+export function NetWorthTrendChart({ data, masterCurrency, title = 'Cash Balance Trend' }: NetWorthTrendChartProps) {
   const { privacyMode } = usePrivacy()
 
   return (
@@ -18,7 +19,7 @@ export function NetWorthTrendChart({ data, masterCurrency }: NetWorthTrendChartP
       <CardHeader className="pb-2 px-4 sm:px-6">
         <div className="flex items-center gap-2">
           <TrendingUp className="h-4 w-4 text-muted-foreground" />
-          <CardTitle className="text-sm sm:text-base">Net Worth Trend</CardTitle>
+          <CardTitle className="text-sm sm:text-base">{title}</CardTitle>
         </div>
       </CardHeader>
       <CardContent className="px-2 sm:px-6">
@@ -58,17 +59,31 @@ export function NetWorthTrendChart({ data, masterCurrency }: NetWorthTrendChartP
                 <Tooltip 
                   content={({ active, payload, label }) => {
                     if (active && payload && payload.length) {
+                      const balanceEntry = payload.find(p => p.dataKey === 'balance')
+                      const value = balanceEntry?.value ?? payload[0].value
                       return (
                         <div className="bg-card border border-border rounded-lg p-2 shadow-lg">
                           <p className="text-xs text-muted-foreground mb-1">{label}</p>
                           <p className={`text-sm font-bold text-primary ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
-                            {privacyMode === 'hidden' ? '••••••' : `${payload[0].value?.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})} ${masterCurrency}`}
+                            {privacyMode === 'hidden' ? '••••••' : `${Number(value)?.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})} ${masterCurrency}`}
                           </p>
                         </div>
                       )
                     }
                     return null
                   }}
+                />
+                <Area
+                  type="monotone"
+                  dataKey="smoothed"
+                  name="Trend"
+                  stroke="hsl(var(--muted-foreground))"
+                  strokeWidth={1.5}
+                  strokeDasharray="6 3"
+                  fillOpacity={0}
+                  fill="none"
+                  dot={false}
+                  activeDot={false}
                 />
                 <Area
                   type="monotone"
