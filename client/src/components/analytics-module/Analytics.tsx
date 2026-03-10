@@ -15,6 +15,7 @@ import { PerAccountTrendChart } from './PerAccountTrendChart'
 import { CategoryBreakdownChart } from './CategoryBreakdownChart'
 import { IncomeBreakdownChart } from './IncomeBreakdownChart'
 import { TopExpensesList } from './TopExpensesList'
+import { PredictionChart } from './PredictionChart'
 import type { Transaction, Category, Account, TimePeriod, SpendingEstimate, ChartDataPoint, TrendDataPoint } from './types'
 
 type AnalyticsProps = {
@@ -41,6 +42,15 @@ export function Analytics({
   const [showDatePicker, setShowDatePicker] = useState(false)
   const [weekEstimate, setWeekEstimate] = useState<SpendingEstimate | null>(null)
   const [monthEstimate, setMonthEstimate] = useState<SpendingEstimate | null>(null)
+
+  // Show prediction chart only when on default current-month view
+  const isCurrentMonthView = useMemo(() => {
+    if (period !== 'custom') return false
+    const now = new Date()
+    const monthStart = format(startOfMonth(now), 'yyyy-MM-dd')
+    const monthEnd = format(endOfMonth(now), 'yyyy-MM-dd')
+    return customDateRange.startDate === monthStart && customDateRange.endDate === monthEnd
+  }, [period, customDateRange])
 
   // Fetch exchange rates
   useEffect(() => {
@@ -709,6 +719,16 @@ export function Analytics({
               masterCurrency={masterCurrency}
               title="Cash Balance Trend"
             />
+
+            {isCurrentMonthView && (
+              <PredictionChart
+                transactions={transactions}
+                accounts={accounts}
+                masterCurrency={masterCurrency}
+                exchangeRates={exchangeRates}
+                convertToMasterCurrency={convertToMasterCurrency}
+              />
+            )}
 
             <IncomeChart 
               data={incomeChartData}
