@@ -2,8 +2,7 @@ import { useState, useMemo, useEffect } from 'react'
 import { Card, CardContent } from '../common/card'
 import { Button } from '../common/button'
 import { BarChart3, Calendar, ChevronLeft, ChevronRight } from 'lucide-react'
-import { format, subMonths, startOfMonth, endOfMonth, isWithinInterval, subYears, startOfYear, endOfYear, isThisYear, startOfWeek, endOfWeek, addWeeks, addDays, differenceInDays } from 'date-fns'
-import { DateRangePicker } from '../common/DateRangePicker'
+import { format, subMonths, addMonths, startOfMonth, endOfMonth, isWithinInterval, subYears, addYears, startOfYear, endOfYear, startOfWeek, endOfWeek, addWeeks } from 'date-fns'
 import { API_BASE_URL, apiFetch } from '../../config'
 import { convertToMasterCurrency as convertUtil } from './utils'
 import { SummaryCards } from './SummaryCards'
@@ -31,26 +30,36 @@ export function Analytics({
   accounts,
   masterCurrency = 'HUF'
 }: AnalyticsProps) {
-  const [period, setPeriod] = useState<TimePeriod>('custom')
+  const [period, setPeriod] = useState<TimePeriod>('month')
   const [selectedExpenseCategory, setSelectedExpenseCategory] = useState<string>('all')
   const [selectedIncomeCategory, setSelectedIncomeCategory] = useState<string>('all')
   const [exchangeRates, setExchangeRates] = useState<Record<string, number>>({})
-  const [customDateRange, setCustomDateRange] = useState({ 
-    startDate: format(startOfMonth(new Date()), 'yyyy-MM-dd'), 
-    endDate: format(endOfMonth(new Date()), 'yyyy-MM-dd') 
-  })
-  const [showDatePicker, setShowDatePicker] = useState(false)
+  const [selectedDate, setSelectedDate] = useState(new Date())
+
+  const customDateRange = useMemo(() => {
+    if (period === 'month') {
+      return {
+        startDate: format(startOfMonth(selectedDate), 'yyyy-MM-dd'),
+        endDate: format(endOfMonth(selectedDate), 'yyyy-MM-dd')
+      }
+    }
+    if (period === 'year') {
+      return {
+        startDate: format(startOfYear(selectedDate), 'yyyy-MM-dd'),
+        endDate: format(endOfYear(selectedDate), 'yyyy-MM-dd')
+      }
+    }
+    return { startDate: '2000-01-01', endDate: format(new Date(), 'yyyy-MM-dd') }
+  }, [period, selectedDate])
   const [weekEstimate, setWeekEstimate] = useState<SpendingEstimate | null>(null)
   const [monthEstimate, setMonthEstimate] = useState<SpendingEstimate | null>(null)
 
   // Show prediction chart only when on default current-month view
   const isCurrentMonthView = useMemo(() => {
-    if (period !== 'custom') return false
+    if (period !== 'month') return false
     const now = new Date()
-    const monthStart = format(startOfMonth(now), 'yyyy-MM-dd')
-    const monthEnd = format(endOfMonth(now), 'yyyy-MM-dd')
-    return customDateRange.startDate === monthStart && customDateRange.endDate === monthEnd
-  }, [period, customDateRange])
+    return selectedDate.getMonth() === now.getMonth() && selectedDate.getFullYear() === now.getFullYear()
+  }, [period, selectedDate])
 
   // Fetch exchange rates
   useEffect(() => {
@@ -101,8 +110,6 @@ export function Analytics({
 
   // Filter transactions by period (exclude investment accounts only)
   const filteredTransactions = useMemo(() => {
-    const now = new Date()
-    
     return transactions.filter(tx => {
       const txDate = new Date(tx.date)
       const account = accounts.find(a => a.id === tx.account_id)
@@ -111,18 +118,8 @@ export function Analytics({
       if (account?.type === 'investment') return false
       
       switch (period) {
-        case 'thisYear':
-          return isWithinInterval(txDate, {
-            start: startOfYear(now),
-            end: endOfYear(now)
-          })
-        case 'lastYear':
-          const lastYear = subYears(now, 1)
-          return isWithinInterval(txDate, {
-            start: startOfYear(lastYear),
-            end: endOfYear(lastYear)
-          })
-        case 'custom':
+        case 'month':
+        case 'year':
           return isWithinInterval(txDate, {
             start: new Date(customDateRange.startDate),
             end: new Date(customDateRange.endDate)
@@ -244,12 +241,8 @@ export function Analytics({
       .filter(d => {
         const txDate = new Date(d.date)
         switch (period) {
-          case 'thisYear':
-            return isThisYear(txDate)
-          case 'lastYear':
-            const lastYear = new Date().getFullYear() - 1
-            return txDate.getFullYear() === lastYear
-          case 'custom':
+          case 'month':
+          case 'year':
             return isWithinInterval(txDate, {
               start: new Date(customDateRange.startDate),
               end: new Date(customDateRange.endDate)
@@ -283,12 +276,8 @@ export function Analytics({
           if (!matchesAccount) return false
           
           switch (period) {
-            case 'thisYear':
-              return isThisYear(txDate)
-            case 'lastYear':
-              const lastYear = new Date().getFullYear() - 1
-              return txDate.getFullYear() === lastYear
-            case 'custom':
+            case 'month':
+            case 'year':
               return isWithinInterval(txDate, {
                 start: new Date(customDateRange.startDate),
                 end: new Date(customDateRange.endDate)
@@ -311,12 +300,8 @@ export function Analytics({
         const todayInRange = (() => {
           const todayDate = new Date(today)
           switch (period) {
-            case 'thisYear':
-              return isThisYear(todayDate)
-            case 'lastYear':
-              const lastYear = new Date().getFullYear() - 1
-              return todayDate.getFullYear() === lastYear
-            case 'custom':
+            case 'month':
+            case 'year':
               return isWithinInterval(todayDate, {
                 start: new Date(customDateRange.startDate),
                 end: new Date(customDateRange.endDate)
@@ -384,7 +369,7 @@ export function Analytics({
     const data: ChartDataPoint[] = []
     const now = new Date()
     
-    if (period === 'custom' && differenceInDays(new Date(customDateRange.endDate), new Date(customDateRange.startDate)) <= 40) {
+    if (period === 'month') {
       const monthStart = new Date(customDateRange.startDate)
       const monthEnd = new Date(customDateRange.endDate)
       
@@ -448,9 +433,7 @@ export function Analytics({
         const monthEnd = endOfMonth(monthDate)
         const monthKey = format(monthDate, 'yyyy-MM')
         
-        if (period === 'thisYear' && !isThisYear(monthDate)) continue
-        if (period === 'lastYear' && monthDate.getFullYear() !== now.getFullYear() - 1) continue
-        if (period === 'custom' && !isWithinInterval(monthDate, { start: new Date(customDateRange.startDate), end: new Date(customDateRange.endDate) })) continue
+        if (period === 'year' && !isWithinInterval(monthDate, { start: new Date(customDateRange.startDate), end: new Date(customDateRange.endDate) })) continue
         
         const monthIncome = transactions
           .filter(tx => {
@@ -480,7 +463,7 @@ export function Analytics({
     const data: ChartDataPoint[] = []
     const now = new Date()
     
-    if (period === 'custom' && differenceInDays(new Date(customDateRange.endDate), new Date(customDateRange.startDate)) <= 40) {
+    if (period === 'month') {
       const monthStart = new Date(customDateRange.startDate)
       const monthEnd = new Date(customDateRange.endDate)
       
@@ -544,9 +527,7 @@ export function Analytics({
         const monthEnd = endOfMonth(monthDate)
         const monthKey = format(monthDate, 'yyyy-MM')
         
-        if (period === 'thisYear' && !isThisYear(monthDate)) continue
-        if (period === 'lastYear' && monthDate.getFullYear() !== now.getFullYear() - 1) continue
-        if (period === 'custom' && !isWithinInterval(monthDate, { start: new Date(customDateRange.startDate), end: new Date(customDateRange.endDate) })) continue
+        if (period === 'year' && !isWithinInterval(monthDate, { start: new Date(customDateRange.startDate), end: new Date(customDateRange.endDate) })) continue
         
         const monthExpenses = transactions
           .filter(tx => {
@@ -572,11 +553,26 @@ export function Analytics({
   }, [transactions, selectedExpenseCategory, period, customDateRange, accounts, exchangeRates, masterCurrency])
 
   const periodLabels: Record<TimePeriod, string> = {
-    thisYear: 'This Year',
-    lastYear: 'Last Year',
     allTime: 'All Time',
-    custom: 'Custom'
+    month: 'Month',
+    year: 'Year'
   }
+
+  const navigateBack = () => {
+    setSelectedDate(d => period === 'month' ? subMonths(d, 1) : subYears(d, 1))
+  }
+
+  const navigateForward = () => {
+    setSelectedDate(d => period === 'month' ? addMonths(d, 1) : addYears(d, 1))
+  }
+
+  const isSelectedInCurrentYear = selectedDate.getFullYear() === new Date().getFullYear()
+
+  const periodDisplayLabel = period === 'month'
+    ? format(selectedDate, isSelectedInCurrentYear ? 'MMMM' : 'MMMM yyyy')
+    : period === 'year'
+      ? format(selectedDate, 'yyyy')
+      : 'All Time'
 
   const hasData = filteredTransactions.length > 0
 
@@ -588,107 +584,45 @@ export function Analytics({
           <BarChart3 className="h-5 w-5 text-primary" />
           <h2 className="text-lg font-semibold">Analytics</h2>
         </div>
-        <div className="flex flex-col sm:flex-row items-center justify-center gap-2 w-full sm:w-auto">
-          <div className="relative">
-            <div className="flex items-center gap-1 sm:gap-2">
-              {period === 'custom' && (
-                <Button
-                  onClick={() => {
-                    const rangeDays = differenceInDays(new Date(customDateRange.endDate), new Date(customDateRange.startDate)) + 1
-                    const newStart = format(addDays(new Date(customDateRange.startDate), -rangeDays), 'yyyy-MM-dd')
-                    const newEnd = format(addDays(new Date(customDateRange.endDate), -rangeDays), 'yyyy-MM-dd')
-                    setCustomDateRange({ startDate: newStart, endDate: newEnd })
-                  }}
-                  size="sm"
-                  variant="ghost"
-                  className="h-7 w-7 sm:h-8 sm:w-8 p-0"
-                >
-                  <ChevronLeft className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                </Button>
-              )}
-              <button
-                onClick={() => {
-                  if (period === 'custom') {
-                    setShowDatePicker(!showDatePicker)
-                  } else {
-                    const now = new Date()
-                    setCustomDateRange({
-                      startDate: format(startOfMonth(now), 'yyyy-MM-dd'),
-                      endDate: format(endOfMonth(now), 'yyyy-MM-dd')
-                    })
-                    setPeriod('custom')
-                    setShowDatePicker(true)
-                  }
-                }}
-                className={`flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-1.5 rounded-md border transition-colors ${
-                  period === 'custom'
-                    ? 'bg-primary text-primary-foreground border-primary'
-                    : 'bg-secondary/50 border-border/50 hover:bg-secondary/70'
-                }`}
-              >
-                <Calendar className="h-3 w-3 text-current" />
-                <span className="text-[11px] sm:text-xs font-medium">
-                  {period === 'custom' 
-                    ? (() => {
-                        const start = new Date(customDateRange.startDate)
-                        const end = new Date(customDateRange.endDate)
-                        const monthStart = startOfMonth(start)
-                        const monthEnd = endOfMonth(start)
-                        
-                        if (format(start, 'yyyy-MM-dd') === format(monthStart, 'yyyy-MM-dd') &&
-                            format(end, 'yyyy-MM-dd') === format(monthEnd, 'yyyy-MM-dd')) {
-                          return format(start, 'MMMM yyyy')
-                        }
-                        return `${format(start, 'MMM d')} - ${format(end, 'MMM d')}`
-                      })()
-                    : 'Custom'
-                  }
-                </span>
-              </button>
-              {period === 'custom' && (
-                <Button
-                  onClick={() => {
-                    const rangeDays = differenceInDays(new Date(customDateRange.endDate), new Date(customDateRange.startDate)) + 1
-                    const newStart = format(addDays(new Date(customDateRange.startDate), rangeDays), 'yyyy-MM-dd')
-                    const newEnd = format(addDays(new Date(customDateRange.endDate), rangeDays), 'yyyy-MM-dd')
-                    setCustomDateRange({ startDate: newStart, endDate: newEnd })
-                  }}
-                  size="sm"
-                  variant="ghost"
-                  className="h-7 w-7 sm:h-8 sm:w-8 p-0"
-                >
-                  <ChevronRight className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                </Button>
-              )}
-            </div>
-            {showDatePicker && (
-              <DateRangePicker
-                startDate={customDateRange.startDate}
-                endDate={customDateRange.endDate}
-                onApply={(range) => {
-                  setCustomDateRange(range)
-                  setPeriod('custom')
-                  setShowDatePicker(false)
-                }}
-                onCancel={() => setShowDatePicker(false)}
-              />
-            )}
-          </div>
-          <div className="flex gap-1 p-1 rounded-xl bg-secondary/50 border border-border/50 w-full sm:w-auto">
-            {(Object.keys(periodLabels).filter(p => p !== 'custom') as TimePeriod[]).map((p) => (
+        <div className="flex flex-col sm:flex-row items-center gap-2 w-full sm:w-auto">
+          <div className="flex gap-1 p-1 rounded-xl bg-background/80 border border-border/70 shadow-inner w-full sm:w-auto">
+            {(Object.keys(periodLabels) as TimePeriod[]).map((p) => (
               <button
                 key={p}
                 onClick={() => setPeriod(p)}
-                className={`flex-1 sm:flex-none px-2 sm:px-3 py-1.5 text-xs font-medium rounded-lg transition-all whitespace-nowrap ${
+                className={`flex-1 sm:flex-none px-2.5 sm:px-3 py-1.5 text-xs font-medium rounded-lg transition-all whitespace-nowrap ${
                   period === p
-                    ? 'bg-primary text-primary-foreground shadow-sm'
-                    : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
+                    ? 'bg-primary text-primary-foreground shadow-md'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-secondary/70'
                 }`}
               >
-                {p === 'thisYear' ? '2026' : p === 'lastYear' ? '2025' : 'All Time'}
+                {periodLabels[p]}
               </button>
             ))}
           </div>
+          {period !== 'allTime' && (
+            <div className="flex items-center gap-1 rounded-xl border border-border/70 bg-background/70 px-1 py-1 shadow-sm">
+              <Button
+                onClick={navigateBack}
+                size="sm"
+                variant="ghost"
+                className="h-7 w-7 sm:h-8 sm:w-8 p-0 rounded-lg hover:bg-secondary"
+              >
+                <ChevronLeft className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+              </Button>
+              <span className="min-w-[130px] px-2 text-center text-xs sm:text-sm font-semibold select-none">
+                {periodDisplayLabel}
+              </span>
+              <Button
+                onClick={navigateForward}
+                size="sm"
+                variant="ghost"
+                className="h-7 w-7 sm:h-8 sm:w-8 p-0 rounded-lg hover:bg-secondary"
+              >
+                <ChevronRight className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+              </Button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -699,7 +633,7 @@ export function Analytics({
               <div className="h-12 w-12 rounded-full bg-secondary/50 flex items-center justify-center mx-auto mb-3">
                 <Calendar className="h-6 w-6 text-muted-foreground" />
               </div>
-              <p className="text-sm text-muted-foreground">No transactions for {periodLabels[period].toLowerCase()}</p>
+              <p className="text-sm text-muted-foreground">No transactions for {period === 'allTime' ? 'all time' : periodDisplayLabel.toLowerCase()}</p>
               <p className="text-xs text-muted-foreground/70 mt-1">Add some transactions to see analytics</p>
             </div>
           </CardContent>

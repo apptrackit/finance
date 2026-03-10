@@ -26,7 +26,7 @@ export type Account = {
   exclude_from_cash_balance?: boolean
 }
 
-export type TimePeriod = 'thisYear' | 'lastYear' | 'allTime' | 'custom'
+export type TimePeriod = 'allTime' | 'month' | 'year'
 
 export type SpendingEstimate = {
   estimate_amount: number
