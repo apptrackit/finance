@@ -98,8 +98,8 @@ if [ -d "migrations" ]; then
       if [ "$ALREADY_RUN" = "0" ]; then
         echo "  Running migration: $migration_name"
         
-        # Execute the migration file
-        if npx wrangler d1 execute finance-db --remote --file="$migration_file"; then
+        # Execute the migration file (echo yes to auto-confirm the D1 prompt)
+        if echo yes | npx wrangler d1 execute finance-db --remote --file="$migration_file"; then
           # Record the migration as executed only if it succeeded
           migration_id="${migration_name}_$(date +%s)"
           npx wrangler d1 execute finance-db --remote --command "INSERT OR IGNORE INTO migration_history (id, migration_name) VALUES ('${migration_id}', '${migration_name}')"
