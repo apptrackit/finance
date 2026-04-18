@@ -11,7 +11,7 @@ import { startOfMonth, endOfMonth, format } from 'date-fns'
 import { Budget } from './components/budget-module/Budget'
 import { useFinanceData } from './hooks/useFinanceData'
 
-const APP_VERSION = '1.6.3'
+const APP_VERSION = '1.7.0'
 const MENU_STORAGE_KEY = 'finance_visible_menus'
 
 type View = 'dashboard' | 'analytics' | 'settings' | 'investments' | 'recurring' | 'budget'
