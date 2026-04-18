@@ -1360,7 +1360,9 @@ export function TransactionList({
               <div key={date}>
                 <div className="flex items-center gap-1.5 sm:gap-2 mb-1.5 sm:mb-2">
                   <div className="text-[10px] sm:text-xs font-medium text-muted-foreground">
-                    {format(new Date(date), 'EEEE, MMM d')}
+                    {new Date(date).getFullYear() !== new Date().getFullYear()
+                      ? format(new Date(date), 'EEEE, MMM d, yyyy')
+                      : format(new Date(date), 'EEEE, MMM d')}
                   </div>
                   <div className="flex-1 h-px bg-border" />
                 </div>
@@ -1537,7 +1539,9 @@ export function TransactionList({
                           }
                         </p>
                         <div className="flex items-center gap-1.5 sm:gap-2 text-[10px] sm:text-xs text-muted-foreground">
-                          <span>{format(new Date(tx.date), 'MMM d')}</span>
+                          <span>{new Date(tx.date).getFullYear() !== new Date().getFullYear()
+                            ? format(new Date(tx.date), 'MMM d, yyyy')
+                            : format(new Date(tx.date), 'MMM d')}</span>
                           <span>•</span>
                           <span>{getAccountName(tx.account_id)}</span>
                           {isTransfer && related && (
