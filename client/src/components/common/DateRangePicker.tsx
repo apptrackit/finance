@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-import { format, subDays, startOfMonth, endOfMonth, startOfYear, endOfYear, subMonths } from 'date-fns'
+import { format, subDays, startOfMonth, startOfYear, endOfYear, subMonths } from 'date-fns'
 import { Button } from './button'
 import { Input } from './input'
 import { Label } from './label'
