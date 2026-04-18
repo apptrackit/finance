@@ -1,9 +1,20 @@
 import { Transaction } from '../models/Transaction'
 
+type RawTransactionRow = Omit<Transaction, 'exclude_from_estimate'> & {
+  exclude_from_estimate: number
+}
+
+type RawExpenseRow = RawTransactionRow & {
+  account_name: string
+  category_name: string | null
+}
+
+type D1Value = string | number | null
+
 export class TransactionRepository {
   constructor(private db: D1Database) {}
 
-  private mapTransaction(raw: any): Transaction {
+  private mapTransaction(raw: RawTransactionRow): Transaction {
     return {
       ...raw,
       exclude_from_estimate: raw.exclude_from_estimate === 1
@@ -11,12 +22,12 @@ export class TransactionRepository {
   }
 
   async findAll(): Promise<Transaction[]> {
-    const { results } = await this.db.prepare('SELECT * FROM transactions ORDER BY date DESC').all<any>()
+    const { results } = await this.db.prepare('SELECT * FROM transactions ORDER BY date DESC').all<RawTransactionRow>()
     return results.map(r => this.mapTransaction(r))
   }
 
   async findById(id: string): Promise<Transaction | null> {
-    const result = await this.db.prepare('SELECT * FROM transactions WHERE id = ?').bind(id).first<any>()
+    const result = await this.db.prepare('SELECT * FROM transactions WHERE id = ?').bind(id).first<RawTransactionRow>()
     return result ? this.mapTransaction(result) : null
   }
 
@@ -37,7 +48,7 @@ export class TransactionRepository {
 
   async update(id: string, updates: Partial<Transaction>): Promise<void> {
     const fields: string[] = []
-    const values: any[] = []
+    const values: D1Value[] = []
 
     if (updates.account_id !== undefined) {
       fields.push('account_id = ?')
@@ -83,10 +94,10 @@ export class TransactionRepository {
     const allowedSortFields = ['date', 'amount', 'description']
     const field = allowedSortFields.includes(sortBy) ? sortBy : 'date'
     const order = sortOrder.toLowerCase() === 'asc' ? 'ASC' : 'DESC'
-    
+
     const { results } = await this.db.prepare(
       `SELECT * FROM transactions ORDER BY ${field} ${order} LIMIT ? OFFSET ?`
-    ).bind(limit, offset).all<any>()
+    ).bind(limit, offset).all<RawTransactionRow>()
     return results.map(r => this.mapTransaction(r))
   }
 
@@ -97,7 +108,7 @@ export class TransactionRepository {
 
   async findByDateRange(startDate: string, endDate: string, accountId?: string, categoryId?: string): Promise<Transaction[]> {
     let query = 'SELECT * FROM transactions WHERE date >= ? AND date <= ?'
-    const params: any[] = [startDate, endDate]
+    const params: D1Value[] = [startDate, endDate]
 
     if (accountId) {
       query += ' AND account_id = ?'
@@ -111,13 +122,13 @@ export class TransactionRepository {
 
     query += ' ORDER BY date DESC'
 
-    const { results } = await this.db.prepare(query).bind(...params).all<any>()
+    const { results } = await this.db.prepare(query).bind(...params).all<RawTransactionRow>()
     return results.map(r => this.mapTransaction(r))
   }
 
   async findFromDate(startDate: string, accountId?: string, categoryId?: string): Promise<Transaction[]> {
     let query = 'SELECT * FROM transactions WHERE date >= ?'
-    const params: any[] = [startDate]
+    const params: D1Value[] = [startDate]
 
     if (accountId) {
       query += ' AND account_id = ?'
@@ -131,25 +142,25 @@ export class TransactionRepository {
 
     query += ' ORDER BY date DESC'
 
-    const { results } = await this.db.prepare(query).bind(...params).all<any>()
+    const { results } = await this.db.prepare(query).bind(...params).all<RawTransactionRow>()
     return results.map(r => this.mapTransaction(r))
   }
 
   async findRecurring(): Promise<Transaction[]> {
-    const { results } = await this.db.prepare('SELECT * FROM transactions WHERE is_recurring = 1').all<any>()
+    const { results } = await this.db.prepare('SELECT * FROM transactions WHERE is_recurring = 1').all<RawTransactionRow>()
     return results.map(r => this.mapTransaction(r))
   }
 
   async findByAccountAndDatePattern(accountId: string, amount: number, description: string, datePattern: string): Promise<Transaction | null> {
     const result = await this.db.prepare(
       'SELECT * FROM transactions WHERE account_id = ? AND amount = ? AND description = ? AND date LIKE ?'
-    ).bind(accountId, amount, description, datePattern).first<any>()
+    ).bind(accountId, amount, description, datePattern).first<RawTransactionRow>()
     return result ? this.mapTransaction(result) : null
   }
 
   async findRecentExpensesFromCashAccounts(startDate: string, endDate: string): Promise<(Transaction & { account_name: string; category_name?: string })[]> {
     const query = `
-      SELECT t.*, a.name as account_name, c.name as category_name 
+      SELECT t.*, a.name as account_name, c.name as category_name
       FROM transactions t
       INNER JOIN accounts a ON t.account_id = a.id
       LEFT JOIN categories c ON t.category_id = c.id
@@ -159,11 +170,11 @@ export class TransactionRepository {
         AND t.date <= ?
       ORDER BY t.date DESC
     `
-    const { results } = await this.db.prepare(query).bind(startDate, endDate).all<any>()
+    const { results } = await this.db.prepare(query).bind(startDate, endDate).all<RawExpenseRow>()
     return results.map(r => ({
       ...this.mapTransaction(r),
       account_name: r.account_name,
-      category_name: r.category_name
+      category_name: r.category_name ?? undefined
     }))
   }
 }

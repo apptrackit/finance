@@ -6,6 +6,7 @@
 ## Table of Contents
 
 - [Overview](#overview)
+- [What's New](#whats-new)
 - [Screenshots](#screenshots)
 - [Quick Start](#quick-start)
   - [Backend Deployment](#backend-deployment)
@@ -27,6 +28,7 @@
 - [Development](#development)
   - [Prerequisites](#prerequisites)
   - [Local Setup](#local-setup)
+  - [Running Tests](#running-tests)
   - [Environment Variables](#environment-variables)
 - [API Documentation](#api-documentation)
 
@@ -35,6 +37,33 @@
 ## Overview
 
 Finance Manager is a modern, privacy-focused personal finance application that helps you track your net worth, manage multiple accounts, monitor investments, automate recurring transactions, and analyze spending patterns. Built on Cloudflare's edge network for global performance and security.
+
+---
+
+## What's New
+
+### v1.6.3 — Comprehensive Improvements
+
+**Security & Reliability**
+- **Zod input validation** — All mutation endpoints (POST/PUT) are validated via Zod schemas before reaching business logic. Invalid payloads return structured `400` errors with per-field details.
+- **Structured error codes** — `AppError` class with typed `ErrorCode` constants. Every error returns `{error, code}` JSON — no more untyped string messages.
+- **Rate limiting** — Sliding window per-IP rate limiter (default: 300 req/60 s). Returns `429` with `RATE_LIMITED` code when exceeded.
+- **CSP & security headers** — `Content-Security-Policy`, `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy`, and `Permissions-Policy` now set on all Cloudflare Pages responses.
+- **Audit log** — Every create/update/delete on accounts and transactions is recorded in the `audit_log` D1 table with action, entity type, entity ID, and timestamp.
+- **Structured JSON logging** — All `console.log` calls replaced with a typed `logger` utility outputting `{level, message, timestamp, ...context}` JSON for easy log querying.
+
+**Performance**
+- **DB indexes** — 8 new indexes on hot query columns (`account_id`, `date`, `category_id`, `linked_transaction_id`) across `transactions`, `investment_transactions`, and `recurring_schedules`.
+- **Type safety** — Removed all `any[]` types from repositories. All D1 query parameters are now typed as `(string | number | null)[]`.
+
+**UI/UX**
+- **Transaction search** — Search bar in the transaction list filters by description, category name, and account name in real time.
+- **Skeleton loaders** — Replaced static loading states with per-row animated skeletons and staggered delays for a polished loading experience.
+- **Mobile bottom navigation** — Fixed bottom nav bar on screens smaller than `lg`. Desktop retains the sidebar layout.
+
+**Code Quality**
+- **`useFinanceData` hook** — All data fetching, state, and callbacks extracted from `App.tsx` into a dedicated hook. `App.tsx` reduced from ~760 to ~280 lines.
+- **Vitest test suites** — Unit tests for all Zod validators, `AppError`/`ErrorCode`, and the `useFinanceData` hook.
 
 ---
 
@@ -110,66 +139,39 @@ finance/
 │   ├── src/
 │   │   ├── config/          # Application configuration
 │   │   ├── controllers/     # HTTP request handlers
-│   │   │   ├── account.controller.ts
-│   │   │   ├── category.controller.ts
-│   │   │   ├── dashboard.controller.ts
-│   │   │   ├── investment-transaction.controller.ts
-│   │   │   ├── market-data.controller.ts
-│   │   │   ├── recurring-schedule.controller.ts
-│   │   │   ├── transaction.controller.ts
-│   │   │   └── transfer.controller.ts
-│   │   ├── dtos/           # Data Transfer Objects
-│   │   ├── mappers/        # Entity-DTO mapping
-│   │   ├── middlewares/    # CORS & authentication
-│   │   ├── models/         # Domain entities
-│   │   ├── repositories/   # Database access layer
-│   │   ├── routes/         # Route definitions
-│   │   ├── services/       # Business logic layer
-│   │   ├── types/          # TypeScript types
-│   │   ├── utils/          # Utility functions
-│   │   └── index.ts        # Application entry point
-│   ├── schema.sql          # Database schema
-│   ├── wrangler.toml       # Cloudflare Workers config
-│   ├── ARCHITECTURE.md     # Detailed architecture docs
+│   │   ├── dtos/            # Data Transfer Objects
+│   │   ├── errors/          # AppError class + ErrorCode constants
+│   │   ├── mappers/         # Entity-DTO mapping
+│   │   ├── middlewares/     # auth, CORS, rate limiting, validation
+│   │   ├── models/          # Domain entities + AuditLog
+│   │   ├── repositories/    # Database access layer (typed D1Value[])
+│   │   ├── services/        # Business logic layer
+│   │   ├── tests/           # Vitest unit tests
+│   │   ├── types/           # TypeScript types
+│   │   ├── utils/           # logger + helpers
+│   │   ├── validators/      # Zod schemas for all mutation endpoints
+│   │   └── index.ts         # Application entry point
+│   ├── migrations/          # D1 SQL migrations (001–004)
+│   ├── wrangler.toml        # Cloudflare Workers config
 │   └── package.json
 │
 ├── client/                   # Frontend (React + Vite)
 │   ├── src/
-│   │   ├── components/      # React components
-│   │   │   ├── AccountList.tsx
-│   │   │   ├── TransactionList.tsx
-│   │   │   ├── Investments.tsx
-│   │   │   ├── InvestmentChart.tsx
-│   │   │   ├── Analytics.tsx
-│   │   │   ├── DateRangePicker.tsx
-│   │   │   ├── TransferForm.tsx
-│   │   │   ├── RecurringTransactions.tsx
-│   │   │   ├── Settings.tsx
-│   │   │   ├── AdjustmentChoiceModal.tsx
-│   │   │   ├── SplitTransactionModal.tsx
-│   │   │   └── ui/          # Reusable UI components
-│   │   │       ├── button.tsx
-│   │   │       ├── card.tsx
-│   │   │       ├── input.tsx
-│   │   │       ├── label.tsx
-│   │   │       ├── modal.tsx
-│   │   │       └── select.tsx
-│   │   ├── context/
-│   │   │   ├── PrivacyContext.tsx
-│   │   │   ├── AlertContext.tsx
-│   │   │   └── LockedAccountsContext.tsx
-│   │   ├── lib/
-│   │   │   └── utils.ts     # Helper functions
-│   │   ├── App.tsx          # Main application
-│   │   ├── config.ts        # API configuration
+│   │   ├── components/      # Feature module components
+│   │   ├── context/         # React context providers
+│   │   ├── hooks/           # useFinanceData + other hooks
+│   │   ├── lib/             # Utility functions
+│   │   ├── test/            # Vitest tests + setup
+│   │   ├── App.tsx          # Root layout + navigation
+│   │   ├── config.ts        # API base URL + apiFetch
 │   │   └── main.tsx         # Entry point
-│   ├── public/              # Static assets
-│   │   ├── icon-192.png     # PWA icon (192x192)
-│   │   ├── icon-512.png     # PWA icon (512x512)
-│   │   └── favicon.svg      # Favicon
-│   ├── vite.config.ts       # Vite & PWA configuration
+│   ├── public/
+│   │   ├── _headers         # Cloudflare Pages security headers (CSP etc.)
+│   │   └── ...              # PWA icons, favicon
+│   ├── vite.config.ts       # Vite + Vitest + PWA configuration
 │   └── package.json
 │
+├── AGENT.md                  # Developer guide for Claude/AI sessions
 ├── deploy.sh                 # Automated deployment script
 └── package.json             # Workspace root
 ```
@@ -397,6 +399,24 @@ Perfect for:
    - Rejects unauthorized domains
    - Configurable via `ALLOWED_ORIGINS` env var
 
+4. **Zod Input Validation**
+   - All POST/PUT payloads validated before reaching business logic
+   - Returns `400 {error, code: "VALIDATION_ERROR", details: [{field, message}]}` on failure
+
+5. **Rate Limiting**
+   - Sliding window per-IP (default: 300 req/60 s)
+   - Returns `429 {error, code: "RATE_LIMITED"}` when exceeded
+
+6. **Security Headers** (Cloudflare Pages `_headers`)
+   - `Content-Security-Policy` restricting scripts and connections to known origins
+   - `X-Frame-Options: DENY` (clickjacking protection)
+   - `X-Content-Type-Options: nosniff` (MIME sniffing protection)
+   - `Referrer-Policy: strict-origin-when-cross-origin`
+   - `Permissions-Policy` disabling camera, microphone, geolocation
+
+7. **Audit Log**
+   - Every create/update/delete on accounts and transactions written to `audit_log` D1 table
+
 **Environment Secrets:**
 - `API_SECRET` — Backend API key
 - `ALLOWED_ORIGINS` — Comma-separated allowed domains
@@ -453,6 +473,20 @@ Perfect for:
    # API: http://localhost:8787
    # Client: http://localhost:5173
    ```
+
+### Running Tests
+
+```bash
+# API unit tests (validators + error codes)
+cd api && npm test
+
+# Client unit tests (hooks + components)
+cd client && npm test
+
+# Watch mode
+cd api && npm run test:watch
+cd client && npm run test:watch
+```
 
 ### Environment Variables
 

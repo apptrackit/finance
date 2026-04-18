@@ -35,6 +35,22 @@ import { BudgetController } from './controllers/budget.controller'
 // Middleware
 import { corsMiddleware } from './middlewares/cors.middleware'
 import { authMiddleware } from './middlewares/auth.middleware'
+import { rateLimitMiddleware } from './middlewares/rate-limit.middleware'
+
+// Errors
+import { AppError } from './errors/codes'
+
+// Logger
+import { logger } from './utils/logger'
+
+// Validators
+import { CreateAccountSchema, UpdateAccountSchema } from './validators/account.validator'
+import { CreateTransactionSchema, UpdateTransactionSchema } from './validators/transaction.validator'
+import { CreateCategorySchema, UpdateCategorySchema } from './validators/category.validator'
+import { CreateBudgetSchema, UpdateBudgetSchema } from './validators/budget.validator'
+import { CreateTransferSchema } from './validators/transfer.validator'
+import { CreateRecurringScheduleSchema, UpdateRecurringScheduleSchema } from './validators/recurring-schedule.validator'
+import { validateBody } from './middlewares/validate.middleware'
 
 // Factory function to create all dependencies per request
 function createDependencies(db: D1Database) {
@@ -82,6 +98,16 @@ function createDependencies(db: D1Database) {
 }
 
 const app = new Hono<{ Bindings: Bindings }>()
+
+// Global error handler — returns structured error responses
+app.onError((err, c) => {
+  if (err instanceof AppError) {
+    logger.warn('AppError', { code: err.code, message: err.message, path: c.req.path })
+    return c.json({ error: err.message, code: err.code }, err.statusCode as 400 | 401 | 403 | 404 | 409 | 429 | 500)
+  }
+  logger.error('Unhandled error', { message: err.message, stack: err.stack, path: c.req.path })
+  return c.json({ error: 'Internal server error', code: 'INTERNAL_ERROR' }, 500)
+})
 
 // Helper to check if the public API feature is enabled
 function isPublicApiEnabled(apiKey: string | undefined): boolean {
@@ -143,6 +169,9 @@ app.use('/*', corsMiddleware)
 // Apply authentication middleware globally (except OPTIONS which is handled by CORS)
 app.use('*', authMiddleware)
 
+// Rate limit: 300 requests per 60 seconds per IP
+app.use('*', rateLimitMiddleware(300, 60))
+
 // Health check
 app.get('/', (c) => c.text('Finance API is running!'))
 
@@ -158,21 +187,21 @@ const getControllers = (c: Context<{ Bindings: Bindings }>) => createDependencie
 
 // Categories
 app.get('/categories', (c) => getControllers(c).categoryController.getAll(c))
-app.post('/categories', (c) => getControllers(c).categoryController.create(c))
-app.put('/categories/:id', (c) => getControllers(c).categoryController.update(c))
+app.post('/categories', validateBody(CreateCategorySchema), (c) => getControllers(c).categoryController.create(c))
+app.put('/categories/:id', validateBody(UpdateCategorySchema), (c) => getControllers(c).categoryController.update(c))
 app.delete('/categories/:id', (c) => getControllers(c).categoryController.delete(c))
 app.post('/categories/reset', (c) => getControllers(c).categoryController.reset(c))
 
 // Accounts
 app.get('/accounts', (c) => getControllers(c).accountController.getAll(c))
-app.post('/accounts', (c) => getControllers(c).accountController.create(c))
-app.put('/accounts/:id', (c) => getControllers(c).accountController.update(c))
+app.post('/accounts', validateBody(CreateAccountSchema), (c) => getControllers(c).accountController.create(c))
+app.put('/accounts/:id', validateBody(UpdateAccountSchema), (c) => getControllers(c).accountController.update(c))
 app.delete('/accounts/:id', (c) => getControllers(c).accountController.delete(c))
 
 // Transactions
 app.get('/transactions', (c) => getControllers(c).transactionController.getAll(c))
-app.post('/transactions', (c) => getControllers(c).transactionController.create(c))
-app.put('/transactions/:id', (c) => getControllers(c).transactionController.update(c))
+app.post('/transactions', validateBody(CreateTransactionSchema), (c) => getControllers(c).transactionController.create(c))
+app.put('/transactions/:id', validateBody(UpdateTransactionSchema), (c) => getControllers(c).transactionController.update(c))
 app.delete('/transactions/:id', (c) => getControllers(c).transactionController.delete(c))
 
 // Transaction Pagination
@@ -187,7 +216,7 @@ app.delete('/investment-transactions/:id', (c) => getControllers(c).investmentTr
 
 // Transfers
 app.get('/transfers/exchange-rate', (c) => getControllers(c).transferController.getExchangeRate(c))
-app.post('/transfers', (c) => getControllers(c).transferController.create(c))
+app.post('/transfers', validateBody(CreateTransferSchema), (c) => getControllers(c).transferController.create(c))
 
 // Dashboard
 app.get('/dashboard/net-worth', (c) => getControllers(c).dashboardController.getNetWorth(c))
@@ -201,20 +230,20 @@ app.get('/market/chart', (c) => getControllers(c).marketDataController.chart(c))
 // Recurring Schedules
 app.get('/recurring-schedules', (c) => getControllers(c).recurringScheduleController.getAll(c))
 app.get('/recurring-schedules/:id', (c) => getControllers(c).recurringScheduleController.getById(c))
-app.post('/recurring-schedules', (c) => getControllers(c).recurringScheduleController.create(c))
-app.put('/recurring-schedules/:id', (c) => getControllers(c).recurringScheduleController.update(c))
+app.post('/recurring-schedules', validateBody(CreateRecurringScheduleSchema), (c) => getControllers(c).recurringScheduleController.create(c))
+app.put('/recurring-schedules/:id', validateBody(UpdateRecurringScheduleSchema), (c) => getControllers(c).recurringScheduleController.update(c))
 app.delete('/recurring-schedules/:id', (c) => getControllers(c).recurringScheduleController.delete(c))
 
 // Budgets
 app.get('/budgets', (c) => getControllers(c).budgetController.getAll(c))
 app.get('/budgets/:id', (c) => getControllers(c).budgetController.getById(c))
-app.post('/budgets', (c) => getControllers(c).budgetController.create(c))
-app.put('/budgets/:id', (c) => getControllers(c).budgetController.update(c))
+app.post('/budgets', validateBody(CreateBudgetSchema), (c) => getControllers(c).budgetController.create(c))
+app.put('/budgets/:id', validateBody(UpdateBudgetSchema), (c) => getControllers(c).budgetController.update(c))
 app.delete('/budgets/:id', (c) => getControllers(c).budgetController.delete(c))
 
 // Manual trigger for scheduled task (for testing)
 app.post('/test-scheduled-task', async (c) => {
-  console.log('Manually triggering scheduled task: Processing recurring schedules')
+  logger.info('Manually triggering scheduled task: Processing recurring schedules')
   
   const transactionRepo = new TransactionRepository(c.env.DB)
   const accountRepo = new AccountRepository(c.env.DB)
@@ -229,7 +258,7 @@ app.post('/test-scheduled-task', async (c) => {
 export default {
   fetch: app.fetch,
   scheduled: async (event: ScheduledEvent, env: Bindings, ctx: ExecutionContext) => {
-    console.log('Running scheduled task: Processing recurring schedules')
+    logger.info('Running scheduled task: Processing recurring schedules')
 
     // Initialize dependencies for scheduled task
     const transactionRepo = new TransactionRepository(env.DB)

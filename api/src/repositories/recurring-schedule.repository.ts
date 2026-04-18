@@ -53,7 +53,7 @@ export class RecurringScheduleRepository {
 
   async update(id: string, updates: Partial<RecurringSchedule>): Promise<void> {
     const fields: string[] = []
-    const values: any[] = []
+    const values: (string | number | null)[] = []
 
     if (updates.frequency !== undefined) {
       fields.push('frequency = ?')

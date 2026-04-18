@@ -5,7 +5,7 @@ import { Label } from '../common/label'
 import { Select } from '../common/select'
 import { Card, CardContent, CardHeader, CardTitle } from '../common/card'
 import { Modal } from '../common/modal'
-import { Plus, X, ArrowDownLeft, ArrowUpRight, Receipt, Pencil, Trash2, Check, ArrowRightLeft, ChevronLeft, ChevronRight, Calendar, Layers } from 'lucide-react'
+import { Plus, X, ArrowDownLeft, ArrowUpRight, Receipt, Pencil, Trash2, Check, ArrowRightLeft, ChevronLeft, ChevronRight, Calendar, Layers, Search } from 'lucide-react'
 import { format, addMonths, subMonths, startOfMonth, endOfMonth, addDays, differenceInDays } from 'date-fns'
 import { API_BASE_URL, apiFetch } from '../../config'
 import { usePrivacy } from '../../context/PrivacyContext'
@@ -100,6 +100,7 @@ export function TransactionList({
   const [categoryFilter, setCategoryFilter] = useState<string>('all')
   const [sortOrder, setSortOrder] = useState<'date' | 'amount-high' | 'amount-low'>('date')
   const [showAllTransactions, setShowAllTransactions] = useState(false)
+  const [searchQuery, setSearchQuery] = useState<string>('')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [deletingId, setDeletingId] = useState<string | null>(null)
   
@@ -107,10 +108,10 @@ export function TransactionList({
   const { privacyMode, shouldHideInvestment } = usePrivacy()
   const { isLocked } = useLockedAccounts()
 
-  // Reset showAllTransactions when filter or sort changes
+  // Reset showAllTransactions when filter, sort, or search changes
   useEffect(() => {
     setShowAllTransactions(false)
-  }, [categoryFilter, sortOrder])
+  }, [categoryFilter, sortOrder, searchQuery])
 
   useEffect(() => {
     apiFetch(`${API_BASE_URL}/categories`)
@@ -638,6 +639,15 @@ export function TransactionList({
     onTransactionAdded()
   }
 
+  const matchesSearch = (tx: Transaction): boolean => {
+    if (!searchQuery.trim()) return true
+    const q = searchQuery.toLowerCase()
+    const desc = (tx.description || '').toLowerCase()
+    const catName = getCategoryName(tx.category_id).toLowerCase()
+    const accName = getAccountName(tx.account_id).toLowerCase()
+    return desc.includes(q) || catName.includes(q) || accName.includes(q)
+  }
+
   const getCategoryName = (id?: string) => {
     if (!id) return 'Uncategorized'
     const cat = categories.find(c => c.id === id)
@@ -749,6 +759,26 @@ export function TransactionList({
             </div>
           </div>
           
+          {/* Search Bar */}
+          <div className="relative">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              placeholder="Search transactions..."
+              className="w-full pl-8 pr-3 py-1.5 text-xs sm:text-sm rounded-lg border border-border/60 bg-background/50 focus:outline-none focus:ring-1 focus:ring-primary/40 placeholder:text-muted-foreground/60"
+            />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery('')}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
+
           <div className="flex items-center justify-center gap-2 sm:gap-3 flex-wrap">
             {/* Month Navigation */}
             <div className="flex items-center gap-1 sm:gap-2 relative">
@@ -1275,31 +1305,28 @@ export function TransactionList({
             // Date-based grouping
             (() => {
               // Collect all filtered transactions first
+              const applyFilters = (tx: Transaction) => {
+                const catMatch = categoryFilter === 'all' ? true
+                  : categoryFilter === 'all-expenses' ? (tx.amount < 0 && !tx.linked_transaction_id)
+                  : categoryFilter === 'all-income' ? (tx.amount > 0 && !tx.linked_transaction_id)
+                  : categoryFilter === 'transfer' ? !!tx.linked_transaction_id
+                  : tx.category_id === categoryFilter
+                return catMatch && matchesSearch(tx)
+              }
+
               let allFilteredTransactions: Transaction[] = []
               sortedDates.forEach(date => {
-                const dateTransactions = groupedTransactions[date].filter(tx => {
-                  if (categoryFilter === 'all') return true
-                  if (categoryFilter === 'all-expenses') return tx.amount < 0 && !tx.linked_transaction_id
-                  if (categoryFilter === 'all-income') return tx.amount > 0 && !tx.linked_transaction_id
-                  if (categoryFilter === 'transfer') return !!tx.linked_transaction_id
-                  return tx.category_id === categoryFilter
-                })
-                allFilteredTransactions = allFilteredTransactions.concat(dateTransactions)
+                allFilteredTransactions = allFilteredTransactions.concat(
+                  groupedTransactions[date].filter(applyFilters)
+                )
               })
-              
+
               const datesToDisplay = showAllTransactions ? sortedDates : sortedDates.slice(0, Math.min(sortedDates.length, 5))
               let displayedCount = 0
-              
+
               return <>
                 {datesToDisplay.map(date => {
-                  // Filter transactions by category
-                  const dateTransactions = groupedTransactions[date].filter(tx => {
-                    if (categoryFilter === 'all') return true
-                    if (categoryFilter === 'all-expenses') return tx.amount < 0 && !tx.linked_transaction_id
-                    if (categoryFilter === 'all-income') return tx.amount > 0 && !tx.linked_transaction_id
-                    if (categoryFilter === 'transfer') return !!tx.linked_transaction_id
-                    return tx.category_id === categoryFilter
-                  })
+                  const dateTransactions = groupedTransactions[date].filter(applyFilters)
                   
                   // Skip date if no transactions match filter
                   if (dateTransactions.length === 0) return null
@@ -1450,11 +1477,12 @@ export function TransactionList({
             (() => {
               // Flatten all transactions
               const allTransactions = transactions.filter(tx => {
-                if (categoryFilter === 'all') return true
-                if (categoryFilter === 'all-expenses') return tx.amount < 0 && !tx.linked_transaction_id
-                if (categoryFilter === 'all-income') return tx.amount > 0 && !tx.linked_transaction_id
-                if (categoryFilter === 'transfer') return !!tx.linked_transaction_id
-                return tx.category_id === categoryFilter
+                const catMatch = categoryFilter === 'all' ? true
+                  : categoryFilter === 'all-expenses' ? (tx.amount < 0 && !tx.linked_transaction_id)
+                  : categoryFilter === 'all-income' ? (tx.amount > 0 && !tx.linked_transaction_id)
+                  : categoryFilter === 'transfer' ? !!tx.linked_transaction_id
+                  : tx.category_id === categoryFilter
+                return catMatch && matchesSearch(tx)
               })
               
               // Sort by amount
@@ -1601,22 +1629,29 @@ export function TransactionList({
             })()
           )}
           
-          {transactions.length === 0 && !isAdding && (
-            loading ? (
-              <div className="space-y-3">
-                {[1, 2, 3, 4, 5].map(i => (
-                  <div key={i} className="h-20 bg-muted animate-pulse rounded-xl" />
-                ))}
-              </div>
-            ) : (
-              <div className="text-center py-12">
-                <div className="h-12 w-12 rounded-full bg-secondary/50 flex items-center justify-center mx-auto mb-3">
-                  <Receipt className="h-6 w-6 text-muted-foreground" />
+          {loading && transactions.length === 0 && (
+            <div className="space-y-2">
+              {[...Array(6)].map((_, i) => (
+                <div key={i} className="flex items-center gap-3 p-2 sm:p-3 rounded-xl">
+                  <div className="h-8 w-8 sm:h-10 sm:w-10 rounded-lg sm:rounded-xl bg-muted animate-pulse flex-shrink-0" />
+                  <div className="flex-1 space-y-1.5">
+                    <div className="h-3 bg-muted animate-pulse rounded w-2/5" style={{ animationDelay: `${i * 60}ms` }} />
+                    <div className="h-2.5 bg-muted animate-pulse rounded w-1/4" style={{ animationDelay: `${i * 60 + 30}ms` }} />
+                  </div>
+                  <div className="h-4 w-16 bg-muted animate-pulse rounded" style={{ animationDelay: `${i * 60}ms` }} />
                 </div>
-                <p className="text-sm text-muted-foreground">No transactions yet</p>
-                <p className="text-xs text-muted-foreground/70 mt-1">Record your first transaction to start tracking</p>
+              ))}
+            </div>
+          )}
+
+          {transactions.length === 0 && !isAdding && !loading && (
+            <div className="text-center py-12">
+              <div className="h-12 w-12 rounded-full bg-secondary/50 flex items-center justify-center mx-auto mb-3">
+                <Receipt className="h-6 w-6 text-muted-foreground" />
               </div>
-            )
+              <p className="text-sm text-muted-foreground">No transactions yet</p>
+              <p className="text-xs text-muted-foreground/70 mt-1">Record your first transaction to start tracking</p>
+            </div>
           )}
         </div>
       </CardContent>

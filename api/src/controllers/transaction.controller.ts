@@ -3,6 +3,8 @@ import { TransactionService } from '../services/transaction.service'
 import { TransactionMapper } from '../mappers/transaction.mapper'
 import { CreateTransactionDto, UpdateTransactionDto } from '../dtos/transaction.dto'
 import { PaginationParams } from '../models/Pagination'
+import { AuditRepository } from '../repositories/audit.repository'
+import { Bindings } from '../types/environment.types'
 
 export class TransactionController {
   constructor(private transactionService: TransactionService) {}
@@ -12,16 +14,19 @@ export class TransactionController {
     return c.json(transactions.map(TransactionMapper.toResponseDto))
   }
 
-  async create(c: Context) {
+  async create(c: Context<{ Bindings: Bindings }>) {
     try {
       const body = await c.req.json<CreateTransactionDto>()
       const result = await this.transactionService.createTransaction(body)
-      
+
       // Handle investment transaction response differently
       if ('type' in result && 'quantity' in result) {
+        const entityId = 'id' in result && typeof result.id === 'string' ? result.id : 'unknown'
+        await new AuditRepository(c.env.DB).log('CREATE', 'investment_transaction', entityId, { account_id: body.account_id, amount: body.amount })
         return c.json({ id: crypto.randomUUID(), ...result }, 201)
       }
-      
+
+      await new AuditRepository(c.env.DB).log('CREATE', 'transaction', result.id, { account_id: body.account_id, amount: body.amount })
       return c.json(TransactionMapper.toResponseDto(result), 201)
     } catch (error: any) {
       console.error('Transaction creation error:', error)
@@ -44,11 +49,12 @@ export class TransactionController {
     }
   }
 
-  async update(c: Context) {
+  async update(c: Context<{ Bindings: Bindings }>) {
     try {
       const id = c.req.param('id')
       const body = await c.req.json<UpdateTransactionDto>()
       const transaction = await this.transactionService.updateTransaction(id, body)
+      await new AuditRepository(c.env.DB).log('UPDATE', 'transaction', id, { amount: body.amount, category_id: body.category_id })
       return c.json(TransactionMapper.toResponseDto(transaction))
     } catch (error: any) {
       const status = error.message.includes('not found') ? 404 : 500
@@ -56,9 +62,10 @@ export class TransactionController {
     }
   }
 
-  async delete(c: Context) {
+  async delete(c: Context<{ Bindings: Bindings }>) {
     const id = c.req.param('id')
     await this.transactionService.deleteTransaction(id)
+    await new AuditRepository(c.env.DB).log('DELETE', 'transaction', id)
     return c.json({ success: true })
   }
 

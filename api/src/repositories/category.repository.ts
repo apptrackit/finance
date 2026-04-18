@@ -34,7 +34,7 @@ export class CategoryRepository {
 
   async update(id: string, updates: Partial<Omit<Category, 'id'>>): Promise<void> {
     const fields: string[] = []
-    const values: any[] = []
+    const values: (string | number | null)[] = []
 
     if (updates.name !== undefined) {
       fields.push('name = ?')

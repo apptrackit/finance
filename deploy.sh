@@ -12,6 +12,29 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
+ensure_wrangler_ready() {
+  if npx wrangler --version >/dev/null 2>&1; then
+    return 0
+  fi
+
+  echo -e "${YELLOW}Wrangler preflight failed. Attempting to repair workerd/wrangler...${NC}"
+
+  if npm rebuild workerd wrangler >/dev/null 2>&1 && npx wrangler --version >/dev/null 2>&1; then
+    echo -e "${GREEN}✓ Repaired wrangler/workerd via npm rebuild${NC}"
+    return 0
+  fi
+
+  echo -e "${YELLOW}Rebuild did not fully resolve it. Running npm install at workspace root...${NC}"
+  if (cd .. && npm install >/dev/null 2>&1) && npx wrangler --version >/dev/null 2>&1; then
+    echo -e "${GREEN}✓ Repaired wrangler/workerd via npm install${NC}"
+    return 0
+  fi
+
+  echo -e "${RED}Error: Wrangler is still not runnable on this platform.${NC}"
+  echo -e "${RED}Try: rm -rf node_modules package-lock.json && npm install${NC}"
+  exit 1
+}
+
 # Check current git branch
 CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
 
@@ -46,6 +69,9 @@ echo -e "${GREEN}🚀 Starting deployment for ${PROJECT_NAME}...${NC}\n"
 # Step 1: Update database schema
 echo -e "${YELLOW}📊 Step 1/3: Updating database schema...${NC}"
 cd api
+
+# Ensure wrangler can run before any migration command
+ensure_wrangler_ready
 
 # Apply database migrations
 echo -e "${YELLOW}Applying database migrations...${NC}"
