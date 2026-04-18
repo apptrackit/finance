@@ -64,7 +64,7 @@ export class BudgetRepository {
 
   async update(id: string, updates: Partial<Budget>): Promise<void> {
     const fields: string[] = []
-    const values: any[] = []
+    const values: (string | number | null)[] = []
 
     if (updates.name !== undefined) {
       fields.push('name = ?')
