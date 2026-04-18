@@ -12,8 +12,8 @@ export function validateBody<T>(schema: ZodSchema<T>) {
 
     const result = schema.safeParse(body)
     if (!result.success) {
-      const errors = result.error.errors.map(e => ({
-        field: e.path.join('.'),
+      const errors = result.error.issues.map((e) => ({
+        field: e.path.map(String).join('.'),
         message: e.message,
       }))
       return c.json({ error: 'Validation failed', code: 'VALIDATION_ERROR', details: errors }, 400)

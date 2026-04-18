@@ -21,7 +21,8 @@ export class TransactionController {
 
       // Handle investment transaction response differently
       if ('type' in result && 'quantity' in result) {
-        await new AuditRepository(c.env.DB).log('CREATE', 'investment_transaction', result.id ?? 'unknown', { account_id: body.account_id, amount: body.amount })
+        const entityId = 'id' in result && typeof result.id === 'string' ? result.id : 'unknown'
+        await new AuditRepository(c.env.DB).log('CREATE', 'investment_transaction', entityId, { account_id: body.account_id, amount: body.amount })
         return c.json({ id: crypto.randomUUID(), ...result }, 201)
       }
 
