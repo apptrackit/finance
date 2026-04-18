@@ -1,13 +1,20 @@
+/*
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; connect-src 'self' https://*.workers.dev https://open.er-api.com; img-src 'self' data: blob:; font-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: DENY
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: camera=(), microphone=(), geolocation=()
+
 # Cache control for static assets with hash in filename (can cache forever)
 /*.js
   Cache-Control: public, max-age=31536000, immutable
-  
+
 /*.css
   Cache-Control: public, max-age=31536000, immutable
 
 /*.woff
   Cache-Control: public, max-age=31536000, immutable
-  
+
 /*.woff2
   Cache-Control: public, max-age=31536000, immutable
 
