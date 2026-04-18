@@ -40,6 +40,9 @@ import { rateLimitMiddleware } from './middlewares/rate-limit.middleware'
 // Errors
 import { AppError } from './errors/codes'
 
+// Logger
+import { logger } from './utils/logger'
+
 // Validators
 import { CreateAccountSchema, UpdateAccountSchema } from './validators/account.validator'
 import { CreateTransactionSchema, UpdateTransactionSchema } from './validators/transaction.validator'
@@ -99,9 +102,10 @@ const app = new Hono<{ Bindings: Bindings }>()
 // Global error handler — returns structured error responses
 app.onError((err, c) => {
   if (err instanceof AppError) {
+    logger.warn('AppError', { code: err.code, message: err.message, path: c.req.path })
     return c.json({ error: err.message, code: err.code }, err.statusCode as 400 | 401 | 403 | 404 | 409 | 429 | 500)
   }
-  console.error('Unhandled error:', err)
+  logger.error('Unhandled error', { message: err.message, stack: err.stack, path: c.req.path })
   return c.json({ error: 'Internal server error', code: 'INTERNAL_ERROR' }, 500)
 })
 
@@ -239,7 +243,7 @@ app.delete('/budgets/:id', (c) => getControllers(c).budgetController.delete(c))
 
 // Manual trigger for scheduled task (for testing)
 app.post('/test-scheduled-task', async (c) => {
-  console.log('Manually triggering scheduled task: Processing recurring schedules')
+  logger.info('Manually triggering scheduled task: Processing recurring schedules')
   
   const transactionRepo = new TransactionRepository(c.env.DB)
   const accountRepo = new AccountRepository(c.env.DB)
@@ -254,7 +258,7 @@ app.post('/test-scheduled-task', async (c) => {
 export default {
   fetch: app.fetch,
   scheduled: async (event: ScheduledEvent, env: Bindings, ctx: ExecutionContext) => {
-    console.log('Running scheduled task: Processing recurring schedules')
+    logger.info('Running scheduled task: Processing recurring schedules')
 
     // Initialize dependencies for scheduled task
     const transactionRepo = new TransactionRepository(env.DB)
