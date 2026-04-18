@@ -32,6 +32,7 @@ export const ErrorCode = {
   UNAUTHORIZED: 'UNAUTHORIZED',
   NOT_FOUND: 'NOT_FOUND',
   INTERNAL_ERROR: 'INTERNAL_ERROR',
+  RATE_LIMITED: 'RATE_LIMITED',
 } as const
 
 export type ErrorCodeKey = keyof typeof ErrorCode
