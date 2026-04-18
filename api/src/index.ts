@@ -36,6 +36,9 @@ import { BudgetController } from './controllers/budget.controller'
 import { corsMiddleware } from './middlewares/cors.middleware'
 import { authMiddleware } from './middlewares/auth.middleware'
 
+// Errors
+import { AppError } from './errors/codes'
+
 // Factory function to create all dependencies per request
 function createDependencies(db: D1Database) {
   // Initialize repositories
@@ -82,6 +85,15 @@ function createDependencies(db: D1Database) {
 }
 
 const app = new Hono<{ Bindings: Bindings }>()
+
+// Global error handler — returns structured error responses
+app.onError((err, c) => {
+  if (err instanceof AppError) {
+    return c.json({ error: err.message, code: err.code }, err.statusCode as 400 | 401 | 403 | 404 | 409 | 429 | 500)
+  }
+  console.error('Unhandled error:', err)
+  return c.json({ error: 'Internal server error', code: 'INTERNAL_ERROR' }, 500)
+})
 
 // Helper to check if the public API feature is enabled
 function isPublicApiEnabled(apiKey: string | undefined): boolean {

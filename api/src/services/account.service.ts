@@ -2,6 +2,7 @@ import { Account } from '../models/Account'
 import { AccountRepository } from '../repositories/account.repository'
 import { TransactionRepository } from '../repositories/transaction.repository'
 import { CreateAccountDto, UpdateAccountDto } from '../dtos/account.dto'
+import { AppError } from '../errors/codes'
 
 export class AccountService {
   constructor(
@@ -108,7 +109,8 @@ export class AccountService {
 
     // Return updated account
     const updatedAccount = await this.accountRepo.findById(id)
-    return updatedAccount!
+    if (!updatedAccount) throw AppError.notFound('ACCOUNT_NOT_FOUND', `Account ${id} not found`)
+    return updatedAccount
   }
 
   async deleteAccount(id: string): Promise<void> {
