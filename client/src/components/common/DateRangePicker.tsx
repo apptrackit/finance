@@ -8,19 +8,18 @@ type DateRangePickerProps = {
   endDate: string
   onApply: (range: { startDate: string; endDate: string }) => void
   onCancel: () => void
+  isAllTime?: boolean
+  onAllTime?: () => void
 }
 
-export function DateRangePicker({ startDate, endDate, onApply, onCancel }: DateRangePickerProps) {
+export function DateRangePicker({ startDate, endDate, onApply, onCancel, isAllTime, onAllTime }: DateRangePickerProps) {
   const [customRange, setCustomRange] = useState({ startDate, endDate })
   const pickerRef = useRef<HTMLDivElement>(null)
   const [positioning, setPositioning] = useState<'right' | 'left'>('right')
 
   useEffect(() => {
-    // Check if picker would go off-screen and adjust positioning
     if (pickerRef.current) {
       const rect = pickerRef.current.getBoundingClientRect()
-      
-      // If picker goes off the left edge, switch to left-aligned
       if (rect.left < 8) {
         setPositioning('left')
       } else {
@@ -33,50 +32,76 @@ export function DateRangePicker({ startDate, endDate, onApply, onCancel }: DateR
     <>
       {/* Mobile overlay */}
       <div className="fixed inset-0 bg-black/20 z-40 md:hidden" onClick={onCancel} />
-      
+
       {/* Picker container */}
-      <div 
+      <div
         ref={pickerRef}
         className={`fixed md:absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 md:top-full md:translate-x-0 md:translate-y-0 mt-0 md:mt-2 p-4 bg-background border border-border rounded-lg shadow-lg z-50 w-[min(320px,calc(100vw-2rem))] md:w-auto md:min-w-[280px] ${
           positioning === 'right' ? 'md:right-0 md:left-auto' : 'md:left-0 md:right-auto'
         }`}
       >
         <div className="space-y-3">
-          <div>
-            <Label className="text-xs">Start Date</Label>
-            <Input
-              type="date"
-              value={customRange.startDate}
-              onChange={(e) => setCustomRange({ ...customRange, startDate: e.target.value })}
-              className="mt-1 w-full max-w-full [-webkit-appearance:none]"
-            />
-          </div>
-          <div>
-            <Label className="text-xs">End Date</Label>
-            <Input
-              type="date"
-              value={customRange.endDate}
-              onChange={(e) => setCustomRange({ ...customRange, endDate: e.target.value })}
-              className="mt-1 w-full max-w-full [-webkit-appearance:none]"
-            />
-          </div>
-          <div className="flex gap-2 pt-2">
+          {onAllTime && (
             <Button
               size="sm"
-              variant="outline"
-              onClick={onCancel}
-              className="flex-1"
+              variant={isAllTime ? 'default' : 'outline'}
+              onClick={onAllTime}
+              className="w-full"
             >
-              Cancel
+              All Time
             </Button>
-            <Button
-              size="sm"
-              onClick={() => onApply(customRange)}
-              className="flex-1"
-            >
-              Apply
-            </Button>
-          </div>
+          )}
+          {!isAllTime && (
+            <>
+              <div>
+                <Label className="text-xs">Start Date</Label>
+                <Input
+                  type="date"
+                  value={customRange.startDate}
+                  onChange={(e) => setCustomRange({ ...customRange, startDate: e.target.value })}
+                  className="mt-1 w-full max-w-full [-webkit-appearance:none]"
+                />
+              </div>
+              <div>
+                <Label className="text-xs">End Date</Label>
+                <Input
+                  type="date"
+                  value={customRange.endDate}
+                  onChange={(e) => setCustomRange({ ...customRange, endDate: e.target.value })}
+                  className="mt-1 w-full max-w-full [-webkit-appearance:none]"
+                />
+              </div>
+              <div className="flex gap-2 pt-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={onCancel}
+                  className="flex-1"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={() => onApply(customRange)}
+                  className="flex-1"
+                >
+                  Apply
+                </Button>
+              </div>
+            </>
+          )}
+          {isAllTime && (
+            <div className="flex gap-2 pt-1">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={onCancel}
+                className="w-full"
+              >
+                Close
+              </Button>
+            </div>
+          )}
         </div>
       </div>
     </>
