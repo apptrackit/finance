@@ -799,106 +799,108 @@ export function TransactionList({
             {/* Month Navigation */}
             <div className="flex items-center gap-1 sm:gap-2 relative">
             {!isAllTimeRange(dateRange) && (
-              <Button
-                onClick={() => {
-                  const monthStart = format(startOfMonth(currentMonth), 'yyyy-MM-dd')
-                  const monthEnd = format(endOfMonth(currentMonth), 'yyyy-MM-dd')
-                  const isDefaultMonth = dateRange.startDate === monthStart && dateRange.endDate === monthEnd
+              <>
+                <Button
+                  onClick={() => {
+                    const monthStart = format(startOfMonth(currentMonth), 'yyyy-MM-dd')
+                    const monthEnd = format(endOfMonth(currentMonth), 'yyyy-MM-dd')
+                    const isDefaultMonth = dateRange.startDate === monthStart && dateRange.endDate === monthEnd
 
-                  if (isDefaultMonth) {
-                    onMonthChange(subMonths(currentMonth, 1))
-                  } else {
-                    const rangeDays = differenceInDays(new Date(dateRange.endDate), new Date(dateRange.startDate)) + 1
-                    const newStart = format(addDays(new Date(dateRange.startDate), -rangeDays), 'yyyy-MM-dd')
-                    const newEnd = format(addDays(new Date(dateRange.endDate), -rangeDays), 'yyyy-MM-dd')
-                    onDateRangeChange({ startDate: newStart, endDate: newEnd })
-                  }
-                }}
-                size="sm"
-                variant="ghost"
-                className="h-7 w-7 sm:h-8 sm:w-8 p-0"
-              >
-                <ChevronLeft className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-              </Button>
+                    if (isDefaultMonth) {
+                      onMonthChange(subMonths(currentMonth, 1))
+                    } else {
+                      const rangeDays = differenceInDays(new Date(dateRange.endDate), new Date(dateRange.startDate)) + 1
+                      const newStart = format(addDays(new Date(dateRange.startDate), -rangeDays), 'yyyy-MM-dd')
+                      const newEnd = format(addDays(new Date(dateRange.endDate), -rangeDays), 'yyyy-MM-dd')
+                      onDateRangeChange({ startDate: newStart, endDate: newEnd })
+                    }
+                  }}
+                  size="sm"
+                  variant="ghost"
+                  className="h-7 w-7 sm:h-8 sm:w-8 p-0"
+                >
+                  <ChevronLeft className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                </Button>
+                <button
+                  onClick={() => {
+                    const now = new Date()
+                    const todayMonthStart = format(startOfMonth(now), 'yyyy-MM-dd')
+                    const todayMonthEnd = format(endOfMonth(now), 'yyyy-MM-dd')
+                    const monthStart = format(startOfMonth(currentMonth), 'yyyy-MM-dd')
+                    const monthEnd = format(endOfMonth(currentMonth), 'yyyy-MM-dd')
+                    const isDefaultMonth = dateRange.startDate === monthStart && dateRange.endDate === monthEnd
+
+                    if (!isDefaultMonth) {
+                      onMonthChange(now)
+                      onDateRangeChange({ startDate: todayMonthStart, endDate: todayMonthEnd })
+                    } else {
+                      setCustomRange({ startDate: dateRange.startDate, endDate: dateRange.endDate })
+                      setShowDatePicker(!showDatePicker)
+                    }
+                  }}
+                  className="flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-1 rounded-md bg-secondary/50 border border-border/50 hover:bg-secondary/70 transition-colors cursor-pointer"
+                >
+                  <Calendar className="h-3 w-3 text-muted-foreground" />
+                  <span className="text-[11px] sm:text-sm font-medium min-w-[90px] sm:min-w-[120px] text-center">
+                    {(() => {
+                      const monthStart = format(startOfMonth(currentMonth), 'yyyy-MM-dd')
+                      const monthEnd = format(endOfMonth(currentMonth), 'yyyy-MM-dd')
+                      const isDefaultMonth = dateRange.startDate === monthStart && dateRange.endDate === monthEnd
+                      if (isDefaultMonth) return format(currentMonth, 'MMMM yyyy')
+                      return `${format(new Date(dateRange.startDate), 'MMM d')} - ${format(new Date(dateRange.endDate), 'MMM d')}`
+                    })()}
+                  </span>
+                </button>
+                <Button
+                  onClick={() => {
+                    const monthStart = format(startOfMonth(currentMonth), 'yyyy-MM-dd')
+                    const monthEnd = format(endOfMonth(currentMonth), 'yyyy-MM-dd')
+                    const isDefaultMonth = dateRange.startDate === monthStart && dateRange.endDate === monthEnd
+
+                    if (isDefaultMonth) {
+                      onMonthChange(addMonths(currentMonth, 1))
+                    } else {
+                      const rangeDays = differenceInDays(new Date(dateRange.endDate), new Date(dateRange.startDate)) + 1
+                      const newStart = format(addDays(new Date(dateRange.startDate), rangeDays), 'yyyy-MM-dd')
+                      const newEnd = format(addDays(new Date(dateRange.endDate), rangeDays), 'yyyy-MM-dd')
+                      onDateRangeChange({ startDate: newStart, endDate: newEnd })
+                    }
+                  }}
+                  size="sm"
+                  variant="ghost"
+                  className="h-7 w-7 sm:h-8 sm:w-8 p-0"
+                >
+                  <ChevronRight className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                </Button>
+              </>
             )}
-            <button
-              onClick={() => {
-                const now = new Date()
-                const todayMonthStart = format(startOfMonth(now), 'yyyy-MM-dd')
-                const todayMonthEnd = format(endOfMonth(now), 'yyyy-MM-dd')
-                const monthStart = format(startOfMonth(currentMonth), 'yyyy-MM-dd')
-                const monthEnd = format(endOfMonth(currentMonth), 'yyyy-MM-dd')
-                const isDefaultMonth = dateRange.startDate === monthStart && dateRange.endDate === monthEnd
 
+            {/* All Time toggle */}
+            <Button
+              size="sm"
+              variant={isAllTimeRange(dateRange) ? 'default' : 'outline'}
+              onClick={() => {
                 if (isAllTimeRange(dateRange)) {
-                  // Open picker so user can switch back to a month
-                  setCustomRange({ startDate: todayMonthStart, endDate: todayMonthEnd })
-                  setShowDatePicker(!showDatePicker)
-                } else if (!isDefaultMonth) {
+                  const now = new Date()
                   onMonthChange(now)
-                  onDateRangeChange({ startDate: todayMonthStart, endDate: todayMonthEnd })
+                  onDateRangeChange({
+                    startDate: format(startOfMonth(now), 'yyyy-MM-dd'),
+                    endDate: format(endOfMonth(now), 'yyyy-MM-dd'),
+                  })
                 } else {
-                  setCustomRange({ startDate: dateRange.startDate, endDate: dateRange.endDate })
-                  setShowDatePicker(!showDatePicker)
+                  onDateRangeChange(ALL_TIME_RANGE)
                 }
               }}
-              className="flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-1 rounded-md bg-secondary/50 border border-border/50 hover:bg-secondary/70 transition-colors cursor-pointer"
+              className="h-7 sm:h-8 px-2 sm:px-3 text-[11px] sm:text-xs"
             >
-              <Calendar className="h-3 w-3 text-muted-foreground" />
-              <span className="text-[11px] sm:text-sm font-medium min-w-[90px] sm:min-w-[120px] text-center">
-                {(() => {
-                  if (isAllTimeRange(dateRange)) return 'All Time'
-                  const monthStart = format(startOfMonth(currentMonth), 'yyyy-MM-dd')
-                  const monthEnd = format(endOfMonth(currentMonth), 'yyyy-MM-dd')
-                  const isDefaultMonth = dateRange.startDate === monthStart && dateRange.endDate === monthEnd
-                  if (isDefaultMonth) return format(currentMonth, 'MMMM yyyy')
-                  return `${format(new Date(dateRange.startDate), 'MMM d')} - ${format(new Date(dateRange.endDate), 'MMM d')}`
-                })()}
-              </span>
-            </button>
-            {!isAllTimeRange(dateRange) && (
-              <Button
-                onClick={() => {
-                  const monthStart = format(startOfMonth(currentMonth), 'yyyy-MM-dd')
-                  const monthEnd = format(endOfMonth(currentMonth), 'yyyy-MM-dd')
-                  const isDefaultMonth = dateRange.startDate === monthStart && dateRange.endDate === monthEnd
-
-                  if (isDefaultMonth) {
-                    onMonthChange(addMonths(currentMonth, 1))
-                  } else {
-                    const rangeDays = differenceInDays(new Date(dateRange.endDate), new Date(dateRange.startDate)) + 1
-                    const newStart = format(addDays(new Date(dateRange.startDate), rangeDays), 'yyyy-MM-dd')
-                    const newEnd = format(addDays(new Date(dateRange.endDate), rangeDays), 'yyyy-MM-dd')
-                    onDateRangeChange({ startDate: newStart, endDate: newEnd })
-                  }
-                }}
-                size="sm"
-                variant="ghost"
-                className="h-7 w-7 sm:h-8 sm:w-8 p-0"
-              >
-                <ChevronRight className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-              </Button>
-            )}
+              All Time
+            </Button>
 
             {/* Custom Date Range Picker */}
             {showDatePicker && (
               <DateRangePicker
                 startDate={customRange.startDate}
                 endDate={customRange.endDate}
-                isAllTime={isAllTimeRange(dateRange)}
-                onAllTime={() => {
-                  if (isAllTimeRange(dateRange)) {
-                    const now = new Date()
-                    onMonthChange(now)
-                    onDateRangeChange({
-                      startDate: format(startOfMonth(now), 'yyyy-MM-dd'),
-                      endDate: format(endOfMonth(now), 'yyyy-MM-dd'),
-                    })
-                  } else {
-                    onDateRangeChange(ALL_TIME_RANGE)
-                  }
-                  setShowDatePicker(false)
-                }}
                 onApply={(range) => {
                   onDateRangeChange(range)
                   setShowDatePicker(false)

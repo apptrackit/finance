@@ -8,11 +8,9 @@ type DateRangePickerProps = {
   endDate: string
   onApply: (range: { startDate: string; endDate: string }) => void
   onCancel: () => void
-  isAllTime?: boolean
-  onAllTime?: () => void
 }
 
-export function DateRangePicker({ startDate, endDate, onApply, onCancel, isAllTime, onAllTime }: DateRangePickerProps) {
+export function DateRangePicker({ startDate, endDate, onApply, onCancel }: DateRangePickerProps) {
   const [customRange, setCustomRange] = useState({ startDate, endDate })
   const pickerRef = useRef<HTMLDivElement>(null)
   const [positioning, setPositioning] = useState<'right' | 'left'>('right')
@@ -41,67 +39,41 @@ export function DateRangePicker({ startDate, endDate, onApply, onCancel, isAllTi
         }`}
       >
         <div className="space-y-3">
-          {onAllTime && (
+          <div>
+            <Label className="text-xs">Start Date</Label>
+            <Input
+              type="date"
+              value={customRange.startDate}
+              onChange={(e) => setCustomRange({ ...customRange, startDate: e.target.value })}
+              className="mt-1 w-full max-w-full [-webkit-appearance:none]"
+            />
+          </div>
+          <div>
+            <Label className="text-xs">End Date</Label>
+            <Input
+              type="date"
+              value={customRange.endDate}
+              onChange={(e) => setCustomRange({ ...customRange, endDate: e.target.value })}
+              className="mt-1 w-full max-w-full [-webkit-appearance:none]"
+            />
+          </div>
+          <div className="flex gap-2 pt-2">
             <Button
               size="sm"
-              variant={isAllTime ? 'default' : 'outline'}
-              onClick={onAllTime}
-              className="w-full"
+              variant="outline"
+              onClick={onCancel}
+              className="flex-1"
             >
-              All Time
+              Cancel
             </Button>
-          )}
-          {!isAllTime && (
-            <>
-              <div>
-                <Label className="text-xs">Start Date</Label>
-                <Input
-                  type="date"
-                  value={customRange.startDate}
-                  onChange={(e) => setCustomRange({ ...customRange, startDate: e.target.value })}
-                  className="mt-1 w-full max-w-full [-webkit-appearance:none]"
-                />
-              </div>
-              <div>
-                <Label className="text-xs">End Date</Label>
-                <Input
-                  type="date"
-                  value={customRange.endDate}
-                  onChange={(e) => setCustomRange({ ...customRange, endDate: e.target.value })}
-                  className="mt-1 w-full max-w-full [-webkit-appearance:none]"
-                />
-              </div>
-              <div className="flex gap-2 pt-2">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={onCancel}
-                  className="flex-1"
-                >
-                  Cancel
-                </Button>
-                <Button
-                  size="sm"
-                  onClick={() => onApply(customRange)}
-                  className="flex-1"
-                >
-                  Apply
-                </Button>
-              </div>
-            </>
-          )}
-          {isAllTime && (
-            <div className="flex gap-2 pt-1">
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={onCancel}
-                className="w-full"
-              >
-                Close
-              </Button>
-            </div>
-          )}
+            <Button
+              size="sm"
+              onClick={() => onApply(customRange)}
+              className="flex-1"
+            >
+              Apply
+            </Button>
+          </div>
         </div>
       </div>
     </>
