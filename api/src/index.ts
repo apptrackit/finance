@@ -35,6 +35,7 @@ import { BudgetController } from './controllers/budget.controller'
 // Middleware
 import { corsMiddleware } from './middlewares/cors.middleware'
 import { authMiddleware } from './middlewares/auth.middleware'
+import { rateLimitMiddleware } from './middlewares/rate-limit.middleware'
 
 // Errors
 import { AppError } from './errors/codes'
@@ -163,6 +164,9 @@ app.use('/*', corsMiddleware)
 
 // Apply authentication middleware globally (except OPTIONS which is handled by CORS)
 app.use('*', authMiddleware)
+
+// Rate limit: 300 requests per 60 seconds per IP
+app.use('*', rateLimitMiddleware(300, 60))
 
 // Health check
 app.get('/', (c) => c.text('Finance API is running!'))
