@@ -121,6 +121,7 @@ dev-dist
 .wrangler/
 .dev.vars
 api/wrangler.toml  # Each developer has their own config
+.deploy-config
 
 # Database backups (may contain sensitive data)
 production-backup.sql
