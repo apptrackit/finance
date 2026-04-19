@@ -28,7 +28,7 @@ export default defineConfig(({ mode }) => {
     plugins: [
       react(),
       VitePWA({
-        registerType: 'prompt',
+        registerType: 'autoUpdate',
         includeAssets: ['favicon.svg', 'vite.svg'],
         manifest: {
           name: 'Finance App',
@@ -58,6 +58,8 @@ export default defineConfig(({ mode }) => {
           cleanupOutdatedCaches: true,
           skipWaiting: true,
           clientsClaim: true,
+          navigateFallback: null,
+          navigateFallbackDenylist: [/^\/assets\//, /\.(js|css|map)$/],
           runtimeCaching: [
             {
               urlPattern: /^https:\/\/api\..*/i,
@@ -77,7 +79,7 @@ export default defineConfig(({ mode }) => {
           ]
         },
         devOptions: {
-          enabled: true
+          enabled: false
         }
       })
     ],

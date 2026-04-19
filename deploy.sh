@@ -50,7 +50,37 @@ step() {
   fi
 }
 
-d1() { npx wrangler d1 execute finance-db --remote --yes "$@"; }
+# ─── Config helpers ───────────────────────────────────────────────────────────
+
+CONFIG_FILE="$(git rev-parse --show-toplevel 2>/dev/null || echo .)/.deploy-config"
+
+get_cfg() { grep "^${1}=" "$CONFIG_FILE" 2>/dev/null | cut -d= -f2-; }
+
+set_cfg() {
+  if grep -q "^${1}=" "$CONFIG_FILE" 2>/dev/null; then
+    sed -i '' "s|^${1}=.*|${1}=${2}|" "$CONFIG_FILE"
+  else
+    echo "${1}=${2}" >> "$CONFIG_FILE"
+  fi
+}
+
+need() {
+  local key="$1" label="$2" secret="${3:-}"
+  local val
+  val=$(get_cfg "$key")
+  if [ -z "$val" ]; then
+    if [ -n "$secret" ]; then
+      printf "%s: " "$label" >&2; read -rs val; echo >&2
+    else
+      printf "%s: " "$label" >&2; read -r val
+    fi
+    [ -z "$val" ] && err "${label} is required."
+    set_cfg "$key" "$val"
+  fi
+  printf '%s' "$val"
+}
+
+d1() { npx wrangler d1 execute finance-db --remote --yes --config wrangler.prod.toml "$@"; }
 
 migration_is_new() {
   local count
@@ -71,27 +101,23 @@ if [ "$CURRENT_BRANCH" != "main" ] && [ "$CURRENT_BRANCH" != "unknown" ]; then
   BRANCH_FLAG="--branch=main"
 fi
 
-# ─── Project name ─────────────────────────────────────────────────────────────
+# ─── Config / secrets ─────────────────────────────────────────────────────────
 
-CONFIG_FILE="$(git rev-parse --show-toplevel 2>/dev/null || echo .)/.deploy-config"
-
-if [ -n "${1:-}" ]; then
-  PROJECT_NAME="$1"
-  echo "$PROJECT_NAME" > "$CONFIG_FILE"
-elif [ -f "$CONFIG_FILE" ]; then
-  PROJECT_NAME=$(cat "$CONFIG_FILE")
-else
-  printf "Project name: "
-  read -r PROJECT_NAME
-  [ -z "$PROJECT_NAME" ] && err "Project name required."
-  echo "$PROJECT_NAME" > "$CONFIG_FILE"
-fi
-
+echo ""
+PROJECT_NAME=$(need PROJECT_NAME   "Project name")
+DATABASE_ID=$(need  DATABASE_ID    "Database ID")
+API_SECRET=$(need   API_SECRET     "API secret"                       secret)
+ORIGINS=$(need      ALLOWED_ORIGINS "Allowed origins (comma-separated)")
+PUB_KEY=$(need      PUBLIC_API_KEY  "Public API key (or 'off')")
 echo ""
 
 # ─── Wrangler check ───────────────────────────────────────────────────────────
 
 cd api
+
+if ! npx wrangler whoami >/dev/null 2>&1; then
+  err "Not logged in. Run: npx wrangler login"
+fi
 
 if ! npx wrangler --version >/dev/null 2>&1; then
   spin "  %-22s" "Repairing wrangler" &
@@ -105,8 +131,51 @@ if ! npx wrangler --version >/dev/null 2>&1; then
     }
   }
   kill_spinner
-  printf "\r  %-22s${GREEN}ok${NC}\n" "Repairing wrangler"
+  printf "\r  %-22s${GREEN}ok${NC}\033[K\n" "Repairing wrangler"
 fi
+
+# ─── Generate wrangler config ─────────────────────────────────────────────────
+
+cat > wrangler.prod.toml << TOML
+name = "finance-api"
+compatibility_date = "2024-09-23"
+compatibility_flags = ["nodejs_compat"]
+main = "src/index.ts"
+
+workers_dev = true
+
+[define]
+__dirname = "'/'"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "finance-db"
+database_id = "${DATABASE_ID}"
+
+[triggers]
+crons = ["0 0 * * *"]
+TOML
+
+# ─── Secrets ──────────────────────────────────────────────────────────────────
+
+echo "  Secrets"
+for entry in "API_SECRET:${API_SECRET}" "ALLOWED_ORIGINS:${ORIGINS}" "PUBLIC_API_KEY:${PUB_KEY}"; do
+  key="${entry%%:*}"
+  val="${entry#*:}"
+  spin "    %-20s" "$key" &
+  SPIN_PID=$!
+  if echo "$val" | npx wrangler versions secret put "$key" --config wrangler.prod.toml >"$TMPOUT" 2>&1; then
+    kill_spinner
+    printf "\r    %-20s${GREEN}ok${NC}\033[K\n" "$key"
+  else
+    kill_spinner
+    printf "\r    %-20s${RED}failed${NC}\033[K\n" "$key"
+    echo "" >&2
+    cat "$TMPOUT" >&2
+    err "Failed to set secret: $key"
+  fi
+done
+echo ""
 
 # ─── Migrations ───────────────────────────────────────────────────────────────
 
@@ -126,11 +195,11 @@ if [ -d "migrations" ]; then
       if d1 --file="$migration_file" >/dev/null 2>&1; then
         d1 --command "INSERT OR IGNORE INTO migration_history (id, migration_name) VALUES ('${migration_name}_$(date +%s)', '${migration_name}')" >/dev/null 2>&1
         kill_spinner
-        printf "\r    + %-18s${GREEN}ok${NC}\n" "$migration_name"
+        printf "\r    + %-18s${GREEN}ok${NC}\033[K\n" "$migration_name"
         APPLIED=$((APPLIED + 1))
       else
         kill_spinner
-        printf "\r    + %-18s${RED}failed${NC}\n" "$migration_name"
+        printf "\r    + %-18s${RED}failed${NC}\033[K\n" "$migration_name"
         err "Migration failed: $migration_name"
       fi
     else
@@ -145,12 +214,41 @@ echo ""
 
 # ─── API ──────────────────────────────────────────────────────────────────────
 
-step "API" npm run deploy
+spin "  %-22s" "API" &
+SPIN_PID=$!
+if npx wrangler deploy --minify --config wrangler.prod.toml >"$TMPOUT" 2>&1; then
+  API_URL=$(grep -Eo 'https://[^[:space:]]+\.workers\.dev[^[:space:]]*' "$TMPOUT" | tail -1 || true)
+  # Fall back to saved URL if wrangler output format didn't match
+  [ -z "$API_URL" ] && API_URL=$(get_cfg "API_URL")
+  if [ -z "$API_URL" ]; then
+    kill_spinner
+    printf "\r  %-22s${RED}failed${NC}\033[K\n" "API"
+    err "Could not determine API URL. Add API_URL=https://... to .deploy-config and retry."
+  fi
+  set_cfg "API_URL" "$API_URL"
+  API_DOMAIN="${API_URL#https://}"
+  kill_spinner
+  printf "\r  %-22s${GREEN}ok${NC}  ${DIM}${API_URL}${NC}\033[K\n" "API"
+else
+  kill_spinner
+  printf "\r  %-22s${RED}failed${NC}\033[K\n" "API"
+  echo "" >&2; cat "$TMPOUT" >&2
+  exit 1
+fi
 
 # ─── Client ───────────────────────────────────────────────────────────────────
 
 cd ../client
+[ -z "$API_DOMAIN" ] && err "API_DOMAIN is empty — check API_URL in .deploy-config"
+[ -z "$API_SECRET" ] && err "API_SECRET is empty — check .deploy-config"
+printf 'VITE_API_DOMAIN=%s\nVITE_API_KEY=%s\n' "$API_DOMAIN" "$API_SECRET" > .env.production
+echo -e "  ${DIM}  API: ${API_DOMAIN}${NC}"
 step "Client build" npm run build
+rm -f .env.production
+if ! grep -qr "$API_DOMAIN" dist/assets/ 2>/dev/null; then
+  echo -e "${RED}  Warning: API domain not found in built assets — env injection may have failed${NC}" >&2
+fi
+sed -i '' "s|DEPLOY_API_ORIGIN|${API_URL}|g" dist/_headers
 
 DEPLOY_CMD=(npx wrangler pages deploy dist --project-name="${PROJECT_NAME}")
 [ -n "$BRANCH_FLAG" ] && DEPLOY_CMD+=("$BRANCH_FLAG")
