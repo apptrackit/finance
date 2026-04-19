@@ -1,43 +1,10 @@
 import { useState, useRef, useEffect } from 'react'
-import { format, subDays, startOfMonth, startOfYear, endOfYear, subMonths } from 'date-fns'
+import { format, startOfMonth, endOfMonth } from 'date-fns'
 import { Button } from './button'
 import { Input } from './input'
 import { Label } from './label'
 
 const ALL_TIME = { startDate: '1900-01-01', endDate: '2100-12-31' }
-
-type Preset = {
-  label: string
-  range: () => { startDate: string; endDate: string }
-}
-
-const PRESETS: Preset[] = [
-  {
-    label: 'Last 30d',
-    range: () => ({
-      startDate: format(subDays(new Date(), 29), 'yyyy-MM-dd'),
-      endDate: format(new Date(), 'yyyy-MM-dd'),
-    }),
-  },
-  {
-    label: 'Last 3m',
-    range: () => ({
-      startDate: format(startOfMonth(subMonths(new Date(), 2)), 'yyyy-MM-dd'),
-      endDate: format(new Date(), 'yyyy-MM-dd'),
-    }),
-  },
-  {
-    label: 'This year',
-    range: () => ({
-      startDate: format(startOfYear(new Date()), 'yyyy-MM-dd'),
-      endDate: format(endOfYear(new Date()), 'yyyy-MM-dd'),
-    }),
-  },
-  {
-    label: 'All time',
-    range: () => ALL_TIME,
-  },
-]
 
 type DateRangePickerProps = {
   startDate: string
@@ -53,10 +20,12 @@ export function DateRangePicker({ startDate, endDate, onApply, onCancel }: DateR
 
   const isAllTime = startDate === ALL_TIME.startDate && endDate === ALL_TIME.endDate
 
-  const activePreset = PRESETS.find(p => {
-    const r = p.range()
-    return r.startDate === startDate && r.endDate === endDate
-  })
+  const now = new Date()
+  const currentMonthRange = {
+    startDate: format(startOfMonth(now), 'yyyy-MM-dd'),
+    endDate: format(endOfMonth(now), 'yyyy-MM-dd'),
+  }
+  const isCurrentMonth = startDate === currentMonthRange.startDate && endDate === currentMonthRange.endDate
 
   useEffect(() => {
     if (pickerRef.current) {
@@ -78,23 +47,27 @@ export function DateRangePicker({ startDate, endDate, onApply, onCancel }: DateR
       >
         <div className="space-y-3">
           {/* Quick presets */}
-          <div className="grid grid-cols-4 gap-1.5">
-            {PRESETS.map(preset => {
-              const isActive = activePreset?.label === preset.label
-              return (
-                <button
-                  key={preset.label}
-                  onClick={() => onApply(preset.range())}
-                  className={`px-2 py-1.5 rounded-md text-[11px] font-medium transition-colors ${
-                    isActive
-                      ? 'bg-primary text-primary-foreground'
-                      : 'bg-secondary/60 text-muted-foreground hover:bg-secondary hover:text-foreground'
-                  }`}
-                >
-                  {preset.label}
-                </button>
-              )
-            })}
+          <div className="grid grid-cols-2 gap-1.5">
+            <button
+              onClick={() => onApply(currentMonthRange)}
+              className={`px-2 py-1.5 rounded-md text-[11px] font-medium transition-colors ${
+                isCurrentMonth
+                  ? 'bg-primary text-primary-foreground'
+                  : 'bg-secondary/60 text-muted-foreground hover:bg-secondary hover:text-foreground'
+              }`}
+            >
+              Current month
+            </button>
+            <button
+              onClick={() => onApply(ALL_TIME)}
+              className={`px-2 py-1.5 rounded-md text-[11px] font-medium transition-colors ${
+                isAllTime
+                  ? 'bg-primary text-primary-foreground'
+                  : 'bg-secondary/60 text-muted-foreground hover:bg-secondary hover:text-foreground'
+              }`}
+            >
+              All time
+            </button>
           </div>
 
           {/* Divider */}
