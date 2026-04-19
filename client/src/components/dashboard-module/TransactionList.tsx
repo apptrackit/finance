@@ -45,6 +45,11 @@ type Category = {
   type: 'income' | 'expense'
 }
 
+const ALL_TIME_RANGE = { startDate: '1900-01-01', endDate: '2100-12-31' }
+const isAllTimeRange = (r: { startDate: string; endDate: string }) =>
+  r.startDate === '1900-01-01' && r.endDate === '2100-12-31'
+const DISPLAY_LIMIT = 7
+
 // LocalStorage keys for remembering last used values
 const STORAGE_KEYS = {
   expenseAccount: 'finance_last_expense_account',
@@ -108,10 +113,10 @@ export function TransactionList({
   const { privacyMode, shouldHideInvestment } = usePrivacy()
   const { isLocked } = useLockedAccounts()
 
-  // Reset showAllTransactions when filter, sort, or search changes
+  // Reset showAllTransactions when filter, sort, search, or date range changes
   useEffect(() => {
     setShowAllTransactions(false)
-  }, [categoryFilter, sortOrder, searchQuery])
+  }, [categoryFilter, sortOrder, searchQuery, dateRange])
 
   useEffect(() => {
     apiFetch(`${API_BASE_URL}/categories`)
@@ -688,6 +693,17 @@ export function TransactionList({
     new Date(b).getTime() - new Date(a).getTime()
   )
 
+  const applyFilters = (tx: Transaction) => {
+    const catMatch = categoryFilter === 'all' ? true
+      : categoryFilter === 'all-expenses' ? (tx.amount < 0 && !tx.linked_transaction_id)
+      : categoryFilter === 'all-income' ? (tx.amount > 0 && !tx.linked_transaction_id)
+      : categoryFilter === 'transfer' ? !!tx.linked_transaction_id
+      : tx.category_id === categoryFilter
+    return catMatch && matchesSearch(tx)
+  }
+
+  const totalFilteredCount = transactions.filter(applyFilters).length
+
   // Helper to process transactions and merge transfers
   const processTransactions = (txs: Transaction[]) => {
     const processed: (Transaction & { relatedTx?: Transaction })[] = []
@@ -782,96 +798,84 @@ export function TransactionList({
           <div className="flex items-center justify-center gap-2 sm:gap-3 flex-wrap">
             {/* Month Navigation */}
             <div className="flex items-center gap-1 sm:gap-2 relative">
-            <Button
-              onClick={() => {
-                const monthStart = format(startOfMonth(currentMonth), 'yyyy-MM-dd')
-                const monthEnd = format(endOfMonth(currentMonth), 'yyyy-MM-dd')
-                const isDefaultMonth = dateRange.startDate === monthStart && dateRange.endDate === monthEnd
-                
-                if (isDefaultMonth) {
-                  // Default behavior: go to previous month
-                  onMonthChange(subMonths(currentMonth, 1))
-                } else {
-                  // Custom range: shift by the range length
-                  const rangeDays = differenceInDays(new Date(dateRange.endDate), new Date(dateRange.startDate)) + 1
-                  const newStart = format(addDays(new Date(dateRange.startDate), -rangeDays), 'yyyy-MM-dd')
-                  const newEnd = format(addDays(new Date(dateRange.endDate), -rangeDays), 'yyyy-MM-dd')
-                  onDateRangeChange({ startDate: newStart, endDate: newEnd })
-                }
-              }}
-              size="sm"
-              variant="ghost"
-              className="h-7 w-7 sm:h-8 sm:w-8 p-0"
-            >
-              <ChevronLeft className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-            </Button>
+            {!isAllTimeRange(dateRange) && (
+              <Button
+                onClick={() => {
+                  const monthStart = format(startOfMonth(currentMonth), 'yyyy-MM-dd')
+                  const monthEnd = format(endOfMonth(currentMonth), 'yyyy-MM-dd')
+                  const isDefaultMonth = dateRange.startDate === monthStart && dateRange.endDate === monthEnd
+
+                  if (isDefaultMonth) {
+                    onMonthChange(subMonths(currentMonth, 1))
+                  } else {
+                    const rangeDays = differenceInDays(new Date(dateRange.endDate), new Date(dateRange.startDate)) + 1
+                    const newStart = format(addDays(new Date(dateRange.startDate), -rangeDays), 'yyyy-MM-dd')
+                    const newEnd = format(addDays(new Date(dateRange.endDate), -rangeDays), 'yyyy-MM-dd')
+                    onDateRangeChange({ startDate: newStart, endDate: newEnd })
+                  }
+                }}
+                size="sm"
+                variant="ghost"
+                className="h-7 w-7 sm:h-8 sm:w-8 p-0"
+              >
+                <ChevronLeft className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+              </Button>
+            )}
             <button
               onClick={() => {
-                const now = new Date()
-                const todayMonthStart = format(startOfMonth(now), 'yyyy-MM-dd')
-                const todayMonthEnd = format(endOfMonth(now), 'yyyy-MM-dd')
-                const monthStart = format(startOfMonth(currentMonth), 'yyyy-MM-dd')
-                const monthEnd = format(endOfMonth(currentMonth), 'yyyy-MM-dd')
-                const isDefaultMonth = dateRange.startDate === monthStart && dateRange.endDate === monthEnd
-                
-                if (!isDefaultMonth) {
-                  // Reset to today's month (not currentMonth)
-                  onMonthChange(now)
-                  onDateRangeChange({ startDate: todayMonthStart, endDate: todayMonthEnd })
-                } else {
-                  // Open date picker
-                  setCustomRange({ startDate: dateRange.startDate, endDate: dateRange.endDate })
-                  setShowDatePicker(!showDatePicker)
-                }
+                setCustomRange({ startDate: dateRange.startDate, endDate: dateRange.endDate })
+                setShowDatePicker(!showDatePicker)
               }}
               className="flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-1 rounded-md bg-secondary/50 border border-border/50 hover:bg-secondary/70 transition-colors cursor-pointer"
             >
               <Calendar className="h-3 w-3 text-muted-foreground" />
               <span className="text-[11px] sm:text-sm font-medium min-w-[90px] sm:min-w-[120px] text-center">
                 {(() => {
+                  if (isAllTimeRange(dateRange)) return 'All Time'
                   const monthStart = format(startOfMonth(currentMonth), 'yyyy-MM-dd')
                   const monthEnd = format(endOfMonth(currentMonth), 'yyyy-MM-dd')
                   const isDefaultMonth = dateRange.startDate === monthStart && dateRange.endDate === monthEnd
-                  
-                  if (isDefaultMonth) {
-                    return format(currentMonth, 'MMMM yyyy')
-                  } else {
-                    return `${format(new Date(dateRange.startDate), 'MMM d')} - ${format(new Date(dateRange.endDate), 'MMM d')}`
-                  }
+                  if (isDefaultMonth) return format(currentMonth, 'MMMM yyyy')
+                  return `${format(new Date(dateRange.startDate), 'MMM d')} - ${format(new Date(dateRange.endDate), 'MMM d, yyyy').replace(`, ${new Date().getFullYear()}`, '')}`
                 })()}
               </span>
             </button>
-            <Button
-              onClick={() => {
-                const monthStart = format(startOfMonth(currentMonth), 'yyyy-MM-dd')
-                const monthEnd = format(endOfMonth(currentMonth), 'yyyy-MM-dd')
-                const isDefaultMonth = dateRange.startDate === monthStart && dateRange.endDate === monthEnd
-                
-                if (isDefaultMonth) {
-                  // Default behavior: go to next month
-                  onMonthChange(addMonths(currentMonth, 1))
-                } else {
-                  // Custom range: shift by the range length
-                  const rangeDays = differenceInDays(new Date(dateRange.endDate), new Date(dateRange.startDate)) + 1
-                  const newStart = format(addDays(new Date(dateRange.startDate), rangeDays), 'yyyy-MM-dd')
-                  const newEnd = format(addDays(new Date(dateRange.endDate), rangeDays), 'yyyy-MM-dd')
-                  onDateRangeChange({ startDate: newStart, endDate: newEnd })
-                }
-              }}
-              size="sm"
-              variant="ghost"
-              className="h-7 w-7 sm:h-8 sm:w-8 p-0"
-            >
-              <ChevronRight className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-            </Button>
-            
-            {/* Custom Date Range Picker */}
+            {!isAllTimeRange(dateRange) && (
+              <Button
+                onClick={() => {
+                  const monthStart = format(startOfMonth(currentMonth), 'yyyy-MM-dd')
+                  const monthEnd = format(endOfMonth(currentMonth), 'yyyy-MM-dd')
+                  const isDefaultMonth = dateRange.startDate === monthStart && dateRange.endDate === monthEnd
+
+                  if (isDefaultMonth) {
+                    onMonthChange(addMonths(currentMonth, 1))
+                  } else {
+                    const rangeDays = differenceInDays(new Date(dateRange.endDate), new Date(dateRange.startDate)) + 1
+                    const newStart = format(addDays(new Date(dateRange.startDate), rangeDays), 'yyyy-MM-dd')
+                    const newEnd = format(addDays(new Date(dateRange.endDate), rangeDays), 'yyyy-MM-dd')
+                    onDateRangeChange({ startDate: newStart, endDate: newEnd })
+                  }
+                }}
+                size="sm"
+                variant="ghost"
+                className="h-7 w-7 sm:h-8 sm:w-8 p-0"
+              >
+                <ChevronRight className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+              </Button>
+            )}
+
+            {/* Date Range Picker with presets */}
             {showDatePicker && (
               <DateRangePicker
                 startDate={customRange.startDate}
                 endDate={customRange.endDate}
                 onApply={(range) => {
-                  onDateRangeChange(range)
+                  if (range.startDate === '1900-01-01' && range.endDate === '2100-12-31') {
+                    onDateRangeChange(range)
+                  } else {
+                    onMonthChange(new Date(range.endDate))
+                    onDateRangeChange(range)
+                  }
                   setShowDatePicker(false)
                 }}
                 onCancel={() => setShowDatePicker(false)}
@@ -1304,16 +1308,6 @@ export function TransactionList({
           {sortOrder === 'date' ? (
             // Date-based grouping
             (() => {
-              // Collect all filtered transactions first
-              const applyFilters = (tx: Transaction) => {
-                const catMatch = categoryFilter === 'all' ? true
-                  : categoryFilter === 'all-expenses' ? (tx.amount < 0 && !tx.linked_transaction_id)
-                  : categoryFilter === 'all-income' ? (tx.amount > 0 && !tx.linked_transaction_id)
-                  : categoryFilter === 'transfer' ? !!tx.linked_transaction_id
-                  : tx.category_id === categoryFilter
-                return catMatch && matchesSearch(tx)
-              }
-
               let allFilteredTransactions: Transaction[] = []
               sortedDates.forEach(date => {
                 allFilteredTransactions = allFilteredTransactions.concat(
@@ -1321,23 +1315,27 @@ export function TransactionList({
                 )
               })
 
-              const datesToDisplay = showAllTransactions ? sortedDates : sortedDates.slice(0, Math.min(sortedDates.length, 5))
-              let displayedCount = 0
+              const shownTxIds = new Set(
+                (showAllTransactions ? allFilteredTransactions : allFilteredTransactions.slice(0, DISPLAY_LIMIT))
+                  .map(tx => tx.id)
+              )
+              const datesToDisplay = sortedDates.filter(date =>
+                groupedTransactions[date].some(tx => shownTxIds.has(tx.id))
+              )
 
               return <>
                 {datesToDisplay.map(date => {
-                  const dateTransactions = groupedTransactions[date].filter(applyFilters)
-                  
-                  // Skip date if no transactions match filter
+                  const dateTransactions = groupedTransactions[date].filter(tx => shownTxIds.has(tx.id))
+
                   if (dateTransactions.length === 0) return null
-                  
-                  displayedCount += dateTransactions.length
               
               return (
               <div key={date}>
                 <div className="flex items-center gap-1.5 sm:gap-2 mb-1.5 sm:mb-2">
                   <div className="text-[10px] sm:text-xs font-medium text-muted-foreground">
-                    {format(new Date(date), 'EEEE, MMM d')}
+                    {new Date(date).getFullYear() !== new Date().getFullYear()
+                      ? format(new Date(date), 'EEEE, MMM d, yyyy')
+                      : format(new Date(date), 'EEEE, MMM d')}
                   </div>
                   <div className="flex-1 h-px bg-border" />
                 </div>
@@ -1444,23 +1442,23 @@ export function TransactionList({
               </div>
             )})}
             
-            {!showAllTransactions && allFilteredTransactions.length > displayedCount && (
+            {!showAllTransactions && allFilteredTransactions.length > DISPLAY_LIMIT && (
               <div className="text-center pt-2">
-                <Button 
-                  variant="outline" 
+                <Button
+                  variant="outline"
                   size="sm"
                   onClick={() => setShowAllTransactions(true)}
                   className="text-xs sm:text-sm"
                 >
-                  Show All ({allFilteredTransactions.length - displayedCount} more)
+                  Show All ({allFilteredTransactions.length - DISPLAY_LIMIT} more)
                 </Button>
               </div>
             )}
-            
-            {showAllTransactions && allFilteredTransactions.length > 5 && (
+
+            {showAllTransactions && allFilteredTransactions.length > DISPLAY_LIMIT && (
               <div className="text-center pt-2">
-                <Button 
-                  variant="outline" 
+                <Button
+                  variant="outline"
                   size="sm"
                   onClick={() => setShowAllTransactions(false)}
                   className="text-xs sm:text-sm"
@@ -1475,15 +1473,7 @@ export function TransactionList({
           ) : (
             // Amount-based sorting (flat list)
             (() => {
-              // Flatten all transactions
-              const allTransactions = transactions.filter(tx => {
-                const catMatch = categoryFilter === 'all' ? true
-                  : categoryFilter === 'all-expenses' ? (tx.amount < 0 && !tx.linked_transaction_id)
-                  : categoryFilter === 'all-income' ? (tx.amount > 0 && !tx.linked_transaction_id)
-                  : categoryFilter === 'transfer' ? !!tx.linked_transaction_id
-                  : tx.category_id === categoryFilter
-                return catMatch && matchesSearch(tx)
-              })
+              const allTransactions = transactions.filter(applyFilters)
               
               // Sort by amount
               const sortedTransactions = [...allTransactions].sort((a, b) => 
@@ -1492,7 +1482,7 @@ export function TransactionList({
                   : Math.abs(a.amount) - Math.abs(b.amount)
               )
               
-              const transactionsToDisplay = showAllTransactions ? sortedTransactions : sortedTransactions.slice(0, 5)
+              const transactionsToDisplay = showAllTransactions ? sortedTransactions : sortedTransactions.slice(0, DISPLAY_LIMIT)
               
               return (
                 <>
@@ -1522,7 +1512,9 @@ export function TransactionList({
                           }
                         </p>
                         <div className="flex items-center gap-1.5 sm:gap-2 text-[10px] sm:text-xs text-muted-foreground">
-                          <span>{format(new Date(tx.date), 'MMM d')}</span>
+                          <span>{new Date(tx.date).getFullYear() !== new Date().getFullYear()
+                            ? format(new Date(tx.date), 'MMM d, yyyy')
+                            : format(new Date(tx.date), 'MMM d')}</span>
                           <span>•</span>
                           <span>{getAccountName(tx.account_id)}</span>
                           {isTransfer && related && (
@@ -1599,23 +1591,23 @@ export function TransactionList({
                   )})}
                 </div>
                 
-                {!showAllTransactions && sortedTransactions.length > 5 && (
+                {!showAllTransactions && sortedTransactions.length > DISPLAY_LIMIT && (
                   <div className="text-center pt-2">
-                    <Button 
-                      variant="outline" 
+                    <Button
+                      variant="outline"
                       size="sm"
                       onClick={() => setShowAllTransactions(true)}
                       className="text-xs sm:text-sm"
                     >
-                      Show All ({sortedTransactions.length - 5} more)
+                      Show All ({sortedTransactions.length - DISPLAY_LIMIT} more)
                     </Button>
                   </div>
                 )}
-                
-                {showAllTransactions && sortedTransactions.length > 5 && (
+
+                {showAllTransactions && sortedTransactions.length > DISPLAY_LIMIT && (
                   <div className="text-center pt-2">
-                    <Button 
-                      variant="outline" 
+                    <Button
+                      variant="outline"
                       size="sm"
                       onClick={() => setShowAllTransactions(false)}
                       className="text-xs sm:text-sm"
@@ -1651,6 +1643,25 @@ export function TransactionList({
               </div>
               <p className="text-sm text-muted-foreground">No transactions yet</p>
               <p className="text-xs text-muted-foreground/70 mt-1">Record your first transaction to start tracking</p>
+            </div>
+          )}
+
+          {transactions.length > 0 && totalFilteredCount === 0 && !isAdding && !loading && (
+            <div className="text-center py-12">
+              <div className="h-12 w-12 rounded-full bg-secondary/50 flex items-center justify-center mx-auto mb-3">
+                <Search className="h-6 w-6 text-muted-foreground" />
+              </div>
+              <p className="text-sm text-muted-foreground">No transactions found</p>
+              {searchQuery && !isAllTimeRange(dateRange) && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => onDateRangeChange(ALL_TIME_RANGE)}
+                  className="mt-3 text-xs sm:text-sm"
+                >
+                  Search in All Time
+                </Button>
+              )}
             </div>
           )}
         </div>
