@@ -48,7 +48,7 @@ type Category = {
 const ALL_TIME_RANGE = { startDate: '1900-01-01', endDate: '2100-12-31' }
 const isAllTimeRange = (r: { startDate: string; endDate: string }) =>
   r.startDate === '1900-01-01' && r.endDate === '2100-12-31'
-const DISPLAY_LIMIT = 5
+const DISPLAY_LIMIT = 7
 
 // LocalStorage keys for remembering last used values
 const STORAGE_KEYS = {
