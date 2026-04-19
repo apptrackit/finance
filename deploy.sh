@@ -1,141 +1,261 @@
 #!/bin/bash
+set -e
 
-# Finance App Deployment Script
-# Usage: ./deploy.sh [project-name]
-# Example: ./deploy.sh finance-client
-
-set -e  # Exit on error
-
-# Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-NC='\033[0m' # No Color
+DIM='\033[2m'
+NC='\033[0m'
 
-ensure_wrangler_ready() {
-  if npx wrangler --version >/dev/null 2>&1; then
-    return 0
+SPIN_PID=""
+TMPOUT=$(mktemp)
+
+kill_spinner() {
+  if [ -n "$SPIN_PID" ]; then
+    kill "$SPIN_PID" 2>/dev/null || true
+    wait "$SPIN_PID" 2>/dev/null || true
   fi
+  SPIN_PID=""
+}
+trap 'kill_spinner; rm -f "$TMPOUT"' EXIT INT TERM
 
-  echo -e "${YELLOW}Wrangler preflight failed. Attempting to repair workerd/wrangler...${NC}"
+err() { echo -e "${RED}$1${NC}" >&2; exit 1; }
 
-  if npm rebuild workerd wrangler >/dev/null 2>&1 && npx wrangler --version >/dev/null 2>&1; then
-    echo -e "${GREEN}✓ Repaired wrangler/workerd via npm rebuild${NC}"
-    return 0
-  fi
-
-  echo -e "${YELLOW}Rebuild did not fully resolve it. Running npm install at workspace root...${NC}"
-  if (cd .. && npm install >/dev/null 2>&1) && npx wrangler --version >/dev/null 2>&1; then
-    echo -e "${GREEN}✓ Repaired wrangler/workerd via npm install${NC}"
-    return 0
-  fi
-
-  echo -e "${RED}Error: Wrangler is still not runnable on this platform.${NC}"
-  echo -e "${RED}Try: rm -rf node_modules package-lock.json && npm install${NC}"
-  exit 1
+spin() {
+  local fmt="$1" label="$2"
+  local frames=('|' '/' '-' '\') i=0
+  while true; do
+    printf "\r${fmt}" "$label"
+    printf "${DIM}%s${NC}" "${frames[$i]}"
+    i=$(( (i + 1) % 4 ))
+    sleep 0.1
+  done
 }
 
-# Check current git branch
+step() {
+  local label="$1"; shift
+  spin "  %-22s" "$label" &
+  SPIN_PID=$!
+  if "$@" >"$TMPOUT" 2>&1; then
+    kill_spinner
+    local url
+    url=$(grep -Eo 'https://[^[:space:]]+(workers\.dev|pages\.dev)[^[:space:]]*' "$TMPOUT" | tail -1 || true)
+    [ -n "$url" ] && printf "\r  %-22s${GREEN}ok${NC}  ${DIM}${url}${NC}\033[K\n" "$label" \
+                  || printf "\r  %-22s${GREEN}ok${NC}\033[K\n" "$label"
+  else
+    kill_spinner
+    printf "\r  %-22s${RED}failed${NC}\033[K\n" "$label"
+    echo "" >&2
+    cat "$TMPOUT" >&2
+    exit 1
+  fi
+}
+
+# ─── Config helpers ───────────────────────────────────────────────────────────
+
+CONFIG_FILE="$(git rev-parse --show-toplevel 2>/dev/null || echo .)/.deploy-config"
+
+get_cfg() { grep "^${1}=" "$CONFIG_FILE" 2>/dev/null | cut -d= -f2-; }
+
+set_cfg() {
+  if grep -q "^${1}=" "$CONFIG_FILE" 2>/dev/null; then
+    sed -i '' "s|^${1}=.*|${1}=${2}|" "$CONFIG_FILE"
+  else
+    echo "${1}=${2}" >> "$CONFIG_FILE"
+  fi
+}
+
+need() {
+  local key="$1" label="$2" secret="${3:-}"
+  local val
+  val=$(get_cfg "$key")
+  if [ -z "$val" ]; then
+    if [ -n "$secret" ]; then
+      printf "%s: " "$label" >&2; read -rs val; echo >&2
+    else
+      printf "%s: " "$label" >&2; read -r val
+    fi
+    [ -z "$val" ] && err "${label} is required."
+    set_cfg "$key" "$val"
+  fi
+  printf '%s' "$val"
+}
+
+d1() { npx wrangler d1 execute finance-db --remote --yes --config wrangler.prod.toml "$@"; }
+
+migration_is_new() {
+  local count
+  count=$(d1 --json --command "SELECT COUNT(*) as count FROM migration_history WHERE migration_name = '${1}'" 2>/dev/null \
+    | grep -o '"count":[[:space:]]*[0-9]*' | grep -o '[0-9]*$' || echo "0")
+  [ "${count:-0}" = "0" ]
+}
+
+# ─── Branch check ─────────────────────────────────────────────────────────────
+
 CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
+BRANCH_FLAG=""
 
 if [ "$CURRENT_BRANCH" != "main" ] && [ "$CURRENT_BRANCH" != "unknown" ]; then
-  echo -e "${YELLOW}⚠️  Warning: You are on branch '${CURRENT_BRANCH}', not 'main'${NC}"
-  echo -e "${YELLOW}Are you sure you want to deploy from this branch? (y/N):${NC}"
+  printf "Branch '%s' is not main. Deploy anyway? (y/N) " "$CURRENT_BRANCH"
   read -r CONFIRM
-  if [[ ! "$CONFIRM" =~ ^[Yy]$ ]]; then
-    echo -e "${RED}Deployment cancelled${NC}"
-    exit 1
-  fi
-  echo -e "${GREEN}Deploying from branch '${CURRENT_BRANCH}' to main...${NC}\n"
+  [[ "$CONFIRM" =~ ^[Yy]$ ]] || err "Cancelled."
   BRANCH_FLAG="--branch=main"
-else
-  BRANCH_FLAG=""
 fi
 
-# Get project name from argument or ask for it
-if [ -z "$1" ]; then
-  echo -e "${YELLOW}Enter project name (e.g., finance-client):${NC}"
-  read -r PROJECT_NAME
-  if [ -z "$PROJECT_NAME" ]; then
-    echo -e "${RED}Error: Project name is required${NC}"
-    exit 1
-  fi
-else
-  PROJECT_NAME="$1"
-fi
+# ─── Config / secrets ─────────────────────────────────────────────────────────
 
-echo -e "${GREEN}🚀 Starting deployment for ${PROJECT_NAME}...${NC}\n"
+echo ""
+PROJECT_NAME=$(need PROJECT_NAME   "Project name")
+DATABASE_ID=$(need  DATABASE_ID    "Database ID")
+API_SECRET=$(need   API_SECRET     "API secret"                       secret)
+ORIGINS=$(need      ALLOWED_ORIGINS "Allowed origins (comma-separated)")
+PUB_KEY=$(need      PUBLIC_API_KEY  "Public API key (or 'off')")
+echo ""
 
-# Step 1: Update database schema
-echo -e "${YELLOW}📊 Step 1/3: Updating database schema...${NC}"
+# ─── Wrangler check ───────────────────────────────────────────────────────────
+
 cd api
 
-# Ensure wrangler can run before any migration command
-ensure_wrangler_ready
+if ! npx wrangler whoami >/dev/null 2>&1; then
+  err "Not logged in. Run: npx wrangler login"
+fi
 
-# Apply database migrations
-echo -e "${YELLOW}Applying database migrations...${NC}"
+if ! npx wrangler --version >/dev/null 2>&1; then
+  spin "  %-22s" "Repairing wrangler" &
+  SPIN_PID=$!
+  npm rebuild workerd wrangler >/dev/null 2>&1 || true
+  npx wrangler --version >/dev/null 2>&1 || {
+    (cd .. && npm install >/dev/null 2>&1) || true
+    npx wrangler --version >/dev/null 2>&1 || {
+      kill_spinner
+      err "Wrangler not runnable. Try: rm -rf node_modules && npm install"
+    }
+  }
+  kill_spinner
+  printf "\r  %-22s${GREEN}ok${NC}\033[K\n" "Repairing wrangler"
+fi
 
-# Create migration tracking table if it doesn't exist
-npx wrangler d1 execute finance-db --remote --command "CREATE TABLE IF NOT EXISTS migration_history (
-  id TEXT PRIMARY KEY,
-  migration_name TEXT NOT NULL UNIQUE,
-  executed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-)"
+# ─── Generate wrangler config ─────────────────────────────────────────────────
 
-# Find and run all migration files in order
+cat > wrangler.prod.toml << TOML
+name = "finance-api"
+compatibility_date = "2024-09-23"
+compatibility_flags = ["nodejs_compat"]
+main = "src/index.ts"
+
+workers_dev = true
+
+[define]
+__dirname = "'/'"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "finance-db"
+database_id = "${DATABASE_ID}"
+
+[triggers]
+crons = ["0 0 * * *"]
+TOML
+
+# ─── Secrets ──────────────────────────────────────────────────────────────────
+
+echo "  Secrets"
+for entry in "API_SECRET:${API_SECRET}" "ALLOWED_ORIGINS:${ORIGINS}" "PUBLIC_API_KEY:${PUB_KEY}"; do
+  key="${entry%%:*}"
+  val="${entry#*:}"
+  spin "    %-20s" "$key" &
+  SPIN_PID=$!
+  if echo "$val" | npx wrangler versions secret put "$key" --config wrangler.prod.toml >"$TMPOUT" 2>&1; then
+    kill_spinner
+    printf "\r    %-20s${GREEN}ok${NC}\033[K\n" "$key"
+  else
+    kill_spinner
+    printf "\r    %-20s${RED}failed${NC}\033[K\n" "$key"
+    echo "" >&2
+    cat "$TMPOUT" >&2
+    err "Failed to set secret: $key"
+  fi
+done
+echo ""
+
+# ─── Migrations ───────────────────────────────────────────────────────────────
+
+echo "  Migrations"
+step "  DB" d1 --command "CREATE TABLE IF NOT EXISTS migration_history (id TEXT PRIMARY KEY, migration_name TEXT NOT NULL UNIQUE, executed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)"
+
+APPLIED=0
 if [ -d "migrations" ]; then
   for migration_file in migrations/*.sql; do
-    if [ -f "$migration_file" ]; then
-      migration_name=$(basename "$migration_file" .sql)
-      
-      
-      # Check if this migration has already been run
-      COUNT_JSON=$(npx wrangler d1 execute finance-db --remote --command "SELECT COUNT(*) AS count FROM migration_history WHERE migration_name = '${migration_name}'" --json || true)
-      ALREADY_RUN=$(echo "$COUNT_JSON" | grep -o '"count":[0-9]\+' | head -n1 | sed 's/[^0-9]//g')
-      ALREADY_RUN=${ALREADY_RUN:-0}
-      
-      if [ "$ALREADY_RUN" = "0" ]; then
-        echo "  Running migration: $migration_name"
-        
-        # Execute the migration file (echo yes to auto-confirm the D1 prompt)
-        if echo yes | npx wrangler d1 execute finance-db --remote --file="$migration_file"; then
-          # Record the migration as executed only if it succeeded
-          migration_id="${migration_name}_$(date +%s)"
-          npx wrangler d1 execute finance-db --remote --command "INSERT OR IGNORE INTO migration_history (id, migration_name) VALUES ('${migration_id}', '${migration_name}')"
-        else
-          echo -e "${RED}Migration failed: ${migration_name}${NC}"
-          exit 1
-        fi
+    [ -f "$migration_file" ] || continue
+    migration_name=$(basename "$migration_file" .sql)
+
+    spin "    %-20s" "$migration_name" &
+    SPIN_PID=$!
+
+    if migration_is_new "$migration_name"; then
+      if d1 --file="$migration_file" >/dev/null 2>&1; then
+        d1 --command "INSERT OR IGNORE INTO migration_history (id, migration_name) VALUES ('${migration_name}_$(date +%s)', '${migration_name}')" >/dev/null 2>&1
+        kill_spinner
+        printf "\r    + %-18s${GREEN}ok${NC}\033[K\n" "$migration_name"
+        APPLIED=$((APPLIED + 1))
       else
-        echo "  Migration already applied: $migration_name"
+        kill_spinner
+        printf "\r    + %-18s${RED}failed${NC}\033[K\n" "$migration_name"
+        err "Migration failed: $migration_name"
       fi
+    else
+      kill_spinner
+      printf "\r\033[K"
     fi
   done
-else
-  echo "  No migrations directory found"
 fi
 
-echo -e "${GREEN}✓ Database schema updated${NC}\n"
+[ "$APPLIED" = "0" ] && echo "    up to date"
+echo ""
 
-# Step 2: Deploy API (backend)
-echo -e "${YELLOW}🔧 Step 2/3: Deploying API...${NC}"
-npm run deploy
-echo -e "${GREEN}✓ API deployed${NC}\n"
+# ─── API ──────────────────────────────────────────────────────────────────────
 
-# Step 3: Build and deploy client (frontend)
-echo -e "${YELLOW}🎨 Step 3/3: Building and deploying client...${NC}"
+spin "  %-22s" "API" &
+SPIN_PID=$!
+if npx wrangler deploy --minify --config wrangler.prod.toml >"$TMPOUT" 2>&1; then
+  API_URL=$(grep -Eo 'https://[^[:space:]]+\.workers\.dev[^[:space:]]*' "$TMPOUT" | tail -1 || true)
+  # Fall back to saved URL if wrangler output format didn't match
+  [ -z "$API_URL" ] && API_URL=$(get_cfg "API_URL")
+  if [ -z "$API_URL" ]; then
+    kill_spinner
+    printf "\r  %-22s${RED}failed${NC}\033[K\n" "API"
+    err "Could not determine API URL. Add API_URL=https://... to .deploy-config and retry."
+  fi
+  set_cfg "API_URL" "$API_URL"
+  API_DOMAIN="${API_URL#https://}"
+  kill_spinner
+  printf "\r  %-22s${GREEN}ok${NC}  ${DIM}${API_URL}${NC}\033[K\n" "API"
+else
+  kill_spinner
+  printf "\r  %-22s${RED}failed${NC}\033[K\n" "API"
+  echo "" >&2; cat "$TMPOUT" >&2
+  exit 1
+fi
+
+# ─── Client ───────────────────────────────────────────────────────────────────
+
 cd ../client
-npm run build
-if [ -n "$BRANCH_FLAG" ]; then
-  npx wrangler pages deploy dist --project-name="${PROJECT_NAME}" $BRANCH_FLAG
-else
-  npx wrangler pages deploy dist --project-name="${PROJECT_NAME}"
+[ -z "$API_DOMAIN" ] && err "API_DOMAIN is empty — check API_URL in .deploy-config"
+[ -z "$API_SECRET" ] && err "API_SECRET is empty — check .deploy-config"
+printf 'VITE_API_DOMAIN=%s\nVITE_API_KEY=%s\n' "$API_DOMAIN" "$API_SECRET" > .env.production
+echo -e "  ${DIM}  API: ${API_DOMAIN}${NC}"
+step "Client build" npm run build
+rm -f .env.production
+if ! grep -qr "$API_DOMAIN" dist/assets/ 2>/dev/null; then
+  echo -e "${RED}  Warning: API domain not found in built assets — env injection may have failed${NC}" >&2
 fi
-echo -e "${GREEN}✓ Client deployed${NC}\n"
+sed -i '' "s|DEPLOY_API_ORIGIN|${API_URL}|g" dist/_headers
 
-echo -e "${GREEN}✅ Deployment complete!${NC}"
-echo -e "${GREEN}Project: ${PROJECT_NAME}${NC}"
-if [ -n "$BRANCH_FLAG" ]; then
-  echo -e "${YELLOW}Deployed from branch '${CURRENT_BRANCH}' to main${NC}"
-fi
+DEPLOY_CMD=(npx wrangler pages deploy dist --project-name="${PROJECT_NAME}")
+[ -n "$BRANCH_FLAG" ] && DEPLOY_CMD+=("$BRANCH_FLAG")
+step "Client deploy" "${DEPLOY_CMD[@]}"
+
+# ─── Done ─────────────────────────────────────────────────────────────────────
+
+echo ""
+echo -e "${GREEN}Deployed ${PROJECT_NAME}${NC}"
+[ -n "$BRANCH_FLAG" ] && echo -e "${DIM}  ${CURRENT_BRANCH} -> main${NC}"

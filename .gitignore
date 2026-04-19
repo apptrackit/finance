@@ -120,7 +120,9 @@ dev-dist
 # Cloudflare Workers
 .wrangler/
 .dev.vars
-api/wrangler.toml  # Each developer has their own config
+api/wrangler.toml
+api/wrangler.prod.toml
+.deploy-config
 
 # Database backups (may contain sensitive data)
 production-backup.sql
