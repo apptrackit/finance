@@ -196,6 +196,8 @@ app.post('/categories/reset', (c) => getControllers(c).categoryController.reset(
 app.get('/accounts', (c) => getControllers(c).accountController.getAll(c))
 app.post('/accounts', validateBody(CreateAccountSchema), (c) => getControllers(c).accountController.create(c))
 app.put('/accounts/:id', validateBody(UpdateAccountSchema), (c) => getControllers(c).accountController.update(c))
+app.patch('/accounts/:id/lock', (c) => getControllers(c).accountController.lock(c))
+app.patch('/accounts/:id/unlock', (c) => getControllers(c).accountController.unlock(c))
 app.delete('/accounts/:id', (c) => getControllers(c).accountController.delete(c))
 
 // Transactions

@@ -12,6 +12,7 @@ export type Account = {
   asset_type?: 'stock' | 'crypto' | 'manual'
   exclude_from_net_worth?: boolean
   exclude_from_cash_balance?: boolean
+  is_locked?: boolean
   updated_at: number
 }
 

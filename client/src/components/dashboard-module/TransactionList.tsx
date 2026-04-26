@@ -10,7 +10,6 @@ import { format, addMonths, subMonths, startOfMonth, endOfMonth, addDays, differ
 import { API_BASE_URL, apiFetch } from '../../config'
 import { usePrivacy } from '../../context/PrivacyContext'
 import { useAlert } from '../../context/AlertContext'
-import { useLockedAccounts } from '../../context/LockedAccountsContext'
 import { DateRangePicker } from '../common/DateRangePicker'
 import { BulkTransactionModal, type BulkTransaction } from './BulkTransactionModal'
 
@@ -36,6 +35,7 @@ type Account = {
   asset_type?: 'stock' | 'crypto' | 'manual'
   exclude_from_net_worth?: boolean
   exclude_from_cash_balance?: boolean
+  is_locked?: boolean
 }
 
 type Category = {
@@ -111,7 +111,7 @@ export function TransactionList({
   
   const { confirm } = useAlert()
   const { privacyMode, shouldHideInvestment } = usePrivacy()
-  const { isLocked } = useLockedAccounts()
+  const isLocked = (accountId: string) => accounts.find(a => a.id === accountId)?.is_locked ?? false
 
   // Reset showAllTransactions when filter, sort, search, or date range changes
   useEffect(() => {

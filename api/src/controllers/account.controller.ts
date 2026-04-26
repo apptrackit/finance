@@ -28,6 +28,20 @@ export class AccountController {
     return c.json(AccountMapper.toResponseDto(account))
   }
 
+  async lock(c: Context<{ Bindings: Bindings }>) {
+    const id = c.req.param('id')
+    const account = await this.accountService.lockAccount(id)
+    await new AuditRepository(c.env.DB).log('UPDATE', 'account', id, { is_locked: true })
+    return c.json(AccountMapper.toResponseDto(account))
+  }
+
+  async unlock(c: Context<{ Bindings: Bindings }>) {
+    const id = c.req.param('id')
+    const account = await this.accountService.unlockAccount(id)
+    await new AuditRepository(c.env.DB).log('UPDATE', 'account', id, { is_locked: false })
+    return c.json(AccountMapper.toResponseDto(account))
+  }
+
   async delete(c: Context<{ Bindings: Bindings }>) {
     const id = c.req.param('id')
     await this.accountService.deleteAccount(id)

@@ -6,8 +6,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../co
 import { Select } from '../common/select'
 import { API_BASE_URL, apiFetch } from '../../config'
 import { useAlert } from '../../context/AlertContext'
-import { useLockedAccounts } from '../../context/LockedAccountsContext'
-
 interface Account {
   id: string
   name: string
@@ -16,6 +14,7 @@ interface Account {
   currency: string
   symbol?: string
   asset_type?: string
+  is_locked?: boolean
 }
 
 interface TransferFormProps {
@@ -25,7 +24,6 @@ interface TransferFormProps {
 
 export default function TransferForm({ accounts, onTransferComplete }: TransferFormProps) {
   const { showAlert } = useAlert()
-  const { isLocked } = useLockedAccounts()
   const [fromAccountId, setFromAccountId] = useState('')
   const [toAccountId, setToAccountId] = useState('')
   const [amountFrom, setAmountFrom] = useState('')
@@ -250,7 +248,7 @@ export default function TransferForm({ accounts, onTransferComplete }: TransferF
               >
                 <option value="">Select account</option>
                 {accounts
-                  .filter(a => a.id !== toAccountId && !isLocked(a.id))
+                  .filter(a => a.id !== toAccountId && !a.is_locked)
                   .map(account => (
                     <option key={account.id} value={account.id}>
                       {account.name} ({account.balance.toFixed(2)} {account.currency})
@@ -268,7 +266,7 @@ export default function TransferForm({ accounts, onTransferComplete }: TransferF
               >
                 <option value="">Select account</option>
                 {accounts
-                  .filter(a => a.id !== fromAccountId && !isLocked(a.id))
+                  .filter(a => a.id !== fromAccountId && !a.is_locked)
                   .map(account => (
                     <option key={account.id} value={account.id}>
                       {account.name} ({account.balance.toFixed(2)} {account.currency})

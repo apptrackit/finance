@@ -11,5 +11,6 @@ export interface Account {
   asset_type?: AssetType
   exclude_from_net_worth?: boolean
   exclude_from_cash_balance?: boolean
+  is_locked?: boolean
   updated_at: number
 }

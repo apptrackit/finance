@@ -9,7 +9,6 @@ import { Plus, X, Wallet, Building, Pencil, Trash2, Check, Search, Lock, LockOpe
 import { API_BASE_URL, apiFetch } from '../../config'
 import { usePrivacy } from '../../context/PrivacyContext'
 import { useAlert } from '../../context/AlertContext'
-import { useLockedAccounts } from '../../context/LockedAccountsContext'
 import { SplitTransactionModal } from './SplitTransactionModal'
 import type { SplitTransaction } from './SplitTransactionModal'
 import { AdjustmentChoiceModal } from './AdjustmentChoiceModal'
@@ -24,6 +23,7 @@ type Account = {
   asset_type?: 'stock' | 'crypto' | 'manual'
   exclude_from_net_worth?: boolean
   exclude_from_cash_balance?: boolean
+  is_locked?: boolean
 }
 
 type Category = {
@@ -51,7 +51,7 @@ type MarketQuote = {
 
 export function AccountList({ accounts, onAccountAdded, loading }: { accounts: Account[], onAccountAdded: () => void, loading?: boolean }) {
   const { confirm, showAlert } = useAlert()
-  const { isLocked, lockAccount, unlockAccount } = useLockedAccounts()
+  const isLocked = (id: string) => accounts.find(a => a.id === id)?.is_locked ?? false
   const [isAdding, setIsAdding] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [formData, setFormData] = useState({
@@ -379,7 +379,6 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
 
   const handleLockToggle = async (accountId: string) => {
     if (isLocked(accountId)) {
-      // Unlocking requires confirmation
       const confirmed = await confirm({
         title: 'Unlock Account',
         message: 'Are you sure you want to unlock this account? You will be able to edit, delete, and add transactions again.',
@@ -388,11 +387,12 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
       })
       
       if (confirmed) {
-        unlockAccount(accountId)
+        await apiFetch(`${API_BASE_URL}/accounts/${accountId}/unlock`, { method: 'PATCH' })
+        onAccountAdded()
       }
     } else {
-      // Locking doesn't require confirmation
-      lockAccount(accountId)
+      await apiFetch(`${API_BASE_URL}/accounts/${accountId}/lock`, { method: 'PATCH' })
+      onAccountAdded()
     }
   }
 

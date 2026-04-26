@@ -4,7 +4,6 @@ import './index.css'
 import App from './App.tsx'
 import { PrivacyProvider } from './context/PrivacyContext.tsx'
 import { AlertProvider } from './context/AlertContext.tsx'
-import { LockedAccountsProvider } from './context/LockedAccountsContext.tsx'
 import { registerSW } from 'virtual:pwa-register'
 
 // Register service worker with update handling
@@ -23,9 +22,7 @@ createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <PrivacyProvider>
       <AlertProvider>
-        <LockedAccountsProvider>
-          <App />
-        </LockedAccountsProvider>
+        <App />
       </AlertProvider>
     </PrivacyProvider>
   </StrictMode>,

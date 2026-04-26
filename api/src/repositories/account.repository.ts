@@ -14,7 +14,7 @@ export class AccountRepository {
 
   async create(account: Account): Promise<void> {
     await this.db.prepare(
-      'INSERT INTO accounts (id, name, type, balance, currency, symbol, asset_type, exclude_from_net_worth, exclude_from_cash_balance, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+      'INSERT INTO accounts (id, name, type, balance, currency, symbol, asset_type, exclude_from_net_worth, exclude_from_cash_balance, is_locked, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
     ).bind(
       account.id,
       account.name,
@@ -25,6 +25,7 @@ export class AccountRepository {
       account.asset_type || null,
       account.exclude_from_net_worth ? 1 : 0,
       account.exclude_from_cash_balance ? 1 : 0,
+      account.is_locked ? 1 : 0,
       account.updated_at
     ).run()
   }
@@ -49,6 +50,11 @@ export class AccountRepository {
   async updateBalance(id: string, balance: number, updated_at: number): Promise<void> {
     await this.db.prepare('UPDATE accounts SET balance = ?, updated_at = ? WHERE id = ?')
       .bind(balance, updated_at, id).run()
+  }
+
+  async setLocked(id: string, locked: boolean): Promise<void> {
+    await this.db.prepare('UPDATE accounts SET is_locked = ? WHERE id = ?')
+      .bind(locked ? 1 : 0, id).run()
   }
 
   async delete(id: string): Promise<void> {
