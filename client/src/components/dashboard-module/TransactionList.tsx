@@ -5,7 +5,7 @@ import { Label } from '../common/label'
 import { Select } from '../common/select'
 import { Card, CardContent, CardHeader, CardTitle } from '../common/card'
 import { Modal } from '../common/modal'
-import { Plus, X, ArrowDownLeft, ArrowUpRight, Receipt, Pencil, Trash2, Check, ArrowRightLeft, ChevronLeft, ChevronRight, Calendar, Layers, Search } from 'lucide-react'
+import { Plus, X, ArrowDownLeft, ArrowUpRight, Receipt, Pencil, Trash2, Check, ArrowRightLeft, ChevronLeft, ChevronRight, ChevronDown, Calendar, Layers, Search } from 'lucide-react'
 import { format, addMonths, subMonths, startOfMonth, endOfMonth, addDays, differenceInDays } from 'date-fns'
 import { API_BASE_URL, apiFetch } from '../../config'
 import { usePrivacy } from '../../context/PrivacyContext'
@@ -108,6 +108,7 @@ export function TransactionList({
   const [searchQuery, setSearchQuery] = useState<string>('')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [isAccountOpen, setIsAccountOpen] = useState(false)
   
   const { confirm } = useAlert()
   const { privacyMode, shouldHideInvestment } = usePrivacy()
@@ -405,6 +406,7 @@ export function TransactionList({
       manual_price: '',
       exclude_from_estimate: false
     })
+    setIsAccountOpen(false)
     setIsAdding(true)
   }
 
@@ -561,6 +563,7 @@ export function TransactionList({
       exclude_from_estimate: !!tx.exclude_from_estimate
     })
     setEditingId(tx.id)
+    setIsAccountOpen(false)
     setIsAdding(true)
   }
 
@@ -1188,8 +1191,8 @@ export function TransactionList({
             ) : (
               /* Expense/Income Form */
               <>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-2">
+                <div className="grid grid-cols-2 gap-3 overflow-hidden">
+                  <div className="space-y-2 min-w-0">
                     <Label htmlFor="amount">{accounts.find(a => a.id === formData.account_id)?.type === 'investment' ? 'Shares' : 'Amount'}</Label>
                     <Input 
                       id="amount" 
@@ -1208,19 +1211,53 @@ export function TransactionList({
                       required 
                     />
                   </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="account">Account</Label>
-                    <Select 
-                      id="account" 
-                      value={formData.account_id} 
-                      onChange={e => setFormData({...formData, account_id: e.target.value})}
-                      required
-                    >
-                      <option value="">Select Account</option>
-                      {accounts.filter(acc => !isLocked(acc.id)).map(acc => (
-                        <option key={acc.id} value={acc.id}>{acc.name}</option>
-                      ))}
-                    </Select>
+                  <div className="space-y-2 min-w-0">
+                    {/* Mobile: collapsible account selector */}
+                    <div className="sm:hidden">
+                      <button
+                        type="button"
+                        onClick={() => setIsAccountOpen(!isAccountOpen)}
+                        className="w-full flex items-center justify-between h-10 rounded-lg border border-border bg-background/50 px-3 py-2 text-sm text-foreground hover:border-border/80 hover:bg-background/80 transition-all"
+                      >
+                        <span className="text-muted-foreground text-xs">Account</span>
+                        <span className="flex items-center gap-1.5 min-w-0">
+                          <span className="truncate text-xs">
+                            {accounts.find(a => a.id === formData.account_id)?.name || 'Select'}
+                          </span>
+                          <ChevronDown className={`h-3.5 w-3.5 flex-shrink-0 transition-transform ${isAccountOpen ? 'rotate-180' : ''}`} />
+                        </span>
+                      </button>
+                      {isAccountOpen && (
+                        <div className="mt-1">
+                          <Select
+                            id="account-mobile"
+                            value={formData.account_id}
+                            onChange={e => { setFormData({...formData, account_id: e.target.value}); setIsAccountOpen(false) }}
+                            required
+                          >
+                            <option value="">Select Account</option>
+                            {accounts.filter(acc => !isLocked(acc.id)).map(acc => (
+                              <option key={acc.id} value={acc.id}>{acc.name}</option>
+                            ))}
+                          </Select>
+                        </div>
+                      )}
+                    </div>
+                    {/* Desktop: always visible */}
+                    <div className="hidden sm:block space-y-2">
+                      <Label htmlFor="account">Account</Label>
+                      <Select
+                        id="account"
+                        value={formData.account_id}
+                        onChange={e => setFormData({...formData, account_id: e.target.value})}
+                        required
+                      >
+                        <option value="">Select Account</option>
+                        {accounts.filter(acc => !isLocked(acc.id)).map(acc => (
+                          <option key={acc.id} value={acc.id}>{acc.name}</option>
+                        ))}
+                      </Select>
+                    </div>
                   </div>
                   {/* Manual Price field for investment accounts */}
                   {accounts.find(a => a.id === formData.account_id)?.type === 'investment' && (
@@ -1259,14 +1296,15 @@ export function TransactionList({
                       ))}
                     </Select>
                   </div>
-                  <div className="space-y-2">
+                  <div className="space-y-2 min-w-0 overflow-hidden">
                     <Label htmlFor="date">Date</Label>
-                    <Input 
-                      id="date" 
-                      type="date" 
-                      value={formData.date} 
-                      onChange={e => setFormData({...formData, date: e.target.value})} 
-                      required 
+                    <Input
+                      id="date"
+                      type="date"
+                      value={formData.date}
+                      onChange={e => setFormData({...formData, date: e.target.value})}
+                      required
+                      className="w-full min-w-0"
                     />
                   </div>
                   <div className="col-span-2 space-y-2">

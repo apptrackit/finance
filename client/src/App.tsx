@@ -385,14 +385,14 @@ function App() {
         </main>
 
         {/* Version Footer */}
-        <footer className="hidden lg:block mt-auto py-4 text-center text-xs text-muted-foreground">
+        <footer className="py-4 text-center text-xs text-muted-foreground">
           <p>v{APP_VERSION}</p>
         </footer>
       </div>
 
       {/* Mobile bottom navigation */}
       <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-50 bg-card/95 backdrop-blur-xl border-t border-border/50">
-        <div className="flex items-center justify-around px-2 py-1 safe-area-pb">
+        <div className="flex items-center justify-around px-2 pt-2" style={{paddingBottom: 'max(8px, env(safe-area-inset-bottom))'}}>
           {navItems.filter(n => visibleMenus[n.key]).map(n => (
             <button
               key={n.key}
@@ -409,17 +409,6 @@ function App() {
               <span className="text-[10px] font-medium truncate">{n.label}</span>
             </button>
           ))}
-          <button
-            onClick={() => setView('settings')}
-            className={`flex flex-col items-center gap-0.5 px-3 py-2 rounded-xl transition-all ${
-              view === 'settings' ? 'text-primary' : 'text-muted-foreground'
-            }`}
-          >
-            <span className={`${view === 'settings' ? 'scale-110' : ''} transition-transform`}>
-              <SettingsIcon className="h-4 w-4" />
-            </span>
-            <span className="text-[10px] font-medium">Settings</span>
-          </button>
         </div>
       </nav>
     </div>

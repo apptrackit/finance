@@ -5,7 +5,7 @@ import { Label } from '../common/label'
 import { Select } from '../common/select'
 import { Card, CardContent, CardHeader, CardTitle } from '../common/card'
 import { Modal } from '../common/modal'
-import { Plus, X, Wallet, Building, Pencil, Trash2, Check, Search, Lock, LockOpen, CircleCheck, CircleX } from 'lucide-react'
+import { Plus, X, Wallet, Building, Pencil, Trash2, Check, Search, Lock, LockOpen, CircleCheck, CircleX, ChevronDown } from 'lucide-react'
 import { API_BASE_URL, apiFetch } from '../../config'
 import { usePrivacy } from '../../context/PrivacyContext'
 import { useAlert } from '../../context/AlertContext'
@@ -86,6 +86,7 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
   } | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [isCollapsed, setIsCollapsed] = useState(true)
 
   const { privacyMode, shouldHideInvestment } = usePrivacy()
 
@@ -529,12 +530,17 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
   return (
     <Card className="h-fit">
       <CardHeader className="flex flex-row items-center justify-between pb-3 sm:pb-4">
-        <div className="flex items-center gap-2 sm:gap-3">
+        <button
+          type="button"
+          className="flex items-center gap-2 sm:gap-3 lg:cursor-default"
+          onClick={() => setIsCollapsed(c => !c)}
+        >
           <div className="h-7 w-7 sm:h-8 sm:w-8 rounded-lg bg-secondary flex items-center justify-center">
             <Building className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-muted-foreground" />
           </div>
           <CardTitle className="text-sm sm:text-base">Accounts</CardTitle>
-        </div>
+          <ChevronDown className={`lg:hidden h-4 w-4 text-muted-foreground transition-transform duration-300 ${isCollapsed ? '' : 'rotate-180'}`} />
+        </button>
         <Button
           onClick={() => isAdding ? handleCancel() : setIsAdding(true)}
           size="sm"
@@ -702,6 +708,7 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
           </form>
       </Modal>
 
+      <div className={`lg:!max-h-none lg:overflow-visible overflow-hidden transition-all duration-500 ease-in-out ${isCollapsed ? 'max-h-0' : 'max-h-[2000px]'}`}>
       <CardContent className="space-y-3 sm:space-y-4">
         {/* Cash Accounts Section */}
         {accounts.filter(a => a.type === 'cash').length > 0 && (
@@ -1038,6 +1045,7 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
           )
         )}
       </CardContent>
+      </div>
 
       {/* Symbol Search Modal */}
       {showSymbolSearch && (
