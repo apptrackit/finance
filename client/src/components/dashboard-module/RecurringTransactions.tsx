@@ -1526,12 +1526,21 @@ export function RecurringTransactions({
                       {category?.icon && <span className="text-2xl">{category.icon}</span>}
                       <div>
                         <h4 className="font-semibold">
-                          {schedule.type === 'transaction' 
-                            ? `${category?.name || 'Transaction'} - ${getAccountName(schedule.account_id)}`
-                            : `Transfer: ${getAccountName(schedule.account_id)} → ${toAccount?.name || 'Unknown'}`
-                          }
+                          {schedule.description || (
+                            schedule.type === 'transaction'
+                              ? `${category?.name || 'Transaction'} - ${getAccountName(schedule.account_id)}`
+                              : `Transfer: ${getAccountName(schedule.account_id)} → ${toAccount?.name || 'Unknown'}`
+                          )}
                         </h4>
                         <p className="text-sm text-muted-foreground">
+                          {schedule.description && (
+                            <span className="mr-2">
+                              {schedule.type === 'transaction'
+                                ? `${category?.name || 'Transaction'} - ${getAccountName(schedule.account_id)}`
+                                : `Transfer: ${getAccountName(schedule.account_id)} → ${toAccount?.name || 'Unknown'}`
+                              } •
+                            </span>
+                          )}
                           {formatFrequency(schedule)}
                           {schedule.last_processed_date && (
                             <span className="ml-2">• Last: {schedule.last_processed_date}</span>
@@ -1545,9 +1554,6 @@ export function RecurringTransactions({
                         </p>
                       </div>
                     </div>
-                    {schedule.description && (
-                      <p className="text-sm text-muted-foreground ml-11">{schedule.description}</p>
-                    )}
                   </div>
 
                   <div className="flex items-center gap-3">
