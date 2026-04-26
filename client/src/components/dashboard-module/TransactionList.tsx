@@ -1308,27 +1308,31 @@ export function TransactionList({
           {sortOrder === 'date' ? (
             // Date-based grouping
             (() => {
-              let allFilteredTransactions: Transaction[] = []
+              type ProcessedTx = Transaction & { relatedTx?: Transaction }
+
+              // Process each date's full filtered group first so transfers always find their pair
+              const processedGrouped: Record<string, ProcessedTx[]> = {}
               sortedDates.forEach(date => {
-                allFilteredTransactions = allFilteredTransactions.concat(
-                  groupedTransactions[date].filter(applyFilters)
-                )
+                const filtered = groupedTransactions[date].filter(applyFilters)
+                processedGrouped[date] = processTransactions(filtered)
               })
 
-              const shownTxIds = new Set(
-                (showAllTransactions ? allFilteredTransactions : allFilteredTransactions.slice(0, DISPLAY_LIMIT))
-                  .map(tx => tx.id)
-              )
+              // Flat list in date order — newest date first, newest tx within date first
+              const allProcessed = sortedDates.flatMap(date => processedGrouped[date])
+
+              const toShow = showAllTransactions ? allProcessed : allProcessed.slice(0, DISPLAY_LIMIT)
+              const shownIds = new Set(toShow.map(tx => tx.id))
+
               const datesToDisplay = sortedDates.filter(date =>
-                groupedTransactions[date].some(tx => shownTxIds.has(tx.id))
+                processedGrouped[date].some(tx => shownIds.has(tx.id))
               )
 
               return <>
                 {datesToDisplay.map(date => {
-                  const dateTransactions = groupedTransactions[date].filter(tx => shownTxIds.has(tx.id))
+                  const dateProcessed = processedGrouped[date].filter(tx => shownIds.has(tx.id))
 
-                  if (dateTransactions.length === 0) return null
-              
+                  if (dateProcessed.length === 0) return null
+
               return (
               <div key={date}>
                 <div className="flex items-center gap-1.5 sm:gap-2 mb-1.5 sm:mb-2">
@@ -1340,7 +1344,7 @@ export function TransactionList({
                   <div className="flex-1 h-px bg-border" />
                 </div>
                 <div className="space-y-1">
-                  {processTransactions(dateTransactions).reverse().map(tx => {
+                  {dateProcessed.map(tx => {
                     const isTransfer = !!tx.linked_transaction_id && !!(tx as any).relatedTx
                     const related = (tx as any).relatedTx as Transaction | undefined
                     
@@ -1442,7 +1446,7 @@ export function TransactionList({
               </div>
             )})}
             
-            {!showAllTransactions && allFilteredTransactions.length > DISPLAY_LIMIT && (
+            {!showAllTransactions && allProcessed.length > DISPLAY_LIMIT && (
               <div className="text-center pt-2">
                 <Button
                   variant="outline"
@@ -1450,12 +1454,12 @@ export function TransactionList({
                   onClick={() => setShowAllTransactions(true)}
                   className="text-xs sm:text-sm"
                 >
-                  Show All ({allFilteredTransactions.length - DISPLAY_LIMIT} more)
+                  Show All ({allProcessed.length - DISPLAY_LIMIT} more)
                 </Button>
               </div>
             )}
 
-            {showAllTransactions && allFilteredTransactions.length > DISPLAY_LIMIT && (
+            {showAllTransactions && allProcessed.length > DISPLAY_LIMIT && (
               <div className="text-center pt-2">
                 <Button
                   variant="outline"
