@@ -242,7 +242,6 @@ cd ../client
 [ -z "$API_DOMAIN" ] && err "API_DOMAIN is empty — check API_URL in .deploy-config"
 [ -z "$API_SECRET" ] && err "API_SECRET is empty — check .deploy-config"
 printf 'VITE_API_DOMAIN=%s\nVITE_API_KEY=%s\n' "$API_DOMAIN" "$API_SECRET" > .env.production
-echo -e "  ${DIM}  API: ${API_DOMAIN}${NC}"
 step "Client build" npm run build
 rm -f .env.production
 if ! grep -qr "$API_DOMAIN" dist/assets/ 2>/dev/null; then
