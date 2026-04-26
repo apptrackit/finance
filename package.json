@@ -1,5 +1,6 @@
 {
   "name": "finance-manager",
+  "version": "2.0",
   "private": true,
   "workspaces": [
     "client",

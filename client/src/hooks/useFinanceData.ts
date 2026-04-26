@@ -55,7 +55,6 @@ export function useFinanceData(
   const [allTransactions, setAllTransactions] = useState<Transaction[]>([])
   const [transactionsLoading, setTransactionsLoading] = useState<boolean>(true)
   const [categories, setCategories] = useState<Category[]>([])
-  const [apiVersion, setApiVersion] = useState<string | null>(null)
   const [exchangeRates, setExchangeRates] = useState<Record<string, number>>({})
   const [investmentRefreshKey, setInvestmentRefreshKey] = useState(0)
 
@@ -155,16 +154,6 @@ export function useFinanceData(
     }
   }, [accounts])
 
-  const fetchApiVersion = useCallback(async () => {
-    try {
-      const res = await apiFetch(`${API_BASE_URL}/version`)
-      const data = await res.json()
-      setApiVersion(data.version)
-    } catch {
-      setApiVersion('unknown')
-    }
-  }, [])
-
   const fetchInvestmentValue = useCallback(async () => {
     setInvestmentLoading(true)
     setInvestmentError(null)
@@ -246,7 +235,6 @@ export function useFinanceData(
   useEffect(() => {
     fetchData()
     fetchAllTransactions()
-    fetchApiVersion()
   }, [])
 
   // Re-fetch when date range changes (but not on initial mount — fetchData handles that)
@@ -292,7 +280,6 @@ export function useFinanceData(
     allTransactions,
     transactionsLoading,
     categories,
-    apiVersion,
     exchangeRates,
     investmentRefreshKey,
     handleDataChange,

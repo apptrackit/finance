@@ -10,8 +10,7 @@ import { usePrivacy } from './context/PrivacyContext'
 import { startOfMonth, endOfMonth, format } from 'date-fns'
 import { Budget } from './components/budget-module/Budget'
 import { useFinanceData } from './hooks/useFinanceData'
-
-const APP_VERSION = '1.7.0'
+import { version as APP_VERSION } from '../../package.json'
 const MENU_STORAGE_KEY = 'finance_visible_menus'
 
 type View = 'dashboard' | 'analytics' | 'settings' | 'investments' | 'recurring' | 'budget'
@@ -66,7 +65,6 @@ function App() {
     allTransactions,
     transactionsLoading,
     categories,
-    apiVersion,
     exchangeRates,
     investmentRefreshKey,
     handleDataChange,
@@ -387,9 +385,8 @@ function App() {
         </main>
 
         {/* Version Footer */}
-        <footer className="hidden lg:block mt-auto py-4 text-center text-xs text-muted-foreground space-y-1">
-          <p>Client v{APP_VERSION}</p>
-          <p>API v{apiVersion || 'loading...'}</p>
+        <footer className="hidden lg:block mt-auto py-4 text-center text-xs text-muted-foreground">
+          <p>v{APP_VERSION}</p>
         </footer>
       </div>
 
