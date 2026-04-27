@@ -5,9 +5,11 @@ import { PrivacyCard } from './components/PrivacyCard'
 import { ScheduledTasksCard } from './components/ScheduledTasksCard'
 import { CacheManagementCard } from './components/CacheManagementCard'
 import { DataExportCard } from './components/DataExportCard'
+import { ThemeCard } from './components/ThemeCard'
 export default function Settings() {
   return (
     <div className="max-w-2xl mx-auto space-y-6">
+      <ThemeCard />
       <CategoriesCard />
       <CurrencySettingsCard />
       <NavigationCard />
