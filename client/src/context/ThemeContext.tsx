@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
 
-export type ThemeId = 'emerald' | 'ocean' | 'sunset' | 'violet'
+export type ThemeId = 'emerald' | 'ocean' | 'sunset' | 'violet' | 'mono' | 'redfilter'
 
 export interface Theme {
   id: ThemeId
@@ -9,6 +9,8 @@ export interface Theme {
   primaryColor: string
   bgColor: string
   cardColor: string
+  /** CSS filter applied to the whole page via the html element */
+  cssFilter?: string
 }
 
 export const THEMES: Theme[] = [
@@ -44,6 +46,24 @@ export const THEMES: Theme[] = [
     bgColor: '#0c0a14',
     cardColor: '#0f0d1a',
   },
+  {
+    id: 'mono',
+    name: 'Monochrome',
+    description: 'Pure black, white & gray — zero color',
+    primaryColor: '#22c55e',
+    bgColor: '#0b0f1a',
+    cardColor: '#0e1420',
+    cssFilter: 'grayscale(1)',
+  },
+  {
+    id: 'redfilter',
+    name: 'Red Filter',
+    description: 'Blue-light blocking — all hues shifted to red',
+    primaryColor: '#22c55e',
+    bgColor: '#0b0f1a',
+    cardColor: '#0e1420',
+    cssFilter: 'sepia(1) saturate(6) hue-rotate(315deg) brightness(0.75)',
+  },
 ]
 
 const THEME_STORAGE_KEY = 'finance_theme'
@@ -63,9 +83,19 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const html = document.documentElement
+    // Remove all theme classes
     THEMES.forEach(t => html.classList.remove(`theme-${t.id}`))
+    // Remove any previously applied filter
+    html.style.removeProperty('filter')
+
     if (theme !== 'emerald') {
       html.classList.add(`theme-${theme}`)
+    }
+
+    // Apply CSS filter for filter-based themes
+    const activeTheme = THEMES.find(t => t.id === theme)
+    if (activeTheme?.cssFilter) {
+      html.style.filter = activeTheme.cssFilter
     }
   }, [theme])
 

@@ -19,7 +19,7 @@ export function ThemeCard() {
         </div>
       </CardHeader>
       <CardContent>
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
           {THEMES.map((t) => (
             <ThemeSwatch
               key={t.id}
@@ -29,6 +29,7 @@ export function ThemeCard() {
               primaryColor={t.primaryColor}
               bgColor={t.bgColor}
               cardColor={t.cardColor}
+              previewFilter={t.cssFilter}
               isSelected={theme === t.id}
               onSelect={setTheme}
             />
@@ -46,11 +47,29 @@ interface ThemeSwatchProps {
   primaryColor: string
   bgColor: string
   cardColor: string
+  previewFilter?: string
   isSelected: boolean
   onSelect: (id: ThemeId) => void
 }
 
-function ThemeSwatch({ themeId, name, description, primaryColor, bgColor, cardColor, isSelected, onSelect }: ThemeSwatchProps) {
+const FILTER_LABELS: Partial<Record<ThemeId, string>> = {
+  mono: 'GRAYSCALE',
+  redfilter: 'RED FILTER',
+}
+
+function ThemeSwatch({
+  themeId,
+  name,
+  description,
+  primaryColor,
+  bgColor,
+  cardColor,
+  previewFilter,
+  isSelected,
+  onSelect,
+}: ThemeSwatchProps) {
+  const filterLabel = FILTER_LABELS[themeId]
+
   return (
     <button
       onClick={() => onSelect(themeId)}
@@ -60,12 +79,14 @@ function ThemeSwatch({ themeId, name, description, primaryColor, bgColor, cardCo
           : 'border-border bg-secondary/20 hover:border-border/80 hover:bg-secondary/40'
       }`}
     >
-      {/* Mini preview */}
+      {/* Mini preview — filter applied here so it shows correctly from any active theme */}
       <div
-        className="h-16 w-full rounded-lg overflow-hidden"
-        style={{ backgroundColor: bgColor }}
+        className="h-16 w-full rounded-lg overflow-hidden relative"
+        style={{
+          backgroundColor: bgColor,
+          filter: previewFilter ?? 'none',
+        }}
       >
-        {/* Fake card inside preview */}
         <div
           className="m-1.5 rounded-md p-1.5"
           style={{ backgroundColor: cardColor }}
@@ -77,6 +98,14 @@ function ThemeSwatch({ themeId, name, description, primaryColor, bgColor, cardCo
           <div className="h-1 w-12 rounded-full mb-1 opacity-20" style={{ backgroundColor: '#ffffff' }} />
           <div className="h-2 w-10 rounded-full" style={{ backgroundColor: primaryColor, opacity: 0.9 }} />
         </div>
+
+        {/* Filter badge inside preview */}
+        {filterLabel && (
+          <div className="absolute bottom-1 right-1.5 text-[7px] font-bold tracking-wider opacity-70"
+            style={{ color: '#ffffff' }}>
+            {filterLabel}
+          </div>
+        )}
       </div>
 
       <div>
