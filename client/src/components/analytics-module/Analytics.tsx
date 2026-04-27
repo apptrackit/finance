@@ -1,7 +1,9 @@
 import { useState, useMemo, useEffect } from 'react'
 import { Card, CardContent } from '../common/card'
 import { Button } from '../common/button'
-import { BarChart3, Calendar, ChevronLeft, ChevronRight } from 'lucide-react'
+import { BarChart3, Calendar, ChevronLeft, ChevronRight, SlidersHorizontal } from 'lucide-react'
+import { loadWidgetVisibility, saveWidgetVisibility, type WidgetId } from './widgetConfig'
+import { WidgetConfigPanel } from './WidgetConfigPanel'
 import { format, subMonths, addMonths, startOfMonth, endOfMonth, isWithinInterval, subYears, addYears, startOfYear, endOfYear, startOfWeek, endOfWeek, addWeeks } from 'date-fns'
 import { API_BASE_URL, apiFetch } from '../../config'
 import { convertToMasterCurrency as convertUtil } from './utils'
@@ -71,6 +73,18 @@ export function Analytics({
   const [selectedIncomeCategory, setSelectedIncomeCategory] = useState<string>('all')
   const [exchangeRates, setExchangeRates] = useState<Record<string, number>>({})
   const [selectedDate, setSelectedDate] = useState(new Date())
+  const [isConfigOpen, setIsConfigOpen] = useState(false)
+  const [widgetVisibility, setWidgetVisibility] = useState<Record<WidgetId, boolean>>(loadWidgetVisibility)
+
+  const toggleWidget = (id: WidgetId) => {
+    setWidgetVisibility(prev => {
+      const next = { ...prev, [id]: !prev[id] }
+      saveWidgetVisibility(next)
+      return next
+    })
+  }
+
+  const show = (id: WidgetId) => widgetVisibility[id]
 
   const customDateRange = useMemo(() => {
     if (period === 'month') {
@@ -612,15 +626,45 @@ export function Analytics({
 
   const hasData = filteredTransactions.length > 0
 
+  const widgetHasData: Record<WidgetId, boolean> = {
+    'summary-cards':          hasData,
+    'cash-balance-trend':     cashBalanceTrendData.length > 0,
+    'cash-balance-forecast':  isCurrentMonthView,
+    'income-chart':           incomeChartData.some(d => d.amount > 0),
+    'expenses-chart':         expensesChartData.some(d => d.amount > 0),
+    'account-trends':         perAccountTrendData.length > 0,
+    'income-breakdown':       incomeCategoryData.length > 0,
+    'spending-breakdown':     categoryData.length > 0,
+    'spending-estimates':     !!(weekEstimate || monthEstimate),
+    'top-expenses':           filteredTransactions.filter(t => t.amount < 0).length > 0,
+  }
+
   if (loading) return <AnalyticsSkeleton />
 
   return (
     <div className="space-y-6">
+      <WidgetConfigPanel
+        isOpen={isConfigOpen}
+        onClose={() => setIsConfigOpen(false)}
+        visibility={widgetVisibility}
+        onToggle={toggleWidget}
+        widgetHasData={widgetHasData}
+      />
+
       {/* Period Selector */}
       <div className="flex flex-col items-start gap-3">
-        <div className="flex items-center gap-2">
-          <BarChart3 className="h-5 w-5 text-primary" />
-          <h2 className="text-lg font-semibold">Analytics</h2>
+        <div className="flex items-center justify-between w-full">
+          <div className="flex items-center gap-2">
+            <BarChart3 className="h-5 w-5 text-primary" />
+            <h2 className="text-lg font-semibold">Analytics</h2>
+          </div>
+          <button
+            onClick={() => setIsConfigOpen(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-secondary border border-transparent hover:border-border/60 transition-all"
+          >
+            <SlidersHorizontal className="h-3.5 w-3.5" />
+            Customize
+          </button>
         </div>
         <div className="flex flex-col sm:flex-row items-center gap-2 w-full sm:w-auto">
           <div className="flex gap-1 p-1 rounded-xl bg-background/80 border border-border/70 shadow-inner w-full sm:w-auto">
@@ -678,21 +722,25 @@ export function Analytics({
         </Card>
       ) : (
         <>
-          <SummaryCards 
-            totalIncome={totalIncome}
-            totalExpenses={totalExpenses}
-            netFlow={netFlow}
-            masterCurrency={masterCurrency}
-          />
+          {show('summary-cards') && (
+            <SummaryCards
+              totalIncome={totalIncome}
+              totalExpenses={totalExpenses}
+              netFlow={netFlow}
+              masterCurrency={masterCurrency}
+            />
+          )}
 
           <div className="grid gap-4 sm:gap-6 grid-cols-1 lg:grid-cols-2">
-            <NetWorthTrendChart 
-              data={cashBalanceTrendData}
-              masterCurrency={masterCurrency}
-              title="Cash Balance Trend"
-            />
+            {show('cash-balance-trend') && (
+              <NetWorthTrendChart
+                data={cashBalanceTrendData}
+                masterCurrency={masterCurrency}
+                title="Cash Balance Trend"
+              />
+            )}
 
-            {isCurrentMonthView && (
+            {show('cash-balance-forecast') && isCurrentMonthView && (
               <PredictionChart
                 transactions={transactions}
                 accounts={accounts}
@@ -702,23 +750,27 @@ export function Analytics({
               />
             )}
 
-            <IncomeChart 
-              data={incomeChartData}
-              selectedCategory={selectedIncomeCategory}
-              onCategoryChange={setSelectedIncomeCategory}
-              categories={incomeCategories}
-              masterCurrency={masterCurrency}
-            />
+            {show('income-chart') && (
+              <IncomeChart
+                data={incomeChartData}
+                selectedCategory={selectedIncomeCategory}
+                onCategoryChange={setSelectedIncomeCategory}
+                categories={incomeCategories}
+                masterCurrency={masterCurrency}
+              />
+            )}
 
-            <ExpensesChart 
-              data={expensesChartData}
-              selectedCategory={selectedExpenseCategory}
-              onCategoryChange={setSelectedExpenseCategory}
-              categories={expenseCategories}
-              masterCurrency={masterCurrency}
-            />
+            {show('expenses-chart') && (
+              <ExpensesChart
+                data={expensesChartData}
+                selectedCategory={selectedExpenseCategory}
+                onCategoryChange={setSelectedExpenseCategory}
+                categories={expenseCategories}
+                masterCurrency={masterCurrency}
+              />
+            )}
 
-            {perAccountTrendData.map(({ account, data }, index) => (
+            {show('account-trends') && perAccountTrendData.map(({ account, data }, index) => (
               <PerAccountTrendChart
                 key={account.id}
                 account={account}
@@ -730,29 +782,37 @@ export function Analytics({
               />
             ))}
 
-            <IncomeBreakdownChart 
-              data={incomeCategoryData}
-              masterCurrency={masterCurrency}
-            />
+            {show('income-breakdown') && (
+              <IncomeBreakdownChart
+                data={incomeCategoryData}
+                masterCurrency={masterCurrency}
+              />
+            )}
 
-            <CategoryBreakdownChart 
-              data={categoryData}
-              masterCurrency={masterCurrency}
-            />
+            {show('spending-breakdown') && (
+              <CategoryBreakdownChart
+                data={categoryData}
+                masterCurrency={masterCurrency}
+              />
+            )}
           </div>
 
-          <SpendingEstimates 
-            weekEstimate={weekEstimate}
-            monthEstimate={monthEstimate}
-            masterCurrency={masterCurrency}
-          />
+          {show('spending-estimates') && (
+            <SpendingEstimates
+              weekEstimate={weekEstimate}
+              monthEstimate={monthEstimate}
+              masterCurrency={masterCurrency}
+            />
+          )}
 
-          <TopExpensesList 
-            transactions={filteredTransactions}
-            categories={categories}
-            masterCurrency={masterCurrency}
-            convertToMasterCurrency={convertToMasterCurrency}
-          />
+          {show('top-expenses') && (
+            <TopExpensesList
+              transactions={filteredTransactions}
+              categories={categories}
+              masterCurrency={masterCurrency}
+              convertToMasterCurrency={convertToMasterCurrency}
+            />
+          )}
         </>
       )}
     </div>
