@@ -71,6 +71,10 @@ function App() {
   } = useFinanceData(dateRange, masterCurrency)
 
   useEffect(() => {
+    window.scrollTo({ top: 0, behavior: 'instant' })
+  }, [view])
+
+  useEffect(() => {
     setMasterCurrency(getMasterCurrency())
   }, [])
 
