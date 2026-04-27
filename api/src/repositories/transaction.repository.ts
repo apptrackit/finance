@@ -22,7 +22,7 @@ export class TransactionRepository {
   }
 
   async findAll(): Promise<Transaction[]> {
-    const { results } = await this.db.prepare('SELECT * FROM transactions ORDER BY date DESC').all<RawTransactionRow>()
+    const { results } = await this.db.prepare('SELECT * FROM transactions ORDER BY date DESC, rowid DESC').all<RawTransactionRow>()
     return results.map(r => this.mapTransaction(r))
   }
 
@@ -96,7 +96,7 @@ export class TransactionRepository {
     const order = sortOrder.toLowerCase() === 'asc' ? 'ASC' : 'DESC'
 
     const { results } = await this.db.prepare(
-      `SELECT * FROM transactions ORDER BY ${field} ${order} LIMIT ? OFFSET ?`
+      `SELECT * FROM transactions ORDER BY ${field} ${order}, rowid DESC LIMIT ? OFFSET ?`
     ).bind(limit, offset).all<RawTransactionRow>()
     return results.map(r => this.mapTransaction(r))
   }
@@ -120,7 +120,7 @@ export class TransactionRepository {
       params.push(categoryId)
     }
 
-    query += ' ORDER BY date DESC'
+    query += ' ORDER BY date DESC, rowid DESC'
 
     const { results } = await this.db.prepare(query).bind(...params).all<RawTransactionRow>()
     return results.map(r => this.mapTransaction(r))
@@ -140,7 +140,7 @@ export class TransactionRepository {
       params.push(categoryId)
     }
 
-    query += ' ORDER BY date DESC'
+    query += ' ORDER BY date DESC, rowid DESC'
 
     const { results } = await this.db.prepare(query).bind(...params).all<RawTransactionRow>()
     return results.map(r => this.mapTransaction(r))

@@ -113,6 +113,20 @@ export class AccountService {
     return updatedAccount
   }
 
+  async lockAccount(id: string): Promise<Account> {
+    await this.accountRepo.setLocked(id, true)
+    const account = await this.accountRepo.findById(id)
+    if (!account) throw AppError.notFound('ACCOUNT_NOT_FOUND', `Account ${id} not found`)
+    return account
+  }
+
+  async unlockAccount(id: string): Promise<Account> {
+    await this.accountRepo.setLocked(id, false)
+    const account = await this.accountRepo.findById(id)
+    if (!account) throw AppError.notFound('ACCOUNT_NOT_FOUND', `Account ${id} not found`)
+    return account
+  }
+
   async deleteAccount(id: string): Promise<void> {
     // Delete associated transactions first
     await this.transactionRepo.deleteByAccountId(id)
