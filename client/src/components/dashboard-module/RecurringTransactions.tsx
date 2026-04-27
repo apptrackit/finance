@@ -64,12 +64,14 @@ const DAYS_OF_WEEK = [
   { value: 6, label: 'Saturday' }
 ]
 
-export function RecurringTransactions({ 
-  accounts, 
-  categories 
-}: { 
+export function RecurringTransactions({
+  accounts,
+  categories,
+  dataLoading = false
+}: {
   accounts: Account[]
   categories: Category[]
+  dataLoading?: boolean
 }) {
   const { confirm, showAlert } = useAlert()
   const [schedules, setSchedules] = useState<RecurringSchedule[]>([])
@@ -971,17 +973,21 @@ export function RecurringTransactions({
   return (
     <div className="space-y-6">
       {/* Expenses and Income */}
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className="grid gap-4 md:grid-cols-2 animate-pulse-once">
         <Card className="p-4 border-destructive/20">
           <div className="flex items-center justify-between mb-2">
             <span className="text-sm font-medium text-muted-foreground">Next 30 Days Expenses</span>
             <TrendingDown className="h-4 w-4 text-destructive" />
           </div>
-          <div className="text-2xl font-bold text-destructive">
-            <span className={privacyMode === 'hidden' ? 'select-none' : ''}>
-              {privacyMode === 'hidden' ? '••••••' : (totalExpenses > 0 ? '-' : '') + totalExpenses.toLocaleString('hu-HU', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
-            </span>
-          </div>
+          {dataLoading ? (
+            <div className="h-8 w-28 rounded bg-muted animate-pulse mt-1" />
+          ) : (
+            <div className="text-2xl font-bold text-destructive">
+              <span className={privacyMode === 'hidden' ? 'select-none' : ''}>
+                {privacyMode === 'hidden' ? '••••••' : (totalExpenses > 0 ? '-' : '') + totalExpenses.toLocaleString('hu-HU', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+              </span>
+            </div>
+          )}
           <p className="text-xs text-muted-foreground mt-1">From recurring schedules</p>
         </Card>
 
@@ -990,11 +996,15 @@ export function RecurringTransactions({
             <span className="text-sm font-medium text-muted-foreground">Next 30 Days Income</span>
             <TrendingUp className="h-4 w-4 text-success" />
           </div>
-          <div className="text-2xl font-bold text-success">
-            <span className={privacyMode === 'hidden' ? 'select-none' : ''}>
-              {privacyMode === 'hidden' ? '••••••' : (totalIncome > 0 ? '+' : '') + totalIncome.toLocaleString('hu-HU', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
-            </span>
-          </div>
+          {dataLoading ? (
+            <div className="h-8 w-28 rounded bg-muted animate-pulse mt-1" />
+          ) : (
+            <div className="text-2xl font-bold text-success">
+              <span className={privacyMode === 'hidden' ? 'select-none' : ''}>
+                {privacyMode === 'hidden' ? '••••••' : (totalIncome > 0 ? '+' : '') + totalIncome.toLocaleString('hu-HU', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+              </span>
+            </div>
+          )}
           <p className="text-xs text-muted-foreground mt-1">From recurring schedules</p>
         </Card>
       </div>
@@ -1447,7 +1457,30 @@ export function RecurringTransactions({
       )}
 
       {loading ? (
-        <div className="text-center py-8 text-muted-foreground">Loading...</div>
+        <div className="space-y-2 animate-pulse">
+          {['Monthly', 'Yearly'].map(freq => (
+            <div key={freq} className="space-y-2">
+              <div className="h-3 w-16 rounded bg-muted mx-1" />
+              {[0, 1].map(i => (
+                <div key={i} className="rounded-xl border bg-card overflow-hidden">
+                  <div className="flex items-center gap-3 p-3">
+                    <div className="h-8 w-8 rounded-full bg-muted shrink-0" />
+                    <div className="flex-1 space-y-1.5">
+                      <div className="h-3.5 w-32 rounded bg-muted" />
+                      <div className="h-3 w-24 rounded bg-muted/70" />
+                    </div>
+                    <div className="h-4 w-20 rounded bg-muted shrink-0" />
+                  </div>
+                  <div className="flex border-t divide-x">
+                    {[0,1,2].map(j => (
+                      <div key={j} className="flex-1 h-8 bg-muted/30" />
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
       ) : schedules.length === 0 ? (
         <Card className="p-8 text-center">
           <Clock className="h-12 w-12 mx-auto text-muted-foreground mb-4" />

@@ -378,11 +378,11 @@ function App() {
               </div>
             </div>
           ) : view === 'analytics' ? (
-            <Analytics transactions={allTransactions} categories={categories} accounts={accounts} masterCurrency={masterCurrency} />
+            <Analytics transactions={allTransactions} categories={categories} accounts={accounts} masterCurrency={masterCurrency} loading={transactionsLoading} />
           ) : view === 'investments' ? (
             <Investments key={investmentRefreshKey} />
           ) : view === 'recurring' ? (
-            <RecurringTransactions accounts={accounts} categories={categories} />
+            <RecurringTransactions accounts={accounts} categories={categories} dataLoading={transactionsLoading} />
           ) : view === 'budget' ? (
             <Budget accounts={accounts} categories={categories} transactions={allTransactions} masterCurrency={masterCurrency} />
           ) : (

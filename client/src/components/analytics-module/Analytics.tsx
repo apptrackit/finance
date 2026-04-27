@@ -22,13 +22,49 @@ type AnalyticsProps = {
   categories: Category[]
   accounts: Account[]
   masterCurrency?: string
+  loading?: boolean
 }
 
-export function Analytics({ 
+function AnalyticsSkeleton() {
+  return (
+    <div className="space-y-6 animate-pulse">
+      {/* Header */}
+      <div className="flex flex-col items-start gap-3">
+        <div className="flex items-center gap-2">
+          <div className="h-5 w-5 rounded bg-muted" />
+          <div className="h-5 w-24 rounded bg-muted" />
+        </div>
+        <div className="flex gap-1 p-1 rounded-xl bg-muted/40 border border-border/40 w-full sm:w-64 h-9" />
+      </div>
+      {/* Summary cards */}
+      <div className="grid grid-cols-3 gap-3 sm:gap-4">
+        {[0,1,2].map(i => (
+          <div key={i} className="rounded-xl border bg-card p-4 space-y-2">
+            <div className="h-3 w-16 rounded bg-muted" />
+            <div className="h-7 w-24 rounded bg-muted" />
+            <div className="h-3 w-12 rounded bg-muted" />
+          </div>
+        ))}
+      </div>
+      {/* Chart grid */}
+      <div className="grid gap-4 sm:gap-6 grid-cols-1 lg:grid-cols-2">
+        {[0,1,2,3].map(i => (
+          <div key={i} className="rounded-xl border bg-card p-4 space-y-3">
+            <div className="h-4 w-32 rounded bg-muted" />
+            <div className="h-48 w-full rounded-lg bg-muted/60" />
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+export function Analytics({
   transactions,
   categories,
   accounts,
-  masterCurrency = 'HUF'
+  masterCurrency = 'HUF',
+  loading = false
 }: AnalyticsProps) {
   const [period, setPeriod] = useState<TimePeriod>('month')
   const [selectedExpenseCategory, setSelectedExpenseCategory] = useState<string>('all')
@@ -575,6 +611,8 @@ export function Analytics({
       : 'All Time'
 
   const hasData = filteredTransactions.length > 0
+
+  if (loading) return <AnalyticsSkeleton />
 
   return (
     <div className="space-y-6">
