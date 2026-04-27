@@ -10,7 +10,7 @@ import { usePrivacy } from './context/PrivacyContext'
 import { startOfMonth, endOfMonth, format } from 'date-fns'
 import { Budget } from './components/budget-module/Budget'
 import { useFinanceData } from './hooks/useFinanceData'
-import { version as APP_VERSION } from '../../package.json'
+
 const MENU_STORAGE_KEY = 'finance_visible_menus'
 
 type View = 'dashboard' | 'analytics' | 'settings' | 'investments' | 'recurring' | 'budget'
@@ -37,13 +37,15 @@ const getVisibleMenus = (): Record<MenuKey, boolean> => {
 
 function App() {
   const [view, setView] = useState<View>(() => {
-    const lastView = localStorage.getItem('finance_last_view') as View | null
-    if (lastView) {
-      localStorage.removeItem('finance_last_view')
-      return lastView
-    }
-    return 'dashboard'
+    const saved = localStorage.getItem('finance_last_view') as View | null
+    const validViews: View[] = ['dashboard', 'analytics', 'settings', 'investments', 'recurring', 'budget']
+    return (saved && validViews.includes(saved)) ? saved : 'dashboard'
   })
+
+  const navigateTo = (v: View) => {
+    localStorage.setItem('finance_last_view', v)
+    setView(v)
+  }
   const [masterCurrency, setMasterCurrency] = useState('HUF')
   const [showNetWorth, setShowNetWorth] = useState(false)
   const [visibleMenus, setVisibleMenus] = useState<Record<MenuKey, boolean>>(getVisibleMenus)
@@ -88,7 +90,7 @@ function App() {
     const menuOrder: MenuKey[] = ['dashboard', 'analytics', 'investments', 'recurring', 'budget']
     if (view !== 'settings' && !visibleMenus[view]) {
       const next = menuOrder.find(key => visibleMenus[key]) || 'dashboard'
-      setView(next)
+      navigateTo(next)
     }
   }, [visibleMenus, view])
 
@@ -160,7 +162,7 @@ function App() {
                   {navItems.filter(n => visibleMenus[n.key]).map(n => (
                     <button
                       key={n.key}
-                      onClick={() => setView(n.key)}
+                      onClick={() => navigateTo(n.key)}
                       className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all flex items-center gap-1.5 ${
                         view === n.key
                           ? 'bg-primary text-primary-foreground shadow-sm'
@@ -172,7 +174,7 @@ function App() {
                     </button>
                   ))}
                   <button
-                    onClick={() => setView('settings')}
+                    onClick={() => navigateTo('settings')}
                     className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all flex items-center gap-1.5 ${
                       view === 'settings'
                         ? 'bg-primary text-primary-foreground shadow-sm'
@@ -187,7 +189,7 @@ function App() {
                 {/* Mobile header — compact icon buttons */}
                 <div className="flex lg:hidden gap-0.5 p-0.5 rounded-lg bg-secondary/50 border border-border/50">
                   <button
-                    onClick={() => setView('settings')}
+                    onClick={() => navigateTo('settings')}
                     className={`px-2.5 py-2 text-xs font-medium rounded-md transition-all flex items-center gap-1 ${
                       view === 'settings'
                         ? 'bg-primary text-primary-foreground shadow-sm'
@@ -388,10 +390,7 @@ function App() {
           )}
         </main>
 
-        {/* Version Footer */}
-        <footer className="py-4 text-center text-xs text-muted-foreground">
-          <p>v{APP_VERSION}</p>
-        </footer>
+
       </div>
 
       {/* Mobile bottom navigation */}
@@ -400,7 +399,7 @@ function App() {
           {navItems.filter(n => visibleMenus[n.key]).map(n => (
             <button
               key={n.key}
-              onClick={() => setView(n.key)}
+              onClick={() => navigateTo(n.key)}
               className={`flex flex-col items-center gap-0.5 px-3 py-2 rounded-xl transition-all min-w-0 ${
                 view === n.key
                   ? 'text-primary'
