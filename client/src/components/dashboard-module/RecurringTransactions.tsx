@@ -336,23 +336,6 @@ export function RecurringTransactions({
 
   const getAccountName = (id: string) => accounts.find(a => a.id === id)?.name || 'Unknown'
 
-  const formatFrequency = (schedule: RecurringSchedule) => {
-    if (schedule.frequency === 'daily') return 'Daily'
-    if (schedule.frequency === 'weekly') {
-      const day = DAYS_OF_WEEK.find(d => d.value === schedule.day_of_week)
-      return `Weekly on ${day?.label || 'Unknown'}`
-    }
-    if (schedule.frequency === 'monthly') {
-      return `Monthly on day ${schedule.day_of_month}`
-    }
-    if (schedule.frequency === 'yearly') {
-      const targetMonth = schedule.month !== undefined ? schedule.month : new Date(schedule.created_at).getMonth()
-      const monthName = new Date(2000, targetMonth, 1).toLocaleDateString('en-US', { month: 'long' })
-      return `Yearly on ${monthName} ${schedule.day_of_month}`
-    }
-    return schedule.frequency
-  }
-
   const getNextOccurrence = (schedule: RecurringSchedule): Date | null => {
     const today = new Date()
     today.setHours(0, 0, 0, 0)
@@ -410,112 +393,6 @@ export function RecurringTransactions({
   const incomeCategories = categories.filter(c => c.type === 'income')
   const cashAccounts = accounts.filter(a => a.type === 'cash')
   const { privacyMode } = usePrivacy()
-
-  // Calculate end-of-month projections
-  const calculateEndOfMonthProjections = () => {
-    const today = new Date()
-    const endOfMonthDate = new Date(today.getFullYear(), today.getMonth() + 1, 0) // Last day of current month
-    
-    let projectedNetWorthChange = 0
-    let projectedCashChange = 0
-
-    // Only calculate for active schedules
-    schedules.filter(s => s.is_active).forEach(schedule => {
-      let currentDate = new Date(today)
-      let occurrences = 0
-
-      // Count occurrences until end of month
-      while (currentDate <= endOfMonthDate) {
-        const shouldProcess = (() => {
-          if (schedule.frequency === 'daily') return true
-          if (schedule.frequency === 'weekly') return currentDate.getDay() === schedule.day_of_week
-          if (schedule.frequency === 'monthly') {
-            const dayOfMonth = currentDate.getDate()
-            const lastDayOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0).getDate()
-            const targetDay = schedule.day_of_month!
-            if (targetDay > lastDayOfMonth) return dayOfMonth === lastDayOfMonth
-            return dayOfMonth === targetDay
-          }
-          if (schedule.frequency === 'yearly') {
-            const month = currentDate.getMonth()
-            const targetMonth = schedule.month !== undefined ? schedule.month : new Date(schedule.created_at).getMonth()
-            
-            if (month !== targetMonth) return false
-            
-            const dayOfMonth = currentDate.getDate()
-            const lastDayOfTargetMonth = new Date(currentDate.getFullYear(), month + 1, 0).getDate()
-            const targetDay = schedule.day_of_month!
-            if (targetDay > lastDayOfTargetMonth) return dayOfMonth === lastDayOfTargetMonth
-            return dayOfMonth === targetDay
-          }
-          return false
-        })()
-
-        // Check if we should process this date
-        if (shouldProcess && (!schedule.last_processed_date || toLocalDateString(currentDate) > schedule.last_processed_date)) {
-          // Check if end_date constraint applies
-          if (schedule.end_date && toLocalDateString(currentDate) > schedule.end_date) {
-            break
-          }
-          
-          // Check remaining_occurrences constraint
-          if (schedule.remaining_occurrences !== undefined && occurrences >= schedule.remaining_occurrences) {
-            break
-          }
-          
-          occurrences++
-        }
-
-        currentDate.setDate(currentDate.getDate() + 1)
-      }
-
-      // Calculate impact for this schedule
-      if (occurrences > 0) {
-        if (schedule.type === 'transaction') {
-          const account = accounts.find(a => a.id === schedule.account_id)
-          if (account && account.type === 'cash' && !(account.exclude_from_cash_balance && account.exclude_from_net_worth)) {
-            const totalAmount = schedule.amount * occurrences
-            projectedCashChange += totalAmount
-            
-            // Also affects net worth if not excluded
-            if (!account.exclude_from_net_worth) {
-              projectedNetWorthChange += totalAmount
-            }
-          }
-        } else if (schedule.type === 'transfer') {
-          // Transfers don't change net worth, but may affect cash balance
-          const fromAccount = accounts.find(a => a.id === schedule.account_id)
-          const toAccount = accounts.find(a => a.id === schedule.to_account_id)
-          
-          if (fromAccount && fromAccount.type === 'cash' && !(fromAccount.exclude_from_cash_balance && fromAccount.exclude_from_net_worth)) {
-            projectedCashChange -= schedule.amount * occurrences
-          }
-          
-          if (toAccount && toAccount.type === 'cash' && !(toAccount.exclude_from_cash_balance && toAccount.exclude_from_net_worth)) {
-            const amountTo = schedule.amount_to || schedule.amount
-            projectedCashChange += amountTo * occurrences
-          }
-        }
-      }
-    })
-
-    // Calculate current totals
-    const currentCash = cashAccounts
-      .filter(a => !(a.exclude_from_cash_balance && a.exclude_from_net_worth))
-      .reduce((sum, acc) => sum + acc.balance, 0)
-    
-    const currentNetWorth = accounts.reduce((sum, acc) => {
-      if (acc.exclude_from_net_worth) return sum
-      return sum + acc.balance
-    }, 0)
-
-    return {
-      projectedCash: currentCash + projectedCashChange,
-      projectedNetWorth: currentNetWorth + projectedNetWorthChange,
-      cashChange: projectedCashChange,
-      netWorthChange: projectedNetWorthChange
-    }
-  }
 
   // Calculate upcoming recurring amounts for next 30 days
   const calculateUpcomingImpact = () => {
