@@ -81,7 +81,7 @@ export function WidgetConfigPanel({
 
       {/* Panel */}
       <div
-        className={`fixed top-0 right-0 z-50 h-full w-full max-w-sm bg-card border-l border-border shadow-2xl flex flex-col transition-transform duration-300 ease-in-out ${
+        className={`fixed top-0 right-0 bottom-16 lg:bottom-0 z-50 w-full max-w-sm bg-card border-l border-border shadow-2xl flex flex-col transition-transform duration-300 ease-in-out rounded-bl-2xl lg:rounded-none ${
           isOpen ? 'translate-x-0' : 'translate-x-full'
         }`}
       >
