@@ -840,6 +840,8 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
                             <Button
                               size="icon"
                               variant="ghost"
+                              title="Edit account"
+                              aria-label="Edit account"
                               className="h-10 w-10 hover:bg-emerald-500/20"
                               onClick={(e) => {
                                 e.stopPropagation()
@@ -854,6 +856,8 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
                             <Button
                               size="icon"
                               variant="ghost"
+                              title="Delete account"
+                              aria-label="Delete account"
                               className="h-10 w-10 text-destructive hover:text-destructive hover:bg-red-500/10"
                               disabled={deletingId === account.id}
                               onClick={(e) => {
@@ -998,6 +1002,8 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
                             <Button
                               size="icon"
                               variant="ghost"
+                              title="Edit account"
+                              aria-label="Edit account"
                               className="h-10 w-10 hover:bg-blue-500/20"
                               onClick={(e) => {
                                 e.stopPropagation()
@@ -1012,6 +1018,8 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
                             <Button
                               size="icon"
                               variant="ghost"
+                              title="Delete account"
+                              aria-label="Delete account"
                               className="h-10 w-10 text-destructive hover:text-destructive hover:bg-red-500/10"
                               disabled={deletingId === account.id}
                               onClick={(e) => {
