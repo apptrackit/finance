@@ -5,7 +5,7 @@ import { Label } from '../common/label'
 import { Select } from '../common/select'
 import { Card, CardContent, CardHeader, CardTitle } from '../common/card'
 import { Modal } from '../common/modal'
-import { Plus, X, Wallet, Building, Pencil, Trash2, Check, Search, Lock, LockOpen, CircleCheck, CircleX, ChevronDown } from 'lucide-react'
+import { Plus, X, Wallet, Building, Pencil, Trash2, Check, Search, Lock, LockOpen, CircleCheck, CircleX, ChevronDown, Loader2 } from 'lucide-react'
 import { API_BASE_URL, apiFetch } from '../../config'
 import { usePrivacy } from '../../context/PrivacyContext'
 import { useAlert } from '../../context/AlertContext'
@@ -86,6 +86,7 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
   } | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [lockingId, setLockingId] = useState<string | null>(null)
   const [isCollapsed, setIsCollapsed] = useState(true)
 
   const { privacyMode, shouldHideInvestment } = usePrivacy()
@@ -386,14 +387,18 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
         confirmText: 'Unlock',
         cancelText: 'Cancel'
       })
-      
-      if (confirmed) {
+      if (!confirmed) return
+    }
+    setLockingId(accountId)
+    try {
+      if (isLocked(accountId)) {
         await apiFetch(`${API_BASE_URL}/accounts/${accountId}/unlock`, { method: 'PATCH' })
-        onAccountAdded()
+      } else {
+        await apiFetch(`${API_BASE_URL}/accounts/${accountId}/lock`, { method: 'PATCH' })
       }
-    } else {
-      await apiFetch(`${API_BASE_URL}/accounts/${accountId}/lock`, { method: 'PATCH' })
       onAccountAdded()
+    } finally {
+      setLockingId(null)
     }
   }
 
@@ -816,6 +821,7 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
                         <Button
                           size="icon"
                           variant="ghost"
+                          disabled={lockingId === account.id}
                           className={`h-10 w-10 ${isLocked(account.id) ? 'text-amber-500 hover:bg-amber-500/20' : 'hover:bg-emerald-500/20'}`}
                           onClick={(e) => {
                             e.stopPropagation()
@@ -826,7 +832,7 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
                           }}
                           title={isLocked(account.id) ? 'Unlock account' : 'Lock account'}
                         >
-                          {isLocked(account.id) ? <Lock className="h-4 w-4" /> : <LockOpen className="h-4 w-4" />}
+                          {lockingId === account.id ? <Loader2 className="h-4 w-4 animate-spin" /> : isLocked(account.id) ? <Lock className="h-4 w-4" /> : <LockOpen className="h-4 w-4" />}
                         </Button>
                         {!isLocked(account.id) && (
                           <>
@@ -973,6 +979,7 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
                         <Button
                           size="icon"
                           variant="ghost"
+                          disabled={lockingId === account.id}
                           className={`h-10 w-10 ${isLocked(account.id) ? 'text-amber-500 hover:bg-amber-500/20' : 'hover:bg-blue-500/20'}`}
                           onClick={(e) => {
                             e.stopPropagation()
@@ -983,7 +990,7 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
                           }}
                           title={isLocked(account.id) ? 'Unlock account' : 'Lock account'}
                         >
-                          {isLocked(account.id) ? <Lock className="h-4 w-4" /> : <LockOpen className="h-4 w-4" />}
+                          {lockingId === account.id ? <Loader2 className="h-4 w-4 animate-spin" /> : isLocked(account.id) ? <Lock className="h-4 w-4" /> : <LockOpen className="h-4 w-4" />}
                         </Button>
                         {!isLocked(account.id) && (
                           <>

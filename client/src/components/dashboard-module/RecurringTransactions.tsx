@@ -5,7 +5,7 @@ import { Card } from '../common/card'
 import { Input } from '../common/input'
 import { Label } from '../common/label'
 import { Select } from '../common/select'
-import { Plus, Trash2, Edit2, Clock, TrendingDown, TrendingUp, AlertTriangle, Calendar, ChevronLeft, ChevronRight, ChevronDown } from 'lucide-react'
+import { Plus, Trash2, Edit2, Clock, TrendingDown, TrendingUp, AlertTriangle, Calendar, ChevronLeft, ChevronRight, ChevronDown, Loader2 } from 'lucide-react'
 import { useAlert } from '../../context/AlertContext'
 import { usePrivacy } from '../../context/PrivacyContext'
 
@@ -82,6 +82,7 @@ export function RecurringTransactions({
   const [calendarMode, setCalendarMode] = useState<'30-day' | 'monthly'>('30-day')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [togglingId, setTogglingId] = useState<string | null>(null)
   const [schedulesExpanded, setSchedulesExpanded] = useState(false)
 
   const [formData, setFormData] = useState({
@@ -318,6 +319,7 @@ export function RecurringTransactions({
   }
 
   const toggleActive = async (schedule: RecurringSchedule) => {
+    setTogglingId(schedule.id)
     try {
       const res = await apiFetch(`${API_BASE_URL}/recurring-schedules/${schedule.id}`, {
         method: 'PUT',
@@ -331,6 +333,8 @@ export function RecurringTransactions({
     } catch (error) {
       showAlert({ type: 'error', message: 'An error occurred' })
       console.error(error)
+    } finally {
+      setTogglingId(null)
     }
   }
 
@@ -1443,9 +1447,13 @@ export function RecurringTransactions({
                 <div className="flex border-t divide-x">
                   <button
                     onClick={() => toggleActive(schedule)}
-                    className={`flex-1 py-2 text-xs font-medium transition-colors hover:bg-muted/60 ${schedule.is_active ? 'text-muted-foreground' : 'text-primary'}`}
+                    disabled={togglingId === schedule.id}
+                    className={`flex-1 py-2 text-xs font-medium transition-colors hover:bg-muted/60 disabled:opacity-50 disabled:cursor-not-allowed ${schedule.is_active ? 'text-muted-foreground' : 'text-primary'}`}
                   >
-                    {schedule.is_active ? 'Pause' : 'Activate'}
+                    {togglingId === schedule.id
+                      ? <Loader2 className="h-3.5 w-3.5 animate-spin mx-auto" />
+                      : schedule.is_active ? 'Pause' : 'Activate'
+                    }
                   </button>
                   <button
                     onClick={() => handleEdit(schedule)}

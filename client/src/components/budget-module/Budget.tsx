@@ -46,6 +46,7 @@ export function Budget({ accounts, categories, transactions, masterCurrency }: B
   const [error, setError] = useState<string | null>(null)
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [editingBudget, setEditingBudget] = useState<Budget | null>(null)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
   const [exchangeRates, setExchangeRates] = useState<Record<string, number>>({})
 
   const fetchBudgets = async () => {
@@ -184,6 +185,7 @@ export function Budget({ accounts, categories, transactions, masterCurrency }: B
   const handleDelete = async (budget: Budget) => {
     const confirmed = window.confirm(`Delete "${budget.name || formatBudgetPeriod(budget)}" budget?`)
     if (!confirmed) return
+    setDeletingId(budget.id)
     try {
       const res = await apiFetch(`${API_BASE_URL}/budgets/${budget.id}`, { method: 'DELETE' })
       if (!res.ok) {
@@ -193,6 +195,8 @@ export function Budget({ accounts, categories, transactions, masterCurrency }: B
       await fetchBudgets()
     } catch (err: any) {
       setError(err?.message || 'Failed to delete budget')
+    } finally {
+      setDeletingId(null)
     }
   }
 
@@ -209,8 +213,8 @@ export function Budget({ accounts, categories, transactions, masterCurrency }: B
           </div>
         </div>
         <div className="flex gap-2">
-          <Button variant="ghost" size="icon" onClick={fetchBudgets} className="h-9 w-9">
-            <RefreshCw className="h-4 w-4" />
+          <Button variant="ghost" size="icon" onClick={fetchBudgets} disabled={loading} className="h-9 w-9">
+            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
           </Button>
           <Button onClick={() => { setEditingBudget(null); setIsModalOpen(true) }} className="gap-2">
             <Plus className="h-4 w-4" />
@@ -263,6 +267,7 @@ export function Budget({ accounts, categories, transactions, masterCurrency }: B
                 currency={budget.currency || masterCurrency}
                 onEdit={handleEdit}
                 onDelete={handleDelete}
+                deletingId={deletingId}
               />
             )
           })}
