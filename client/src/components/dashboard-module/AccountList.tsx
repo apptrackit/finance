@@ -319,6 +319,7 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
       onAccountAdded()
     } catch (error) {
       console.error('Failed to save account', error)
+      showAlert({ type: 'error', message: 'Failed to save account. Please try again.' })
     } finally {
       setIsSubmitting(false)
     }
