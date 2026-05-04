@@ -110,7 +110,7 @@ export function TransactionList({
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [isAccountOpen, setIsAccountOpen] = useState(false)
   
-  const { confirm } = useAlert()
+  const { confirm, showAlert } = useAlert()
   const { privacyMode, shouldHideInvestment } = usePrivacy()
   const isLocked = (accountId: string) => accounts.find(a => a.id === accountId)?.is_locked ?? false
 
