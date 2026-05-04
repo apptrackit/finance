@@ -8,6 +8,7 @@ import { BudgetFormModal } from './BudgetFormModal'
 import type { Budget } from './types'
 import { formatBudgetPeriod } from './utils'
 import { convertToMasterCurrency as convertUtil } from '../analytics-module/utils'
+import { useAlert } from '../../context/AlertContext'
 
 type Account = {
   id: string
@@ -41,6 +42,7 @@ type BudgetProps = {
 }
 
 export function Budget({ accounts, categories, transactions, masterCurrency }: BudgetProps) {
+  const { confirm } = useAlert()
   const [budgets, setBudgets] = useState<Budget[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -183,7 +185,12 @@ export function Budget({ accounts, categories, transactions, masterCurrency }: B
   }
 
   const handleDelete = async (budget: Budget) => {
-    const confirmed = window.confirm(`Delete "${budget.name || formatBudgetPeriod(budget)}" budget?`)
+    const confirmed = await confirm({
+      title: 'Delete Budget',
+      message: `Delete "${budget.name || formatBudgetPeriod(budget)}" budget? This cannot be undone.`,
+      confirmText: 'Delete',
+      cancelText: 'Cancel',
+    })
     if (!confirmed) return
     setDeletingId(budget.id)
     try {
