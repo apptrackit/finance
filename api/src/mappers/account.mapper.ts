@@ -13,6 +13,7 @@ export class AccountMapper {
       asset_type: account.asset_type,
       exclude_from_net_worth: account.exclude_from_net_worth,
       exclude_from_cash_balance: account.exclude_from_cash_balance,
+      is_locked: account.is_locked,
       updated_at: account.updated_at
     }
   }

@@ -42,7 +42,7 @@ export function Modal({ isOpen, onClose, title, children, className }: ModalProp
       {/* Modal */}
       <div className={cn(
         "relative bg-card border border-border/50 rounded-xl shadow-2xl",
-        "w-full max-w-[calc(100%-1rem)] sm:max-w-2xl max-h-[90vh] overflow-y-auto",
+        "w-full max-w-[calc(100%-1rem)] sm:max-w-2xl max-h-[90vh] overflow-y-auto overflow-x-hidden",
         "mx-2 my-4 sm:m-4 animate-in fade-in-0 zoom-in-95",
         className
       )}>
@@ -52,6 +52,7 @@ export function Modal({ isOpen, onClose, title, children, className }: ModalProp
             <h2 className="text-lg sm:text-xl font-semibold text-foreground">{title}</h2>
             <button
               onClick={onClose}
+              aria-label="Close"
               className="text-muted-foreground hover:text-foreground transition-colors p-1 -mr-1"
             >
               <X className="h-5 w-5" />

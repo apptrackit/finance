@@ -5,7 +5,7 @@ import { Card } from '../common/card'
 import { Input } from '../common/input'
 import { Label } from '../common/label'
 import { Select } from '../common/select'
-import { Plus, Trash2, Edit2, Clock, TrendingDown, TrendingUp, AlertTriangle, Calendar, Wallet, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Plus, Trash2, Edit2, Clock, TrendingDown, TrendingUp, AlertTriangle, Calendar, ChevronLeft, ChevronRight, ChevronDown, Loader2 } from 'lucide-react'
 import { useAlert } from '../../context/AlertContext'
 import { usePrivacy } from '../../context/PrivacyContext'
 
@@ -64,12 +64,14 @@ const DAYS_OF_WEEK = [
   { value: 6, label: 'Saturday' }
 ]
 
-export function RecurringTransactions({ 
-  accounts, 
-  categories 
-}: { 
+export function RecurringTransactions({
+  accounts,
+  categories,
+  dataLoading = false
+}: {
   accounts: Account[]
   categories: Category[]
+  dataLoading?: boolean
 }) {
   const { confirm, showAlert } = useAlert()
   const [schedules, setSchedules] = useState<RecurringSchedule[]>([])
@@ -80,7 +82,8 @@ export function RecurringTransactions({
   const [calendarMode, setCalendarMode] = useState<'30-day' | 'monthly'>('30-day')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [deletingId, setDeletingId] = useState<string | null>(null)
-  const [showAllTransactions, setShowAllTransactions] = useState(false)
+  const [togglingId, setTogglingId] = useState<string | null>(null)
+  const [schedulesExpanded, setSchedulesExpanded] = useState(false)
 
   const [formData, setFormData] = useState({
     type: 'transaction' as 'transaction' | 'transfer',
@@ -316,6 +319,7 @@ export function RecurringTransactions({
   }
 
   const toggleActive = async (schedule: RecurringSchedule) => {
+    setTogglingId(schedule.id)
     try {
       const res = await apiFetch(`${API_BASE_URL}/recurring-schedules/${schedule.id}`, {
         method: 'PUT',
@@ -329,140 +333,70 @@ export function RecurringTransactions({
     } catch (error) {
       showAlert({ type: 'error', message: 'An error occurred' })
       console.error(error)
+    } finally {
+      setTogglingId(null)
     }
   }
 
   const getAccountName = (id: string) => accounts.find(a => a.id === id)?.name || 'Unknown'
 
-  const formatFrequency = (schedule: RecurringSchedule) => {
-    if (schedule.frequency === 'daily') return 'Daily'
-    if (schedule.frequency === 'weekly') {
-      const day = DAYS_OF_WEEK.find(d => d.value === schedule.day_of_week)
-      return `Weekly on ${day?.label || 'Unknown'}`
+  const getNextOccurrence = (schedule: RecurringSchedule): Date | null => {
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    const todayStr = toLocalDateString(today)
+
+    const start = new Date(today)
+    if (schedule.last_processed_date === todayStr) {
+      start.setDate(start.getDate() + 1)
     }
-    if (schedule.frequency === 'monthly') {
-      return `Monthly on day ${schedule.day_of_month}`
+
+    const maxDate = new Date(today)
+    maxDate.setFullYear(maxDate.getFullYear() + 2)
+
+    const current = new Date(start)
+    while (current <= maxDate) {
+      const dateStr = toLocalDateString(current)
+      if (schedule.end_date && dateStr > schedule.end_date) return null
+
+      const shouldOccur = (() => {
+        if (schedule.frequency === 'daily') return true
+        if (schedule.frequency === 'weekly') return current.getDay() === schedule.day_of_week
+        if (schedule.frequency === 'monthly') {
+          const lastDay = new Date(current.getFullYear(), current.getMonth() + 1, 0).getDate()
+          const target = schedule.day_of_month!
+          return current.getDate() === (target > lastDay ? lastDay : target)
+        }
+        if (schedule.frequency === 'yearly') {
+          const targetMonth = schedule.month !== undefined ? schedule.month : new Date(schedule.created_at).getMonth()
+          if (current.getMonth() !== targetMonth) return false
+          const lastDay = new Date(current.getFullYear(), targetMonth + 1, 0).getDate()
+          const target = schedule.day_of_month!
+          return current.getDate() === (target > lastDay ? lastDay : target)
+        }
+        return false
+      })()
+
+      if (shouldOccur) return new Date(current)
+      current.setDate(current.getDate() + 1)
     }
-    if (schedule.frequency === 'yearly') {
-      const targetMonth = schedule.month !== undefined ? schedule.month : new Date(schedule.created_at).getMonth()
-      const monthName = new Date(2000, targetMonth, 1).toLocaleDateString('en-US', { month: 'long' })
-      return `Yearly on ${monthName} ${schedule.day_of_month}`
-    }
-    return schedule.frequency
+    return null
+  }
+
+  const formatNextDate = (schedule: RecurringSchedule): string => {
+    const next = getNextOccurrence(schedule)
+    if (!next) return 'No upcoming'
+    const thisYear = new Date().getFullYear()
+    const mm = String(next.getMonth() + 1).padStart(2, '0')
+    const dd = String(next.getDate()).padStart(2, '0')
+    return next.getFullYear() === thisYear
+      ? `${mm}.${dd}`
+      : `${next.getFullYear()}.${mm}.${dd}`
   }
 
   const expenseCategories = categories.filter(c => c.type === 'expense')
   const incomeCategories = categories.filter(c => c.type === 'income')
   const cashAccounts = accounts.filter(a => a.type === 'cash')
   const { privacyMode } = usePrivacy()
-
-  // Calculate end-of-month projections
-  const calculateEndOfMonthProjections = () => {
-    const today = new Date()
-    const endOfMonthDate = new Date(today.getFullYear(), today.getMonth() + 1, 0) // Last day of current month
-    
-    let projectedNetWorthChange = 0
-    let projectedCashChange = 0
-
-    // Only calculate for active schedules
-    schedules.filter(s => s.is_active).forEach(schedule => {
-      let currentDate = new Date(today)
-      let occurrences = 0
-
-      // Count occurrences until end of month
-      while (currentDate <= endOfMonthDate) {
-        const shouldProcess = (() => {
-          if (schedule.frequency === 'daily') return true
-          if (schedule.frequency === 'weekly') return currentDate.getDay() === schedule.day_of_week
-          if (schedule.frequency === 'monthly') {
-            const dayOfMonth = currentDate.getDate()
-            const lastDayOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0).getDate()
-            const targetDay = schedule.day_of_month!
-            if (targetDay > lastDayOfMonth) return dayOfMonth === lastDayOfMonth
-            return dayOfMonth === targetDay
-          }
-          if (schedule.frequency === 'yearly') {
-            const month = currentDate.getMonth()
-            const targetMonth = schedule.month !== undefined ? schedule.month : new Date(schedule.created_at).getMonth()
-            
-            if (month !== targetMonth) return false
-            
-            const dayOfMonth = currentDate.getDate()
-            const lastDayOfTargetMonth = new Date(currentDate.getFullYear(), month + 1, 0).getDate()
-            const targetDay = schedule.day_of_month!
-            if (targetDay > lastDayOfTargetMonth) return dayOfMonth === lastDayOfTargetMonth
-            return dayOfMonth === targetDay
-          }
-          return false
-        })()
-
-        // Check if we should process this date
-        if (shouldProcess && (!schedule.last_processed_date || toLocalDateString(currentDate) > schedule.last_processed_date)) {
-          // Check if end_date constraint applies
-          if (schedule.end_date && toLocalDateString(currentDate) > schedule.end_date) {
-            break
-          }
-          
-          // Check remaining_occurrences constraint
-          if (schedule.remaining_occurrences !== undefined && occurrences >= schedule.remaining_occurrences) {
-            break
-          }
-          
-          occurrences++
-        }
-
-        currentDate.setDate(currentDate.getDate() + 1)
-      }
-
-      // Calculate impact for this schedule
-      if (occurrences > 0) {
-        if (schedule.type === 'transaction') {
-          const account = accounts.find(a => a.id === schedule.account_id)
-          if (account && account.type === 'cash' && !(account.exclude_from_cash_balance && account.exclude_from_net_worth)) {
-            const totalAmount = schedule.amount * occurrences
-            projectedCashChange += totalAmount
-            
-            // Also affects net worth if not excluded
-            if (!account.exclude_from_net_worth) {
-              projectedNetWorthChange += totalAmount
-            }
-          }
-        } else if (schedule.type === 'transfer') {
-          // Transfers don't change net worth, but may affect cash balance
-          const fromAccount = accounts.find(a => a.id === schedule.account_id)
-          const toAccount = accounts.find(a => a.id === schedule.to_account_id)
-          
-          if (fromAccount && fromAccount.type === 'cash' && !(fromAccount.exclude_from_cash_balance && fromAccount.exclude_from_net_worth)) {
-            projectedCashChange -= schedule.amount * occurrences
-          }
-          
-          if (toAccount && toAccount.type === 'cash' && !(toAccount.exclude_from_cash_balance && toAccount.exclude_from_net_worth)) {
-            const amountTo = schedule.amount_to || schedule.amount
-            projectedCashChange += amountTo * occurrences
-          }
-        }
-      }
-    })
-
-    // Calculate current totals
-    const currentCash = cashAccounts
-      .filter(a => !(a.exclude_from_cash_balance && a.exclude_from_net_worth))
-      .reduce((sum, acc) => sum + acc.balance, 0)
-    
-    const currentNetWorth = accounts.reduce((sum, acc) => {
-      if (acc.exclude_from_net_worth) return sum
-      return sum + acc.balance
-    }, 0)
-
-    return {
-      projectedCash: currentCash + projectedCashChange,
-      projectedNetWorth: currentNetWorth + projectedNetWorthChange,
-      cashChange: projectedCashChange,
-      netWorthChange: projectedNetWorthChange
-    }
-  }
-
-  const endOfMonthProjections = calculateEndOfMonthProjections()
 
   // Calculate upcoming recurring amounts for next 30 days
   const calculateUpcomingImpact = () => {
@@ -592,7 +526,7 @@ export function RecurringTransactions({
     return { accountImpact, totalExpenses, totalIncome, nextTransactions }
   }
 
-  const { accountImpact, totalExpenses, totalIncome, nextTransactions } = calculateUpcomingImpact()
+  const { accountImpact, totalExpenses, totalIncome } = calculateUpcomingImpact()
 
   // Check which accounts will be insufficient
   const insufficientAccounts = cashAccounts.filter(account => {
@@ -919,60 +853,22 @@ export function RecurringTransactions({
 
   return (
     <div className="space-y-6">
-      {/* Top Row - Projected Cash and Account Status */}
-      <div className="grid gap-4 md:grid-cols-2">
-        <Card className="p-4 border-emerald-500/20">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-sm font-medium text-muted-foreground">Projected Cash (End of Month)</span>
-            <Wallet className="h-4 w-4 text-emerald-500" />
-          </div>
-          <div className="flex items-baseline gap-2">
-            <div className="text-2xl font-bold text-foreground">
-              <span className={privacyMode === 'hidden' ? 'select-none' : ''}>
-                {privacyMode === 'hidden' 
-                  ? '••••••' 
-                  : endOfMonthProjections.projectedCash.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})}
-              </span>
-            </div>
-            {endOfMonthProjections.cashChange !== 0 && (
-              <span className={`text-sm font-medium ${endOfMonthProjections.cashChange > 0 ? 'text-success' : 'text-destructive'}`}>
-                {endOfMonthProjections.cashChange > 0 ? '+' : ''}{endOfMonthProjections.cashChange.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})}
-              </span>
-            )}
-          </div>
-          <p className="text-xs text-muted-foreground mt-1">Based on recurring schedules</p>
-        </Card>
-
-        <Card className={`p-4 ${insufficientAccounts.length > 0 ? 'border-destructive/50 bg-destructive/5' : 'border-success/20'}`}>
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-sm font-medium text-muted-foreground">Account Status</span>
-            {insufficientAccounts.length > 0 ? (
-              <AlertTriangle className="h-4 w-4 text-destructive" />
-            ) : (
-              <Calendar className="h-4 w-4 text-success" />
-            )}
-          </div>
-          <div className={`text-2xl font-bold ${insufficientAccounts.length > 0 ? 'text-destructive' : 'text-success'}`}>
-            {insufficientAccounts.length > 0 ? `${insufficientAccounts.length} Warning${insufficientAccounts.length > 1 ? 's' : ''}` : 'All Good'}
-          </div>
-          <p className="text-xs text-muted-foreground mt-1">
-            {insufficientAccounts.length > 0 ? 'Insufficient balance projected' : 'All accounts have sufficient funds'}
-          </p>
-        </Card>
-      </div>
-
-      {/* Bottom Row - Expenses and Income */}
-      <div className="grid gap-4 md:grid-cols-2">
+      {/* Expenses and Income */}
+      <div className="grid gap-4 md:grid-cols-2 animate-pulse-once">
         <Card className="p-4 border-destructive/20">
           <div className="flex items-center justify-between mb-2">
             <span className="text-sm font-medium text-muted-foreground">Next 30 Days Expenses</span>
             <TrendingDown className="h-4 w-4 text-destructive" />
           </div>
-          <div className="text-2xl font-bold text-destructive">
-            <span className={privacyMode === 'hidden' ? 'select-none' : ''}>
-              {privacyMode === 'hidden' ? '••••••' : (totalExpenses > 0 ? '-' : '') + totalExpenses.toLocaleString('hu-HU', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
-            </span>
-          </div>
+          {dataLoading ? (
+            <div className="h-8 w-28 rounded bg-muted animate-pulse mt-1" />
+          ) : (
+            <div className="text-2xl font-bold text-destructive">
+              <span className={privacyMode === 'hidden' ? 'select-none' : ''}>
+                {privacyMode === 'hidden' ? '••••••' : (totalExpenses > 0 ? '-' : '') + totalExpenses.toLocaleString('hu-HU', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+              </span>
+            </div>
+          )}
           <p className="text-xs text-muted-foreground mt-1">From recurring schedules</p>
         </Card>
 
@@ -981,133 +877,73 @@ export function RecurringTransactions({
             <span className="text-sm font-medium text-muted-foreground">Next 30 Days Income</span>
             <TrendingUp className="h-4 w-4 text-success" />
           </div>
-          <div className="text-2xl font-bold text-success">
-            <span className={privacyMode === 'hidden' ? 'select-none' : ''}>
-              {privacyMode === 'hidden' ? '••••••' : (totalIncome > 0 ? '+' : '') + totalIncome.toLocaleString('hu-HU', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
-            </span>
-          </div>
+          {dataLoading ? (
+            <div className="h-8 w-28 rounded bg-muted animate-pulse mt-1" />
+          ) : (
+            <div className="text-2xl font-bold text-success">
+              <span className={privacyMode === 'hidden' ? 'select-none' : ''}>
+                {privacyMode === 'hidden' ? '••••••' : (totalIncome > 0 ? '+' : '') + totalIncome.toLocaleString('hu-HU', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+              </span>
+            </div>
+          )}
           <p className="text-xs text-muted-foreground mt-1">From recurring schedules</p>
         </Card>
       </div>
 
-      {/* Account Breakdown */}
-      {Object.keys(accountImpact).some(id => accountImpact[id].debits > 0 || accountImpact[id].credits > 0) && (
-        <Card className="p-4">
-          <h3 className="font-semibold mb-3 flex items-center gap-2">
-            <TrendingDown className="h-4 w-4" />
-            Account Impact (Next 30 Days)
-          </h3>
-          <div className="space-y-2">
-            {cashAccounts.filter(account => accountImpact[account.id]?.debits > 0 || accountImpact[account.id]?.credits > 0).map(account => {
-              const impact = accountImpact[account.id]
-              const projectedBalance = account.balance - impact.debits + impact.credits
-              const isInsufficient = projectedBalance < 0
+      {/* Account Status - only shown when there are warnings */}
+      {insufficientAccounts.length > 0 && (
+        <Card className="p-4 border-destructive/50 bg-destructive/5">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-sm font-medium text-muted-foreground">Account Status</span>
+            <AlertTriangle className="h-4 w-4 text-destructive" />
+          </div>
+          <div className="text-2xl font-bold text-destructive">
+            {insufficientAccounts.length} Warning{insufficientAccounts.length > 1 ? 's' : ''}
+          </div>
+          <p className="text-xs text-muted-foreground mt-1">Insufficient balance projected</p>
+        </Card>
+      )}
 
-              return (
-                <div key={account.id} className={`flex items-center justify-between p-2 rounded ${isInsufficient ? 'bg-destructive/10' : 'bg-muted/50'}`}>
-                  <div className="flex-1">
-                    <div className="font-medium flex items-center gap-2">
-                      {account.name}
-                      {isInsufficient && <AlertTriangle className="h-3 w-3 text-destructive" />}
-                    </div>
-                    <div className="text-xs text-muted-foreground">
-                      Current: <span className={privacyMode === 'hidden' ? 'select-none' : ''}>
-                        {privacyMode === 'hidden' ? '••••' : account.balance.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})}
-                      </span> {account.currency}
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <div className="text-xs space-x-2">
-                      {impact.debits > 0 && (
-                        <span className={`text-destructive ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
-                          {privacyMode === 'hidden' ? '-••••' : `-${impact.debits.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})}`}
-                        </span>
-                      )}
-                      {impact.credits > 0 && (
-                        <span className={`text-success ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
-                          {privacyMode === 'hidden' ? '+••••' : `+${impact.credits.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})}`}
-                        </span>
-                      )}
-                    </div>
-                    <div className={`text-sm font-medium ${isInsufficient ? 'text-destructive' : ''}`}>
-                      → <span className={privacyMode === 'hidden' ? 'select-none' : ''}>
-                        {privacyMode === 'hidden' ? '••••' : projectedBalance.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})}
-                      </span> {account.currency}
-                    </div>
-                  </div>
-                </div>
+      {/* Manage Schedules Section */}
+      <div>
+        {/* Header row — always visible */}
+        <div className="flex items-center gap-4">
+          <button
+            onClick={() => setSchedulesExpanded(v => !v)}
+            className="flex items-center gap-2 text-xl font-semibold hover:text-primary transition-colors"
+          >
+            <Clock className="h-5 w-5 text-primary shrink-0" />
+            <span className="md:hidden">Schedules</span>
+            <span className="hidden md:inline">Manage Schedules</span>
+            <ChevronDown className={`h-5 w-5 text-muted-foreground transition-transform duration-300 shrink-0 ${schedulesExpanded ? 'rotate-180' : ''}`} />
+          </button>
+          <div className="flex-1" />
+          <Button onClick={() => {
+            if (isAdding) {
+              resetForm()
+            } else {
+              setSchedulesExpanded(true)
+              setIsAdding(true)
+              const subscriptionCategory = expenseCategories.find(
+                cat => cat.name.toLowerCase() === 'subscription'
               )
-            })}
-          </div>
-        </Card>
-      )}
-
-      {/* Next Upcoming Transactions */}
-      {nextTransactions.length > 0 && (
-        <Card className="p-4">
-          <h3 className="font-semibold mb-3 flex items-center gap-2">
-            <Calendar className="h-4 w-4" />
-            Next 30 Days Transactions
-          </h3>
-          <div className="space-y-2">
-            {(showAllTransactions ? nextTransactions : nextTransactions.slice(0, 5)).map((tx, idx) => (
-              <div key={idx} className="flex items-center justify-between text-sm py-1">
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-muted-foreground w-16">
-                    {tx.date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                  </span>
-                  <span>{tx.description}</span>
-                  <span className="text-xs text-muted-foreground">({tx.account})</span>
-                </div>
-                <span className={`font-medium ${tx.amount < 0 ? 'text-destructive' : 'text-success'}`}>
-                  <span className={privacyMode === 'hidden' ? 'select-none' : ''}>
-                    {privacyMode === 'hidden' ? '••••' : `${tx.amount < 0 ? '-' : '+'}${Math.abs(tx.amount).toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})}`}
-                  </span>
-                </span>
-              </div>
-            ))}
-          </div>
-          {nextTransactions.length > 5 && (
-            <div className="mt-3 pt-3 border-t">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setShowAllTransactions(!showAllTransactions)}
-                className="w-full"
-              >
-                {showAllTransactions ? 'Show Less' : `Show All (${nextTransactions.length})`}
-              </Button>
-            </div>
-          )}
-        </Card>
-      )}
-
-      {/* Add/Edit Form Section */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-xl font-semibold flex items-center gap-2">
-            <Clock className="h-5 w-5 text-primary" />
-            Manage Schedules
-          </h2>
-        </div>
-        <Button onClick={() => {
-          if (isAdding) {
-            resetForm()
-          } else {
-            setIsAdding(true)
-            // Set default subscription category when opening form
-            const subscriptionCategory = expenseCategories.find(
-              cat => cat.name.toLowerCase() === 'subscription'
-            )
-            if (subscriptionCategory && !editingId) {
-              setFormData(prev => ({ ...prev, category_id: subscriptionCategory.id }))
+              if (subscriptionCategory && !editingId) {
+                setFormData(prev => ({ ...prev, category_id: subscriptionCategory.id }))
+              }
             }
-          }
-        }} variant={isAdding ? 'outline' : 'default'}>
-          {!isAdding && <Plus className="mr-2 h-4 w-4" />}
-          {isAdding ? 'Cancel' : 'Add Recurring'}
-        </Button>
+          }} variant={isAdding ? 'outline' : 'default'}>
+            {!isAdding && <Plus className="mr-2 h-4 w-4" />}
+            {isAdding ? 'Cancel' : 'Add Recurring'}
+          </Button>
+        </div>
       </div>
+
+      {/* Collapsible body */}
+      <div
+        className="overflow-hidden transition-all duration-300 ease-in-out"
+        style={{ maxHeight: schedulesExpanded ? '9999px' : '0px' }}
+      >
+      <div className="space-y-3 pt-3">
 
       {isAdding && (
         <Card className="p-6">
@@ -1502,7 +1338,30 @@ export function RecurringTransactions({
       )}
 
       {loading ? (
-        <div className="text-center py-8 text-muted-foreground">Loading...</div>
+        <div className="space-y-2 animate-pulse">
+          {['Monthly', 'Yearly'].map(freq => (
+            <div key={freq} className="space-y-2">
+              <div className="h-3 w-16 rounded bg-muted mx-1" />
+              {[0, 1].map(i => (
+                <div key={i} className="rounded-xl border bg-card overflow-hidden">
+                  <div className="flex items-center gap-3 p-3">
+                    <div className="h-8 w-8 rounded-full bg-muted shrink-0" />
+                    <div className="flex-1 space-y-1.5">
+                      <div className="h-3.5 w-32 rounded bg-muted" />
+                      <div className="h-3 w-24 rounded bg-muted/70" />
+                    </div>
+                    <div className="h-4 w-20 rounded bg-muted shrink-0" />
+                  </div>
+                  <div className="flex border-t divide-x">
+                    {[0,1,2].map(j => (
+                      <div key={j} className="flex-1 h-8 bg-muted/30" />
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
       ) : schedules.length === 0 ? (
         <Card className="p-8 text-center">
           <Clock className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
@@ -1512,90 +1371,115 @@ export function RecurringTransactions({
           </p>
         </Card>
       ) : (
-        <div className="space-y-3">
-          {schedules.map(schedule => {
+        <div className="space-y-4">
+          {(['daily', 'weekly', 'monthly', 'yearly'] as const).map(freq => {
+            const group = schedules
+              .filter(s => s.frequency === freq)
+              .sort((a, b) => {
+                if (freq === 'weekly') return (a.day_of_week ?? 0) - (b.day_of_week ?? 0)
+                if (freq === 'monthly') return (a.day_of_month ?? 0) - (b.day_of_month ?? 0)
+                if (freq === 'yearly') {
+                  const monthDiff = (a.month ?? 0) - (b.month ?? 0)
+                  return monthDiff !== 0 ? monthDiff : (a.day_of_month ?? 0) - (b.day_of_month ?? 0)
+                }
+                return 0
+              })
+            if (group.length === 0) return null
+            return (
+              <div key={freq} className="space-y-2">
+                <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground px-1">
+                  {freq === 'daily' ? 'Daily' : freq === 'weekly' ? 'Weekly' : freq === 'monthly' ? 'Monthly' : 'Yearly'}
+                </h4>
+                {group.map(schedule => {
             const account = accounts.find(a => a.id === schedule.account_id)
             const toAccount = schedule.to_account_id ? accounts.find(a => a.id === schedule.to_account_id) : undefined
             const category = schedule.category_id ? categories.find(c => c.id === schedule.category_id) : undefined
+            const title = schedule.description || (
+              schedule.type === 'transaction'
+                ? `${category?.name || 'Transaction'} - ${getAccountName(schedule.account_id)}`
+                : `Transfer: ${getAccountName(schedule.account_id)} → ${toAccount?.name || 'Unknown'}`
+            )
+            const subtitle = schedule.description
+              ? (schedule.type === 'transaction'
+                  ? `${category?.name || 'Transaction'} · ${getAccountName(schedule.account_id)}`
+                  : `Transfer · ${getAccountName(schedule.account_id)} → ${toAccount?.name || 'Unknown'}`)
+              : null
 
             return (
-              <Card key={schedule.id} className={`p-4 ${!schedule.is_active ? 'opacity-50' : ''}`}>
-                <div className="flex items-center justify-between">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-3 mb-2">
-                      {category?.icon && <span className="text-2xl">{category.icon}</span>}
-                      <div>
-                        <h4 className="font-semibold">
-                          {schedule.type === 'transaction' 
-                            ? `${category?.name || 'Transaction'} - ${getAccountName(schedule.account_id)}`
-                            : `Transfer: ${getAccountName(schedule.account_id)} → ${toAccount?.name || 'Unknown'}`
-                          }
-                        </h4>
-                        <p className="text-sm text-muted-foreground">
-                          {formatFrequency(schedule)}
-                          {schedule.last_processed_date && (
-                            <span className="ml-2">• Last: {schedule.last_processed_date}</span>
-                          )}
-                          {schedule.remaining_occurrences !== undefined && schedule.remaining_occurrences !== null && (
-                            <span className="ml-2">• {schedule.remaining_occurrences} left</span>
-                          )}
-                          {schedule.end_date && (
-                            <span className="ml-2">• Until {schedule.end_date}</span>
-                          )}
-                        </p>
-                      </div>
-                    </div>
-                    {schedule.description && (
-                      <p className="text-sm text-muted-foreground ml-11">{schedule.description}</p>
-                    )}
-                  </div>
+              <Card key={schedule.id} className={`overflow-hidden ${!schedule.is_active ? 'opacity-50' : ''}`}>
+                {/* Main row */}
+                <div className="flex items-center gap-3 p-3 md:p-4">
+                  {/* Icon */}
+                  {category?.icon
+                    ? <span className="text-xl shrink-0">{category.icon}</span>
+                    : <span className="text-xl shrink-0">🔄</span>
+                  }
 
-                  <div className="flex items-center gap-3">
-                    <div className="text-right">
-                      <div className={`font-semibold ${schedule.amount < 0 ? 'text-destructive' : 'text-success'} ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
-                        {privacyMode === 'hidden' 
-                          ? `${schedule.amount < 0 ? '-' : '+'}••••` 
-                          : `${schedule.amount < 0 ? '-' : '+'}${Math.abs(schedule.amount).toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})}`
-                        } {account?.currency}
-                      </div>
-                      {schedule.amount_to && toAccount && (
-                        <div className={`text-xs text-muted-foreground ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
-                          → {privacyMode === 'hidden' ? '••••' : schedule.amount_to.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})} {toAccount.currency}
-                        </div>
+                  {/* Info — grows */}
+                  <div className="flex-1 min-w-0">
+                    <div className="font-semibold text-sm leading-tight truncate">{title}</div>
+                    <div className="text-xs text-muted-foreground mt-0.5 truncate">
+                      {subtitle && <span>{subtitle} · </span>}
+                      {formatNextDate(schedule)}
+                      {schedule.remaining_occurrences !== undefined && schedule.remaining_occurrences !== null && (
+                        <span> · {schedule.remaining_occurrences} left</span>
                       )}
                     </div>
-
-                    <div className="flex items-center gap-2">
-                      <Button
-                        size="sm"
-                        variant={schedule.is_active ? 'outline' : 'default'}
-                        onClick={() => toggleActive(schedule)}
-                      >
-                        {schedule.is_active ? 'Pause' : 'Activate'}
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => handleEdit(schedule)}
-                      >
-                        <Edit2 className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="destructive"
-                        disabled={deletingId === schedule.id}
-                        onClick={() => handleDelete(schedule.id)}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
                   </div>
+
+                  {/* Amount — shrinks to fit */}
+                  <div className="text-right shrink-0">
+                    <div className={`font-semibold text-sm ${schedule.amount < 0 ? 'text-destructive' : 'text-success'} ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
+                      {privacyMode === 'hidden'
+                        ? `${schedule.amount < 0 ? '-' : '+'}••••`
+                        : `${schedule.amount < 0 ? '-' : '+'}${Math.abs(schedule.amount).toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})}`
+                      } {account?.currency}
+                    </div>
+                    {schedule.amount_to && toAccount && (
+                      <div className={`text-xs text-muted-foreground ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
+                        → {privacyMode === 'hidden' ? '••••' : schedule.amount_to.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})} {toAccount.currency}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Action strip */}
+                <div className="flex border-t divide-x">
+                  <button
+                    onClick={() => toggleActive(schedule)}
+                    disabled={togglingId === schedule.id}
+                    className={`flex-1 py-2 text-xs font-medium transition-colors hover:bg-muted/60 disabled:opacity-50 disabled:cursor-not-allowed ${schedule.is_active ? 'text-muted-foreground' : 'text-primary'}`}
+                  >
+                    {togglingId === schedule.id
+                      ? <Loader2 className="h-3.5 w-3.5 animate-spin mx-auto" />
+                      : schedule.is_active ? 'Pause' : 'Activate'
+                    }
+                  </button>
+                  <button
+                    onClick={() => handleEdit(schedule)}
+                    className="flex-1 py-2 flex items-center justify-center text-muted-foreground hover:bg-muted/60 transition-colors"
+                  >
+                    <Edit2 className="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    disabled={deletingId === schedule.id}
+                    onClick={() => handleDelete(schedule.id)}
+                    className="flex-1 py-2 flex items-center justify-center text-destructive hover:bg-destructive/10 transition-colors disabled:opacity-50"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
                 </div>
               </Card>
             )
           })}
+              </div>
+            )
+          })}
         </div>
       )}
+
+      </div>
+      </div>
 
       {/* Calendar View */}
       <Card className="p-3 md:p-6">
