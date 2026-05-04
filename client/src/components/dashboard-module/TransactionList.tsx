@@ -509,6 +509,7 @@ export function TransactionList({
       onTransactionAdded()
     } catch (error) {
       console.error('Failed to save transaction', error)
+      showAlert({ type: 'error', message: 'Failed to save transaction. Please try again.' })
     } finally {
       setIsSubmitting(false)
     }
