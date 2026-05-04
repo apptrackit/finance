@@ -52,6 +52,7 @@ export function Modal({ isOpen, onClose, title, children, className }: ModalProp
             <h2 className="text-lg sm:text-xl font-semibold text-foreground">{title}</h2>
             <button
               onClick={onClose}
+              aria-label="Close"
               className="text-muted-foreground hover:text-foreground transition-colors p-1 -mr-1"
             >
               <X className="h-5 w-5" />
