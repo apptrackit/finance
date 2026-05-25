@@ -250,6 +250,11 @@ export class RecurringScheduleService {
       return
     }
 
+    if (account.is_locked) {
+      console.warn(`Skipping recurring schedule ${schedule.id}: account ${schedule.account_id} is locked`)
+      return
+    }
+
     const transaction: Transaction = {
       id: crypto.randomUUID(),
       account_id: schedule.account_id,
@@ -281,6 +286,11 @@ export class RecurringScheduleService {
 
     if (!fromAccount || !toAccount) {
       console.error(`Account(s) not found for recurring transfer ${schedule.id}`)
+      return
+    }
+
+    if (fromAccount.is_locked || toAccount.is_locked) {
+      console.warn(`Skipping recurring transfer ${schedule.id}: one or more accounts are locked`)
       return
     }
 

@@ -41,6 +41,10 @@ export class TransactionController {
       if (error.message.includes('not found')) {
         return c.json({ error: error.message }, 404)
       }
+
+      if (error.message.includes('locked')) {
+        return c.json({ error: error.message }, 409)
+      }
       
       return c.json({ 
         error: error.message || 'Failed to create transaction', 
@@ -57,16 +61,21 @@ export class TransactionController {
       await new AuditRepository(c.env.DB).log('UPDATE', 'transaction', id, { amount: body.amount, category_id: body.category_id })
       return c.json(TransactionMapper.toResponseDto(transaction))
     } catch (error: any) {
-      const status = error.message.includes('not found') ? 404 : 500
+      const status = error.message.includes('not found') ? 404 : error.message.includes('locked') ? 409 : 500
       return c.json({ error: error.message }, status)
     }
   }
 
   async delete(c: Context<{ Bindings: Bindings }>) {
-    const id = c.req.param('id')
-    await this.transactionService.deleteTransaction(id)
-    await new AuditRepository(c.env.DB).log('DELETE', 'transaction', id)
-    return c.json({ success: true })
+    try {
+      const id = c.req.param('id')
+      await this.transactionService.deleteTransaction(id)
+      await new AuditRepository(c.env.DB).log('DELETE', 'transaction', id)
+      return c.json({ success: true })
+    } catch (error: any) {
+      const status = error.message.includes('not found') ? 404 : error.message.includes('locked') ? 409 : 500
+      return c.json({ error: error.message }, status)
+    }
   }
 
   async getPaginated(c: Context) {

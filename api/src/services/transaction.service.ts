@@ -15,6 +15,12 @@ export class TransactionService {
     private investmentTransactionRepo: InvestmentTransactionRepository
   ) {}
 
+  private assertAccountUnlocked(account: Account): void {
+    if (account.is_locked) {
+      throw new Error(`Account "${account.name}" is locked`)
+    }
+  }
+
   async getAllTransactions(): Promise<Transaction[]> {
     return await this.transactionRepo.findAll()
   }
@@ -28,6 +34,8 @@ export class TransactionService {
     if (!account) {
       throw new Error('Account not found')
     }
+
+    this.assertAccountUnlocked(account)
 
     // For investment accounts: redirect to investment_transactions table
     if (account.type === 'investment') {
@@ -112,20 +120,30 @@ export class TransactionService {
       }
     }
 
-    // Revert old balance
     const oldAccount = await this.accountRepo.findById(oldTx.account_id)
-    if (oldAccount) {
-      await this.accountRepo.updateBalance(
-        oldTx.account_id,
-        oldAccount.balance - oldTx.amount,
-        Date.now()
-      )
+    if (!oldAccount) {
+      throw new Error('Account not found')
     }
+    this.assertAccountUnlocked(oldAccount)
 
-    // Update transaction
     const newAccountId = dto.account_id || oldTx.account_id
     const newAmount = dto.amount ?? oldTx.amount
+    if (newAccountId !== oldTx.account_id) {
+      const targetAccount = await this.accountRepo.findById(newAccountId)
+      if (!targetAccount) {
+        throw new Error('Account not found')
+      }
+      this.assertAccountUnlocked(targetAccount)
+    }
 
+    // Revert old balance
+    await this.accountRepo.updateBalance(
+      oldTx.account_id,
+      oldAccount.balance - oldTx.amount,
+      Date.now()
+    )
+
+    // Update transaction
     await this.transactionRepo.update(id, {
       account_id: newAccountId,
       category_id: dto.category_id !== undefined ? dto.category_id : oldTx.category_id,
@@ -137,13 +155,14 @@ export class TransactionService {
 
     // Apply new balance
     const newAccount = await this.accountRepo.findById(newAccountId)
-    if (newAccount) {
-      await this.accountRepo.updateBalance(
-        newAccountId,
-        newAccount.balance + newAmount,
-        Date.now()
-      )
+    if (!newAccount) {
+      throw new Error('Account not found')
     }
+    await this.accountRepo.updateBalance(
+      newAccountId,
+      newAccount.balance + newAmount,
+      Date.now()
+    )
 
     const updated = await this.transactionRepo.findById(id)
     return updated!
@@ -178,6 +197,7 @@ export class TransactionService {
       if (!account) {
         throw new Error('Account not found')
       }
+      this.assertAccountUnlocked(account)
       accounts.set(accountId, account)
     }
 
@@ -246,8 +266,25 @@ export class TransactionService {
     const tx = await this.transactionRepo.findById(id)
 
     if (tx) {
-      // Revert balance for the main transaction
       const account = await this.accountRepo.findById(tx.account_id)
+      if (account) {
+        this.assertAccountUnlocked(account)
+      }
+
+      let linkedTx: Transaction | null = null
+      let linkedAccount: Account | null = null
+
+      if (tx.linked_transaction_id) {
+        linkedTx = await this.transactionRepo.findById(tx.linked_transaction_id)
+        if (linkedTx) {
+          linkedAccount = await this.accountRepo.findById(linkedTx.account_id)
+          if (linkedAccount) {
+            this.assertAccountUnlocked(linkedAccount)
+          }
+        }
+      }
+
+      // Revert balance for the main transaction
       if (account) {
         await this.accountRepo.updateBalance(
           tx.account_id,
@@ -257,21 +294,15 @@ export class TransactionService {
       }
 
       // If this is a transfer (has linked_transaction_id), delete the linked transaction too
-      if (tx.linked_transaction_id) {
-        const linkedTx = await this.transactionRepo.findById(tx.linked_transaction_id)
-        if (linkedTx) {
-          // Revert balance for the linked account
-          const linkedAccount = await this.accountRepo.findById(linkedTx.account_id)
-          if (linkedAccount) {
-            await this.accountRepo.updateBalance(
-              linkedTx.account_id,
-              linkedAccount.balance - linkedTx.amount,
-              Date.now()
-            )
-          }
-          // Delete the linked transaction
-          await this.transactionRepo.delete(tx.linked_transaction_id)
+      if (linkedTx) {
+        if (linkedAccount) {
+          await this.accountRepo.updateBalance(
+            linkedTx.account_id,
+            linkedAccount.balance - linkedTx.amount,
+            Date.now()
+          )
         }
+        await this.transactionRepo.delete(linkedTx.id)
       }
 
       // Delete the main transaction

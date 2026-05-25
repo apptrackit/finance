@@ -27,7 +27,7 @@ export class TransferController {
       const transfer = await this.transferService.createTransfer(body)
       return c.json(transfer, 201)
     } catch (error: any) {
-      const status = error.message.includes('not found') ? 404 : 400
+      const status = error.message.includes('not found') ? 404 : error.message.includes('locked') ? 409 : 400
       return c.json({ error: error.message }, status)
     }
   }

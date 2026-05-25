@@ -43,6 +43,14 @@ export class TransferService {
       throw new Error('Account not found')
     }
 
+    if (fromAccount.is_locked) {
+      throw new Error(`Account "${fromAccount.name}" is locked`)
+    }
+
+    if (toAccount.is_locked) {
+      throw new Error(`Account "${toAccount.name}" is locked`)
+    }
+
     const totalDeduction = dto.amount_from
     const now = Date.now()
     const transferId = crypto.randomUUID()
