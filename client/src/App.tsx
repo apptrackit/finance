@@ -5,35 +5,15 @@ import { Analytics } from './components/analytics-module/Analytics'
 import { Investments } from './components/investments-module/Investments'
 import { RecurringTransactions } from './components/dashboard-module/RecurringTransactions'
 import { Wallet, TrendingUp, TrendingDown, Activity, BarChart3, List, Settings as SettingsIcon, LineChart, Eye, EyeOff, RefreshCw, PiggyBank } from 'lucide-react'
-import Settings, { getMasterCurrency } from './components/settings-module/Settings'
+import Settings from './components/settings-module/Settings'
+import { getMasterCurrency, getStoredMenuVisibility, loadNavigationSettings } from './components/settings-module/settings.storage'
+import { MENU_VISIBILITY_EVENT, type MenuKey } from './components/settings-module/constants'
 import { usePrivacy } from './context/PrivacyContext'
 import { startOfMonth, endOfMonth, format } from 'date-fns'
 import { Budget } from './components/budget-module/Budget'
 import { useFinanceData } from './hooks/useFinanceData'
 
-const MENU_STORAGE_KEY = 'finance_visible_menus'
-
 type View = 'dashboard' | 'analytics' | 'settings' | 'investments' | 'recurring' | 'budget'
-type MenuKey = Exclude<View, 'settings'>
-
-const DEFAULT_MENU_VISIBILITY: Record<MenuKey, boolean> = {
-  dashboard: true,
-  analytics: true,
-  investments: true,
-  recurring: true,
-  budget: true,
-}
-
-const getVisibleMenus = (): Record<MenuKey, boolean> => {
-  try {
-    const stored = localStorage.getItem(MENU_STORAGE_KEY)
-    if (!stored) return DEFAULT_MENU_VISIBILITY
-    const parsed = JSON.parse(stored) as Partial<Record<MenuKey, boolean>>
-    return { ...DEFAULT_MENU_VISIBILITY, ...parsed }
-  } catch {
-    return DEFAULT_MENU_VISIBILITY
-  }
-}
 
 function App() {
   const [view, setView] = useState<View>(() => {
@@ -48,7 +28,7 @@ function App() {
   }
   const [masterCurrency, setMasterCurrency] = useState('HUF')
   const [showNetWorth, setShowNetWorth] = useState(false)
-  const [visibleMenus, setVisibleMenus] = useState<Record<MenuKey, boolean>>(getVisibleMenus)
+  const [visibleMenus, setVisibleMenus] = useState<Record<MenuKey, boolean>>(getStoredMenuVisibility)
   const { privacyMode, togglePrivacyMode, shouldHideInvestment } = usePrivacy()
 
   const [currentMonth, setCurrentMonth] = useState(new Date())
@@ -81,9 +61,23 @@ function App() {
   }, [])
 
   useEffect(() => {
-    const handler = () => setVisibleMenus(getVisibleMenus())
-    window.addEventListener('finance:menu-visibility', handler)
-    return () => window.removeEventListener('finance:menu-visibility', handler)
+    let isMounted = true
+
+    loadNavigationSettings().then(next => {
+      if (isMounted) {
+        setVisibleMenus(next)
+      }
+    })
+
+    return () => {
+      isMounted = false
+    }
+  }, [])
+
+  useEffect(() => {
+    const handler = () => setVisibleMenus(getStoredMenuVisibility())
+    window.addEventListener(MENU_VISIBILITY_EVENT, handler)
+    return () => window.removeEventListener(MENU_VISIBILITY_EVENT, handler)
   }, [])
 
   useEffect(() => {

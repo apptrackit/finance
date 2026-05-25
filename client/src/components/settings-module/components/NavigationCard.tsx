@@ -1,26 +1,37 @@
 import { useEffect, useState } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../common/card'
 import { Settings as SettingsIcon } from 'lucide-react'
-import { DEFAULT_MENU_VISIBILITY, MENU_STORAGE_KEY, type MenuKey } from '../constants'
+import { MENU_VISIBILITY_EVENT, type MenuKey } from '../constants'
+import {
+  getStoredMenuVisibility,
+  loadNavigationSettings,
+  saveNavigationSettings,
+  storeMenuVisibility
+} from '../settings.storage'
 import { useAlert } from '../../../context/AlertContext'
 
 export function NavigationCard() {
   const { showAlert } = useAlert()
-  const [menuVisibility, setMenuVisibility] = useState<Record<MenuKey, boolean>>(DEFAULT_MENU_VISIBILITY)
+  const [menuVisibility, setMenuVisibility] = useState<Record<MenuKey, boolean>>(getStoredMenuVisibility)
+  const [isSaving, setIsSaving] = useState(false)
 
   useEffect(() => {
-    const savedMenus = localStorage.getItem(MENU_STORAGE_KEY)
-    if (savedMenus) {
-      try {
-        const parsed = JSON.parse(savedMenus) as Partial<Record<MenuKey, boolean>>
-        setMenuVisibility({ ...DEFAULT_MENU_VISIBILITY, ...parsed })
-      } catch (error) {
-        console.error('Failed to parse menu visibility settings:', error)
+    let isMounted = true
+
+    loadNavigationSettings().then(next => {
+      if (isMounted) {
+        setMenuVisibility(next)
       }
+    })
+
+    return () => {
+      isMounted = false
     }
   }, [])
 
-  const handleToggleMenu = (key: MenuKey) => {
+  const handleToggleMenu = async (key: MenuKey) => {
+    if (isSaving) return
+
     const enabledMenus = Object.values(menuVisibility).filter(Boolean).length
     if (menuVisibility[key] && enabledMenus === 1) {
       showAlert({
@@ -31,11 +42,30 @@ export function NavigationCard() {
       return
     }
 
+    const previous = menuVisibility
     const next = { ...menuVisibility, [key]: !menuVisibility[key] }
     setMenuVisibility(next)
-    localStorage.setItem(MENU_STORAGE_KEY, JSON.stringify(next))
+    storeMenuVisibility(next)
     localStorage.setItem('finance_last_view', 'settings')
-    window.dispatchEvent(new Event('finance:menu-visibility'))
+    window.dispatchEvent(new Event(MENU_VISIBILITY_EVENT))
+
+    setIsSaving(true)
+    try {
+      const saved = await saveNavigationSettings(next)
+      setMenuVisibility(saved)
+      window.dispatchEvent(new Event(MENU_VISIBILITY_EVENT))
+    } catch (error) {
+      setMenuVisibility(previous)
+      storeMenuVisibility(previous)
+      window.dispatchEvent(new Event(MENU_VISIBILITY_EVENT))
+      showAlert({
+        type: 'error',
+        title: 'Navigation not saved',
+        message: error instanceof Error ? error.message : 'Failed to save navigation settings.'
+      })
+    } finally {
+      setIsSaving(false)
+    }
   }
 
   return (
@@ -70,9 +100,10 @@ export function NavigationCard() {
               </div>
               <button
                 onClick={() => handleToggleMenu(item.key as MenuKey)}
+                disabled={isSaving}
                 className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 ${
                   menuVisibility[item.key as MenuKey] ? 'bg-primary' : 'bg-muted'
-                }`}
+                } disabled:cursor-not-allowed disabled:opacity-60`}
                 role="switch"
                 aria-checked={menuVisibility[item.key as MenuKey]}
                 aria-label={`Toggle ${item.label}`}

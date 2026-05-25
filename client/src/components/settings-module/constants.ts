@@ -27,6 +27,7 @@ export const EMOJI_OPTIONS = [
 
 export const STORAGE_KEY = 'finance_master_currency'
 export const MENU_STORAGE_KEY = 'finance_visible_menus'
+export const MENU_VISIBILITY_EVENT = 'finance:menu-visibility'
 
 export type MenuKey = 'dashboard' | 'analytics' | 'investments' | 'recurring' | 'budget'
 
