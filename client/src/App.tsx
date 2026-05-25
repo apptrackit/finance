@@ -5,49 +5,30 @@ import { Analytics } from './components/analytics-module/Analytics'
 import { Investments } from './components/investments-module/Investments'
 import { RecurringTransactions } from './components/dashboard-module/RecurringTransactions'
 import { Wallet, TrendingUp, TrendingDown, Activity, BarChart3, List, Settings as SettingsIcon, LineChart, Eye, EyeOff, RefreshCw, PiggyBank } from 'lucide-react'
-import Settings, { getMasterCurrency } from './components/settings-module/Settings'
+import Settings from './components/settings-module/Settings'
+import { getMasterCurrency, getStoredMenuVisibility, loadNavigationSettings } from './components/settings-module/settings.storage'
+import { MENU_VISIBILITY_EVENT, type MenuKey } from './components/settings-module/constants'
 import { usePrivacy } from './context/PrivacyContext'
 import { startOfMonth, endOfMonth, format } from 'date-fns'
 import { Budget } from './components/budget-module/Budget'
 import { useFinanceData } from './hooks/useFinanceData'
 
-const APP_VERSION = '1.7.0'
-const MENU_STORAGE_KEY = 'finance_visible_menus'
-
 type View = 'dashboard' | 'analytics' | 'settings' | 'investments' | 'recurring' | 'budget'
-type MenuKey = Exclude<View, 'settings'>
-
-const DEFAULT_MENU_VISIBILITY: Record<MenuKey, boolean> = {
-  dashboard: true,
-  analytics: true,
-  investments: true,
-  recurring: true,
-  budget: true,
-}
-
-const getVisibleMenus = (): Record<MenuKey, boolean> => {
-  try {
-    const stored = localStorage.getItem(MENU_STORAGE_KEY)
-    if (!stored) return DEFAULT_MENU_VISIBILITY
-    const parsed = JSON.parse(stored) as Partial<Record<MenuKey, boolean>>
-    return { ...DEFAULT_MENU_VISIBILITY, ...parsed }
-  } catch {
-    return DEFAULT_MENU_VISIBILITY
-  }
-}
 
 function App() {
   const [view, setView] = useState<View>(() => {
-    const lastView = localStorage.getItem('finance_last_view') as View | null
-    if (lastView) {
-      localStorage.removeItem('finance_last_view')
-      return lastView
-    }
-    return 'dashboard'
+    const saved = localStorage.getItem('finance_last_view') as View | null
+    const validViews: View[] = ['dashboard', 'analytics', 'settings', 'investments', 'recurring', 'budget']
+    return (saved && validViews.includes(saved)) ? saved : 'dashboard'
   })
+
+  const navigateTo = (v: View) => {
+    localStorage.setItem('finance_last_view', v)
+    setView(v)
+  }
   const [masterCurrency, setMasterCurrency] = useState('HUF')
   const [showNetWorth, setShowNetWorth] = useState(false)
-  const [visibleMenus, setVisibleMenus] = useState<Record<MenuKey, boolean>>(getVisibleMenus)
+  const [visibleMenus, setVisibleMenus] = useState<Record<MenuKey, boolean>>(getStoredMenuVisibility)
   const { privacyMode, togglePrivacyMode, shouldHideInvestment } = usePrivacy()
 
   const [currentMonth, setCurrentMonth] = useState(new Date())
@@ -66,27 +47,44 @@ function App() {
     allTransactions,
     transactionsLoading,
     categories,
-    apiVersion,
     exchangeRates,
     investmentRefreshKey,
     handleDataChange,
   } = useFinanceData(dateRange, masterCurrency)
 
   useEffect(() => {
+    window.scrollTo({ top: 0, behavior: 'instant' })
+  }, [view])
+
+  useEffect(() => {
     setMasterCurrency(getMasterCurrency())
   }, [])
 
   useEffect(() => {
-    const handler = () => setVisibleMenus(getVisibleMenus())
-    window.addEventListener('finance:menu-visibility', handler)
-    return () => window.removeEventListener('finance:menu-visibility', handler)
+    let isMounted = true
+
+    loadNavigationSettings().then(next => {
+      if (isMounted) {
+        setVisibleMenus(next)
+      }
+    })
+
+    return () => {
+      isMounted = false
+    }
+  }, [])
+
+  useEffect(() => {
+    const handler = () => setVisibleMenus(getStoredMenuVisibility())
+    window.addEventListener(MENU_VISIBILITY_EVENT, handler)
+    return () => window.removeEventListener(MENU_VISIBILITY_EVENT, handler)
   }, [])
 
   useEffect(() => {
     const menuOrder: MenuKey[] = ['dashboard', 'analytics', 'investments', 'recurring', 'budget']
     if (view !== 'settings' && !visibleMenus[view]) {
       const next = menuOrder.find(key => visibleMenus[key]) || 'dashboard'
-      setView(next)
+      navigateTo(next)
     }
   }, [visibleMenus, view])
 
@@ -158,7 +156,7 @@ function App() {
                   {navItems.filter(n => visibleMenus[n.key]).map(n => (
                     <button
                       key={n.key}
-                      onClick={() => setView(n.key)}
+                      onClick={() => navigateTo(n.key)}
                       className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all flex items-center gap-1.5 ${
                         view === n.key
                           ? 'bg-primary text-primary-foreground shadow-sm'
@@ -170,7 +168,7 @@ function App() {
                     </button>
                   ))}
                   <button
-                    onClick={() => setView('settings')}
+                    onClick={() => navigateTo('settings')}
                     className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all flex items-center gap-1.5 ${
                       view === 'settings'
                         ? 'bg-primary text-primary-foreground shadow-sm'
@@ -185,7 +183,7 @@ function App() {
                 {/* Mobile header — compact icon buttons */}
                 <div className="flex lg:hidden gap-0.5 p-0.5 rounded-lg bg-secondary/50 border border-border/50">
                   <button
-                    onClick={() => setView('settings')}
+                    onClick={() => navigateTo('settings')}
                     className={`px-2.5 py-2 text-xs font-medium rounded-md transition-all flex items-center gap-1 ${
                       view === 'settings'
                         ? 'bg-primary text-primary-foreground shadow-sm'
@@ -374,11 +372,11 @@ function App() {
               </div>
             </div>
           ) : view === 'analytics' ? (
-            <Analytics transactions={allTransactions} categories={categories} accounts={accounts} masterCurrency={masterCurrency} />
+            <Analytics transactions={allTransactions} categories={categories} accounts={accounts} masterCurrency={masterCurrency} loading={transactionsLoading} />
           ) : view === 'investments' ? (
             <Investments key={investmentRefreshKey} />
           ) : view === 'recurring' ? (
-            <RecurringTransactions accounts={accounts} categories={categories} />
+            <RecurringTransactions accounts={accounts} categories={categories} dataLoading={transactionsLoading} />
           ) : view === 'budget' ? (
             <Budget accounts={accounts} categories={categories} transactions={allTransactions} masterCurrency={masterCurrency} />
           ) : (
@@ -386,20 +384,16 @@ function App() {
           )}
         </main>
 
-        {/* Version Footer */}
-        <footer className="hidden lg:block mt-auto py-4 text-center text-xs text-muted-foreground space-y-1">
-          <p>Client v{APP_VERSION}</p>
-          <p>API v{apiVersion || 'loading...'}</p>
-        </footer>
+
       </div>
 
       {/* Mobile bottom navigation */}
       <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-50 bg-card/95 backdrop-blur-xl border-t border-border/50">
-        <div className="flex items-center justify-around px-2 py-1 safe-area-pb">
+        <div className="flex items-center justify-around px-2 pt-2" style={{paddingBottom: 'max(8px, env(safe-area-inset-bottom))'}}>
           {navItems.filter(n => visibleMenus[n.key]).map(n => (
             <button
               key={n.key}
-              onClick={() => setView(n.key)}
+              onClick={() => navigateTo(n.key)}
               className={`flex flex-col items-center gap-0.5 px-3 py-2 rounded-xl transition-all min-w-0 ${
                 view === n.key
                   ? 'text-primary'
@@ -412,17 +406,6 @@ function App() {
               <span className="text-[10px] font-medium truncate">{n.label}</span>
             </button>
           ))}
-          <button
-            onClick={() => setView('settings')}
-            className={`flex flex-col items-center gap-0.5 px-3 py-2 rounded-xl transition-all ${
-              view === 'settings' ? 'text-primary' : 'text-muted-foreground'
-            }`}
-          >
-            <span className={`${view === 'settings' ? 'scale-110' : ''} transition-transform`}>
-              <SettingsIcon className="h-4 w-4" />
-            </span>
-            <span className="text-[10px] font-medium">Settings</span>
-          </button>
         </div>
       </nav>
     </div>

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { CreateAccountSchema, UpdateAccountSchema } from '../validators/account.validator'
-import { CreateTransactionSchema } from '../validators/transaction.validator'
+import { CreateTransactionSchema, UpdateTransactionSchema } from '../validators/transaction.validator'
 import { CreateCategorySchema } from '../validators/category.validator'
 import { CreateTransferSchema } from '../validators/transfer.validator'
 import { CreateBudgetSchema } from '../validators/budget.validator'
@@ -99,6 +99,29 @@ describe('Transaction validators', () => {
       exclude_from_estimate: false,
     })
     expect(result.success).toBe(true)
+  })
+
+  it('accepts linked transfer update fields', () => {
+    const result = UpdateTransactionSchema.safeParse({
+      account_id: 'acc-1',
+      to_account_id: 'acc-2',
+      amount: 100000,
+      amount_to: 260,
+      date: '2026-04-15',
+      description: 'Monthly savings',
+    })
+    expect(result.success).toBe(true)
+  })
+
+  it('rejects transfer update to same account', () => {
+    const result = UpdateTransactionSchema.safeParse({
+      account_id: 'acc-1',
+      to_account_id: 'acc-1',
+      amount: 100,
+      amount_to: 100,
+      date: '2026-04-15',
+    })
+    expect(result.success).toBe(false)
   })
 })
 

@@ -4,7 +4,7 @@ import './index.css'
 import App from './App.tsx'
 import { PrivacyProvider } from './context/PrivacyContext.tsx'
 import { AlertProvider } from './context/AlertContext.tsx'
-import { LockedAccountsProvider } from './context/LockedAccountsContext.tsx'
+import { ThemeProvider } from './context/ThemeContext.tsx'
 import { registerSW } from 'virtual:pwa-register'
 
 // Register service worker with update handling
@@ -21,12 +21,12 @@ const updateSW = registerSW({
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <PrivacyProvider>
-      <AlertProvider>
-        <LockedAccountsProvider>
+    <ThemeProvider>
+      <PrivacyProvider>
+        <AlertProvider>
           <App />
-        </LockedAccountsProvider>
-      </AlertProvider>
-    </PrivacyProvider>
+        </AlertProvider>
+      </PrivacyProvider>
+    </ThemeProvider>
   </StrictMode>,
 )

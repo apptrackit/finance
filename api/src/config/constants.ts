@@ -1,4 +1,5 @@
-export const API_VERSION = '1.3.1'
+import pkg from '../../../package.json'
+export const APP_VERSION = pkg.version
 
 export const DEFAULT_CATEGORIES = [
   { name: 'Salary', type: 'income', icon: '💰' },

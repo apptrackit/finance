@@ -15,9 +15,14 @@ export const CreateTransactionSchema = z.object({
 
 export const UpdateTransactionSchema = z.object({
   account_id: z.string().min(1).optional(),
+  to_account_id: z.string().min(1).optional(),
   category_id: z.string().nullable().optional(),
   amount: z.number().finite().refine(n => n !== 0, 'Amount cannot be zero').optional(),
+  amount_to: z.number().finite().positive('amount_to must be positive').optional(),
   description: z.string().max(500).nullable().optional(),
   date: z.string().regex(dateRegex, 'Date must be YYYY-MM-DD').optional(),
   exclude_from_estimate: z.boolean().optional(),
+}).refine(data => !data.account_id || !data.to_account_id || data.account_id !== data.to_account_id, {
+  message: 'account_id and to_account_id must be different',
+  path: ['to_account_id'],
 })

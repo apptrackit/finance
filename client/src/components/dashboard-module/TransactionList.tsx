@@ -5,22 +5,21 @@ import { Label } from '../common/label'
 import { Select } from '../common/select'
 import { Card, CardContent, CardHeader, CardTitle } from '../common/card'
 import { Modal } from '../common/modal'
-import { Plus, X, ArrowDownLeft, ArrowUpRight, Receipt, Pencil, Trash2, Check, ArrowRightLeft, ChevronLeft, ChevronRight, Calendar, Layers, Search } from 'lucide-react'
+import { Plus, X, ArrowDownLeft, ArrowUpRight, Receipt, Pencil, Trash2, Check, ArrowRightLeft, ChevronLeft, ChevronRight, ChevronDown, Calendar, Layers, Search } from 'lucide-react'
 import { format, addMonths, subMonths, startOfMonth, endOfMonth, addDays, differenceInDays } from 'date-fns'
 import { API_BASE_URL, apiFetch } from '../../config'
 import { usePrivacy } from '../../context/PrivacyContext'
 import { useAlert } from '../../context/AlertContext'
-import { useLockedAccounts } from '../../context/LockedAccountsContext'
 import { DateRangePicker } from '../common/DateRangePicker'
 import { BulkTransactionModal, type BulkTransaction } from './BulkTransactionModal'
 
 type Transaction = {
   id: string
   account_id: string
-  category_id?: string
+  category_id?: string | null
   amount: number
   quantity?: number
-  description?: string
+  description?: string | null
   date: string
   linked_transaction_id?: string
   exclude_from_estimate?: boolean
@@ -36,6 +35,7 @@ type Account = {
   asset_type?: 'stock' | 'crypto' | 'manual'
   exclude_from_net_worth?: boolean
   exclude_from_cash_balance?: boolean
+  is_locked?: boolean
 }
 
 type Category = {
@@ -108,10 +108,11 @@ export function TransactionList({
   const [searchQuery, setSearchQuery] = useState<string>('')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [isAccountOpen, setIsAccountOpen] = useState(false)
   
-  const { confirm } = useAlert()
+  const { confirm, showAlert } = useAlert()
   const { privacyMode, shouldHideInvestment } = usePrivacy()
-  const { isLocked } = useLockedAccounts()
+  const isLocked = (accountId: string) => accounts.find(a => a.id === accountId)?.is_locked ?? false
 
   // Reset showAllTransactions when filter, sort, search, or date range changes
   useEffect(() => {
@@ -405,6 +406,7 @@ export function TransactionList({
       manual_price: '',
       exclude_from_estimate: false
     })
+    setIsAccountOpen(false)
     setIsAdding(true)
   }
 
@@ -442,21 +444,37 @@ export function TransactionList({
           price = parseFloat(formData.manual_price.replace(/\s/g, ''))
           console.log(`Transfer to investment: ${amountTo} shares @ $${price}`)
         }
-        
-        await apiFetch(`${API_BASE_URL}/transfers`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            from_account_id: formData.account_id,
-            to_account_id: formData.to_account_id,
-            amount_from: amount,
-            amount_to: amountTo,
-            exchange_rate: exchangeRate,
-            description: formData.description,
-            date: formData.date,
-            price: price
-          }),
-        })
+
+        if (editingId) {
+          await apiFetch(`${API_BASE_URL}/transactions/${editingId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              account_id: formData.account_id,
+              to_account_id: formData.to_account_id,
+              amount,
+              amount_to: amountTo,
+              description: formData.description,
+              date: formData.date,
+            }),
+          })
+          setEditingId(null)
+        } else {
+          await apiFetch(`${API_BASE_URL}/transfers`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              from_account_id: formData.account_id,
+              to_account_id: formData.to_account_id,
+              amount_from: amount,
+              amount_to: amountTo,
+              exchange_rate: exchangeRate,
+              description: formData.description,
+              date: formData.date,
+              price: price
+            }),
+          })
+        }
         saveDefaults('transfer')
       } else {
         // Handle expense/income
@@ -507,6 +525,7 @@ export function TransactionList({
       onTransactionAdded()
     } catch (error) {
       console.error('Failed to save transaction', error)
+      showAlert({ type: 'error', message: 'Failed to save transaction. Please try again.' })
     } finally {
       setIsSubmitting(false)
     }
@@ -525,10 +544,7 @@ export function TransactionList({
         return
       }
     }
-    
-    const isIncome = tx.amount >= 0
-    const account = accounts.find(a => a.id === tx.account_id)
-    
+
     // Format numbers with spaces
     const formatNumber = (num: number) => {
       const str = Math.abs(num).toString()
@@ -537,6 +553,35 @@ export function TransactionList({
         : str.replace(/\B(?=(\d{3})+(?!\d))/g, ' ')
     }
     
+    const relatedTx = (tx as Transaction & { relatedTx?: Transaction }).relatedTx
+      || (tx.linked_transaction_id ? transactions.find(t => t.id === tx.linked_transaction_id) : undefined)
+
+    if (tx.linked_transaction_id && relatedTx) {
+      const outgoing = tx.amount < 0 ? tx : relatedTx
+      const incoming = tx.amount < 0 ? relatedTx : tx
+      const transferNote = (outgoing.description || '').split(' - ').slice(1).join(' - ')
+
+      setFormData({
+        account_id: outgoing.account_id,
+        to_account_id: incoming.account_id,
+        category_id: '',
+        amount: formatNumber(outgoing.amount),
+        amount_to: formatNumber(incoming.amount),
+        description: transferNote,
+        date: outgoing.date,
+        type: 'transfer',
+        manual_price: '',
+        exclude_from_estimate: false
+      })
+      setEditingId(outgoing.id)
+      setIsAccountOpen(false)
+      setIsAdding(true)
+      return
+    }
+
+    const isIncome = tx.amount >= 0
+    const account = accounts.find(a => a.id === tx.account_id)
+
     // For investment accounts, use quantity (shares) instead of amount (USD)
     const amountValue = account?.type === 'investment' && tx.quantity !== undefined
       ? formatNumber(tx.quantity)
@@ -561,6 +606,7 @@ export function TransactionList({
       exclude_from_estimate: !!tx.exclude_from_estimate
     })
     setEditingId(tx.id)
+    setIsAccountOpen(false)
     setIsAdding(true)
   }
 
@@ -653,13 +699,13 @@ export function TransactionList({
     return desc.includes(q) || catName.includes(q) || accName.includes(q)
   }
 
-  const getCategoryName = (id?: string) => {
+  const getCategoryName = (id?: string | null) => {
     if (!id) return 'Uncategorized'
     const cat = categories.find(c => c.id === id)
     return cat ? cat.name : 'Unknown'
   }
 
-  const getCategoryIcon = (id?: string) => {
+  const getCategoryIcon = (id?: string | null) => {
     if (!id) return '📄'
     const cat = categories.find(c => c.id === id)
     return cat?.icon || '📄'
@@ -680,6 +726,8 @@ export function TransactionList({
   const toAccount = accounts.find(a => a.id === formData.to_account_id)
   const transferAmount = parseFloat(formData.amount.replace(/\s/g, '')) || 0
   const transferAmountTo = parseFloat(formData.amount_to.replace(/\s/g, '')) || transferAmount
+  const isEditingTransfer = !!editingId && formData.type === 'transfer'
+  const isEditingStandardTransaction = !!editingId && formData.type !== 'transfer'
 
   // Group transactions by date
   const groupedTransactions = transactions.reduce((groups, tx) => {
@@ -929,44 +977,46 @@ export function TransactionList({
       <Modal 
         isOpen={isAdding} 
         onClose={handleCancel} 
-        title={editingId ? 'Edit Transaction' : (formData.type === 'transfer' ? 'Add Transfer' : formData.type === 'income' ? 'Add Income' : 'Add Transaction')}
+        title={editingId ? (formData.type === 'transfer' ? 'Edit Transfer' : 'Edit Transaction') : (formData.type === 'transfer' ? 'Add Transfer' : formData.type === 'income' ? 'Add Income' : 'Add Transaction')}
       >
         <form onSubmit={handleSubmit} className="space-y-4">
             {/* Transaction Type Selector - 3 options now */}
             <div className="grid grid-cols-3 gap-2">
               <button
                 type="button"
+                disabled={isEditingTransfer}
                 onClick={() => handleTypeChange('expense')}
                 className={`p-3 rounded-lg border transition-all duration-200 flex items-center justify-center gap-2 ${
                   formData.type === 'expense' 
                     ? 'border-destructive/50 bg-destructive/10 text-destructive' 
                     : 'border-border bg-background/50 text-muted-foreground hover:bg-background'
-                }`}
+                } ${isEditingTransfer ? 'opacity-50 cursor-not-allowed' : ''}`}
               >
                 <ArrowUpRight className="h-4 w-4" />
                 <span className="text-sm font-medium">Expense</span>
               </button>
               <button
                 type="button"
+                disabled={isEditingTransfer}
                 onClick={() => handleTypeChange('income')}
                 className={`p-3 rounded-lg border transition-all duration-200 flex items-center justify-center gap-2 ${
                   formData.type === 'income' 
                     ? 'border-success/50 bg-success/10 text-success' 
                     : 'border-border bg-background/50 text-muted-foreground hover:bg-background'
-                }`}
+                } ${isEditingTransfer ? 'opacity-50 cursor-not-allowed' : ''}`}
               >
                 <ArrowDownLeft className="h-4 w-4" />
                 <span className="text-sm font-medium">Income</span>
               </button>
               <button
                 type="button"
-                disabled={!!editingId}
+                disabled={isEditingStandardTransaction}
                 onClick={() => handleTypeChange('transfer')}
                 className={`p-3 rounded-lg border transition-all duration-200 flex items-center justify-center gap-2 ${
                   formData.type === 'transfer' 
                     ? 'border-primary/50 bg-primary/10 text-primary' 
                     : 'border-border bg-background/50 text-muted-foreground hover:bg-background'
-                } ${editingId ? 'opacity-50 cursor-not-allowed' : ''}`}
+                } ${isEditingStandardTransaction ? 'opacity-50 cursor-not-allowed' : ''}`}
               >
                 <ArrowRightLeft className="h-4 w-4" />
                 <span className="text-sm font-medium">Transfer</span>
@@ -1182,14 +1232,14 @@ export function TransactionList({
 
                 <Button type="submit" className="w-full" disabled={isSubmitting}>
                   <ArrowRightLeft className="h-4 w-4 mr-2" />
-                  {isSubmitting ? 'Processing...' : 'Transfer Funds'}
+                  {isSubmitting ? 'Processing...' : (editingId ? 'Save Transfer' : 'Transfer Funds')}
                 </Button>
               </div>
             ) : (
               /* Expense/Income Form */
               <>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-2">
+                <div className="grid grid-cols-2 gap-3 overflow-hidden">
+                  <div className="space-y-2 min-w-0">
                     <Label htmlFor="amount">{accounts.find(a => a.id === formData.account_id)?.type === 'investment' ? 'Shares' : 'Amount'}</Label>
                     <Input 
                       id="amount" 
@@ -1208,19 +1258,53 @@ export function TransactionList({
                       required 
                     />
                   </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="account">Account</Label>
-                    <Select 
-                      id="account" 
-                      value={formData.account_id} 
-                      onChange={e => setFormData({...formData, account_id: e.target.value})}
-                      required
-                    >
-                      <option value="">Select Account</option>
-                      {accounts.filter(acc => !isLocked(acc.id)).map(acc => (
-                        <option key={acc.id} value={acc.id}>{acc.name}</option>
-                      ))}
-                    </Select>
+                  <div className="space-y-2 min-w-0">
+                    {/* Mobile: collapsible account selector */}
+                    <div className="sm:hidden">
+                      <button
+                        type="button"
+                        onClick={() => setIsAccountOpen(!isAccountOpen)}
+                        className="w-full flex items-center justify-between h-10 rounded-lg border border-border bg-background/50 px-3 py-2 text-sm text-foreground hover:border-border/80 hover:bg-background/80 transition-all"
+                      >
+                        <span className="text-muted-foreground text-xs">Account</span>
+                        <span className="flex items-center gap-1.5 min-w-0">
+                          <span className="truncate text-xs">
+                            {accounts.find(a => a.id === formData.account_id)?.name || 'Select'}
+                          </span>
+                          <ChevronDown className={`h-3.5 w-3.5 flex-shrink-0 transition-transform ${isAccountOpen ? 'rotate-180' : ''}`} />
+                        </span>
+                      </button>
+                      {isAccountOpen && (
+                        <div className="mt-1">
+                          <Select
+                            id="account-mobile"
+                            value={formData.account_id}
+                            onChange={e => { setFormData({...formData, account_id: e.target.value}); setIsAccountOpen(false) }}
+                            required
+                          >
+                            <option value="">Select Account</option>
+                            {accounts.filter(acc => !isLocked(acc.id)).map(acc => (
+                              <option key={acc.id} value={acc.id}>{acc.name}</option>
+                            ))}
+                          </Select>
+                        </div>
+                      )}
+                    </div>
+                    {/* Desktop: always visible */}
+                    <div className="hidden sm:block space-y-2">
+                      <Label htmlFor="account">Account</Label>
+                      <Select
+                        id="account"
+                        value={formData.account_id}
+                        onChange={e => setFormData({...formData, account_id: e.target.value})}
+                        required
+                      >
+                        <option value="">Select Account</option>
+                        {accounts.filter(acc => !isLocked(acc.id)).map(acc => (
+                          <option key={acc.id} value={acc.id}>{acc.name}</option>
+                        ))}
+                      </Select>
+                    </div>
                   </div>
                   {/* Manual Price field for investment accounts */}
                   {accounts.find(a => a.id === formData.account_id)?.type === 'investment' && (
@@ -1259,14 +1343,15 @@ export function TransactionList({
                       ))}
                     </Select>
                   </div>
-                  <div className="space-y-2">
+                  <div className="space-y-2 min-w-0 overflow-hidden">
                     <Label htmlFor="date">Date</Label>
-                    <Input 
-                      id="date" 
-                      type="date" 
-                      value={formData.date} 
-                      onChange={e => setFormData({...formData, date: e.target.value})} 
-                      required 
+                    <Input
+                      id="date"
+                      type="date"
+                      value={formData.date}
+                      onChange={e => setFormData({...formData, date: e.target.value})}
+                      required
+                      className="w-full min-w-0"
                     />
                   </div>
                   <div className="col-span-2 space-y-2">
@@ -1308,27 +1393,31 @@ export function TransactionList({
           {sortOrder === 'date' ? (
             // Date-based grouping
             (() => {
-              let allFilteredTransactions: Transaction[] = []
+              type ProcessedTx = Transaction & { relatedTx?: Transaction }
+
+              // Process each date's full filtered group first so transfers always find their pair
+              const processedGrouped: Record<string, ProcessedTx[]> = {}
               sortedDates.forEach(date => {
-                allFilteredTransactions = allFilteredTransactions.concat(
-                  groupedTransactions[date].filter(applyFilters)
-                )
+                const filtered = groupedTransactions[date].filter(applyFilters)
+                processedGrouped[date] = processTransactions(filtered)
               })
 
-              const shownTxIds = new Set(
-                (showAllTransactions ? allFilteredTransactions : allFilteredTransactions.slice(0, DISPLAY_LIMIT))
-                  .map(tx => tx.id)
-              )
+              // Flat list in date order — newest date first, newest tx within date first
+              const allProcessed = sortedDates.flatMap(date => processedGrouped[date])
+
+              const toShow = showAllTransactions ? allProcessed : allProcessed.slice(0, DISPLAY_LIMIT)
+              const shownIds = new Set(toShow.map(tx => tx.id))
+
               const datesToDisplay = sortedDates.filter(date =>
-                groupedTransactions[date].some(tx => shownTxIds.has(tx.id))
+                processedGrouped[date].some(tx => shownIds.has(tx.id))
               )
 
               return <>
                 {datesToDisplay.map(date => {
-                  const dateTransactions = groupedTransactions[date].filter(tx => shownTxIds.has(tx.id))
+                  const dateProcessed = processedGrouped[date].filter(tx => shownIds.has(tx.id))
 
-                  if (dateTransactions.length === 0) return null
-              
+                  if (dateProcessed.length === 0) return null
+
               return (
               <div key={date}>
                 <div className="flex items-center gap-1.5 sm:gap-2 mb-1.5 sm:mb-2">
@@ -1340,7 +1429,7 @@ export function TransactionList({
                   <div className="flex-1 h-px bg-border" />
                 </div>
                 <div className="space-y-1">
-                  {processTransactions(dateTransactions).reverse().map(tx => {
+                  {dateProcessed.map(tx => {
                     const isTransfer = !!tx.linked_transaction_id && !!(tx as any).relatedTx
                     const related = (tx as any).relatedTx as Transaction | undefined
                     
@@ -1442,7 +1531,7 @@ export function TransactionList({
               </div>
             )})}
             
-            {!showAllTransactions && allFilteredTransactions.length > DISPLAY_LIMIT && (
+            {!showAllTransactions && allProcessed.length > DISPLAY_LIMIT && (
               <div className="text-center pt-2">
                 <Button
                   variant="outline"
@@ -1450,12 +1539,12 @@ export function TransactionList({
                   onClick={() => setShowAllTransactions(true)}
                   className="text-xs sm:text-sm"
                 >
-                  Show All ({allFilteredTransactions.length - DISPLAY_LIMIT} more)
+                  Show All ({allProcessed.length - DISPLAY_LIMIT} more)
                 </Button>
               </div>
             )}
 
-            {showAllTransactions && allFilteredTransactions.length > DISPLAY_LIMIT && (
+            {showAllTransactions && allProcessed.length > DISPLAY_LIMIT && (
               <div className="text-center pt-2">
                 <Button
                   variant="outline"

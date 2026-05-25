@@ -1,4 +1,4 @@
-import { Pencil, Trash2 } from 'lucide-react'
+import { Pencil, Trash2, Loader2 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '../common/card'
 import { Button } from '../common/button'
 import type { Budget } from './types'
@@ -11,9 +11,10 @@ type BudgetCardProps = {
   currency: string
   onEdit: (budget: Budget) => void
   onDelete: (budget: Budget) => void
+  deletingId?: string | null
 }
 
-export function BudgetCard({ budget, spent, progress, currency, onEdit, onDelete }: BudgetCardProps) {
+export function BudgetCard({ budget, spent, progress, currency, onEdit, onDelete, deletingId }: BudgetCardProps) {
   const remaining = budget.amount - spent
   const over = spent > budget.amount
   const overspent = Math.max(spent - budget.amount, 0)
@@ -39,8 +40,8 @@ export function BudgetCard({ budget, spent, progress, currency, onEdit, onDelete
             <Button variant="ghost" size="icon" className="h-7 w-7 hover:bg-muted/50" onClick={() => onEdit(budget)} aria-label="Edit budget">
               <Pencil className="h-3 w-3" />
             </Button>
-            <Button variant="ghost" size="icon" className="h-7 w-7 hover:bg-destructive/10" onClick={() => onDelete(budget)} aria-label="Delete budget">
-              <Trash2 className="h-3 w-3 text-destructive/70" />
+            <Button variant="ghost" size="icon" disabled={deletingId === budget.id} className="h-7 w-7 hover:bg-destructive/10" onClick={() => onDelete(budget)} aria-label="Delete budget">
+              {deletingId === budget.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3 text-destructive/70" />}
             </Button>
           </div>
         </div>

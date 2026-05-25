@@ -1,6 +1,6 @@
 import { Hono } from 'hono'
 import { Bindings } from '../types/environment.types'
-import { API_VERSION } from '../config/constants'
+import { APP_VERSION } from '../config/constants'
 import { AccountController } from '../controllers/account.controller'
 import { CategoryController } from '../controllers/category.controller'
 import { TransactionController } from '../controllers/transaction.controller'
@@ -39,7 +39,7 @@ export function setupRoutes(
   
   app.get('/version', (c) => {
     return c.json({ 
-      version: API_VERSION,
+      version: APP_VERSION,
       name: 'Finance API'
     })
   })
