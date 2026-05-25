@@ -1,8 +1,8 @@
 export interface CreateTransactionDto {
   account_id: string
-  category_id?: string
+  category_id?: string | null
   amount: number
-  description?: string
+  description?: string | null
   date: string
   price?: number
   linked_transaction_id?: string
@@ -11,9 +11,11 @@ export interface CreateTransactionDto {
 
 export interface UpdateTransactionDto {
   account_id?: string
-  category_id?: string
+  to_account_id?: string
+  category_id?: string | null
   amount?: number
-  description?: string
+  amount_to?: number
+  description?: string | null
   date?: string
   exclude_from_estimate?: boolean
 }
@@ -21,9 +23,9 @@ export interface UpdateTransactionDto {
 export interface TransactionResponseDto {
   id: string
   account_id: string
-  category_id?: string
+  category_id?: string | null
   amount: number
-  description?: string
+  description?: string | null
   date: string
   price?: number
   linked_transaction_id?: string

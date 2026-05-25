@@ -1,5 +1,6 @@
 import { Transaction } from '../models/Transaction'
 import { InvestmentTransaction } from '../models/InvestmentTransaction'
+import { Account } from '../models/Account'
 import { TransactionRepository } from '../repositories/transaction.repository'
 import { AccountRepository } from '../repositories/account.repository'
 import { InvestmentTransactionRepository } from '../repositories/investment-transaction.repository'
@@ -62,7 +63,7 @@ export class TransactionService {
         price: pricePerUnit,
         total_amount: totalAmount,
         date: dto.date,
-        notes: dto.description,
+        notes: dto.description ?? undefined,
         created_at: Date.now()
       }
 
@@ -104,6 +105,13 @@ export class TransactionService {
       throw new Error('Transaction not found')
     }
 
+    if (oldTx.linked_transaction_id) {
+      const linkedTx = await this.transactionRepo.findById(oldTx.linked_transaction_id)
+      if (linkedTx) {
+        return await this.updateTransferPair(oldTx, linkedTx, dto)
+      }
+    }
+
     // Revert old balance
     const oldAccount = await this.accountRepo.findById(oldTx.account_id)
     if (oldAccount) {
@@ -138,6 +146,98 @@ export class TransactionService {
     }
 
     const updated = await this.transactionRepo.findById(id)
+    return updated!
+  }
+
+  private async updateTransferPair(tx: Transaction, linkedTx: Transaction, dto: UpdateTransactionDto): Promise<Transaction> {
+    const outgoing = tx.amount < 0 ? tx : linkedTx
+    const incoming = tx.amount < 0 ? linkedTx : tx
+    const requestedId = tx.id
+
+    const fromAccountId = dto.account_id || outgoing.account_id
+    const toAccountId = dto.to_account_id || incoming.account_id
+    const amountFrom = Math.abs(dto.amount ?? outgoing.amount)
+    const amountTo = dto.amount_to ?? Math.abs(incoming.amount)
+    const date = dto.date || outgoing.date
+    const note = dto.description !== undefined ? dto.description : undefined
+    const now = Date.now()
+
+    if (fromAccountId === toAccountId) {
+      throw new Error('Cannot transfer to same account')
+    }
+
+    if (amountFrom <= 0 || amountTo <= 0) {
+      throw new Error('Transfer amounts must be positive')
+    }
+
+    const accountIds = new Set([outgoing.account_id, incoming.account_id, fromAccountId, toAccountId])
+    const accounts = new Map<string, Account>()
+
+    for (const accountId of accountIds) {
+      const account = await this.accountRepo.findById(accountId)
+      if (!account) {
+        throw new Error('Account not found')
+      }
+      accounts.set(accountId, account)
+    }
+
+    const balanceDeltas = new Map<string, number>()
+    const addDelta = (accountId: string, delta: number) => {
+      balanceDeltas.set(accountId, (balanceDeltas.get(accountId) || 0) + delta)
+    }
+
+    addDelta(outgoing.account_id, -outgoing.amount)
+    addDelta(incoming.account_id, -incoming.amount)
+    addDelta(fromAccountId, -amountFrom)
+    addDelta(toAccountId, amountTo)
+
+    for (const [accountId, delta] of balanceDeltas) {
+      if (delta === 0) continue
+      const account = accounts.get(accountId)!
+      await this.accountRepo.updateBalance(accountId, account.balance + delta, now)
+    }
+
+    let outgoingDescription = outgoing.description
+    let incomingDescription = incoming.description
+
+    if (note !== undefined) {
+      const fromAccount = accounts.get(fromAccountId)!
+      const toAccount = accounts.get(toAccountId)!
+      const effectiveRate = amountTo / amountFrom
+
+      outgoingDescription = `Transfer to ${toAccount.name}`
+      incomingDescription = `Transfer from ${fromAccount.name}`
+
+      if (fromAccount.currency !== toAccount.currency) {
+        outgoingDescription += ` (${amountTo.toFixed(2)} ${toAccount.currency} @ ${effectiveRate.toFixed(4)})`
+        incomingDescription += ` (${amountFrom.toFixed(2)} ${fromAccount.currency} @ ${effectiveRate.toFixed(4)})`
+      }
+
+      if (note) {
+        outgoingDescription += ` - ${note}`
+        incomingDescription += ` - ${note}`
+      }
+    }
+
+    await this.transactionRepo.update(outgoing.id, {
+      account_id: fromAccountId,
+      category_id: null,
+      amount: -amountFrom,
+      description: outgoingDescription,
+      date,
+      exclude_from_estimate: false
+    })
+
+    await this.transactionRepo.update(incoming.id, {
+      account_id: toAccountId,
+      category_id: null,
+      amount: amountTo,
+      description: incomingDescription,
+      date,
+      exclude_from_estimate: false
+    })
+
+    const updated = await this.transactionRepo.findById(requestedId)
     return updated!
   }
 

@@ -16,10 +16,10 @@ import { BulkTransactionModal, type BulkTransaction } from './BulkTransactionMod
 type Transaction = {
   id: string
   account_id: string
-  category_id?: string
+  category_id?: string | null
   amount: number
   quantity?: number
-  description?: string
+  description?: string | null
   date: string
   linked_transaction_id?: string
   exclude_from_estimate?: boolean
@@ -444,21 +444,37 @@ export function TransactionList({
           price = parseFloat(formData.manual_price.replace(/\s/g, ''))
           console.log(`Transfer to investment: ${amountTo} shares @ $${price}`)
         }
-        
-        await apiFetch(`${API_BASE_URL}/transfers`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            from_account_id: formData.account_id,
-            to_account_id: formData.to_account_id,
-            amount_from: amount,
-            amount_to: amountTo,
-            exchange_rate: exchangeRate,
-            description: formData.description,
-            date: formData.date,
-            price: price
-          }),
-        })
+
+        if (editingId) {
+          await apiFetch(`${API_BASE_URL}/transactions/${editingId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              account_id: formData.account_id,
+              to_account_id: formData.to_account_id,
+              amount,
+              amount_to: amountTo,
+              description: formData.description,
+              date: formData.date,
+            }),
+          })
+          setEditingId(null)
+        } else {
+          await apiFetch(`${API_BASE_URL}/transfers`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              from_account_id: formData.account_id,
+              to_account_id: formData.to_account_id,
+              amount_from: amount,
+              amount_to: amountTo,
+              exchange_rate: exchangeRate,
+              description: formData.description,
+              date: formData.date,
+              price: price
+            }),
+          })
+        }
         saveDefaults('transfer')
       } else {
         // Handle expense/income
@@ -528,10 +544,7 @@ export function TransactionList({
         return
       }
     }
-    
-    const isIncome = tx.amount >= 0
-    const account = accounts.find(a => a.id === tx.account_id)
-    
+
     // Format numbers with spaces
     const formatNumber = (num: number) => {
       const str = Math.abs(num).toString()
@@ -540,6 +553,35 @@ export function TransactionList({
         : str.replace(/\B(?=(\d{3})+(?!\d))/g, ' ')
     }
     
+    const relatedTx = (tx as Transaction & { relatedTx?: Transaction }).relatedTx
+      || (tx.linked_transaction_id ? transactions.find(t => t.id === tx.linked_transaction_id) : undefined)
+
+    if (tx.linked_transaction_id && relatedTx) {
+      const outgoing = tx.amount < 0 ? tx : relatedTx
+      const incoming = tx.amount < 0 ? relatedTx : tx
+      const transferNote = (outgoing.description || '').split(' - ').slice(1).join(' - ')
+
+      setFormData({
+        account_id: outgoing.account_id,
+        to_account_id: incoming.account_id,
+        category_id: '',
+        amount: formatNumber(outgoing.amount),
+        amount_to: formatNumber(incoming.amount),
+        description: transferNote,
+        date: outgoing.date,
+        type: 'transfer',
+        manual_price: '',
+        exclude_from_estimate: false
+      })
+      setEditingId(outgoing.id)
+      setIsAccountOpen(false)
+      setIsAdding(true)
+      return
+    }
+
+    const isIncome = tx.amount >= 0
+    const account = accounts.find(a => a.id === tx.account_id)
+
     // For investment accounts, use quantity (shares) instead of amount (USD)
     const amountValue = account?.type === 'investment' && tx.quantity !== undefined
       ? formatNumber(tx.quantity)
@@ -657,13 +699,13 @@ export function TransactionList({
     return desc.includes(q) || catName.includes(q) || accName.includes(q)
   }
 
-  const getCategoryName = (id?: string) => {
+  const getCategoryName = (id?: string | null) => {
     if (!id) return 'Uncategorized'
     const cat = categories.find(c => c.id === id)
     return cat ? cat.name : 'Unknown'
   }
 
-  const getCategoryIcon = (id?: string) => {
+  const getCategoryIcon = (id?: string | null) => {
     if (!id) return '📄'
     const cat = categories.find(c => c.id === id)
     return cat?.icon || '📄'
@@ -964,13 +1006,13 @@ export function TransactionList({
               </button>
               <button
                 type="button"
-                disabled={!!editingId}
+                disabled={!!editingId && formData.type !== 'transfer'}
                 onClick={() => handleTypeChange('transfer')}
                 className={`p-3 rounded-lg border transition-all duration-200 flex items-center justify-center gap-2 ${
                   formData.type === 'transfer' 
                     ? 'border-primary/50 bg-primary/10 text-primary' 
                     : 'border-border bg-background/50 text-muted-foreground hover:bg-background'
-                } ${editingId ? 'opacity-50 cursor-not-allowed' : ''}`}
+                } ${editingId && formData.type !== 'transfer' ? 'opacity-50 cursor-not-allowed' : ''}`}
               >
                 <ArrowRightLeft className="h-4 w-4" />
                 <span className="text-sm font-medium">Transfer</span>
@@ -1186,7 +1228,7 @@ export function TransactionList({
 
                 <Button type="submit" className="w-full" disabled={isSubmitting}>
                   <ArrowRightLeft className="h-4 w-4 mr-2" />
-                  {isSubmitting ? 'Processing...' : 'Transfer Funds'}
+                  {isSubmitting ? 'Processing...' : (editingId ? 'Save Transfer' : 'Transfer Funds')}
                 </Button>
               </div>
             ) : (
