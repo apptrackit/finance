@@ -726,6 +726,8 @@ export function TransactionList({
   const toAccount = accounts.find(a => a.id === formData.to_account_id)
   const transferAmount = parseFloat(formData.amount.replace(/\s/g, '')) || 0
   const transferAmountTo = parseFloat(formData.amount_to.replace(/\s/g, '')) || transferAmount
+  const isEditingTransfer = !!editingId && formData.type === 'transfer'
+  const isEditingStandardTransaction = !!editingId && formData.type !== 'transfer'
 
   // Group transactions by date
   const groupedTransactions = transactions.reduce((groups, tx) => {
@@ -975,44 +977,46 @@ export function TransactionList({
       <Modal 
         isOpen={isAdding} 
         onClose={handleCancel} 
-        title={editingId ? 'Edit Transaction' : (formData.type === 'transfer' ? 'Add Transfer' : formData.type === 'income' ? 'Add Income' : 'Add Transaction')}
+        title={editingId ? (formData.type === 'transfer' ? 'Edit Transfer' : 'Edit Transaction') : (formData.type === 'transfer' ? 'Add Transfer' : formData.type === 'income' ? 'Add Income' : 'Add Transaction')}
       >
         <form onSubmit={handleSubmit} className="space-y-4">
             {/* Transaction Type Selector - 3 options now */}
             <div className="grid grid-cols-3 gap-2">
               <button
                 type="button"
+                disabled={isEditingTransfer}
                 onClick={() => handleTypeChange('expense')}
                 className={`p-3 rounded-lg border transition-all duration-200 flex items-center justify-center gap-2 ${
                   formData.type === 'expense' 
                     ? 'border-destructive/50 bg-destructive/10 text-destructive' 
                     : 'border-border bg-background/50 text-muted-foreground hover:bg-background'
-                }`}
+                } ${isEditingTransfer ? 'opacity-50 cursor-not-allowed' : ''}`}
               >
                 <ArrowUpRight className="h-4 w-4" />
                 <span className="text-sm font-medium">Expense</span>
               </button>
               <button
                 type="button"
+                disabled={isEditingTransfer}
                 onClick={() => handleTypeChange('income')}
                 className={`p-3 rounded-lg border transition-all duration-200 flex items-center justify-center gap-2 ${
                   formData.type === 'income' 
                     ? 'border-success/50 bg-success/10 text-success' 
                     : 'border-border bg-background/50 text-muted-foreground hover:bg-background'
-                }`}
+                } ${isEditingTransfer ? 'opacity-50 cursor-not-allowed' : ''}`}
               >
                 <ArrowDownLeft className="h-4 w-4" />
                 <span className="text-sm font-medium">Income</span>
               </button>
               <button
                 type="button"
-                disabled={!!editingId && formData.type !== 'transfer'}
+                disabled={isEditingStandardTransaction}
                 onClick={() => handleTypeChange('transfer')}
                 className={`p-3 rounded-lg border transition-all duration-200 flex items-center justify-center gap-2 ${
                   formData.type === 'transfer' 
                     ? 'border-primary/50 bg-primary/10 text-primary' 
                     : 'border-border bg-background/50 text-muted-foreground hover:bg-background'
-                } ${editingId && formData.type !== 'transfer' ? 'opacity-50 cursor-not-allowed' : ''}`}
+                } ${isEditingStandardTransaction ? 'opacity-50 cursor-not-allowed' : ''}`}
               >
                 <ArrowRightLeft className="h-4 w-4" />
                 <span className="text-sm font-medium">Transfer</span>
