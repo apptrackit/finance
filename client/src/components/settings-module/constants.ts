@@ -6,7 +6,8 @@ export const CURRENCIES = [
   { code: 'CHF', name: 'Swiss Franc', symbol: 'CHF' },
   { code: 'PLN', name: 'Polish Zloty', symbol: 'zł' },
   { code: 'CZK', name: 'Czech Koruna', symbol: 'Kč' },
-  { code: 'RON', name: 'Romanian Leu', symbol: 'lei' }
+  { code: 'RON', name: 'Romanian Leu', symbol: 'lei' },
+  { code: 'MXN', name: 'Mexican Peso', symbol: '$' }
 ]
 
 export const EMOJI_OPTIONS = [

@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-const SUPPORTED_CURRENCIES = ['HUF', 'EUR', 'USD', 'GBP', 'CHF', 'PLN', 'CZK', 'RON']
+const SUPPORTED_CURRENCIES = ['HUF', 'EUR', 'USD', 'GBP', 'CHF', 'PLN', 'CZK', 'RON', 'MXN']
 
 export const CreateAccountSchema = z.object({
   name: z.string().min(1, 'Name is required').max(100),

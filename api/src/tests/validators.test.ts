@@ -16,6 +16,16 @@ describe('Account validators', () => {
     expect(result.success).toBe(true)
   })
 
+  it('accepts MXN account currency', () => {
+    const result = CreateAccountSchema.safeParse({
+      name: 'Mexico Household Wallet',
+      type: 'cash',
+      balance: 10000,
+      currency: 'MXN',
+    })
+    expect(result.success).toBe(true)
+  })
+
   it('rejects empty name', () => {
     const result = CreateAccountSchema.safeParse({
       name: '',
