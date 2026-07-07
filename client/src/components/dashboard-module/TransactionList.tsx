@@ -55,20 +55,25 @@ const isAllTimeRange = (r: { startDate: string; endDate: string }) =>
   r.startDate === '1900-01-01' && r.endDate === '2100-12-31'
 const DISPLAY_LIMIT = 7
 const RECENT_TRANSACTION_MS = 10 * 60 * 1000
+const RECENT_TIMESTAMP_GRACE_MS = 60 * 1000
 const UPDATED_BADGE_GRACE_MS = 1000
 const getLocalDateString = () => format(new Date(), 'yyyy-MM-dd')
+
+const isRecentTimestamp = (timestamp: number, now: number) => {
+  return timestamp > 0
+    && timestamp <= now + RECENT_TIMESTAMP_GRACE_MS
+    && now - timestamp <= RECENT_TRANSACTION_MS
+}
 
 const getRecentTransactionLabel = (tx: Transaction, now: number) => {
   const createdAt = tx.created_at || 0
   const updatedAt = tx.updated_at || 0
-  const isRecentlyCreated = createdAt > 0 && now >= createdAt && now - createdAt <= RECENT_TRANSACTION_MS
-  const isRecentlyUpdated = updatedAt > 0
-    && now >= updatedAt
-    && now - updatedAt <= RECENT_TRANSACTION_MS
+  const isRecentlyCreated = isRecentTimestamp(createdAt, now)
+  const isRecentlyUpdated = isRecentTimestamp(updatedAt, now)
     && (!createdAt || updatedAt > createdAt + UPDATED_BADGE_GRACE_MS)
 
-  if (isRecentlyUpdated) return 'Updated'
-  if (isRecentlyCreated) return 'New'
+  if (isRecentlyUpdated) return 'edited'
+  if (isRecentlyCreated) return 'new'
   return null
 }
 
@@ -142,6 +147,7 @@ export function TransactionList({
   const today = getLocalDateString()
   const isUpcomingForm = formData.type !== 'transfer' && formData.date > today
   const allKnownTransactions = [...transactions, ...upcomingTransactions]
+  const refreshRecentBadges = () => setBadgeNow(Date.now())
 
   // Reset showAllTransactions when filter, sort, search, or date range changes
   useEffect(() => {
@@ -152,6 +158,10 @@ export function TransactionList({
     const interval = window.setInterval(() => setBadgeNow(Date.now()), 30000)
     return () => window.clearInterval(interval)
   }, [])
+
+  useEffect(() => {
+    setBadgeNow(Date.now())
+  }, [transactions, upcomingTransactions])
 
   useEffect(() => {
     apiFetch(`${API_BASE_URL}/categories`)
@@ -559,6 +569,7 @@ export function TransactionList({
       }
       setIsAdding(false)
       resetForm()
+      refreshRecentBadges()
       onTransactionAdded()
       showAlert({
         type: 'success',
@@ -702,6 +713,7 @@ export function TransactionList({
         await apiFetch(`${API_BASE_URL}/transactions/${id}`, { method: 'DELETE' })
       }
       
+      refreshRecentBadges()
       onTransactionAdded()
       showAlert({ type: 'success', message: 'Transaction deleted' })
     } catch (error) {
@@ -729,6 +741,7 @@ export function TransactionList({
         throw new Error(data.error || 'Failed to confirm transaction')
       }
 
+      refreshRecentBadges()
       onTransactionAdded()
       showAlert({ type: 'success', message: 'Upcoming transaction confirmed' })
     } catch (error) {
@@ -805,6 +818,7 @@ export function TransactionList({
     }
     
     setShowBulkModal(false)
+    refreshRecentBadges()
     onTransactionAdded()
     showAlert({
       type: 'success',
@@ -918,7 +932,7 @@ export function TransactionList({
     if (!recentLabel) return null
 
     return (
-      <span className="flex-shrink-0 rounded border border-primary/20 bg-primary/10 px-1 py-0.5 text-[9px] font-semibold uppercase leading-none text-primary">
+      <span className="flex-shrink-0 select-none text-[10px] font-medium lowercase leading-none text-primary/50 animate-pulse">
         {recentLabel}
       </span>
     )
