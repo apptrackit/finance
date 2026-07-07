@@ -197,14 +197,17 @@ export class TransactionRepository {
 
     const [claimResult, balanceResult, postResult] = await this.db.batch([
       this.db.prepare(
-        "UPDATE transactions SET status = ?, updated_at = ? WHERE id = ? AND status = 'pending' AND linked_transaction_id IS NULL AND date <= ?"
-      ).bind(confirmationToken, now, transaction.id, today),
+        "UPDATE transactions SET status = ?, updated_at = ? WHERE id = ? AND status = 'pending' AND linked_transaction_id IS NULL AND date <= ? AND EXISTS (SELECT 1 FROM accounts WHERE id = ?)"
+      ).bind(confirmationToken, now, transaction.id, today, transaction.account_id),
       this.db.prepare(
         'UPDATE accounts SET balance = balance + ?, updated_at = ? WHERE id = ? AND EXISTS (SELECT 1 FROM transactions WHERE id = ? AND status = ?)'
       ).bind(transaction.amount, now, transaction.account_id, transaction.id, confirmationToken),
       this.db.prepare(
-        "UPDATE transactions SET status = 'posted', confirmed_at = ?, cancelled_at = NULL, updated_at = ? WHERE id = ? AND status = ?"
-      ).bind(now, now, transaction.id, confirmationToken),
+        "UPDATE transactions SET status = 'posted', confirmed_at = ?, cancelled_at = NULL, updated_at = ? WHERE id = ? AND status = ? AND EXISTS (SELECT 1 FROM accounts WHERE id = ? AND updated_at = ?)"
+      ).bind(now, now, transaction.id, confirmationToken, transaction.account_id, now),
+      this.db.prepare(
+        "UPDATE transactions SET status = 'pending', updated_at = ? WHERE id = ? AND status = ? AND NOT EXISTS (SELECT 1 FROM accounts WHERE id = ? AND updated_at = ?)"
+      ).bind(now, transaction.id, confirmationToken, transaction.account_id, now),
     ])
 
     return claimResult.meta.changes === 1 && balanceResult.meta.changes === 1 && postResult.meta.changes === 1

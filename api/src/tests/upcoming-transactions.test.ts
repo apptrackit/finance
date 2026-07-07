@@ -183,6 +183,28 @@ describe('upcoming transactions', () => {
     expect(accountRepo.updateBalance).not.toHaveBeenCalled()
   })
 
+  it('rejects confirmation when the atomic balance application does not complete', async () => {
+    const accounts = { 'account-1': makeAccount() }
+    const transactions: Record<string, Transaction> = {
+      'tx-1': {
+        id: 'tx-1',
+        account_id: 'account-1',
+        amount: 500,
+        date: '2000-01-01',
+        status: 'pending',
+      },
+    }
+    const { service, transactionRepo, accountRepo } = createService(transactions, accounts)
+    transactionRepo.confirmPendingAndApplyBalance.mockResolvedValueOnce(false)
+
+    await expect(service.confirmTransaction('tx-1'))
+      .rejects.toThrow('Transaction is not pending confirmation')
+
+    expect(transactions['tx-1'].status).toBe('pending')
+    expect(accounts['account-1'].balance).toBe(1000)
+    expect(accountRepo.updateBalance).not.toHaveBeenCalled()
+  })
+
   it('rejects confirming pending transactions dated in the future', async () => {
     const accounts = { 'account-1': makeAccount() }
     const transactions: Record<string, Transaction> = {

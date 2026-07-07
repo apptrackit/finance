@@ -54,6 +54,7 @@ const ALL_TIME_RANGE = { startDate: '1900-01-01', endDate: '2100-12-31' }
 const isAllTimeRange = (r: { startDate: string; endDate: string }) =>
   r.startDate === '1900-01-01' && r.endDate === '2100-12-31'
 const DISPLAY_LIMIT = 7
+const getLocalDateString = () => format(new Date(), 'yyyy-MM-dd')
 
 // LocalStorage keys for remembering last used values
 const STORAGE_KEYS = {
@@ -99,7 +100,7 @@ export function TransactionList({
     amount: '',
     amount_to: '',
     description: '',
-    date: new Date().toISOString().split('T')[0],
+    date: getLocalDateString(),
     type: 'expense' as 'expense' | 'income' | 'transfer',
     manual_price: '', // For investment accounts - manual price override
     exclude_from_estimate: false
@@ -121,7 +122,7 @@ export function TransactionList({
   const { confirm, showAlert } = useAlert()
   const { privacyMode, shouldHideInvestment } = usePrivacy()
   const isLocked = (accountId: string) => accounts.find(a => a.id === accountId)?.is_locked ?? false
-  const today = format(new Date(), 'yyyy-MM-dd')
+  const today = getLocalDateString()
   const isUpcomingForm = formData.type !== 'transfer' && formData.date > today
   const allKnownTransactions = [...transactions, ...upcomingTransactions]
 
@@ -393,7 +394,7 @@ export function TransactionList({
       amount: '',
       amount_to: '',
       description: '',
-      date: new Date().toISOString().split('T')[0],
+      date: getLocalDateString(),
       type: 'expense',
       manual_price: '',
       exclude_from_estimate: false
@@ -412,7 +413,7 @@ export function TransactionList({
       amount: '',
       amount_to: '',
       description: '',
-      date: new Date().toISOString().split('T')[0],
+      date: getLocalDateString(),
       type: 'expense',
       manual_price: '',
       exclude_from_estimate: false
@@ -1988,7 +1989,7 @@ export function TransactionList({
         onConfirm={handleBulkTransactionConfirm}
         accounts={accounts}
         categories={categories}
-        defaultDate={new Date().toISOString().split('T')[0]}
+        defaultDate={getLocalDateString()}
       />
     </Card>
   )
