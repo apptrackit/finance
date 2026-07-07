@@ -3,6 +3,7 @@ import { Modal } from '../common/modal'
 import { Input } from '../common/input'
 import { Select } from '../common/select'
 import { Button } from '../common/button'
+import { useAlert } from '../../context/AlertContext'
 import type { Budget, BudgetFormData, BudgetAccountScope, BudgetCategoryScope, BudgetPeriod } from './types'
 
 type Account = {
@@ -64,6 +65,7 @@ export function BudgetFormModal({
   initialData,
   masterCurrency
 }: BudgetFormModalProps) {
+  const { showAlert } = useAlert()
   const currentYear = new Date().getFullYear()
   const [form, setForm] = useState<BudgetFormData>(() => emptyForm(currentYear))
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -138,7 +140,9 @@ export function BudgetFormModal({
       })
       onClose()
     } catch (err: any) {
-      setError(err?.message || 'Failed to save budget.')
+      const message = err?.message || 'Failed to save budget.'
+      setError(message)
+      showAlert({ type: 'error', message })
     } finally {
       setIsSubmitting(false)
     }

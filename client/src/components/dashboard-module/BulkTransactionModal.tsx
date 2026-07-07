@@ -5,6 +5,7 @@ import { Input } from '../common/input'
 import { Label } from '../common/label'
 import { Select } from '../common/select'
 import { Plus, Trash2, AlertCircle, Percent } from 'lucide-react'
+import { useAlert } from '../../context/AlertContext'
 
 type Category = {
   id: string
@@ -50,6 +51,7 @@ export function BulkTransactionModal({
   defaultAccountId = '',
   defaultDate = new Date().toISOString().split('T')[0]
 }: BulkTransactionModalProps) {
+  const { showAlert } = useAlert()
   const [totalAmount, setTotalAmount] = useState('')
   const [transactionType, setTransactionType] = useState<'expense' | 'income'>('expense')
   const [transactions, setTransactions] = useState<BulkTransaction[]>([])
@@ -141,6 +143,10 @@ export function BulkTransactionModal({
       onClose()
     } catch (error) {
       console.error('Failed to create bulk transactions', error)
+      showAlert({
+        type: 'error',
+        message: error instanceof Error ? error.message : 'Failed to create bulk transactions'
+      })
     } finally {
       setIsSubmitting(false)
     }

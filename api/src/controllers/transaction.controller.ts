@@ -9,15 +9,25 @@ import { Bindings } from '../types/environment.types'
 export class TransactionController {
   constructor(private transactionService: TransactionService) {}
 
+  private getClientDate(c: Context): string | undefined {
+    const clientDate = c.req.header('X-Client-Date')
+    return clientDate && /^\d{4}-\d{2}-\d{2}$/.test(clientDate) ? clientDate : undefined
+  }
+
   async getAll(c: Context) {
     const transactions = await this.transactionService.getAllTransactions()
+    return c.json(transactions.map(TransactionMapper.toResponseDto))
+  }
+
+  async getUpcoming(c: Context) {
+    const transactions = await this.transactionService.getUpcomingTransactions()
     return c.json(transactions.map(TransactionMapper.toResponseDto))
   }
 
   async create(c: Context<{ Bindings: Bindings }>) {
     try {
       const body = await c.req.json<CreateTransactionDto>()
-      const result = await this.transactionService.createTransaction(body)
+      const result = await this.transactionService.createTransaction(body, this.getClientDate(c))
 
       // Handle investment transaction response differently
       if ('type' in result && 'quantity' in result) {
@@ -45,6 +55,10 @@ export class TransactionController {
       if (error.message.includes('locked')) {
         return c.json({ error: error.message }, 409)
       }
+
+      if (error.message.includes('Linked transfers cannot be pending')) {
+        return c.json({ error: error.message }, 400)
+      }
       
       return c.json({ 
         error: error.message || 'Failed to create transaction', 
@@ -57,11 +71,18 @@ export class TransactionController {
     try {
       const id = c.req.param('id')
       const body = await c.req.json<UpdateTransactionDto>()
-      const transaction = await this.transactionService.updateTransaction(id, body)
+      const transaction = await this.transactionService.updateTransaction(id, body, this.getClientDate(c))
       await new AuditRepository(c.env.DB).log('UPDATE', 'transaction', id, { amount: body.amount, category_id: body.category_id })
       return c.json(TransactionMapper.toResponseDto(transaction))
     } catch (error: any) {
-      const status = error.message.includes('not found') ? 404 : error.message.includes('locked') ? 409 : 500
+      const message = error.message || ''
+      const status = message.includes('not found')
+        ? 404
+        : message.includes('locked')
+          ? 409
+          : message.includes('cannot be edited') || message.includes('Linked transfers cannot be pending')
+            ? 400
+            : 500
       return c.json({ error: error.message }, status)
     }
   }
@@ -74,6 +95,30 @@ export class TransactionController {
       return c.json({ success: true })
     } catch (error: any) {
       const status = error.message.includes('not found') ? 404 : error.message.includes('locked') ? 409 : 500
+      return c.json({ error: error.message }, status)
+    }
+  }
+
+  async confirm(c: Context<{ Bindings: Bindings }>) {
+    try {
+      const id = c.req.param('id')
+      const transaction = await this.transactionService.confirmTransaction(id, this.getClientDate(c))
+      await new AuditRepository(c.env.DB).log('UPDATE', 'transaction', id, { status: 'posted' })
+      return c.json(TransactionMapper.toResponseDto(transaction))
+    } catch (error: any) {
+      const status = error.message.includes('not found') ? 404 : error.message.includes('locked') ? 409 : 400
+      return c.json({ error: error.message }, status)
+    }
+  }
+
+  async decline(c: Context<{ Bindings: Bindings }>) {
+    try {
+      const id = c.req.param('id')
+      const transaction = await this.transactionService.declineTransaction(id)
+      await new AuditRepository(c.env.DB).log('UPDATE', 'transaction', id, { status: 'cancelled' })
+      return c.json(TransactionMapper.toResponseDto(transaction))
+    } catch (error: any) {
+      const status = error.message.includes('not found') ? 404 : error.message.includes('locked') ? 409 : 400
       return c.json({ error: error.message }, status)
     }
   }

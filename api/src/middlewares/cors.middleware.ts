@@ -32,7 +32,7 @@ export async function corsMiddleware(c: Context<{ Bindings: Bindings }>, next: N
 
   // Set CORS headers for allowed origins
   c.header('Access-Control-Allow-Origin', origin)
-  c.header('Access-Control-Allow-Headers', 'Content-Type, X-API-Key')
+  c.header('Access-Control-Allow-Headers', 'Content-Type, X-API-Key, X-Client-Date')
   c.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
 
   // Handle preflight requests - return early without API key check

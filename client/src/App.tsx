@@ -45,6 +45,7 @@ function App() {
     accounts,
     transactions,
     allTransactions,
+    upcomingTransactions,
     transactionsLoading,
     categories,
     exchangeRates,
@@ -119,7 +120,43 @@ function App() {
       return sum + account.balance / rate
     }, 0)
 
+  const pendingPeriodTransactions = upcomingTransactions.filter(t =>
+    t.date >= dateRange.startDate && t.date <= dateRange.endDate
+  )
+
+  const pendingIncome = pendingPeriodTransactions
+    .filter(t => {
+      const account = accounts.find(a => a.id === t.account_id)
+      const isExcluded = account?.exclude_from_cash_balance && account?.exclude_from_net_worth
+      return t.amount > 0 && !t.linked_transaction_id && account?.type !== 'investment' && !isExcluded
+    })
+    .reduce((sum, t) => sum + convertToMasterCurrency(t.amount, t.account_id), 0)
+
+  const pendingExpenses = pendingPeriodTransactions
+    .filter(t => {
+      const account = accounts.find(a => a.id === t.account_id)
+      const isExcluded = account?.exclude_from_cash_balance && account?.exclude_from_net_worth
+      return t.amount < 0 && !t.linked_transaction_id && account?.type !== 'investment' && !isExcluded
+    })
+    .reduce((sum, t) => sum + Math.abs(convertToMasterCurrency(t.amount, t.account_id)), 0)
+
+  const pendingCashDelta = upcomingTransactions
+    .filter(t => {
+      const account = accounts.find(a => a.id === t.account_id)
+      return account?.type === 'cash' && !(account.exclude_from_cash_balance && account.exclude_from_net_worth)
+    })
+    .reduce((sum, t) => sum + convertToMasterCurrency(t.amount, t.account_id), 0)
+
+  const pendingNetWorthDelta = upcomingTransactions
+    .filter(t => {
+      const account = accounts.find(a => a.id === t.account_id)
+      return account?.type !== 'investment' && !account?.exclude_from_net_worth
+    })
+    .reduce((sum, t) => sum + convertToMasterCurrency(t.amount, t.account_id), 0)
+
   const totalNetWorth = netWorth !== null && !investmentLoading ? netWorth + investmentValue : null
+  const projectedNetWorth = totalNetWorth !== null ? totalNetWorth + pendingNetWorthDelta : null
+  const projectedCashBalance = cashBalance + pendingCashDelta
   const hasInvestmentAccounts = accounts.some(a => a.type === 'investment')
   const showSeparateCashCard = hasInvestmentAccounts
 
@@ -264,7 +301,17 @@ function App() {
                     )}
                   </div>
                   <p className="text-[9px] sm:text-xs text-muted-foreground mt-1 sm:mt-2">
-                    {investmentError ? investmentError : 'Total value'}
+                    {investmentError ? investmentError : projectedNetWorth !== null && pendingNetWorthDelta !== 0 ? (
+                      <>
+                        After all upcoming{' '}
+                        <span className={privacyMode === 'hidden' || shouldHideInvestment() ? 'select-none' : ''}>
+                          {(privacyMode === 'hidden' || shouldHideInvestment()) && !showNetWorth
+                            ? '••••••'
+                            : projectedNetWorth.toLocaleString('hu-HU', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                        </span>{' '}
+                        {masterCurrency}
+                      </>
+                    ) : 'Total value'}
                   </p>
                 </div>
               </div>
@@ -293,7 +340,21 @@ function App() {
                     )}
                   </div>
                   <p className="text-[9px] sm:text-xs text-muted-foreground mt-1 sm:mt-2">
-                    {accounts.filter(a => a.type === 'cash').length} account{accounts.filter(a => a.type === 'cash').length !== 1 ? 's' : ''}
+                    {pendingCashDelta !== 0 ? (
+                      <>
+                        After all upcoming{' '}
+                        <span className={privacyMode === 'hidden' ? 'select-none' : ''}>
+                          {privacyMode === 'hidden'
+                            ? '••••••'
+                            : projectedCashBalance.toLocaleString('hu-HU', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                        </span>{' '}
+                        {masterCurrency}
+                      </>
+                    ) : (
+                      <>
+                        {accounts.filter(a => a.type === 'cash').length} account{accounts.filter(a => a.type === 'cash').length !== 1 ? 's' : ''}
+                      </>
+                    )}
                   </p>
                 </div>
               )}
@@ -318,7 +379,13 @@ function App() {
                     </>
                   )}
                 </div>
-                <p className="text-[9px] sm:text-xs text-muted-foreground mt-1 sm:mt-2">This period</p>
+                <p className="text-[9px] sm:text-xs text-muted-foreground mt-1 sm:mt-2">
+                  {pendingIncome > 0 ? (
+                    <>
+                      +{privacyMode === 'hidden' ? '••••••' : pendingIncome.toLocaleString('hu-HU', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} {masterCurrency} pending
+                    </>
+                  ) : 'This period'}
+                </p>
               </div>
 
               {/* Expenses Card */}
@@ -342,7 +409,13 @@ function App() {
                     </>
                   )}
                 </div>
-                <p className="text-[9px] sm:text-xs text-muted-foreground mt-1 sm:mt-2">This period</p>
+                <p className="text-[9px] sm:text-xs text-muted-foreground mt-1 sm:mt-2">
+                  {pendingExpenses > 0 ? (
+                    <>
+                      −{privacyMode === 'hidden' ? '••••••' : pendingExpenses.toLocaleString('hu-HU', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} {masterCurrency} pending
+                    </>
+                  ) : 'This period'}
+                </p>
               </div>
             </div>
           )}
@@ -355,6 +428,7 @@ function App() {
               <div className="lg:col-span-8">
                 <TransactionList
                   transactions={transactions}
+                  upcomingTransactions={upcomingTransactions}
                   accounts={accounts}
                   onTransactionAdded={handleDataChange}
                   loading={transactionsLoading}
@@ -372,7 +446,7 @@ function App() {
               </div>
             </div>
           ) : view === 'analytics' ? (
-            <Analytics transactions={allTransactions} categories={categories} accounts={accounts} masterCurrency={masterCurrency} loading={transactionsLoading} />
+            <Analytics transactions={allTransactions} upcomingTransactions={upcomingTransactions} categories={categories} accounts={accounts} masterCurrency={masterCurrency} loading={transactionsLoading} />
           ) : view === 'investments' ? (
             <Investments key={investmentRefreshKey} />
           ) : view === 'recurring' ? (

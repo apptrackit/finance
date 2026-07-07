@@ -21,29 +21,22 @@ export function ScheduledTasksCard() {
 
     setIsTestingSchedule(true)
     try {
-      const res = await apiFetch(`${API_BASE_URL}/test-scheduled-task`, {
+      await apiFetch(`${API_BASE_URL}/test-scheduled-task`, {
         method: 'POST'
       })
 
-      if (res.ok) {
-        showAlert({
-          type: 'success',
-          message: 'Scheduled task executed successfully. Check your transactions.'
-        })
-        setTimeout(() => {
-          window.location.reload()
-        }, 1000)
-      } else {
-        showAlert({
-          type: 'error',
-          message: 'Failed to execute scheduled task. Please try again.'
-        })
-      }
+      showAlert({
+        type: 'success',
+        message: 'Scheduled task executed successfully. Check your transactions.'
+      })
+      setTimeout(() => {
+        window.location.reload()
+      }, 1000)
     } catch (error) {
       console.error('Failed to test scheduled task:', error)
       showAlert({
         type: 'error',
-        message: 'Failed to execute scheduled task. Please try again.'
+        message: error instanceof Error ? error.message : 'Failed to execute scheduled task. Please try again.'
       })
     } finally {
       setIsTestingSchedule(false)

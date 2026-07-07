@@ -13,7 +13,12 @@ export class TransactionMapper {
       price: transaction.price,
       linked_transaction_id: transaction.linked_transaction_id,
       exclude_from_estimate: transaction.exclude_from_estimate,
-      is_recurring: transaction.is_recurring
+      is_recurring: transaction.is_recurring,
+      status: transaction.status || 'posted',
+      confirmed_at: transaction.confirmed_at,
+      cancelled_at: transaction.cancelled_at,
+      created_at: transaction.created_at,
+      updated_at: transaction.updated_at
     }
   }
 }

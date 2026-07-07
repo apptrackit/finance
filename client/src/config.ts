@@ -18,16 +18,98 @@ export const API_BASE_URL = isDev
 // API Key for authentication
 const API_KEY = import.meta.env.VITE_API_KEY || ''
 
-// Helper function for authenticated API calls
-export const apiFetch = (url: string, options: RequestInit = {}) => {
-  return fetch(url, {
-    ...options,
-    // No credentials needed since we use API key authentication
-    headers: {
-      'X-API-Key': API_KEY,
-      ...options.headers,
-    },
+const getLocalDateString = () => {
+  const now = new Date()
+  const year = now.getFullYear()
+  const month = String(now.getMonth() + 1).padStart(2, '0')
+  const day = String(now.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+type ApiFetchOptions = RequestInit & {
+  throwOnError?: boolean
+}
+
+type ApiErrorDetail = {
+  field?: string
+  message?: string
+}
+
+type ApiErrorResponse = {
+  error?: string
+  message?: string
+  code?: string
+  details?: ApiErrorDetail[]
+}
+
+export class ApiRequestError extends Error {
+  status: number
+  code?: string
+  details?: ApiErrorDetail[]
+
+  constructor(message: string, status: number, code?: string, details?: ApiErrorDetail[]) {
+    super(message)
+    this.name = 'ApiRequestError'
+    this.status = status
+    this.code = code
+    this.details = details
+  }
+}
+
+const MUTATING_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE'])
+
+const buildHeaders = (headers?: HeadersInit) => {
+  const next = new Headers({
+    'X-API-Key': API_KEY,
+    'X-Client-Date': getLocalDateString(),
   })
+
+  new Headers(headers).forEach((value, key) => {
+    next.set(key, value)
+  })
+
+  return next
+}
+
+const createApiRequestError = async (response: Response) => {
+  const fallback = `Request failed (${response.status})`
+
+  try {
+    const data = await response.clone().json() as ApiErrorResponse
+    const details = Array.isArray(data.details) ? data.details : undefined
+    const detailMessage = details
+      ?.map(detail => {
+        if (!detail.message) return ''
+        return detail.field ? `${detail.field}: ${detail.message}` : detail.message
+      })
+      .filter(Boolean)
+      .join('; ')
+
+    const mainMessage = data.error || data.message || fallback
+    const message = detailMessage ? `${mainMessage}: ${detailMessage}` : mainMessage
+
+    return new ApiRequestError(message, response.status, data.code, details)
+  } catch {
+    const text = await response.clone().text().catch(() => '')
+    return new ApiRequestError(text || fallback, response.status)
+  }
+}
+
+// Helper function for authenticated API calls
+export const apiFetch = async (url: string, options: ApiFetchOptions = {}) => {
+  const { throwOnError, headers, ...fetchOptions } = options
+  const method = (fetchOptions.method || 'GET').toUpperCase()
+  const response = await fetch(url, {
+    ...fetchOptions,
+    // No credentials needed since we use API key authentication
+    headers: buildHeaders(headers),
+  })
+
+  if (!response.ok && (throwOnError ?? MUTATING_METHODS.has(method))) {
+    throw await createApiRequestError(response)
+  }
+
+  return response
 }
 
 // ===========================================
