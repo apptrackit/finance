@@ -1,3 +1,5 @@
+export type TransactionStatusDto = 'posted' | 'pending' | 'cancelled'
+
 export interface CreateTransactionDto {
   account_id: string
   category_id?: string
@@ -7,6 +9,7 @@ export interface CreateTransactionDto {
   price?: number
   linked_transaction_id?: string
   exclude_from_estimate?: boolean
+  status?: Extract<TransactionStatusDto, 'posted' | 'pending'>
 }
 
 export interface UpdateTransactionDto {
@@ -16,6 +19,7 @@ export interface UpdateTransactionDto {
   description?: string
   date?: string
   exclude_from_estimate?: boolean
+  status?: Extract<TransactionStatusDto, 'posted' | 'pending'>
 }
 
 export interface TransactionResponseDto {
@@ -29,4 +33,9 @@ export interface TransactionResponseDto {
   linked_transaction_id?: string
   exclude_from_estimate?: boolean
   is_recurring?: boolean
+  status: TransactionStatusDto
+  confirmed_at?: number | null
+  cancelled_at?: number | null
+  created_at?: number | null
+  updated_at?: number | null
 }

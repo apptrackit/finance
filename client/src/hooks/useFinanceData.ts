@@ -24,6 +24,11 @@ export type Transaction = {
   date: string
   linked_transaction_id?: string
   exclude_from_estimate?: boolean
+  status?: 'posted' | 'pending' | 'cancelled'
+  confirmed_at?: number | null
+  cancelled_at?: number | null
+  created_at?: number | null
+  updated_at?: number | null
 }
 
 export type Category = {
@@ -51,6 +56,7 @@ export function useFinanceData(
   const [investmentError, setInvestmentError] = useState<string | null>(null)
   const [accounts, setAccounts] = useState<Account[]>([])
   const [transactions, setTransactions] = useState<Transaction[]>([])
+  const [upcomingTransactions, setUpcomingTransactions] = useState<Transaction[]>([])
   const [allTransactions, setAllTransactions] = useState<Transaction[]>([])
   const [transactionsLoading, setTransactionsLoading] = useState<boolean>(true)
   const [categories, setCategories] = useState<Category[]>([])
@@ -78,6 +84,10 @@ export function useFinanceData(
       .then(res => res.json())
       .catch(() => [])
 
+    const upcomingTxPromise = apiFetch(`${API_BASE_URL}/transactions/upcoming`)
+      .then(res => res.json())
+      .catch(() => [])
+
     const investmentAccounts = accountsData.filter(acc => acc.type === 'investment')
 
     const investmentTxPromises = investmentAccounts.map(acc =>
@@ -101,11 +111,12 @@ export function useFinanceData(
         .catch(() => [])
     )
 
-    const [regularTxs, ...investmentTxArrays] = await Promise.all([regularTxPromise, ...investmentTxPromises])
+    const [regularTxs, upcomingTxs, ...investmentTxArrays] = await Promise.all([regularTxPromise, upcomingTxPromise, ...investmentTxPromises])
     const allTxs = [...regularTxs, ...investmentTxArrays.flat()].sort(
       (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
     )
     setTransactions(allTxs)
+    setUpcomingTransactions(upcomingTxs)
 
     apiFetch(`${API_BASE_URL}/categories`)
       .then(res => res.json())
@@ -288,6 +299,7 @@ export function useFinanceData(
     investmentError,
     accounts,
     transactions,
+    upcomingTransactions,
     allTransactions,
     transactionsLoading,
     categories,

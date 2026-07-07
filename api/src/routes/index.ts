@@ -59,7 +59,10 @@ export function setupRoutes(
 
   // Transactions
   app.get('/transactions', (c) => transactionController.getAll(c))
+  app.get('/transactions/upcoming', (c) => transactionController.getUpcoming(c))
   app.post('/transactions', (c) => transactionController.create(c))
+  app.post('/transactions/:id/confirm', (c) => transactionController.confirm(c))
+  app.post('/transactions/:id/decline', (c) => transactionController.decline(c))
   app.put('/transactions/:id', (c) => transactionController.update(c))
   app.delete('/transactions/:id', (c) => transactionController.delete(c))
 

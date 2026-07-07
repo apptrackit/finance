@@ -6,6 +6,7 @@ export type Transaction = {
   description?: string
   date: string
   linked_transaction_id?: string
+  status?: 'posted' | 'pending' | 'cancelled'
 }
 
 export type Category = {

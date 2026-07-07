@@ -97,6 +97,7 @@ describe('Transaction validators', () => {
       description: 'Salary',
       category_id: 'cat-1',
       exclude_from_estimate: false,
+      status: 'pending',
     })
     expect(result.success).toBe(true)
   })

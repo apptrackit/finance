@@ -200,7 +200,10 @@ app.delete('/accounts/:id', (c) => getControllers(c).accountController.delete(c)
 
 // Transactions
 app.get('/transactions', (c) => getControllers(c).transactionController.getAll(c))
+app.get('/transactions/upcoming', (c) => getControllers(c).transactionController.getUpcoming(c))
 app.post('/transactions', validateBody(CreateTransactionSchema), (c) => getControllers(c).transactionController.create(c))
+app.post('/transactions/:id/confirm', (c) => getControllers(c).transactionController.confirm(c))
+app.post('/transactions/:id/decline', (c) => getControllers(c).transactionController.decline(c))
 app.put('/transactions/:id', validateBody(UpdateTransactionSchema), (c) => getControllers(c).transactionController.update(c))
 app.delete('/transactions/:id', (c) => getControllers(c).transactionController.delete(c))
 

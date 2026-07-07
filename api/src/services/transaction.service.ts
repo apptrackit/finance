@@ -18,6 +18,31 @@ export class TransactionService {
     return await this.transactionRepo.findAll()
   }
 
+  async getUpcomingTransactions(): Promise<Transaction[]> {
+    return await this.transactionRepo.findUpcoming()
+  }
+
+  private todayString(): string {
+    return new Date().toISOString().slice(0, 10)
+  }
+
+  private isApplied(transaction: Transaction): boolean {
+    return (transaction.status || 'posted') === 'posted'
+  }
+
+  private resolveCreateStatus(dto: CreateTransactionDto): 'posted' | 'pending' {
+    if (dto.status === 'pending') return 'pending'
+    return dto.date > this.todayString() ? 'pending' : 'posted'
+  }
+
+  private resolveUpdateStatus(oldTx: Transaction, dto: UpdateTransactionDto): 'posted' | 'pending' {
+    if (dto.status) return dto.status
+    const oldStatus = oldTx.status || 'posted'
+    if (oldStatus === 'pending') return 'pending'
+    const nextDate = dto.date || oldTx.date
+    return nextDate > this.todayString() ? 'pending' : 'posted'
+  }
+
   async createTransaction(dto: CreateTransactionDto): Promise<Transaction | { type: string; quantity: number; price: number; total_amount: number }> {
     const id = crypto.randomUUID()
 
@@ -76,6 +101,8 @@ export class TransactionService {
     }
 
     // For non-investment accounts: use regular transactions table
+    const now = Date.now()
+    const status = this.resolveCreateStatus(dto)
     const transaction: Transaction = {
       id,
       account_id: dto.account_id,
@@ -84,14 +111,20 @@ export class TransactionService {
       description: dto.description,
       date: dto.date,
       linked_transaction_id: dto.linked_transaction_id,
-      exclude_from_estimate: dto.exclude_from_estimate
+      exclude_from_estimate: dto.exclude_from_estimate,
+      status,
+      confirmed_at: status === 'posted' ? now : null,
+      created_at: now,
+      updated_at: now
     }
 
     await this.transactionRepo.create(transaction)
 
-    // Update account balance
-    const newBalance = account.balance + dto.amount
-    await this.accountRepo.updateBalance(dto.account_id, newBalance, Date.now())
+    // Pending transactions are projections only until confirmed.
+    if (status === 'posted') {
+      const newBalance = account.balance + dto.amount
+      await this.accountRepo.updateBalance(dto.account_id, newBalance, now)
+    }
 
     return transaction
   }
@@ -104,36 +137,46 @@ export class TransactionService {
       throw new Error('Transaction not found')
     }
 
-    // Revert old balance
+    if ((oldTx.status || 'posted') === 'cancelled') {
+      throw new Error('Cannot update a declined transaction')
+    }
+
+    const oldWasApplied = this.isApplied(oldTx)
+    const nextStatus = this.resolveUpdateStatus(oldTx, dto)
+    const newAccountId = dto.account_id || oldTx.account_id
+    const newAmount = dto.amount ?? oldTx.amount
+    const now = Date.now()
+
+    // Revert old balance only if the transaction had already been posted.
     const oldAccount = await this.accountRepo.findById(oldTx.account_id)
-    if (oldAccount) {
+    if (oldAccount && oldWasApplied) {
       await this.accountRepo.updateBalance(
         oldTx.account_id,
         oldAccount.balance - oldTx.amount,
-        Date.now()
+        now
       )
     }
 
     // Update transaction
-    const newAccountId = dto.account_id || oldTx.account_id
-    const newAmount = dto.amount ?? oldTx.amount
-
     await this.transactionRepo.update(id, {
       account_id: newAccountId,
       category_id: dto.category_id !== undefined ? dto.category_id : oldTx.category_id,
       amount: newAmount,
       description: dto.description !== undefined ? dto.description : oldTx.description,
       date: dto.date || oldTx.date,
-      exclude_from_estimate: dto.exclude_from_estimate !== undefined ? dto.exclude_from_estimate : oldTx.exclude_from_estimate
+      exclude_from_estimate: dto.exclude_from_estimate !== undefined ? dto.exclude_from_estimate : oldTx.exclude_from_estimate,
+      status: nextStatus,
+      confirmed_at: nextStatus === 'posted' ? (oldTx.confirmed_at || now) : null,
+      updated_at: now
     })
 
-    // Apply new balance
+    // Apply new balance only when the updated transaction is posted.
     const newAccount = await this.accountRepo.findById(newAccountId)
-    if (newAccount) {
+    if (newAccount && nextStatus === 'posted') {
       await this.accountRepo.updateBalance(
         newAccountId,
         newAccount.balance + newAmount,
-        Date.now()
+        now
       )
     }
 
@@ -148,7 +191,7 @@ export class TransactionService {
     if (tx) {
       // Revert balance for the main transaction
       const account = await this.accountRepo.findById(tx.account_id)
-      if (account) {
+      if (account && this.isApplied(tx)) {
         await this.accountRepo.updateBalance(
           tx.account_id,
           account.balance - tx.amount,
@@ -162,7 +205,7 @@ export class TransactionService {
         if (linkedTx) {
           // Revert balance for the linked account
           const linkedAccount = await this.accountRepo.findById(linkedTx.account_id)
-          if (linkedAccount) {
+          if (linkedAccount && this.isApplied(linkedTx)) {
             await this.accountRepo.updateBalance(
               linkedTx.account_id,
               linkedAccount.balance - linkedTx.amount,
@@ -177,6 +220,58 @@ export class TransactionService {
       // Delete the main transaction
       await this.transactionRepo.delete(id)
     }
+  }
+
+  async confirmTransaction(id: string): Promise<Transaction> {
+    const tx = await this.transactionRepo.findById(id)
+    if (!tx) {
+      throw new Error('Transaction not found')
+    }
+
+    if ((tx.status || 'posted') !== 'pending') {
+      throw new Error('Only pending transactions can be confirmed')
+    }
+
+    if (tx.linked_transaction_id) {
+      throw new Error('Linked transactions cannot be confirmed here')
+    }
+
+    const account = await this.accountRepo.findById(tx.account_id)
+    if (!account) {
+      throw new Error('Account not found')
+    }
+
+    const now = Date.now()
+    await this.accountRepo.updateBalance(tx.account_id, account.balance + tx.amount, now)
+    await this.transactionRepo.update(id, {
+      status: 'posted',
+      confirmed_at: now,
+      updated_at: now
+    })
+
+    const updated = await this.transactionRepo.findById(id)
+    return updated!
+  }
+
+  async declineTransaction(id: string): Promise<Transaction> {
+    const tx = await this.transactionRepo.findById(id)
+    if (!tx) {
+      throw new Error('Transaction not found')
+    }
+
+    if ((tx.status || 'posted') !== 'pending') {
+      throw new Error('Only pending transactions can be declined')
+    }
+
+    const now = Date.now()
+    await this.transactionRepo.update(id, {
+      status: 'cancelled',
+      cancelled_at: now,
+      updated_at: now
+    })
+
+    const updated = await this.transactionRepo.findById(id)
+    return updated!
   }
 
   async cloneRecurringTransactions(): Promise<void> {

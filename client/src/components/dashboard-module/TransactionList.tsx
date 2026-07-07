@@ -24,6 +24,7 @@ type Transaction = {
   date: string
   linked_transaction_id?: string
   exclude_from_estimate?: boolean
+  status?: 'posted' | 'pending' | 'cancelled'
 }
 
 type Account = {
@@ -62,6 +63,7 @@ const STORAGE_KEYS = {
 
 export function TransactionList({ 
   transactions, 
+  upcomingTransactions = [],
   accounts, 
   onTransactionAdded,
   loading,
@@ -71,6 +73,7 @@ export function TransactionList({
   onMonthChange
 }: { 
   transactions: Transaction[], 
+  upcomingTransactions?: Transaction[],
   accounts: Account[],
   onTransactionAdded: () => void,
   loading?: boolean,
@@ -108,10 +111,15 @@ export function TransactionList({
   const [searchQuery, setSearchQuery] = useState<string>('')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [confirmingId, setConfirmingId] = useState<string | null>(null)
+  const [decliningId, setDecliningId] = useState<string | null>(null)
   
   const { confirm } = useAlert()
   const { privacyMode, shouldHideInvestment } = usePrivacy()
   const { isLocked } = useLockedAccounts()
+  const allKnownTransactions = [...transactions, ...upcomingTransactions]
+  const today = new Date().toISOString().split('T')[0]
+  const isUpcomingForm = formData.type !== 'transfer' && formData.date > today
 
   // Reset showAllTransactions when filter, sort, search, or date range changes
   useEffect(() => {
@@ -520,7 +528,7 @@ export function TransactionList({
     
     // For transfers, also check if the linked account is locked
     if (tx.linked_transaction_id) {
-      const linkedTx = transactions.find(t => t.id === tx.linked_transaction_id)
+      const linkedTx = allKnownTransactions.find(t => t.id === tx.linked_transaction_id)
       if (linkedTx && isLocked(linkedTx.account_id)) {
         return
       }
@@ -566,7 +574,7 @@ export function TransactionList({
 
   const handleDelete = async (id: string) => {
     // Find the transaction first to check if account is locked
-    const tx = transactions.find(t => t.id === id)
+    const tx = allKnownTransactions.find(t => t.id === id)
     if (!tx) return
     
     // Check if the account is locked
@@ -576,7 +584,7 @@ export function TransactionList({
     
     // For transfers, also check if the linked account is locked
     if (tx.linked_transaction_id) {
-      const linkedTx = transactions.find(t => t.id === tx.linked_transaction_id)
+      const linkedTx = allKnownTransactions.find(t => t.id === tx.linked_transaction_id)
       if (linkedTx && isLocked(linkedTx.account_id)) {
         return
       }
@@ -594,7 +602,7 @@ export function TransactionList({
     setDeletingId(id)
     try {
       // Find the transaction to determine if it's an investment transaction
-      const tx = transactions.find(t => t.id === id)
+      const tx = allKnownTransactions.find(t => t.id === id)
       const account = accounts.find(a => a.id === tx?.account_id)
       
       // If it's an investment account and has quantity data, it's from investment_transactions table
@@ -611,6 +619,43 @@ export function TransactionList({
       console.error('Failed to delete transaction', error)
     } finally {
       setDeletingId(null)
+    }
+  }
+
+  const handleConfirmUpcoming = async (tx: Transaction) => {
+    if (isLocked(tx.account_id) || confirmingId) return
+
+    setConfirmingId(tx.id)
+    try {
+      await apiFetch(`${API_BASE_URL}/transactions/${tx.id}/confirm`, { method: 'POST' })
+      onTransactionAdded()
+    } catch (error) {
+      console.error('Failed to confirm upcoming transaction', error)
+    } finally {
+      setConfirmingId(null)
+    }
+  }
+
+  const handleDeclineUpcoming = async (tx: Transaction) => {
+    if (isLocked(tx.account_id) || decliningId) return
+
+    const confirmed = await confirm({
+      title: 'Decline Upcoming Transaction',
+      message: 'Decline this upcoming transaction? It will not affect your balance.',
+      confirmText: 'Decline',
+      cancelText: 'Cancel'
+    })
+
+    if (!confirmed) return
+
+    setDecliningId(tx.id)
+    try {
+      await apiFetch(`${API_BASE_URL}/transactions/${tx.id}/decline`, { method: 'POST' })
+      onTransactionAdded()
+    } catch (error) {
+      console.error('Failed to decline upcoming transaction', error)
+    } finally {
+      setDecliningId(null)
     }
   }
 
@@ -737,6 +782,126 @@ export function TransactionList({
     return processed
   }
 
+  const pendingFilteredTransactions = upcomingTransactions
+    .filter(applyFilters)
+    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+
+  const dueTransactions = pendingFilteredTransactions.filter(tx => tx.date <= today)
+  const futureTransactions = pendingFilteredTransactions.filter(tx => tx.date > today)
+  const visibleTransactionCount = transactions.length + upcomingTransactions.length
+
+  const pendingLabel = (tx: Transaction) => {
+    if (tx.date > today) {
+      return `Expected ${format(new Date(tx.date), new Date(tx.date).getFullYear() !== new Date().getFullYear() ? 'MMM d, yyyy' : 'MMM d')}`
+    }
+    const daysLate = differenceInDays(new Date(today), new Date(tx.date))
+    if (daysLate <= 0) return 'Ready today'
+    return `${daysLate} day${daysLate === 1 ? '' : 's'} late`
+  }
+
+  const renderPendingRow = (tx: Transaction, isDue: boolean) => {
+    const account = accounts.find(a => a.id === tx.account_id)
+    const isInvestmentTx = account?.type === 'investment'
+    const shouldHide = privacyMode === 'hidden' || (isInvestmentTx && shouldHideInvestment())
+    const amountText = shouldHide
+      ? '••••••'
+      : `${tx.amount >= 0 ? '+' : '-'}${Math.abs(tx.amount).toLocaleString('hu-HU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${getAccountCurrency(tx.account_id)}`
+
+    return (
+      <div
+        key={tx.id}
+        className={`group flex items-center justify-between p-2 sm:p-3 rounded-lg sm:rounded-xl border transition-all duration-200 ${
+          isDue
+            ? 'border-success/20 bg-success/5 hover:bg-success/10'
+            : 'border-border/50 bg-secondary/20 hover:bg-secondary/30'
+        }`}
+        onClick={() => setActiveTxId(activeTxId === tx.id ? null : tx.id)}
+      >
+        <div className="flex items-center gap-2 sm:gap-3" onClick={(e) => e.stopPropagation()}>
+          <div className={`h-8 w-8 sm:h-10 sm:w-10 rounded-lg sm:rounded-xl flex items-center justify-center text-base sm:text-lg ${
+            isDue ? 'bg-success/10 text-success' : 'bg-primary/10 text-primary'
+          }`}>
+            {isDue ? <Check className="h-4 w-4 sm:h-5 sm:w-5" /> : <Calendar className="h-4 w-4 sm:h-5 sm:w-5" />}
+          </div>
+          <div>
+            <p className="font-medium text-xs sm:text-sm">
+              {tx.description || getCategoryName(tx.category_id)}
+            </p>
+            <div className="flex items-center gap-1.5 sm:gap-2 text-[10px] sm:text-xs text-muted-foreground">
+              <span>{getAccountName(tx.account_id)}</span>
+              <span>•</span>
+              <span>{pendingLabel(tx)}</span>
+            </div>
+          </div>
+        </div>
+        <div className="flex flex-col items-end gap-0.5">
+          <div className={`font-bold text-xs sm:text-sm ${tx.amount >= 0 ? 'text-success' : 'text-destructive'} ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
+            {amountText}
+          </div>
+          <div className={`flex gap-1 transition-opacity ${activeTxId === tx.id ? 'opacity-100' : 'opacity-0 md:group-hover:opacity-100'}`}>
+            {!isLocked(tx.account_id) && (
+              <>
+                {isDue && (
+                  <>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="h-7 w-7 sm:h-8 sm:w-8 text-success hover:text-success"
+                      disabled={confirmingId === tx.id}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        handleConfirmUpcoming(tx)
+                      }}
+                    >
+                      <Check className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
+                    </Button>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="h-7 w-7 sm:h-8 sm:w-8 text-destructive hover:text-destructive"
+                      disabled={decliningId === tx.id}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        handleDeclineUpcoming(tx)
+                      }}
+                    >
+                      <X className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
+                    </Button>
+                  </>
+                )}
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="h-7 w-7 sm:h-8 sm:w-8"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    handleEdit(tx)
+                  }}
+                >
+                  <Pencil className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
+                </Button>
+                {!isDue && (
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="h-7 w-7 sm:h-8 sm:w-8 text-destructive hover:text-destructive"
+                    disabled={deletingId === tx.id}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      handleDelete(tx.id)
+                    }}
+                  >
+                    <Trash2 className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
+                  </Button>
+                )}
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <Card>
       <CardHeader className="pb-3 sm:pb-4">
@@ -748,7 +913,9 @@ export function TransactionList({
               </div>
               <div>
                 <CardTitle className="text-sm sm:text-base">Transactions</CardTitle>
-                <p className="text-[10px] sm:text-xs text-muted-foreground">{transactions.length} total</p>
+                <p className="text-[10px] sm:text-xs text-muted-foreground">
+                  {transactions.length} posted{upcomingTransactions.length > 0 ? ` • ${upcomingTransactions.length} pending` : ''}
+                </p>
               </div>
             </div>
             
@@ -1261,14 +1428,19 @@ export function TransactionList({
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="date">Date</Label>
-                    <Input 
-                      id="date" 
-                      type="date" 
-                      value={formData.date} 
-                      onChange={e => setFormData({...formData, date: e.target.value})} 
-                      required 
-                    />
-                  </div>
+	                    <Input 
+	                      id="date" 
+	                      type="date" 
+	                      value={formData.date} 
+	                      onChange={e => setFormData({...formData, date: e.target.value})} 
+	                      required 
+	                    />
+	                    {isUpcomingForm && (
+	                      <p className="text-[10px] sm:text-xs text-primary">
+	                        This will be saved as an upcoming transaction.
+	                      </p>
+	                    )}
+	                  </div>
                   <div className="col-span-2 space-y-2">
                     <Label htmlFor="description">Description</Label>
                     <Input 
@@ -1294,10 +1466,10 @@ export function TransactionList({
                     </div>
                   )}
                 </div>
-                <Button type="submit" className="w-full" variant={formData.type === 'income' ? 'success' : 'default'} disabled={isSubmitting}>
-                  {editingId ? <Check className="h-4 w-4 mr-2" /> : <Plus className="h-4 w-4 mr-2" />}
-                  {isSubmitting ? 'Saving...' : (editingId ? 'Save Changes' : `Add ${formData.type === 'income' ? 'Income' : 'Expense'}`)}
-                </Button>
+	                <Button type="submit" className="w-full" variant={formData.type === 'income' ? 'success' : 'default'} disabled={isSubmitting}>
+	                  {editingId ? <Check className="h-4 w-4 mr-2" /> : <Plus className="h-4 w-4 mr-2" />}
+	                  {isSubmitting ? 'Saving...' : (editingId ? 'Save Changes' : isUpcomingForm ? 'Save Upcoming' : `Add ${formData.type === 'income' ? 'Income' : 'Expense'}`)}
+	                </Button>
               </>
             )}
           </form>
@@ -1305,6 +1477,38 @@ export function TransactionList({
 
       <CardContent className="space-y-3 sm:space-y-4">
         <div className="space-y-3 sm:space-y-4">
+          {(dueTransactions.length > 0 || futureTransactions.length > 0) && (
+            <div className="space-y-3 rounded-xl border border-border/60 bg-background/35 p-2 sm:p-3">
+              {dueTransactions.length > 0 && (
+                <div>
+                  <div className="mb-1.5 sm:mb-2 flex items-center gap-2">
+                    <div className="text-[10px] sm:text-xs font-medium text-success">
+                      Ready to confirm
+                    </div>
+                    <div className="flex-1 h-px bg-success/20" />
+                  </div>
+                  <div className="space-y-1">
+                    {dueTransactions.map(tx => renderPendingRow(tx, true))}
+                  </div>
+                </div>
+              )}
+
+              {futureTransactions.length > 0 && (
+                <div>
+                  <div className="mb-1.5 sm:mb-2 flex items-center gap-2">
+                    <div className="text-[10px] sm:text-xs font-medium text-muted-foreground">
+                      Upcoming
+                    </div>
+                    <div className="flex-1 h-px bg-border" />
+                  </div>
+                  <div className="space-y-1">
+                    {futureTransactions.map(tx => renderPendingRow(tx, false))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           {sortOrder === 'date' ? (
             // Date-based grouping
             (() => {
@@ -1621,7 +1825,7 @@ export function TransactionList({
             })()
           )}
           
-          {loading && transactions.length === 0 && (
+          {loading && visibleTransactionCount === 0 && (
             <div className="space-y-2">
               {[...Array(6)].map((_, i) => (
                 <div key={i} className="flex items-center gap-3 p-2 sm:p-3 rounded-xl">
@@ -1636,7 +1840,7 @@ export function TransactionList({
             </div>
           )}
 
-          {transactions.length === 0 && !isAdding && !loading && (
+          {visibleTransactionCount === 0 && !isAdding && !loading && (
             <div className="text-center py-12">
               <div className="h-12 w-12 rounded-full bg-secondary/50 flex items-center justify-center mx-auto mb-3">
                 <Receipt className="h-6 w-6 text-muted-foreground" />
@@ -1646,7 +1850,7 @@ export function TransactionList({
             </div>
           )}
 
-          {transactions.length > 0 && totalFilteredCount === 0 && !isAdding && !loading && (
+          {visibleTransactionCount > 0 && totalFilteredCount === 0 && pendingFilteredTransactions.length === 0 && !isAdding && !loading && (
             <div className="text-center py-12">
               <div className="h-12 w-12 rounded-full bg-secondary/50 flex items-center justify-center mx-auto mb-3">
                 <Search className="h-6 w-6 text-muted-foreground" />

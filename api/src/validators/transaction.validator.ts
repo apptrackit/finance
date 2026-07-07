@@ -1,6 +1,7 @@
 import { z } from 'zod'
 
 const dateRegex = /^\d{4}-\d{2}-\d{2}$/
+const TransactionStatusSchema = z.enum(['posted', 'pending'])
 
 export const CreateTransactionSchema = z.object({
   account_id: z.string().min(1, 'account_id is required'),
@@ -11,6 +12,7 @@ export const CreateTransactionSchema = z.object({
   price: z.number().positive().optional(),
   linked_transaction_id: z.string().optional(),
   exclude_from_estimate: z.boolean().optional(),
+  status: TransactionStatusSchema.optional(),
 })
 
 export const UpdateTransactionSchema = z.object({
@@ -20,4 +22,5 @@ export const UpdateTransactionSchema = z.object({
   description: z.string().max(500).nullable().optional(),
   date: z.string().regex(dateRegex, 'Date must be YYYY-MM-DD').optional(),
   exclude_from_estimate: z.boolean().optional(),
+  status: TransactionStatusSchema.optional(),
 })

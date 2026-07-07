@@ -17,12 +17,22 @@ export class TransactionRepository {
   private mapTransaction(raw: RawTransactionRow): Transaction {
     return {
       ...raw,
-      exclude_from_estimate: raw.exclude_from_estimate === 1
+      exclude_from_estimate: raw.exclude_from_estimate === 1,
+      status: raw.status || 'posted'
     }
   }
 
   async findAll(): Promise<Transaction[]> {
-    const { results } = await this.db.prepare('SELECT * FROM transactions ORDER BY date DESC').all<RawTransactionRow>()
+    const { results } = await this.db.prepare(
+      "SELECT * FROM transactions WHERE status = 'posted' ORDER BY date DESC"
+    ).all<RawTransactionRow>()
+    return results.map(r => this.mapTransaction(r))
+  }
+
+  async findUpcoming(): Promise<Transaction[]> {
+    const { results } = await this.db.prepare(
+      "SELECT * FROM transactions WHERE status = 'pending' ORDER BY date ASC"
+    ).all<RawTransactionRow>()
     return results.map(r => this.mapTransaction(r))
   }
 
@@ -32,8 +42,11 @@ export class TransactionRepository {
   }
 
   async create(transaction: Transaction): Promise<void> {
+    const now = transaction.created_at || Date.now()
+    const status = transaction.status || 'posted'
+
     await this.db.prepare(
-      'INSERT INTO transactions (id, account_id, category_id, amount, description, date, linked_transaction_id, exclude_from_estimate) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+      'INSERT INTO transactions (id, account_id, category_id, amount, description, date, linked_transaction_id, exclude_from_estimate, status, confirmed_at, cancelled_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
     ).bind(
       transaction.id,
       transaction.account_id,
@@ -42,7 +55,12 @@ export class TransactionRepository {
       transaction.description || null,
       transaction.date,
       transaction.linked_transaction_id || null,
-      transaction.exclude_from_estimate ? 1 : 0
+      transaction.exclude_from_estimate ? 1 : 0,
+      status,
+      transaction.confirmed_at ?? (status === 'posted' ? now : null),
+      transaction.cancelled_at ?? null,
+      now,
+      transaction.updated_at || now
     ).run()
   }
 
@@ -74,6 +92,22 @@ export class TransactionRepository {
       fields.push('exclude_from_estimate = ?')
       values.push(updates.exclude_from_estimate ? 1 : 0)
     }
+    if (updates.status !== undefined) {
+      fields.push('status = ?')
+      values.push(updates.status)
+    }
+    if (updates.confirmed_at !== undefined) {
+      fields.push('confirmed_at = ?')
+      values.push(updates.confirmed_at)
+    }
+    if (updates.cancelled_at !== undefined) {
+      fields.push('cancelled_at = ?')
+      values.push(updates.cancelled_at)
+    }
+    if (updates.updated_at !== undefined) {
+      fields.push('updated_at = ?')
+      values.push(updates.updated_at)
+    }
 
     values.push(id)
 
@@ -96,18 +130,18 @@ export class TransactionRepository {
     const order = sortOrder.toLowerCase() === 'asc' ? 'ASC' : 'DESC'
 
     const { results } = await this.db.prepare(
-      `SELECT * FROM transactions ORDER BY ${field} ${order} LIMIT ? OFFSET ?`
+      `SELECT * FROM transactions WHERE status = 'posted' ORDER BY ${field} ${order} LIMIT ? OFFSET ?`
     ).bind(limit, offset).all<RawTransactionRow>()
     return results.map(r => this.mapTransaction(r))
   }
 
   async count(): Promise<number> {
-    const result = await this.db.prepare('SELECT COUNT(*) as count FROM transactions').first<{ count: number }>()
+    const result = await this.db.prepare("SELECT COUNT(*) as count FROM transactions WHERE status = 'posted'").first<{ count: number }>()
     return result?.count || 0
   }
 
   async findByDateRange(startDate: string, endDate: string, accountId?: string, categoryId?: string): Promise<Transaction[]> {
-    let query = 'SELECT * FROM transactions WHERE date >= ? AND date <= ?'
+    let query = "SELECT * FROM transactions WHERE status = 'posted' AND date >= ? AND date <= ?"
     const params: D1Value[] = [startDate, endDate]
 
     if (accountId) {
@@ -127,7 +161,7 @@ export class TransactionRepository {
   }
 
   async findFromDate(startDate: string, accountId?: string, categoryId?: string): Promise<Transaction[]> {
-    let query = 'SELECT * FROM transactions WHERE date >= ?'
+    let query = "SELECT * FROM transactions WHERE status = 'posted' AND date >= ?"
     const params: D1Value[] = [startDate]
 
     if (accountId) {
@@ -147,7 +181,7 @@ export class TransactionRepository {
   }
 
   async findRecurring(): Promise<Transaction[]> {
-    const { results } = await this.db.prepare('SELECT * FROM transactions WHERE is_recurring = 1').all<RawTransactionRow>()
+    const { results } = await this.db.prepare("SELECT * FROM transactions WHERE status = 'posted' AND is_recurring = 1").all<RawTransactionRow>()
     return results.map(r => this.mapTransaction(r))
   }
 
@@ -165,6 +199,7 @@ export class TransactionRepository {
       INNER JOIN accounts a ON t.account_id = a.id
       LEFT JOIN categories c ON t.category_id = c.id
       WHERE a.type = 'cash'
+        AND t.status = 'posted'
         AND t.amount < 0
         AND t.date >= ?
         AND t.date <= ?
