@@ -42,7 +42,7 @@ type BudgetProps = {
 }
 
 export function Budget({ accounts, categories, transactions, masterCurrency }: BudgetProps) {
-  const { confirm } = useAlert()
+  const { confirm, showAlert } = useAlert()
   const [budgets, setBudgets] = useState<Budget[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -149,6 +149,7 @@ export function Budget({ accounts, categories, transactions, masterCurrency }: B
     account_ids?: string[]
     category_ids?: string[]
   }) => {
+    const wasEditing = !!editingBudget
     const payloadWithCurrency = {
       ...payload,
       currency: masterCurrency
@@ -177,6 +178,10 @@ export function Budget({ accounts, categories, transactions, masterCurrency }: B
 
     await fetchBudgets()
     setEditingBudget(null)
+    showAlert({
+      type: 'success',
+      message: wasEditing ? 'Budget updated' : 'Budget created'
+    })
   }
 
   const handleEdit = (budget: Budget) => {
@@ -200,8 +205,11 @@ export function Budget({ accounts, categories, transactions, masterCurrency }: B
         throw new Error(data?.error || 'Failed to delete budget')
       }
       await fetchBudgets()
+      showAlert({ type: 'success', message: 'Budget deleted' })
     } catch (err: any) {
-      setError(err?.message || 'Failed to delete budget')
+      const message = err?.message || 'Failed to delete budget'
+      setError(message)
+      showAlert({ type: 'error', message })
     } finally {
       setDeletingId(null)
     }

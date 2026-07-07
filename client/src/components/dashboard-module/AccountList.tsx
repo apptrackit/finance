@@ -268,6 +268,7 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
     
     setIsSubmitting(true)
     try {
+      const wasEditing = !!editingId
       const balanceValue = formData.balance.replace(/\s/g, '').trim()
       const payload: any = {
         name: formData.name,
@@ -317,9 +318,16 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
       setIsAdding(false)
       resetForm()
       onAccountAdded()
+      showAlert({
+        type: 'success',
+        message: wasEditing ? 'Account updated' : 'Account created'
+      })
     } catch (error) {
       console.error('Failed to save account', error)
-      showAlert({ type: 'error', message: 'Failed to save account. Please try again.' })
+      showAlert({
+        type: 'error',
+        message: error instanceof Error ? error.message : 'Failed to save account. Please try again.'
+      })
     } finally {
       setIsSubmitting(false)
     }
@@ -367,8 +375,13 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
     try {
       await apiFetch(`${API_BASE_URL}/accounts/${id}`, { method: 'DELETE' })
       onAccountAdded()
+      showAlert({ type: 'success', message: 'Account deleted' })
     } catch (error) {
       console.error('Failed to delete account', error)
+      showAlert({
+        type: 'error',
+        message: error instanceof Error ? error.message : 'Failed to delete account. Please try again.'
+      })
     } finally {
       setDeletingId(null)
     }
@@ -381,7 +394,8 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
   }
 
   const handleLockToggle = async (accountId: string) => {
-    if (isLocked(accountId)) {
+    const wasLocked = isLocked(accountId)
+    if (wasLocked) {
       const confirmed = await confirm({
         title: 'Unlock Account',
         message: 'Are you sure you want to unlock this account? You will be able to edit, delete, and add transactions again.',
@@ -392,12 +406,22 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
     }
     setLockingId(accountId)
     try {
-      if (isLocked(accountId)) {
+      if (wasLocked) {
         await apiFetch(`${API_BASE_URL}/accounts/${accountId}/unlock`, { method: 'PATCH' })
       } else {
         await apiFetch(`${API_BASE_URL}/accounts/${accountId}/lock`, { method: 'PATCH' })
       }
       onAccountAdded()
+      showAlert({
+        type: 'success',
+        message: wasLocked ? 'Account unlocked' : 'Account locked'
+      })
+    } catch (error) {
+      console.error('Failed to update account lock state', error)
+      showAlert({
+        type: 'error',
+        message: error instanceof Error ? error.message : 'Failed to update account lock state'
+      })
     } finally {
       setLockingId(null)
     }
@@ -448,7 +472,7 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
       console.error('Failed to update account exclusions', error)
       showAlert({
         type: 'error',
-        message: 'Failed to update account exclusion settings'
+        message: error instanceof Error ? error.message : 'Failed to update account exclusion settings'
       })
     }
   }
@@ -493,7 +517,7 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
       console.error('Failed to save account with adjustment', error)
       showAlert({
         type: 'error',
-        message: 'Failed to save account changes'
+        message: error instanceof Error ? error.message : 'Failed to save account changes'
       })
     }
   }
@@ -528,7 +552,7 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
       console.error('Failed to save account with split transactions', error)
       showAlert({
         type: 'error',
-        message: 'Failed to save account changes'
+        message: error instanceof Error ? error.message : 'Failed to save account changes'
       })
     }
   }

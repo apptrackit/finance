@@ -54,7 +54,23 @@ const ALL_TIME_RANGE = { startDate: '1900-01-01', endDate: '2100-12-31' }
 const isAllTimeRange = (r: { startDate: string; endDate: string }) =>
   r.startDate === '1900-01-01' && r.endDate === '2100-12-31'
 const DISPLAY_LIMIT = 7
+const RECENT_TRANSACTION_MS = 10 * 60 * 1000
+const UPDATED_BADGE_GRACE_MS = 1000
 const getLocalDateString = () => format(new Date(), 'yyyy-MM-dd')
+
+const getRecentTransactionLabel = (tx: Transaction, now: number) => {
+  const createdAt = tx.created_at || 0
+  const updatedAt = tx.updated_at || 0
+  const isRecentlyCreated = createdAt > 0 && now >= createdAt && now - createdAt <= RECENT_TRANSACTION_MS
+  const isRecentlyUpdated = updatedAt > 0
+    && now >= updatedAt
+    && now - updatedAt <= RECENT_TRANSACTION_MS
+    && (!createdAt || updatedAt > createdAt + UPDATED_BADGE_GRACE_MS)
+
+  if (isRecentlyUpdated) return 'Updated'
+  if (isRecentlyCreated) return 'New'
+  return null
+}
 
 // LocalStorage keys for remembering last used values
 const STORAGE_KEYS = {
@@ -118,6 +134,7 @@ export function TransactionList({
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [pendingActionId, setPendingActionId] = useState<string | null>(null)
   const [isAccountOpen, setIsAccountOpen] = useState(false)
+  const [badgeNow, setBadgeNow] = useState(() => Date.now())
   
   const { confirm, showAlert } = useAlert()
   const { privacyMode, shouldHideInvestment } = usePrivacy()
@@ -130,6 +147,11 @@ export function TransactionList({
   useEffect(() => {
     setShowAllTransactions(false)
   }, [categoryFilter, sortOrder, searchQuery, dateRange])
+
+  useEffect(() => {
+    const interval = window.setInterval(() => setBadgeNow(Date.now()), 30000)
+    return () => window.clearInterval(interval)
+  }, [])
 
   useEffect(() => {
     apiFetch(`${API_BASE_URL}/categories`)
@@ -444,6 +466,9 @@ export function TransactionList({
     setIsSubmitting(true)
     try {
       const amount = parseFloat(formData.amount.replace(/\s/g, ''))
+      const wasEditing = !!editingId
+      const savedType = formData.type
+      const savedAsUpcoming = isUpcomingForm
 
       if (formData.type === 'transfer') {
         // Handle transfer
@@ -535,9 +560,22 @@ export function TransactionList({
       setIsAdding(false)
       resetForm()
       onTransactionAdded()
+      showAlert({
+        type: 'success',
+        message: wasEditing
+          ? `${savedType === 'transfer' ? 'Transfer' : 'Transaction'} updated`
+          : savedType === 'transfer'
+            ? 'Transfer created'
+            : savedAsUpcoming
+              ? 'Upcoming transaction saved'
+              : 'Transaction created'
+      })
     } catch (error) {
       console.error('Failed to save transaction', error)
-      showAlert({ type: 'error', message: 'Failed to save transaction. Please try again.' })
+      showAlert({
+        type: 'error',
+        message: error instanceof Error ? error.message : 'Failed to save transaction. Please try again.'
+      })
     } finally {
       setIsSubmitting(false)
     }
@@ -665,8 +703,13 @@ export function TransactionList({
       }
       
       onTransactionAdded()
+      showAlert({ type: 'success', message: 'Transaction deleted' })
     } catch (error) {
       console.error('Failed to delete transaction', error)
+      showAlert({
+        type: 'error',
+        message: error instanceof Error ? error.message : 'Failed to delete transaction. Please try again.'
+      })
     } finally {
       setDeletingId(null)
     }
@@ -687,9 +730,13 @@ export function TransactionList({
       }
 
       onTransactionAdded()
+      showAlert({ type: 'success', message: 'Upcoming transaction confirmed' })
     } catch (error) {
       console.error('Failed to confirm upcoming transaction', error)
-      showAlert({ type: 'error', message: 'Failed to confirm transaction. Please try again.' })
+      showAlert({
+        type: 'error',
+        message: error instanceof Error ? error.message : 'Failed to confirm transaction. Please try again.'
+      })
     } finally {
       setPendingActionId(null)
     }
@@ -719,9 +766,13 @@ export function TransactionList({
       }
 
       onTransactionAdded()
+      showAlert({ type: 'success', message: 'Upcoming transaction declined' })
     } catch (error) {
       console.error('Failed to decline upcoming transaction', error)
-      showAlert({ type: 'error', message: 'Failed to decline transaction. Please try again.' })
+      showAlert({
+        type: 'error',
+        message: error instanceof Error ? error.message : 'Failed to decline transaction. Please try again.'
+      })
     } finally {
       setPendingActionId(null)
     }
@@ -755,6 +806,10 @@ export function TransactionList({
     
     setShowBulkModal(false)
     onTransactionAdded()
+    showAlert({
+      type: 'success',
+      message: `${bulkTransactions.length} transaction${bulkTransactions.length === 1 ? '' : 's'} created`
+    })
   }
 
   const matchesSearch = (tx: Transaction): boolean => {
@@ -858,6 +913,17 @@ export function TransactionList({
     return processed
   }
 
+  const renderRecentBadge = (tx: Transaction) => {
+    const recentLabel = getRecentTransactionLabel(tx, badgeNow)
+    if (!recentLabel) return null
+
+    return (
+      <span className="flex-shrink-0 rounded border border-primary/20 bg-primary/10 px-1 py-0.5 text-[9px] font-semibold uppercase leading-none text-primary">
+        {recentLabel}
+      </span>
+    )
+  }
+
   const renderPendingTransaction = (tx: Transaction, ready: boolean) => {
     const daysFromToday = differenceInDays(new Date(tx.date), new Date(today))
     const account = accounts.find(a => a.id === tx.account_id)
@@ -888,8 +954,9 @@ export function TransactionList({
             {ready ? <AlertCircle className="h-4 w-4 sm:h-5 sm:w-5" /> : <Clock className="h-4 w-4 sm:h-5 sm:w-5" />}
           </div>
           <div className="min-w-0">
-            <p className="font-medium text-xs sm:text-sm truncate">
-              {tx.description || getCategoryName(tx.category_id)}
+            <p className="font-medium text-xs sm:text-sm flex items-center gap-1.5 min-w-0">
+              <span className="truncate">{tx.description || getCategoryName(tx.category_id)}</span>
+              {renderRecentBadge(tx)}
             </p>
             <div className="flex items-center gap-1.5 sm:gap-2 text-[10px] sm:text-xs text-muted-foreground">
               <span className={ready ? 'text-success font-medium' : 'text-primary font-medium'}>{statusLabel}</span>
@@ -1665,26 +1732,29 @@ export function TransactionList({
                       className="group flex items-center justify-between p-2 sm:p-3 rounded-lg sm:rounded-xl hover:bg-secondary/30 transition-all duration-200"
                       onClick={() => setActiveTxId(activeTxId === tx.id ? null : tx.id)}
                     >
-                      <div className="flex items-center gap-2 sm:gap-3" onClick={(e) => e.stopPropagation()}>
+                      <div className="flex items-center gap-2 sm:gap-3 min-w-0" onClick={(e) => e.stopPropagation()}>
                         <div className={`h-8 w-8 sm:h-10 sm:w-10 rounded-lg sm:rounded-xl flex items-center justify-center text-base sm:text-lg ${
                           isTransfer ? 'bg-blue-500/10 text-blue-500' :
                           tx.amount >= 0 ? 'bg-success/10' : 'bg-secondary'
                         }`}>
                           {isTransfer ? <ArrowRightLeft className="h-4 w-4 sm:h-5 sm:w-5" /> : getCategoryIcon(tx.category_id)}
                         </div>
-                        <div>
-                          <p className="font-medium text-xs sm:text-sm">
-                            {isTransfer 
-                              ? `Transfer to ${related ? getAccountName(related.account_id) : 'Unknown'}`
-                              : (tx.description || getCategoryName(tx.category_id))
-                            }
+                        <div className="min-w-0">
+                          <p className="font-medium text-xs sm:text-sm flex items-center gap-1.5 min-w-0">
+                            <span className="truncate">
+                              {isTransfer
+                                ? `Transfer to ${related ? getAccountName(related.account_id) : 'Unknown'}`
+                                : (tx.description || getCategoryName(tx.category_id))
+                              }
+                            </span>
+                            {renderRecentBadge(tx)}
                           </p>
                           <div className="flex items-center gap-1.5 sm:gap-2 text-[10px] sm:text-xs text-muted-foreground">
-                            <span>{getAccountName(tx.account_id)}</span>
+                            <span className="truncate">{getAccountName(tx.account_id)}</span>
                             {isTransfer && related && (
                                <>
                                  <span>→</span>
-                                 <span>{getAccountName(related.account_id)}</span>
+                                 <span className="truncate">{getAccountName(related.account_id)}</span>
                                </>
                             )}
                           </div>
@@ -1812,30 +1882,33 @@ export function TransactionList({
                     className="group flex items-center justify-between p-2 sm:p-3 rounded-lg sm:rounded-xl hover:bg-secondary/30 transition-all duration-200"
                     onClick={() => setActiveTxId(activeTxId === tx.id ? null : tx.id)}
                   >
-                    <div className="flex items-center gap-2 sm:gap-3" onClick={(e) => e.stopPropagation()}>
+                    <div className="flex items-center gap-2 sm:gap-3 min-w-0" onClick={(e) => e.stopPropagation()}>
                       <div className={`h-8 w-8 sm:h-10 sm:w-10 rounded-lg sm:rounded-xl flex items-center justify-center text-base sm:text-lg ${
                         isTransfer ? 'bg-blue-500/10 text-blue-500' :
                         tx.amount >= 0 ? 'bg-success/10' : 'bg-secondary'
                       }`}>
                         {isTransfer ? <ArrowRightLeft className="h-4 w-4 sm:h-5 sm:w-5" /> : getCategoryIcon(tx.category_id)}
                       </div>
-                      <div>
-                        <p className="font-medium text-xs sm:text-sm">
-                          {isTransfer 
-                            ? `Transfer to ${related ? getAccountName(related.account_id) : 'Unknown'}`
-                            : (tx.description || getCategoryName(tx.category_id))
-                          }
+                      <div className="min-w-0">
+                        <p className="font-medium text-xs sm:text-sm flex items-center gap-1.5 min-w-0">
+                          <span className="truncate">
+                            {isTransfer
+                              ? `Transfer to ${related ? getAccountName(related.account_id) : 'Unknown'}`
+                              : (tx.description || getCategoryName(tx.category_id))
+                            }
+                          </span>
+                          {renderRecentBadge(tx)}
                         </p>
                         <div className="flex items-center gap-1.5 sm:gap-2 text-[10px] sm:text-xs text-muted-foreground">
                           <span>{new Date(tx.date).getFullYear() !== new Date().getFullYear()
                             ? format(new Date(tx.date), 'MMM d, yyyy')
                             : format(new Date(tx.date), 'MMM d')}</span>
                           <span>•</span>
-                          <span>{getAccountName(tx.account_id)}</span>
+                          <span className="truncate">{getAccountName(tx.account_id)}</span>
                           {isTransfer && related && (
                              <>
                                <span>→</span>
-                               <span>{getAccountName(related.account_id)}</span>
+                               <span className="truncate">{getAccountName(related.account_id)}</span>
                              </>
                           )}
                         </div>

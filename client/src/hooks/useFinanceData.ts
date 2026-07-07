@@ -106,6 +106,8 @@ export function useFinanceData(
               is_recurring: false,
               category_id: undefined,
               linked_transaction_id: undefined,
+              created_at: itx.created_at,
+              updated_at: itx.updated_at ?? itx.created_at,
             }))
         )
         .catch(() => [])
@@ -150,6 +152,8 @@ export function useFinanceData(
               date: itx.date,
               category_id: undefined,
               linked_transaction_id: undefined,
+              created_at: itx.created_at,
+              updated_at: itx.updated_at ?? itx.created_at,
             }))
           )
           .catch(() => [])

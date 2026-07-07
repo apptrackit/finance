@@ -180,6 +180,7 @@ export function RecurringTransactions({
         payload.day_of_month = dayOfMonth
       } else {
         showAlert({ type: 'error', message: 'Please enter a valid day of month (1-31)' })
+        setIsSubmitting(false)
         return
       }
       
@@ -225,37 +226,32 @@ export function RecurringTransactions({
 
     try {
       if (editingId) {
-        const res = await apiFetch(`${API_BASE_URL}/recurring-schedules/${editingId}`, {
+        await apiFetch(`${API_BASE_URL}/recurring-schedules/${editingId}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload)
         })
-        if (res.ok) {
-          showAlert({ type: 'success', message: 'Recurring schedule updated successfully' })
-          await fetchSchedules()
-          resetForm()
-        } else {
-          const error = await res.json()
-          showAlert({ type: 'error', message: error.error || 'Failed to update recurring schedule' })
-        }
+        showAlert({ type: 'success', message: 'Recurring schedule updated successfully' })
+        await fetchSchedules()
+        resetForm()
       } else {
-        const res = await apiFetch(`${API_BASE_URL}/recurring-schedules`, {
+        await apiFetch(`${API_BASE_URL}/recurring-schedules`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload)
         })
-        if (res.ok) {
-          showAlert({ type: 'success', message: 'Recurring schedule created successfully' })
-          await fetchSchedules()
-          resetForm()
-        } else {
-          const error = await res.json()
-          showAlert({ type: 'error', message: error.error || 'Failed to create recurring schedule' })
-        }
+        showAlert({ type: 'success', message: 'Recurring schedule created successfully' })
+        await fetchSchedules()
+        resetForm()
       }
     } catch (error) {
-      showAlert({ type: 'error', message: 'An error occurred' })
       console.error(error)
+      showAlert({
+        type: 'error',
+        message: error instanceof Error ? error.message : 'Failed to save recurring schedule'
+      })
+    } finally {
+      setIsSubmitting(false)
     }
   }
 
@@ -301,18 +297,17 @@ export function RecurringTransactions({
 
     setDeletingId(id)
     try {
-      const res = await apiFetch(`${API_BASE_URL}/recurring-schedules/${id}`, {
+      await apiFetch(`${API_BASE_URL}/recurring-schedules/${id}`, {
         method: 'DELETE'
       })
-      if (res.ok) {
-        showAlert({ type: 'success', message: 'Recurring schedule deleted successfully' })
-        await fetchSchedules()
-      } else {
-        showAlert({ type: 'error', message: 'Failed to delete recurring schedule' })
-      }
+      showAlert({ type: 'success', message: 'Recurring schedule deleted successfully' })
+      await fetchSchedules()
     } catch (error) {
-      showAlert({ type: 'error', message: 'An error occurred' })
       console.error(error)
+      showAlert({
+        type: 'error',
+        message: error instanceof Error ? error.message : 'Failed to delete recurring schedule'
+      })
     } finally {
       setDeletingId(null)
     }
@@ -321,18 +316,19 @@ export function RecurringTransactions({
   const toggleActive = async (schedule: RecurringSchedule) => {
     setTogglingId(schedule.id)
     try {
-      const res = await apiFetch(`${API_BASE_URL}/recurring-schedules/${schedule.id}`, {
+      await apiFetch(`${API_BASE_URL}/recurring-schedules/${schedule.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ is_active: !schedule.is_active })
       })
-      if (res.ok) {
-        showAlert({ type: 'success', message: `Recurring schedule ${!schedule.is_active ? 'activated' : 'deactivated'}` })
-        await fetchSchedules()
-      }
+      showAlert({ type: 'success', message: `Recurring schedule ${!schedule.is_active ? 'activated' : 'deactivated'}` })
+      await fetchSchedules()
     } catch (error) {
-      showAlert({ type: 'error', message: 'An error occurred' })
       console.error(error)
+      showAlert({
+        type: 'error',
+        message: error instanceof Error ? error.message : 'Failed to update recurring schedule'
+      })
     } finally {
       setTogglingId(null)
     }

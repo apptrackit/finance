@@ -298,7 +298,8 @@ export class TransactionService {
       amount: -amountFrom,
       description: outgoingDescription,
       date,
-      exclude_from_estimate: false
+      exclude_from_estimate: false,
+      updated_at: now
     })
 
     await this.transactionRepo.update(incoming.id, {
@@ -307,7 +308,8 @@ export class TransactionService {
       amount: amountTo,
       description: incomingDescription,
       date,
-      exclude_from_estimate: false
+      exclude_from_estimate: false,
+      updated_at: now
     })
 
     const updated = await this.transactionRepo.findById(requestedId)
