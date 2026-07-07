@@ -50,6 +50,10 @@ export class TransactionController {
       if (error.message.includes('locked')) {
         return c.json({ error: error.message }, 409)
       }
+
+      if (error.message.includes('Linked transfers cannot be pending')) {
+        return c.json({ error: error.message }, 400)
+      }
       
       return c.json({ 
         error: error.message || 'Failed to create transaction', 

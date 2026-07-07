@@ -64,6 +64,39 @@ describe('upcoming transactions', () => {
     expect(accountRepo.updateBalance).not.toHaveBeenCalled()
   })
 
+  it('rejects linked transfer transactions that would become pending', async () => {
+    const accounts = { 'account-1': makeAccount() }
+    const transactions: Record<string, Transaction> = {}
+    const { service, transactionRepo, accountRepo } = createService(transactions, accounts)
+
+    await expect(service.createTransaction({
+      account_id: 'account-1',
+      amount: -500,
+      date: '2999-01-01',
+      linked_transaction_id: 'linked-tx',
+    })).rejects.toThrow('Linked transfers cannot be pending')
+
+    expect(transactionRepo.create).not.toHaveBeenCalled()
+    expect(accountRepo.updateBalance).not.toHaveBeenCalled()
+  })
+
+  it('rejects explicit pending linked transfer transactions', async () => {
+    const accounts = { 'account-1': makeAccount() }
+    const transactions: Record<string, Transaction> = {}
+    const { service, transactionRepo, accountRepo } = createService(transactions, accounts)
+
+    await expect(service.createTransaction({
+      account_id: 'account-1',
+      amount: -500,
+      date: '2026-07-07',
+      linked_transaction_id: 'linked-tx',
+      status: 'pending',
+    })).rejects.toThrow('Linked transfers cannot be pending')
+
+    expect(transactionRepo.create).not.toHaveBeenCalled()
+    expect(accountRepo.updateBalance).not.toHaveBeenCalled()
+  })
+
   it('confirms a pending transaction and applies it once', async () => {
     const accounts = { 'account-1': makeAccount() }
     const transactions: Record<string, Transaction> = {
@@ -103,6 +136,63 @@ describe('upcoming transactions', () => {
     expect(result.status).toBe('cancelled')
     expect(result.cancelled_at).toEqual(expect.any(Number))
     expect(accounts['account-1'].balance).toBe(1000)
+    expect(accountRepo.updateBalance).not.toHaveBeenCalled()
+  })
+
+  it('rejects declining linked transfer transactions', async () => {
+    const accounts = { 'account-1': makeAccount() }
+    const transactions: Record<string, Transaction> = {
+      'tx-1': {
+        id: 'tx-1',
+        account_id: 'account-1',
+        amount: -500,
+        date: '2026-07-07',
+        linked_transaction_id: 'tx-2',
+        status: 'pending',
+      },
+    }
+    const { service, transactionRepo, accountRepo } = createService(transactions, accounts)
+
+    await expect(service.declineTransaction('tx-1'))
+      .rejects.toThrow('Linked transfers cannot be declined as upcoming transactions')
+
+    expect(transactionRepo.update).not.toHaveBeenCalled()
+    expect(accountRepo.updateBalance).not.toHaveBeenCalled()
+  })
+
+  it('rejects editing linked transfer transactions that are already pending', async () => {
+    const accounts = {
+      'account-1': makeAccount(),
+      'account-2': makeAccount({ id: 'account-2', name: 'Savings' }),
+    }
+    const transactions: Record<string, Transaction> = {
+      'tx-1': {
+        id: 'tx-1',
+        account_id: 'account-1',
+        amount: -500,
+        date: '2026-07-07',
+        linked_transaction_id: 'tx-2',
+        status: 'pending',
+      },
+      'tx-2': {
+        id: 'tx-2',
+        account_id: 'account-2',
+        amount: 500,
+        date: '2026-07-07',
+        linked_transaction_id: 'tx-1',
+        status: 'pending',
+      },
+    }
+    const { service, transactionRepo, accountRepo } = createService(transactions, accounts)
+
+    await expect(service.updateTransaction('tx-1', {
+      amount: 700,
+      amount_to: 700,
+      account_id: 'account-1',
+      to_account_id: 'account-2',
+    })).rejects.toThrow('Linked transfers cannot be pending')
+
+    expect(transactionRepo.update).not.toHaveBeenCalled()
     expect(accountRepo.updateBalance).not.toHaveBeenCalled()
   })
 

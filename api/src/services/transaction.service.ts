@@ -111,6 +111,11 @@ export class TransactionService {
     // For non-investment accounts: use regular transactions table
     const now = Date.now()
     const status = this.resolveCreateStatus(dto)
+
+    if (dto.linked_transaction_id && status === 'pending') {
+      throw new Error('Linked transfers cannot be pending; use the /transfers endpoint')
+    }
+
     const transaction: Transaction = {
       id,
       account_id: dto.account_id,
@@ -150,6 +155,10 @@ export class TransactionService {
     }
 
     if (oldTx.linked_transaction_id) {
+      if (!this.isPosted(oldTx)) {
+        throw new Error('Linked transfers cannot be pending')
+      }
+
       const linkedTx = await this.transactionRepo.findById(oldTx.linked_transaction_id)
       if (linkedTx) {
         return await this.updateTransferPair(oldTx, linkedTx, dto)
@@ -397,6 +406,10 @@ export class TransactionService {
 
     if (!tx) {
       throw new Error('Transaction not found')
+    }
+
+    if (tx.linked_transaction_id) {
+      throw new Error('Linked transfers cannot be declined as upcoming transactions')
     }
 
     if ((tx.status || 'posted') !== 'pending') {
