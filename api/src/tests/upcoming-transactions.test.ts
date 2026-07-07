@@ -104,7 +104,7 @@ describe('upcoming transactions', () => {
         id: 'tx-1',
         account_id: 'account-1',
         amount: 500,
-        date: '2026-07-07',
+        date: '2000-01-01',
         status: 'pending',
       },
     }
@@ -116,6 +116,26 @@ describe('upcoming transactions', () => {
     expect(result.confirmed_at).toEqual(expect.any(Number))
     expect(accounts['account-1'].balance).toBe(1500)
     expect(accountRepo.updateBalance).toHaveBeenCalledTimes(1)
+  })
+
+  it('rejects confirming pending transactions dated in the future', async () => {
+    const accounts = { 'account-1': makeAccount() }
+    const transactions: Record<string, Transaction> = {
+      'tx-1': {
+        id: 'tx-1',
+        account_id: 'account-1',
+        amount: 500,
+        date: '2999-01-01',
+        status: 'pending',
+      },
+    }
+    const { service, transactionRepo, accountRepo } = createService(transactions, accounts)
+
+    await expect(service.confirmTransaction('tx-1'))
+      .rejects.toThrow('Cannot confirm a transaction dated in the future')
+
+    expect(transactionRepo.update).not.toHaveBeenCalled()
+    expect(accountRepo.updateBalance).not.toHaveBeenCalled()
   })
 
   it('declines a pending transaction without changing balance', async () => {

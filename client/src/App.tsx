@@ -303,7 +303,7 @@ function App() {
                   <p className="text-[9px] sm:text-xs text-muted-foreground mt-1 sm:mt-2">
                     {investmentError ? investmentError : projectedNetWorth !== null && pendingNetWorthDelta !== 0 ? (
                       <>
-                        Projected{' '}
+                        After all upcoming{' '}
                         <span className={privacyMode === 'hidden' || shouldHideInvestment() ? 'select-none' : ''}>
                           {(privacyMode === 'hidden' || shouldHideInvestment()) && !showNetWorth
                             ? '••••••'
@@ -342,7 +342,7 @@ function App() {
                   <p className="text-[9px] sm:text-xs text-muted-foreground mt-1 sm:mt-2">
                     {pendingCashDelta !== 0 ? (
                       <>
-                        Projected{' '}
+                        After all upcoming{' '}
                         <span className={privacyMode === 'hidden' ? 'select-none' : ''}>
                           {privacyMode === 'hidden'
                             ? '••••••'

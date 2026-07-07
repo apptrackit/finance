@@ -382,6 +382,10 @@ export class TransactionService {
       throw new Error('Transaction is not pending confirmation')
     }
 
+    if (tx.date > this.todayString()) {
+      throw new Error('Cannot confirm a transaction dated in the future')
+    }
+
     const account = await this.accountRepo.findById(tx.account_id)
     if (!account) {
       throw new Error('Account not found')
