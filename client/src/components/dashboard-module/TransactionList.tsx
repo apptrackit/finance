@@ -881,7 +881,7 @@ export function TransactionList({
         }`}
         onClick={() => setActiveTxId(activeTxId === tx.id ? null : tx.id)}
       >
-        <div className="flex items-center gap-2 sm:gap-3 min-w-0" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center gap-2 sm:gap-3 min-w-0">
           <div className={`h-8 w-8 sm:h-10 sm:w-10 rounded-lg sm:rounded-xl flex items-center justify-center flex-shrink-0 ${
             ready ? 'bg-success/10 text-success' : 'bg-primary/10 text-primary'
           }`}>

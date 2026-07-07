@@ -21,35 +21,35 @@ export class TransactionService {
     }
   }
 
-  private todayString(): string {
-    return new Date().toISOString().slice(0, 10)
+  private todayString(today?: string): string {
+    return today || new Date().toISOString().slice(0, 10)
   }
 
   private isPosted(transaction: Transaction): boolean {
     return (transaction.status || 'posted') === 'posted'
   }
 
-  private resolveCreateStatus(dto: CreateTransactionDto): TransactionStatus {
-    if (dto.status === 'pending' || dto.date > this.todayString()) {
+  private resolveCreateStatus(dto: CreateTransactionDto, today?: string): TransactionStatus {
+    if (dto.status === 'pending' || dto.date > this.todayString(today)) {
       return 'pending'
     }
     return 'posted'
   }
 
-  private resolveUpdateStatus(oldTx: Transaction, dto: UpdateTransactionDto): TransactionStatus {
+  private resolveUpdateStatus(oldTx: Transaction, dto: UpdateTransactionDto, today?: string): TransactionStatus {
     if ((oldTx.status || 'posted') === 'pending') {
       return 'pending'
     }
 
     const nextDate = dto.date || oldTx.date
-    return nextDate > this.todayString() ? 'pending' : 'posted'
+    return nextDate > this.todayString(today) ? 'pending' : 'posted'
   }
 
   async getAllTransactions(): Promise<Transaction[]> {
     return await this.transactionRepo.findAll()
   }
 
-  async createTransaction(dto: CreateTransactionDto): Promise<Transaction | { type: string; quantity: number; price: number; total_amount: number }> {
+  async createTransaction(dto: CreateTransactionDto, today?: string): Promise<Transaction | { type: string; quantity: number; price: number; total_amount: number }> {
     const id = crypto.randomUUID()
 
     // Get account to check if it's an investment account
@@ -110,7 +110,7 @@ export class TransactionService {
 
     // For non-investment accounts: use regular transactions table
     const now = Date.now()
-    const status = this.resolveCreateStatus(dto)
+    const status = this.resolveCreateStatus(dto, today)
 
     if (dto.linked_transaction_id && status === 'pending') {
       throw new Error('Linked transfers cannot be pending; use the /transfers endpoint')
@@ -142,7 +142,7 @@ export class TransactionService {
     return transaction
   }
 
-  async updateTransaction(id: string, dto: UpdateTransactionDto): Promise<Transaction> {
+  async updateTransaction(id: string, dto: UpdateTransactionDto, today?: string): Promise<Transaction> {
     // Get old transaction to adjust balance
     const oldTx = await this.transactionRepo.findById(id)
 
@@ -173,7 +173,7 @@ export class TransactionService {
 
     const newAccountId = dto.account_id || oldTx.account_id
     const newAmount = dto.amount ?? oldTx.amount
-    const newStatus = this.resolveUpdateStatus(oldTx, dto)
+    const newStatus = this.resolveUpdateStatus(oldTx, dto, today)
     const now = Date.now()
     if (newAccountId !== oldTx.account_id) {
       const targetAccount = await this.accountRepo.findById(newAccountId)
@@ -367,7 +367,7 @@ export class TransactionService {
     return await this.transactionRepo.findUpcoming()
   }
 
-  async confirmTransaction(id: string): Promise<Transaction> {
+  async confirmTransaction(id: string, today?: string): Promise<Transaction> {
     const tx = await this.transactionRepo.findById(id)
 
     if (!tx) {
@@ -386,7 +386,8 @@ export class TransactionService {
       throw new Error('Transaction is not pending confirmation')
     }
 
-    if (tx.date > this.todayString()) {
+    const effectiveToday = this.todayString(today)
+    if (tx.date > effectiveToday) {
       throw new Error('Cannot confirm a transaction dated in the future')
     }
 
@@ -397,7 +398,7 @@ export class TransactionService {
     this.assertAccountUnlocked(account)
 
     const now = Date.now()
-    const confirmed = await this.transactionRepo.confirmPendingAndApplyBalance(tx, now, this.todayString())
+    const confirmed = await this.transactionRepo.confirmPendingAndApplyBalance(tx, now, effectiveToday)
 
     const updated = await this.transactionRepo.findById(id)
     if (!confirmed && updated?.status !== 'posted') {

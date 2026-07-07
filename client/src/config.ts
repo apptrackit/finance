@@ -18,6 +18,14 @@ export const API_BASE_URL = isDev
 // API Key for authentication
 const API_KEY = import.meta.env.VITE_API_KEY || ''
 
+const getLocalDateString = () => {
+  const now = new Date()
+  const year = now.getFullYear()
+  const month = String(now.getMonth() + 1).padStart(2, '0')
+  const day = String(now.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
 // Helper function for authenticated API calls
 export const apiFetch = (url: string, options: RequestInit = {}) => {
   return fetch(url, {
@@ -25,6 +33,7 @@ export const apiFetch = (url: string, options: RequestInit = {}) => {
     // No credentials needed since we use API key authentication
     headers: {
       'X-API-Key': API_KEY,
+      'X-Client-Date': getLocalDateString(),
       ...options.headers,
     },
   })

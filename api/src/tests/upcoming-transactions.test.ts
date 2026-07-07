@@ -80,6 +80,23 @@ describe('upcoming transactions', () => {
     expect(accountRepo.updateBalance).not.toHaveBeenCalled()
   })
 
+  it('uses the supplied client date when deciding whether a new transaction is upcoming', async () => {
+    const accounts = { 'account-1': makeAccount() }
+    const transactions: Record<string, Transaction> = {}
+    const { service, accountRepo } = createService(transactions, accounts)
+
+    const result = await service.createTransaction({
+      account_id: 'account-1',
+      amount: 500,
+      date: '2999-01-01',
+      description: 'Local today salary',
+    }, '2999-01-01')
+
+    expect('status' in result && result.status).toBe('posted')
+    expect(accounts['account-1'].balance).toBe(1500)
+    expect(accountRepo.updateBalance).toHaveBeenCalledTimes(1)
+  })
+
   it('rejects linked transfer transactions that would become pending', async () => {
     const accounts = { 'account-1': makeAccount() }
     const transactions: Record<string, Transaction> = {}
@@ -222,6 +239,27 @@ describe('upcoming transactions', () => {
       .rejects.toThrow('Cannot confirm a transaction dated in the future')
 
     expect(transactionRepo.update).not.toHaveBeenCalled()
+    expect(accountRepo.updateBalance).not.toHaveBeenCalled()
+  })
+
+  it('uses the supplied client date when confirming a pending transaction', async () => {
+    const accounts = { 'account-1': makeAccount() }
+    const transactions: Record<string, Transaction> = {
+      'tx-1': {
+        id: 'tx-1',
+        account_id: 'account-1',
+        amount: 500,
+        date: '2999-01-01',
+        status: 'pending',
+      },
+    }
+    const { service, transactionRepo, accountRepo } = createService(transactions, accounts)
+
+    const result = await service.confirmTransaction('tx-1', '2999-01-01')
+
+    expect(result.status).toBe('posted')
+    expect(accounts['account-1'].balance).toBe(1500)
+    expect(transactionRepo.confirmPendingAndApplyBalance).toHaveBeenCalledTimes(1)
     expect(accountRepo.updateBalance).not.toHaveBeenCalled()
   })
 
