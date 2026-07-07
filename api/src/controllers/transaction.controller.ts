@@ -70,7 +70,14 @@ export class TransactionController {
       await new AuditRepository(c.env.DB).log('UPDATE', 'transaction', id, { amount: body.amount, category_id: body.category_id })
       return c.json(TransactionMapper.toResponseDto(transaction))
     } catch (error: any) {
-      const status = error.message.includes('not found') ? 404 : error.message.includes('locked') ? 409 : 500
+      const message = error.message || ''
+      const status = message.includes('not found')
+        ? 404
+        : message.includes('locked')
+          ? 409
+          : message.includes('cannot be edited') || message.includes('Linked transfers cannot be pending')
+            ? 400
+            : 500
       return c.json({ error: error.message }, status)
     }
   }

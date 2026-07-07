@@ -121,7 +121,7 @@ export function TransactionList({
   const { confirm, showAlert } = useAlert()
   const { privacyMode, shouldHideInvestment } = usePrivacy()
   const isLocked = (accountId: string) => accounts.find(a => a.id === accountId)?.is_locked ?? false
-  const today = new Date().toISOString().split('T')[0]
+  const today = format(new Date(), 'yyyy-MM-dd')
   const isUpcomingForm = formData.type !== 'transfer' && formData.date > today
   const allKnownTransactions = [...transactions, ...upcomingTransactions]
 

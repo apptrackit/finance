@@ -25,6 +25,22 @@ function createService(transactions: Record<string, Transaction>, accounts: Reco
       transactions[id] = { ...transactions[id], ...updates }
     }),
     findUpcoming: vi.fn(async () => Object.values(transactions).filter(tx => tx.status === 'pending')),
+    confirmPendingAndApplyBalance: vi.fn(async (transaction: Transaction, now: number, today: string) => {
+      const current = transactions[transaction.id]
+      if (!current || current.status !== 'pending' || current.linked_transaction_id || current.date > today) {
+        return false
+      }
+
+      current.status = 'posted'
+      current.confirmed_at = now
+      current.cancelled_at = null
+      current.updated_at = now
+      if (accounts[current.account_id]) {
+        accounts[current.account_id].balance += current.amount
+        accounts[current.account_id].updated_at = now
+      }
+      return true
+    }),
   }
 
   const accountRepo = {
@@ -108,14 +124,63 @@ describe('upcoming transactions', () => {
         status: 'pending',
       },
     }
-    const { service, accountRepo } = createService(transactions, accounts)
+    const { service, transactionRepo, accountRepo } = createService(transactions, accounts)
 
     const result = await service.confirmTransaction('tx-1')
 
     expect(result.status).toBe('posted')
     expect(result.confirmed_at).toEqual(expect.any(Number))
     expect(accounts['account-1'].balance).toBe(1500)
-    expect(accountRepo.updateBalance).toHaveBeenCalledTimes(1)
+    expect(transactionRepo.confirmPendingAndApplyBalance).toHaveBeenCalledTimes(1)
+    expect(accountRepo.updateBalance).not.toHaveBeenCalled()
+  })
+
+  it('treats already posted confirmations as idempotent no-ops', async () => {
+    const accounts = { 'account-1': makeAccount({ balance: 1500 }) }
+    const transactions: Record<string, Transaction> = {
+      'tx-1': {
+        id: 'tx-1',
+        account_id: 'account-1',
+        amount: 500,
+        date: '2000-01-01',
+        status: 'posted',
+        confirmed_at: Date.now(),
+      },
+    }
+    const { service, transactionRepo, accountRepo } = createService(transactions, accounts)
+
+    const result = await service.confirmTransaction('tx-1')
+
+    expect(result.status).toBe('posted')
+    expect(accounts['account-1'].balance).toBe(1500)
+    expect(transactionRepo.confirmPendingAndApplyBalance).not.toHaveBeenCalled()
+    expect(accountRepo.updateBalance).not.toHaveBeenCalled()
+  })
+
+  it('does not apply balance when another confirmation already claimed the pending transaction', async () => {
+    const accounts = { 'account-1': makeAccount({ balance: 1500 }) }
+    const transactions: Record<string, Transaction> = {
+      'tx-1': {
+        id: 'tx-1',
+        account_id: 'account-1',
+        amount: 500,
+        date: '2000-01-01',
+        status: 'pending',
+      },
+    }
+    const { service, transactionRepo, accountRepo } = createService(transactions, accounts)
+    transactionRepo.confirmPendingAndApplyBalance.mockImplementationOnce(async () => {
+      transactions['tx-1'].status = 'posted'
+      transactions['tx-1'].confirmed_at = Date.now()
+      return false
+    })
+
+    const result = await service.confirmTransaction('tx-1')
+
+    expect(result.status).toBe('posted')
+    expect(accounts['account-1'].balance).toBe(1500)
+    expect(transactionRepo.confirmPendingAndApplyBalance).toHaveBeenCalledTimes(1)
+    expect(accountRepo.updateBalance).not.toHaveBeenCalled()
   })
 
   it('rejects confirming pending transactions dated in the future', async () => {

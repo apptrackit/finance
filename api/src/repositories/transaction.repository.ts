@@ -192,6 +192,24 @@ export class TransactionRepository {
     return results.map(r => this.mapTransaction(r))
   }
 
+  async confirmPendingAndApplyBalance(transaction: Transaction, now: number, today: string): Promise<boolean> {
+    const confirmationToken = `confirming:${crypto.randomUUID()}`
+
+    const [claimResult, balanceResult, postResult] = await this.db.batch([
+      this.db.prepare(
+        "UPDATE transactions SET status = ?, updated_at = ? WHERE id = ? AND status = 'pending' AND linked_transaction_id IS NULL AND date <= ?"
+      ).bind(confirmationToken, now, transaction.id, today),
+      this.db.prepare(
+        'UPDATE accounts SET balance = balance + ?, updated_at = ? WHERE id = ? AND EXISTS (SELECT 1 FROM transactions WHERE id = ? AND status = ?)'
+      ).bind(transaction.amount, now, transaction.account_id, transaction.id, confirmationToken),
+      this.db.prepare(
+        "UPDATE transactions SET status = 'posted', confirmed_at = ?, cancelled_at = NULL, updated_at = ? WHERE id = ? AND status = ?"
+      ).bind(now, now, transaction.id, confirmationToken),
+    ])
+
+    return claimResult.meta.changes === 1 && balanceResult.meta.changes === 1 && postResult.meta.changes === 1
+  }
+
   async findRecentExpensesFromCashAccounts(startDate: string, endDate: string): Promise<(Transaction & { account_name: string; category_name?: string })[]> {
     const query = `
       SELECT t.*, a.name as account_name, c.name as category_name

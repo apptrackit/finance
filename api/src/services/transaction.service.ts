@@ -378,6 +378,10 @@ export class TransactionService {
       throw new Error('Linked transfers cannot be confirmed as upcoming transactions')
     }
 
+    if ((tx.status || 'posted') === 'posted') {
+      return tx
+    }
+
     if ((tx.status || 'posted') !== 'pending') {
       throw new Error('Transaction is not pending confirmation')
     }
@@ -393,15 +397,13 @@ export class TransactionService {
     this.assertAccountUnlocked(account)
 
     const now = Date.now()
-    await this.accountRepo.updateBalance(tx.account_id, account.balance + tx.amount, now)
-    await this.transactionRepo.update(id, {
-      status: 'posted',
-      confirmed_at: now,
-      cancelled_at: null,
-      updated_at: now
-    })
+    const confirmed = await this.transactionRepo.confirmPendingAndApplyBalance(tx, now, this.todayString())
 
     const updated = await this.transactionRepo.findById(id)
+    if (!confirmed && updated?.status !== 'posted') {
+      throw new Error('Transaction is not pending confirmation')
+    }
+
     return updated!
   }
 
