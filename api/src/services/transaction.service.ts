@@ -1,4 +1,4 @@
-import { Transaction } from '../models/Transaction'
+import { Transaction, TransactionStatus } from '../models/Transaction'
 import { InvestmentTransaction } from '../models/InvestmentTransaction'
 import { Account } from '../models/Account'
 import { TransactionRepository } from '../repositories/transaction.repository'
@@ -6,7 +6,7 @@ import { AccountRepository } from '../repositories/account.repository'
 import { InvestmentTransactionRepository } from '../repositories/investment-transaction.repository'
 import { CreateTransactionDto, UpdateTransactionDto } from '../dtos/transaction.dto'
 import { fetchPriceFromYahoo } from '../utils/yahoo-finance.util'
-import { PaginatedResponse, PaginationHelper, PaginationParams, DateFilterParams } from '../models/Pagination'
+import { PaginatedResponse, PaginationHelper, PaginationParams } from '../models/Pagination'
 
 export class TransactionService {
   constructor(
@@ -19,6 +19,30 @@ export class TransactionService {
     if (account.is_locked) {
       throw new Error(`Account "${account.name}" is locked`)
     }
+  }
+
+  private todayString(): string {
+    return new Date().toISOString().slice(0, 10)
+  }
+
+  private isPosted(transaction: Transaction): boolean {
+    return (transaction.status || 'posted') === 'posted'
+  }
+
+  private resolveCreateStatus(dto: CreateTransactionDto): TransactionStatus {
+    if (dto.status === 'pending' || dto.date > this.todayString()) {
+      return 'pending'
+    }
+    return 'posted'
+  }
+
+  private resolveUpdateStatus(oldTx: Transaction, dto: UpdateTransactionDto): TransactionStatus {
+    if ((oldTx.status || 'posted') === 'pending') {
+      return 'pending'
+    }
+
+    const nextDate = dto.date || oldTx.date
+    return nextDate > this.todayString() ? 'pending' : 'posted'
   }
 
   async getAllTransactions(): Promise<Transaction[]> {
@@ -85,6 +109,8 @@ export class TransactionService {
     }
 
     // For non-investment accounts: use regular transactions table
+    const now = Date.now()
+    const status = this.resolveCreateStatus(dto)
     const transaction: Transaction = {
       id,
       account_id: dto.account_id,
@@ -93,14 +119,20 @@ export class TransactionService {
       description: dto.description,
       date: dto.date,
       linked_transaction_id: dto.linked_transaction_id,
-      exclude_from_estimate: dto.exclude_from_estimate
+      exclude_from_estimate: dto.exclude_from_estimate,
+      status,
+      confirmed_at: status === 'posted' ? now : null,
+      cancelled_at: null,
+      created_at: now,
+      updated_at: now
     }
 
     await this.transactionRepo.create(transaction)
 
-    // Update account balance
-    const newBalance = account.balance + dto.amount
-    await this.accountRepo.updateBalance(dto.account_id, newBalance, Date.now())
+    if (status === 'posted') {
+      const newBalance = account.balance + dto.amount
+      await this.accountRepo.updateBalance(dto.account_id, newBalance, now)
+    }
 
     return transaction
   }
@@ -111,6 +143,10 @@ export class TransactionService {
 
     if (!oldTx) {
       throw new Error('Transaction not found')
+    }
+
+    if ((oldTx.status || 'posted') === 'cancelled') {
+      throw new Error('Cancelled transaction cannot be edited')
     }
 
     if (oldTx.linked_transaction_id) {
@@ -128,6 +164,8 @@ export class TransactionService {
 
     const newAccountId = dto.account_id || oldTx.account_id
     const newAmount = dto.amount ?? oldTx.amount
+    const newStatus = this.resolveUpdateStatus(oldTx, dto)
+    const now = Date.now()
     if (newAccountId !== oldTx.account_id) {
       const targetAccount = await this.accountRepo.findById(newAccountId)
       if (!targetAccount) {
@@ -136,12 +174,13 @@ export class TransactionService {
       this.assertAccountUnlocked(targetAccount)
     }
 
-    // Revert old balance
-    await this.accountRepo.updateBalance(
-      oldTx.account_id,
-      oldAccount.balance - oldTx.amount,
-      Date.now()
-    )
+    if (this.isPosted(oldTx)) {
+      await this.accountRepo.updateBalance(
+        oldTx.account_id,
+        oldAccount.balance - oldTx.amount,
+        now
+      )
+    }
 
     // Update transaction
     await this.transactionRepo.update(id, {
@@ -150,19 +189,24 @@ export class TransactionService {
       amount: newAmount,
       description: dto.description !== undefined ? dto.description : oldTx.description,
       date: dto.date || oldTx.date,
-      exclude_from_estimate: dto.exclude_from_estimate !== undefined ? dto.exclude_from_estimate : oldTx.exclude_from_estimate
+      exclude_from_estimate: dto.exclude_from_estimate !== undefined ? dto.exclude_from_estimate : oldTx.exclude_from_estimate,
+      status: newStatus,
+      confirmed_at: newStatus === 'posted' ? (oldTx.confirmed_at ?? now) : null,
+      cancelled_at: null,
+      updated_at: now
     })
 
-    // Apply new balance
-    const newAccount = await this.accountRepo.findById(newAccountId)
-    if (!newAccount) {
-      throw new Error('Account not found')
+    if (newStatus === 'posted') {
+      const newAccount = await this.accountRepo.findById(newAccountId)
+      if (!newAccount) {
+        throw new Error('Account not found')
+      }
+      await this.accountRepo.updateBalance(
+        newAccountId,
+        newAccount.balance + newAmount,
+        now
+      )
     }
-    await this.accountRepo.updateBalance(
-      newAccountId,
-      newAccount.balance + newAmount,
-      Date.now()
-    )
 
     const updated = await this.transactionRepo.findById(id)
     return updated!
@@ -285,7 +329,7 @@ export class TransactionService {
       }
 
       // Revert balance for the main transaction
-      if (account) {
+      if (account && this.isPosted(tx)) {
         await this.accountRepo.updateBalance(
           tx.account_id,
           account.balance - tx.amount,
@@ -295,7 +339,7 @@ export class TransactionService {
 
       // If this is a transfer (has linked_transaction_id), delete the linked transaction too
       if (linkedTx) {
-        if (linkedAccount) {
+        if (linkedAccount && this.isPosted(linkedTx)) {
           await this.accountRepo.updateBalance(
             linkedTx.account_id,
             linkedAccount.balance - linkedTx.amount,
@@ -308,6 +352,72 @@ export class TransactionService {
       // Delete the main transaction
       await this.transactionRepo.delete(id)
     }
+  }
+
+  async getUpcomingTransactions(): Promise<Transaction[]> {
+    return await this.transactionRepo.findUpcoming()
+  }
+
+  async confirmTransaction(id: string): Promise<Transaction> {
+    const tx = await this.transactionRepo.findById(id)
+
+    if (!tx) {
+      throw new Error('Transaction not found')
+    }
+
+    if (tx.linked_transaction_id) {
+      throw new Error('Linked transfers cannot be confirmed as upcoming transactions')
+    }
+
+    if ((tx.status || 'posted') !== 'pending') {
+      throw new Error('Transaction is not pending confirmation')
+    }
+
+    const account = await this.accountRepo.findById(tx.account_id)
+    if (!account) {
+      throw new Error('Account not found')
+    }
+    this.assertAccountUnlocked(account)
+
+    const now = Date.now()
+    await this.accountRepo.updateBalance(tx.account_id, account.balance + tx.amount, now)
+    await this.transactionRepo.update(id, {
+      status: 'posted',
+      confirmed_at: now,
+      cancelled_at: null,
+      updated_at: now
+    })
+
+    const updated = await this.transactionRepo.findById(id)
+    return updated!
+  }
+
+  async declineTransaction(id: string): Promise<Transaction> {
+    const tx = await this.transactionRepo.findById(id)
+
+    if (!tx) {
+      throw new Error('Transaction not found')
+    }
+
+    if ((tx.status || 'posted') !== 'pending') {
+      throw new Error('Transaction is not pending confirmation')
+    }
+
+    const account = await this.accountRepo.findById(tx.account_id)
+    if (!account) {
+      throw new Error('Account not found')
+    }
+    this.assertAccountUnlocked(account)
+
+    const now = Date.now()
+    await this.transactionRepo.update(id, {
+      status: 'cancelled',
+      cancelled_at: now,
+      updated_at: now
+    })
+
+    const updated = await this.transactionRepo.findById(id)
+    return updated!
   }
 
   async cloneRecurringTransactions(): Promise<void> {

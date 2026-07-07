@@ -21,6 +21,7 @@ import type { Transaction, Category, Account, TimePeriod, SpendingEstimate, Char
 
 type AnalyticsProps = {
   transactions: Transaction[]
+  upcomingTransactions?: Transaction[]
   categories: Category[]
   accounts: Account[]
   masterCurrency?: string
@@ -63,12 +64,14 @@ function AnalyticsSkeleton() {
 
 export function Analytics({
   transactions,
+  upcomingTransactions = [],
   categories,
   accounts,
   masterCurrency = 'HUF',
   loading = false
 }: AnalyticsProps) {
   const [period, setPeriod] = useState<TimePeriod>('month')
+  const [projectionMode, setProjectionMode] = useState<'actual' | 'projected'>('actual')
   const [selectedExpenseCategory, setSelectedExpenseCategory] = useState<string>('all')
   const [selectedIncomeCategory, setSelectedIncomeCategory] = useState<string>('all')
   const [exchangeRates, setExchangeRates] = useState<Record<string, number>>({})
@@ -85,6 +88,13 @@ export function Analytics({
   }
 
   const show = (id: WidgetId) => widgetVisibility[id]
+
+  const transactionsForAnalytics = useMemo(() => {
+    if (projectionMode === 'projected') {
+      return [...transactions, ...upcomingTransactions]
+    }
+    return transactions
+  }, [projectionMode, transactions, upcomingTransactions])
 
   const customDateRange = useMemo(() => {
     if (period === 'month') {
@@ -160,7 +170,7 @@ export function Analytics({
 
   // Filter transactions by period (exclude investment accounts only)
   const filteredTransactions = useMemo(() => {
-    return transactions.filter(tx => {
+    return transactionsForAnalytics.filter(tx => {
       const txDate = new Date(tx.date)
       const account = accounts.find(a => a.id === tx.account_id)
       
@@ -179,7 +189,7 @@ export function Analytics({
           return true
       }
     })
-  }, [transactions, period, accounts, customDateRange])
+  }, [transactionsForAnalytics, period, accounts, customDateRange])
 
   // Calculate totals in master currency
   const { totalIncome, totalExpenses, netFlow } = useMemo(() => {
@@ -257,7 +267,7 @@ export function Analytics({
       return sum + convertToMasterCurrency(acc.balance, acc.id)
     }, 0)
 
-    const sortedTransactions = [...transactions]
+    const sortedTransactions = [...transactionsForAnalytics]
       .filter(tx => cashAccountIds.has(tx.account_id))
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
 
@@ -313,14 +323,14 @@ export function Analytics({
       ema = point.balance * k + ema * (1 - k)
       return { ...point, smoothed: ema }
     })
-  }, [transactions, accounts, period, exchangeRates, masterCurrency, customDateRange])
+  }, [transactionsForAnalytics, accounts, period, exchangeRates, masterCurrency, customDateRange])
 
   // Per-account Net Worth Trend data in master currency (exclude investment accounts)
   const perAccountTrendData = useMemo(() => {
     return accounts
       .filter(account => account.type !== 'investment')
       .map(account => {
-        const accountTransactions = transactions.filter(t => {
+        const accountTransactions = transactionsForAnalytics.filter(t => {
           const txDate = new Date(t.date)
           const matchesAccount = t.account_id === account.id
           if (!matchesAccount) return false
@@ -402,7 +412,7 @@ export function Analytics({
         }
       })
       .filter(({ hasTransactions }) => hasTransactions)
-  }, [accounts, transactions, period, exchangeRates, masterCurrency, customDateRange])
+  }, [accounts, transactionsForAnalytics, period, exchangeRates, masterCurrency, customDateRange])
 
   // Get expense categories for filter
   const expenseCategories = useMemo(() => {
@@ -430,7 +440,7 @@ export function Analytics({
         const weekEnd = endOfWeek(weekStart, { weekStartsOn: 1 })
         const weekKey = format(weekStart, 'yyyy-MM-dd')
         
-        const weekIncome = transactions
+        const weekIncome = transactionsForAnalytics
           .filter(tx => {
             const account = accounts.find(a => a.id === tx.account_id)
             if (account?.type === 'investment') return false
@@ -457,7 +467,7 @@ export function Analytics({
     } else {
       const maxMonths = period === 'allTime' ? 100 : 12
       
-      const incomeTransactions = transactions.filter(tx => {
+      const incomeTransactions = transactionsForAnalytics.filter(tx => {
         const account = accounts.find(a => a.id === tx.account_id)
         if (account?.type === 'investment') return false
         if (tx.amount <= 0) return false
@@ -485,7 +495,7 @@ export function Analytics({
         
         if (period === 'year' && !isWithinInterval(monthDate, { start: new Date(customDateRange.startDate), end: new Date(customDateRange.endDate) })) continue
         
-        const monthIncome = transactions
+        const monthIncome = transactionsForAnalytics
           .filter(tx => {
             const account = accounts.find(a => a.id === tx.account_id)
             if (account?.type === 'investment') return false
@@ -506,7 +516,7 @@ export function Analytics({
     }
     
     return data
-  }, [transactions, selectedIncomeCategory, period, customDateRange, accounts, exchangeRates, masterCurrency])
+  }, [transactionsForAnalytics, selectedIncomeCategory, period, customDateRange, accounts, exchangeRates, masterCurrency])
 
   // Expenses comparison data
   const expensesChartData = useMemo((): ChartDataPoint[] => {
@@ -524,7 +534,7 @@ export function Analytics({
         const weekEnd = endOfWeek(weekStart, { weekStartsOn: 1 })
         const weekKey = format(weekStart, 'yyyy-MM-dd')
         
-        const weekExpenses = transactions
+        const weekExpenses = transactionsForAnalytics
           .filter(tx => {
             const account = accounts.find(a => a.id === tx.account_id)
             if (account?.type === 'investment') return false
@@ -551,7 +561,7 @@ export function Analytics({
     } else {
       const maxMonths = period === 'allTime' ? 100 : 12
       
-      const expenseTransactions = transactions.filter(tx => {
+      const expenseTransactions = transactionsForAnalytics.filter(tx => {
         const account = accounts.find(a => a.id === tx.account_id)
         if (account?.type === 'investment') return false
         if (tx.amount >= 0) return false
@@ -579,7 +589,7 @@ export function Analytics({
         
         if (period === 'year' && !isWithinInterval(monthDate, { start: new Date(customDateRange.startDate), end: new Date(customDateRange.endDate) })) continue
         
-        const monthExpenses = transactions
+        const monthExpenses = transactionsForAnalytics
           .filter(tx => {
             const account = accounts.find(a => a.id === tx.account_id)
             if (account?.type === 'investment') return false
@@ -600,7 +610,7 @@ export function Analytics({
     }
     
     return data
-  }, [transactions, selectedExpenseCategory, period, customDateRange, accounts, exchangeRates, masterCurrency])
+  }, [transactionsForAnalytics, selectedExpenseCategory, period, customDateRange, accounts, exchangeRates, masterCurrency])
 
   const periodLabels: Record<TimePeriod, string> = {
     allTime: 'All Time',
@@ -705,6 +715,28 @@ export function Analytics({
               </Button>
             </div>
           )}
+          <div className="flex gap-1 p-1 rounded-xl bg-background/80 border border-border/70 shadow-inner w-full sm:w-auto">
+            <button
+              onClick={() => setProjectionMode('actual')}
+              className={`flex-1 sm:flex-none px-2.5 sm:px-3 py-1.5 text-xs font-medium rounded-lg transition-all whitespace-nowrap ${
+                projectionMode === 'actual'
+                  ? 'bg-primary text-primary-foreground shadow-md'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-secondary/70'
+              }`}
+            >
+              Actual
+            </button>
+            <button
+              onClick={() => setProjectionMode('projected')}
+              className={`flex-1 sm:flex-none px-2.5 sm:px-3 py-1.5 text-xs font-medium rounded-lg transition-all whitespace-nowrap ${
+                projectionMode === 'projected'
+                  ? 'bg-primary text-primary-foreground shadow-md'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-secondary/70'
+              }`}
+            >
+              Projected{upcomingTransactions.length > 0 ? ` (${upcomingTransactions.length})` : ''}
+            </button>
+          </div>
         </div>
       </div>
 
@@ -742,7 +774,7 @@ export function Analytics({
 
             {show('cash-balance-forecast') && isCurrentMonthView && (
               <PredictionChart
-                transactions={transactions}
+                transactions={transactionsForAnalytics}
                 accounts={accounts}
                 masterCurrency={masterCurrency}
                 exchangeRates={exchangeRates}

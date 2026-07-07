@@ -14,6 +14,11 @@ export class TransactionController {
     return c.json(transactions.map(TransactionMapper.toResponseDto))
   }
 
+  async getUpcoming(c: Context) {
+    const transactions = await this.transactionService.getUpcomingTransactions()
+    return c.json(transactions.map(TransactionMapper.toResponseDto))
+  }
+
   async create(c: Context<{ Bindings: Bindings }>) {
     try {
       const body = await c.req.json<CreateTransactionDto>()
@@ -74,6 +79,30 @@ export class TransactionController {
       return c.json({ success: true })
     } catch (error: any) {
       const status = error.message.includes('not found') ? 404 : error.message.includes('locked') ? 409 : 500
+      return c.json({ error: error.message }, status)
+    }
+  }
+
+  async confirm(c: Context<{ Bindings: Bindings }>) {
+    try {
+      const id = c.req.param('id')
+      const transaction = await this.transactionService.confirmTransaction(id)
+      await new AuditRepository(c.env.DB).log('UPDATE', 'transaction', id, { status: 'posted' })
+      return c.json(TransactionMapper.toResponseDto(transaction))
+    } catch (error: any) {
+      const status = error.message.includes('not found') ? 404 : error.message.includes('locked') ? 409 : 400
+      return c.json({ error: error.message }, status)
+    }
+  }
+
+  async decline(c: Context<{ Bindings: Bindings }>) {
+    try {
+      const id = c.req.param('id')
+      const transaction = await this.transactionService.declineTransaction(id)
+      await new AuditRepository(c.env.DB).log('UPDATE', 'transaction', id, { status: 'cancelled' })
+      return c.json(TransactionMapper.toResponseDto(transaction))
+    } catch (error: any) {
+      const status = error.message.includes('not found') ? 404 : error.message.includes('locked') ? 409 : 400
       return c.json({ error: error.message }, status)
     }
   }

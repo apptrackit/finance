@@ -1,3 +1,5 @@
+import { TransactionStatus } from '../models/Transaction'
+
 export interface CreateTransactionDto {
   account_id: string
   category_id?: string | null
@@ -7,6 +9,7 @@ export interface CreateTransactionDto {
   price?: number
   linked_transaction_id?: string
   exclude_from_estimate?: boolean
+  status?: Extract<TransactionStatus, 'pending' | 'posted'>
 }
 
 export interface UpdateTransactionDto {
@@ -31,4 +34,9 @@ export interface TransactionResponseDto {
   linked_transaction_id?: string
   exclude_from_estimate?: boolean
   is_recurring?: boolean
+  status: TransactionStatus
+  confirmed_at?: number | null
+  cancelled_at?: number | null
+  created_at?: number | null
+  updated_at?: number | null
 }

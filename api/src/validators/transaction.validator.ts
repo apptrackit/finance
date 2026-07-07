@@ -11,6 +11,7 @@ export const CreateTransactionSchema = z.object({
   price: z.number().positive().optional(),
   linked_transaction_id: z.string().optional(),
   exclude_from_estimate: z.boolean().optional(),
+  status: z.enum(['posted', 'pending']).optional(),
 })
 
 export const UpdateTransactionSchema = z.object({
