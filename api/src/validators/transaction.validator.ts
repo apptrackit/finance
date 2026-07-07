@@ -4,7 +4,7 @@ const dateRegex = /^\d{4}-\d{2}-\d{2}$/
 
 export const CreateTransactionSchema = z.object({
   account_id: z.string().min(1, 'account_id is required'),
-  category_id: z.string().optional(),
+  category_id: z.string().nullable().optional(),
   amount: z.number().finite('Amount must be a finite number').refine(n => n !== 0, 'Amount cannot be zero'),
   description: z.string().max(500).optional(),
   date: z.string().regex(dateRegex, 'Date must be YYYY-MM-DD'),

@@ -101,6 +101,16 @@ describe('Transaction validators', () => {
     expect(result.success).toBe(true)
   })
 
+  it('accepts uncategorized transactions', () => {
+    const result = CreateTransactionSchema.safeParse({
+      account_id: 'acc-123',
+      amount: -1000,
+      date: '2026-04-01',
+      category_id: null,
+    })
+    expect(result.success).toBe(true)
+  })
+
   it('accepts linked transfer update fields', () => {
     const result = UpdateTransactionSchema.safeParse({
       account_id: 'acc-1',
