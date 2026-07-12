@@ -3,6 +3,12 @@ main = "src/index.ts"
 compatibility_date = "2026-07-01"
 workers_dev = false
 
+# deploy.sh generates this route from MCP_HOSTNAME. If deploying manually,
+# replace it with the custom hostname protected by Cloudflare Access.
+# routes = [
+#   { pattern = "ai.finance.yourdomain.com", custom_domain = true }
+# ]
+
 [[d1_databases]]
 binding = "DB"
 database_name = "finance-db"
@@ -13,5 +19,5 @@ CF_ACCESS_TEAM_DOMAIN = "https://your-team.cloudflareaccess.com"
 CF_ACCESS_AUD = "your-access-application-audience-tag"
 ALLOWED_EMAIL = "you@example.com"
 
-# Configure the custom hostname and Cloudflare Access Managed OAuth in the
+# Configure Cloudflare Access Managed OAuth for this custom hostname in the
 # Cloudflare dashboard. Never enable DISABLE_ACCESS_AUTH in production.

@@ -45,21 +45,31 @@ Transfers are excluded from income and expense aggregates. Investment accounts a
 
 ## Deploy
 
-1. Copy `wrangler.toml.example` to the gitignored `wrangler.toml`.
-2. Set the existing Finance D1 database ID.
-3. Replace the Access team domain, application audience, and allowed email.
-4. Deploy:
+1. Run the root deploy once. It asks whether to include MCP and stores that
+   choice, the D1 binding, hostname, and Access values in gitignored
+   `.deploy-config`. The generated `mcp/wrangler.toml` is a deployment artifact,
+   not a second source of configuration.
 
    ```bash
-   npm install
-   npm run test:mcp
-   npm run build:mcp
-   npm run deploy -w mcp
+   npm run deploy
    ```
 
-5. Add `ai.finance.example.com` as the Worker custom domain and ensure the `workers.dev` route remains disabled.
-6. In Cloudflare Zero Trust, create an Access application for the MCP hostname, restrict it to the intended email, and enable Managed OAuth for MCP clients.
-7. Test `initialize`, `tools/list`, and representative `tools/call` requests using MCP Inspector's OAuth flow before connecting ChatGPT.
+   To include MCP without waiting for the prompt, use:
+
+   ```bash
+   npm run deploy:mcp
+   ```
+
+   Use `npm run deploy -- --no-mcp` to save a future default of skipping it.
+2. The script creates the custom-domain Worker route and keeps `workers.dev`
+   disabled. In Cloudflare Zero Trust, create an Access application for the MCP
+   hostname, restrict it to the intended email, and enable Managed OAuth for MCP
+   clients.
+3. Test `initialize`, `tools/list`, and representative `tools/call` requests using MCP Inspector's OAuth flow before connecting ChatGPT.
+
+For a standalone/manual deployment, copy `wrangler.toml.example` to the
+gitignored `wrangler.toml`, set its values and custom route, then run the MCP
+test, build, and deploy scripts from this workspace.
 
 `DISABLE_ACCESS_AUTH=true` is for local Wrangler tests only. Never configure it in production.
 

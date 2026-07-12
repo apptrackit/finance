@@ -1,0 +1,21 @@
+# Private deployment configuration. Copy this to .deploy-config or let
+# ./deploy.sh create it interactively. Do not commit the real file.
+
+PROJECT_NAME=finance-client
+DATABASE_NAME=finance-db
+DATABASE_ID=your-d1-database-id
+API_SECRET=your-browser-api-key
+ALLOWED_ORIGINS=https://finance.example.com
+PUBLIC_API_KEY=off
+# API_URL is written by deploy.sh after the API Worker deploys. Set it manually
+# only when Wrangler cannot report the worker URL.
+API_URL=https://finance-api.example.workers.dev
+
+# The root deploy asks once and remembers this choice. Use ./deploy.sh --mcp or
+# ./deploy.sh --no-mcp to change it later.
+DEPLOY_MCP=false
+MCP_WORKER_NAME=finance-mcp
+MCP_HOSTNAME=ai.finance.example.com
+MCP_ACCESS_TEAM_DOMAIN=https://your-team.cloudflareaccess.com
+MCP_ACCESS_AUD=your-access-application-audience-tag
+MCP_ALLOWED_EMAIL=you@example.com

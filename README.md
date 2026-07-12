@@ -87,16 +87,21 @@ npx wrangler pages deploy dist --project-name=finance-client
 
 ### Automated Deployment
 
-Use the deployment script to deploy everything at once:
+Use the deployment script to deploy the database, API, and client together:
 
 ```bash
-./deploy.sh finance-client
+npm run deploy
 ```
 
 This script handles:
 1. **Database schema updates** — Applies migrations to your D1 database
 2. **API deployment** — Deploys backend to Cloudflare Workers
 3. **Client build & deploy** — Builds React app and deploys to Cloudflare Pages
+
+On its first run it also asks whether to deploy the read-only Finance MCP
+Worker. That choice is stored privately in `.deploy-config`; use
+`npm run deploy:mcp` to include MCP immediately, or `npm run deploy -- --no-mcp`
+to change the saved default. See [the MCP deployment guide](mcp/README.md).
 
 ---
 

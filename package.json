@@ -12,7 +12,8 @@
     "build": "npm run build -w client",
     "build:mcp": "npm run build -w mcp",
     "test:mcp": "npm run test -w mcp",
-    "deploy": "./deploy.sh"
+    "deploy": "./deploy.sh",
+    "deploy:mcp": "./deploy.sh --mcp"
   },
   "devDependencies": {
     "concurrently": "^8.2.2"
