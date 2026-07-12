@@ -203,6 +203,10 @@ export function TransactionList({
     }
 
     const pairKey = getTransferPairKey(fromAccount.id, toAccount.id)
+    const shouldKeepCurrentRate = () =>
+      (!!editingId && editedTransferPairRef.current === pairKey)
+      || manualRateOverrideRef.current
+
     const fetchRate = async () => {
       setIsLoadingRate(true)
       try {
@@ -284,18 +288,17 @@ export function TransactionList({
 
         if (!isCurrentRequest()) return
 
-        const preserveEditedRate = !!editingId && editedTransferPairRef.current === pairKey
-        const userChangedRate = manualRateOverrideRef.current
+        const preserveEditedRate = shouldKeepCurrentRate()
 
         if (rate > 0) {
           setSuggestedRate(rate)
-          if (!preserveEditedRate && !userChangedRate) {
+          if (!preserveEditedRate) {
             setExchangeRate(rate)
             setExchangeRateDraft(formatCalculatedAmount(rate, { maximumFractionDigits: 12 }))
           }
         } else {
           setSuggestedRate(null)
-          if (!preserveEditedRate && !userChangedRate) {
+          if (!preserveEditedRate) {
             setExchangeRate(null)
             setExchangeRateDraft('')
           }
@@ -304,6 +307,10 @@ export function TransactionList({
         if (!isCurrentRequest()) return
         console.error('Failed to fetch exchange rate:', error)
         setSuggestedRate(null)
+        if (!shouldKeepCurrentRate()) {
+          setExchangeRate(null)
+          setExchangeRateDraft('')
+        }
       } finally {
         if (isCurrentRequest()) setIsLoadingRate(false)
       }
@@ -884,11 +891,17 @@ export function TransactionList({
   }
 
   const handleBulkTransactionConfirm = async (bulkTransactions: BulkTransaction[]) => {
-    // Create all transactions one by one
-    for (const tx of bulkTransactions) {
+    const parsedTransactions = bulkTransactions.map(tx => {
       const amount = parseAmount(tx.amount)
-      const numericAmount = amount ?? 0
-      const finalAmount = tx.type === 'expense' ? -Math.abs(numericAmount) : Math.abs(numericAmount)
+      if (amount === null || amount <= 0) {
+        throw new Error('Each bulk transaction needs a valid amount greater than 0')
+      }
+      return { tx, amount }
+    })
+
+    // Validate every row before creating any transactions, then submit them one by one.
+    for (const { tx, amount } of parsedTransactions) {
+      const finalAmount = tx.type === 'expense' ? -amount : amount
       
       await apiFetch(`${API_BASE_URL}/transactions`, {
         method: 'POST',

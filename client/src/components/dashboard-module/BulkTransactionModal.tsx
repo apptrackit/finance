@@ -7,7 +7,7 @@ import { Select } from '../common/select'
 import { Plus, Trash2, AlertCircle, Percent } from 'lucide-react'
 import { useAlert } from '../../context/AlertContext'
 import { AmountInput } from '../common/amount-input'
-import { formatAmount, formatCalculatedAmount, parseAmount } from '../../lib/amount'
+import { formatCalculatedAmount, parseAmount } from '../../lib/amount'
 
 type Category = {
   id: string
@@ -235,7 +235,7 @@ export function BulkTransactionModal({
               <div className="flex items-center justify-between text-sm">
                 <span className="text-muted-foreground">Allocated:</span>
                 <span className={`font-medium ${Math.abs(remaining) < 0.01 ? 'text-green-500' : 'text-foreground'}`}>
-                  {formatAmount(allocatedAmount)} / {formatAmount(parsedTotal)} {accountCurrency}
+                  {formatCalculatedAmount(allocatedAmount, { maximumFractionDigits: 2 })} / {formatCalculatedAmount(parsedTotal, { maximumFractionDigits: 2 })} {accountCurrency}
                 </span>
               </div>
               {Math.abs(remaining) >= 0.01 && (
