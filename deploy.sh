@@ -63,7 +63,8 @@ step() {
 
 # ─── Config helpers ───────────────────────────────────────────────────────────
 
-CONFIG_FILE="$(git rev-parse --show-toplevel 2>/dev/null || echo .)/.deploy-config"
+ROOT_DIR="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+CONFIG_FILE="${ROOT_DIR}/.deploy-config"
 
 get_cfg() {
   awk -v key="$1" '
@@ -115,6 +116,28 @@ need_default() {
   local key="$1" default="$2" val
   val=$(get_cfg "$key")
   [ -n "$val" ] || val="$default"
+  set_cfg "$key" "$val"
+  printf '%s' "$val"
+}
+
+legacy_mcp_value() {
+  local key="$1" file="${ROOT_DIR}/mcp/wrangler.toml"
+  [ -f "$file" ] || return 0
+  sed -nE "s/^[[:space:]]*${key}[[:space:]]*=[[:space:]]*\"([^\"]*)\"[[:space:]]*(#.*)?$/\1/p" "$file" | head -n 1
+}
+
+need_with_fallback() {
+  local key="$1" label="$2" fallback="$3" secret="${4:-}" val
+  val=$(get_cfg "$key")
+  [ -n "$val" ] || val="$fallback"
+  if [ -z "$val" ]; then
+    if [ -n "$secret" ]; then
+      printf "%s: " "$label" >&2; read -rs val; echo >&2
+    else
+      printf "%s: " "$label" >&2; read -r val
+    fi
+    [ -z "$val" ] && err "${label} is required."
+  fi
   set_cfg "$key" "$val"
   printf '%s' "$val"
 }
@@ -173,11 +196,12 @@ ORIGINS=$(need      ALLOWED_ORIGINS "Allowed origins (comma-separated)")
 resolve_mcp_preference
 
 if [ "$DEPLOY_MCP" = "true" ]; then
-  MCP_WORKER_NAME=$(need_default MCP_WORKER_NAME "finance-mcp")
-  MCP_HOSTNAME=$(need MCP_HOSTNAME "MCP hostname (for example ai.finance.example.com)")
-  MCP_ACCESS_TEAM_DOMAIN=$(need MCP_ACCESS_TEAM_DOMAIN "Cloudflare Access team domain")
-  MCP_ACCESS_AUD=$(need MCP_ACCESS_AUD "Cloudflare Access application audience")
-  MCP_ALLOWED_EMAIL=$(need MCP_ALLOWED_EMAIL "Allowed MCP email")
+  LEGACY_MCP_WORKER_NAME=$(legacy_mcp_value "name")
+  [ -n "$LEGACY_MCP_WORKER_NAME" ] || LEGACY_MCP_WORKER_NAME="finance-mcp"
+  MCP_WORKER_NAME=$(need_with_fallback MCP_WORKER_NAME "MCP Worker name" "$LEGACY_MCP_WORKER_NAME")
+  MCP_ACCESS_TEAM_DOMAIN=$(need_with_fallback MCP_ACCESS_TEAM_DOMAIN "Cloudflare Access team domain" "$(legacy_mcp_value "CF_ACCESS_TEAM_DOMAIN")")
+  MCP_ACCESS_AUD=$(need_with_fallback MCP_ACCESS_AUD "Cloudflare Access application audience" "$(legacy_mcp_value "CF_ACCESS_AUD")")
+  MCP_ALLOWED_EMAIL=$(need_with_fallback MCP_ALLOWED_EMAIL "Allowed MCP email" "$(legacy_mcp_value "ALLOWED_EMAIL")")
 fi
 echo ""
 
@@ -317,10 +341,6 @@ main = "src/index.ts"
 compatibility_date = "2026-07-01"
 workers_dev = false
 
-routes = [
-  { pattern = "${MCP_HOSTNAME}", custom_domain = true }
-]
-
 [[d1_databases]]
 binding = "DB"
 database_name = "${DATABASE_NAME}"
@@ -359,4 +379,3 @@ step "Client deploy" "${DEPLOY_CMD[@]}"
 echo ""
 echo -e "${GREEN}Deployed ${PROJECT_NAME}${NC}"
 [ -n "$BRANCH_FLAG" ] && echo -e "${DIM}  ${CURRENT_BRANCH} -> main${NC}"
-[ "$DEPLOY_MCP" = "true" ] && echo -e "${DIM}  MCP: https://${MCP_HOSTNAME}/mcp${NC}"

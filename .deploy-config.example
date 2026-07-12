@@ -14,7 +14,6 @@ API_URL=https://finance-api.example.workers.dev
 # ./deploy.sh --no-mcp to change it later.
 DEPLOY_MCP=false
 MCP_WORKER_NAME=finance-mcp
-MCP_HOSTNAME=ai.finance.example.com
 MCP_ACCESS_TEAM_DOMAIN=https://your-team.cloudflareaccess.com
 MCP_ACCESS_AUD=your-access-application-audience-tag
 MCP_ALLOWED_EMAIL=you@example.com
