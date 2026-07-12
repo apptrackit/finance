@@ -170,7 +170,6 @@ DATABASE_ID=$(need  DATABASE_ID    "Database ID")
 DATABASE_NAME=$(need_default DATABASE_NAME "finance-db")
 API_SECRET=$(need   API_SECRET     "API secret"                       secret)
 ORIGINS=$(need      ALLOWED_ORIGINS "Allowed origins (comma-separated)")
-PUB_KEY=$(need      PUBLIC_API_KEY  "Public API key (or 'off')")
 resolve_mcp_preference
 
 if [ "$DEPLOY_MCP" = "true" ]; then
@@ -230,7 +229,7 @@ TOML
 # ─── Secrets ──────────────────────────────────────────────────────────────────
 
 echo "  Secrets"
-for entry in "API_SECRET:${API_SECRET}" "ALLOWED_ORIGINS:${ORIGINS}" "PUBLIC_API_KEY:${PUB_KEY}"; do
+for entry in "API_SECRET:${API_SECRET}" "ALLOWED_ORIGINS:${ORIGINS}"; do
   key="${entry%%:*}"
   val="${entry#*:}"
   spin "    %-20s" "$key" &

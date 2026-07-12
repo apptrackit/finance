@@ -6,7 +6,6 @@ DATABASE_NAME=finance-db
 DATABASE_ID=your-d1-database-id
 API_SECRET=your-browser-api-key
 ALLOWED_ORIGINS=https://finance.example.com
-PUBLIC_API_KEY=off
 # API_URL is written by deploy.sh after the API Worker deploys. Set it manually
 # only when Wrangler cannot report the worker URL.
 API_URL=https://finance-api.example.workers.dev
