@@ -1,0 +1,17 @@
+{
+  "name": "finance-mcp",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "build": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20240208.0",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.4",
+    "wrangler": "^4.83.0"
+  }
+}
