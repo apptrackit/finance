@@ -12,6 +12,8 @@ import { useAlert } from '../../context/AlertContext'
 import { SplitTransactionModal } from './SplitTransactionModal'
 import type { SplitTransaction } from './SplitTransactionModal'
 import { AdjustmentChoiceModal } from './AdjustmentChoiceModal'
+import { AmountInput } from '../common/amount-input'
+import { formatAmount, parseAmount } from '../../lib/amount'
 
 type Account = {
   id: string
@@ -269,11 +271,14 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
     setIsSubmitting(true)
     try {
       const wasEditing = !!editingId
-      const balanceValue = formData.balance.replace(/\s/g, '').trim()
+      const balanceValue = parseAmount(formData.balance)
+      if (formData.balance.trim() !== '' && balanceValue === null) {
+        throw new Error('Please enter a valid balance')
+      }
       const payload: any = {
         name: formData.name,
         type: formData.type,
-        balance: balanceValue === '' ? 0 : parseFloat(balanceValue) || 0,
+        balance: balanceValue ?? 0,
         currency: formData.currency
       }
 
@@ -334,18 +339,10 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
   }
 
   const handleEdit = (account: Account) => {
-    const balanceStr = account.balance.toString()
-    const formattedBalance = balanceStr.includes('.') 
-      ? (() => {
-          const [integer, decimal] = balanceStr.split('.')
-          return integer.replace(/\B(?=(\d{3})+(?!\d))/g, ' ') + '.' + decimal
-        })()
-      : balanceStr.replace(/\B(?=(\d{3})+(?!\d))/g, ' ')
-    
     setFormData({
       name: account.name,
       type: account.type,
-      balance: formattedBalance,
+      balance: formatAmount(account.balance, { maximumFractionDigits: 8 }),
       currency: account.currency,
       symbol: account.symbol || '',
       asset_type: account.asset_type || 'stock',
@@ -637,26 +634,11 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
               )}
               <div className="col-span-2 space-y-2">
                 <Label htmlFor="balance">{formData.type === 'investment' ? 'Initial Quantity (0 if tracking from transactions)' : 'Current Balance'}</Label>
-                <Input
+                <AmountInput
                   id="balance"
-                  type="text"
-                  inputMode="decimal"
                   value={formData.balance}
-                  onChange={e => {
-                    let value = e.target.value.replace(/\s/g, '') // Remove spaces
-                    // Allow only numbers and one decimal point
-                    if (!/^\d*\.?\d*$/.test(value)) return
-                    
-                    // Format with spaces
-                    if (value.includes('.')) {
-                      const [integer, decimal] = value.split('.')
-                      const formatted = integer.replace(/\B(?=(\d{3})+(?!\d))/g, ' ') + (decimal !== undefined ? '.' + decimal : '')
-                      setFormData({ ...formData, balance: formatted })
-                    } else {
-                      const formatted = value.replace(/\B(?=(\d{3})+(?!\d))/g, ' ')
-                      setFormData({ ...formData, balance: formatted })
-                    }
-                  }}
+                  onValueChange={balance => setFormData({ ...formData, balance })}
+                  allowNegative
                   placeholder="0"
                 />
               </div>

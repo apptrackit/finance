@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Button } from '../common/button'
 import { Input } from '../common/input'
 import { Label } from '../common/label'
@@ -12,6 +12,8 @@ import { usePrivacy } from '../../context/PrivacyContext'
 import { useAlert } from '../../context/AlertContext'
 import { DateRangePicker } from '../common/DateRangePicker'
 import { BulkTransactionModal, type BulkTransaction } from './BulkTransactionModal'
+import { AmountInput } from '../common/amount-input'
+import { formatAmount, formatCalculatedAmount, parseAmount } from '../../lib/amount'
 
 type Transaction = {
   id: string
@@ -58,6 +60,7 @@ const RECENT_TRANSACTION_MS = 10 * 60 * 1000
 const RECENT_TIMESTAMP_GRACE_MS = 60 * 1000
 const UPDATED_BADGE_GRACE_MS = 1000
 const getLocalDateString = () => format(new Date(), 'yyyy-MM-dd')
+const getTransferPairKey = (fromAccountId: string, toAccountId: string) => `${fromAccountId}:${toAccountId}`
 
 const isRecentTimestamp = (timestamp: number, now: number) => {
   return timestamp > 0
@@ -127,9 +130,13 @@ export function TransactionList({
     exclude_from_estimate: false
   })
   const [exchangeRate, setExchangeRate] = useState<number | null>(null)
+  const [exchangeRateDraft, setExchangeRateDraft] = useState('')
   const [suggestedRate, setSuggestedRate] = useState<number | null>(null)
   const [isLoadingRate, setIsLoadingRate] = useState(false)
   const [skipAutoCalc, setSkipAutoCalc] = useState(false)
+  const rateRequestSequenceRef = useRef(0)
+  const manualRateOverrideRef = useRef(false)
+  const editedTransferPairRef = useRef<string | null>(null)
   const [activeTxId, setActiveTxId] = useState<string | null>(null)
   const [categoryFilter, setCategoryFilter] = useState<string>('all')
   const [sortOrder, setSortOrder] = useState<'date' | 'amount-high' | 'amount-low'>('date')
@@ -172,9 +179,15 @@ export function TransactionList({
 
   // Fetch exchange rate when transfer accounts are selected
   useEffect(() => {
+    const requestId = ++rateRequestSequenceRef.current
+    let cancelled = false
+    const isCurrentRequest = () => !cancelled && rateRequestSequenceRef.current === requestId
+
     if (formData.type !== 'transfer' || !formData.account_id || !formData.to_account_id) {
       setSuggestedRate(null)
       setExchangeRate(null)
+      setExchangeRateDraft('')
+      setIsLoadingRate(false)
       return
     }
 
@@ -184,9 +197,12 @@ export function TransactionList({
     if (!fromAccount || !toAccount || fromAccount.currency === toAccount.currency) {
       setSuggestedRate(null)
       setExchangeRate(null)
+      setExchangeRateDraft('')
+      setIsLoadingRate(false)
       return
     }
 
+    const pairKey = getTransferPairKey(fromAccount.id, toAccount.id)
     const fetchRate = async () => {
       setIsLoadingRate(true)
       try {
@@ -266,24 +282,38 @@ export function TransactionList({
            if (directRate) rate = directRate
         }
 
+        if (!isCurrentRequest()) return
+
+        const preserveEditedRate = !!editingId && editedTransferPairRef.current === pairKey
+        const userChangedRate = manualRateOverrideRef.current
+
         if (rate > 0) {
           setSuggestedRate(rate)
-          setExchangeRate(rate)
+          if (!preserveEditedRate && !userChangedRate) {
+            setExchangeRate(rate)
+            setExchangeRateDraft(formatCalculatedAmount(rate, { maximumFractionDigits: 12 }))
+          }
         } else {
           setSuggestedRate(null)
-          setExchangeRate(null)
+          if (!preserveEditedRate && !userChangedRate) {
+            setExchangeRate(null)
+            setExchangeRateDraft('')
+          }
         }
       } catch (error) {
+        if (!isCurrentRequest()) return
         console.error('Failed to fetch exchange rate:', error)
         setSuggestedRate(null)
-        setExchangeRate(null)
       } finally {
-        setIsLoadingRate(false)
+        if (isCurrentRequest()) setIsLoadingRate(false)
       }
     }
 
     fetchRate()
-  }, [formData.account_id, formData.to_account_id, formData.type, accounts])
+    return () => {
+      cancelled = true
+    }
+  }, [formData.account_id, formData.to_account_id, formData.type, accounts, editingId])
 
   // Auto-calculate amount_to when amount or rate changes
   useEffect(() => {
@@ -295,13 +325,18 @@ export function TransactionList({
 
     if (isDifferentCurrency && formData.amount && exchangeRate) {
       // Different currency: amount_to = amount_from × exchange_rate
-      const amountFrom = parseFloat(formData.amount.replace(/\s/g, '')) || 0
+      const amountFrom = parseAmount(formData.amount) || 0
       const calculated = amountFrom * exchangeRate
-      setFormData(prev => ({ ...prev, amount_to: calculated.toString() }))
+      const maximumFractionDigits = toAccount?.type === 'investment' ? 8 : 2
+      setFormData(prev => ({
+        ...prev,
+        amount_to: formatCalculatedAmount(calculated, { maximumFractionDigits })
+      }))
     } else if (!isDifferentCurrency && formData.amount) {
       // Same currency: amount_to = amount_from (no fee)
-      const amountFrom = parseFloat(formData.amount.replace(/\s/g, '')) || 0
-      setFormData(prev => ({ ...prev, amount_to: amountFrom.toString() }))
+      setFormData(prev => ({ ...prev, amount_to: prev.amount }))
+    } else if (!formData.amount) {
+      setFormData(prev => prev.amount_to ? ({ ...prev, amount_to: '' }) : prev)
     }
   }, [formData.amount, exchangeRate, formData.type, formData.account_id, formData.to_account_id, accounts, skipAutoCalc])
 
@@ -417,6 +452,15 @@ export function TransactionList({
     }
   }
 
+  const resetTransferRateState = () => {
+    manualRateOverrideRef.current = false
+    editedTransferPairRef.current = null
+    setExchangeRate(null)
+    setExchangeRateDraft('')
+    setSuggestedRate(null)
+    setSkipAutoCalc(false)
+  }
+
   const resetForm = () => {
     const defaults = loadSavedDefaults('expense')
     setFormData({
@@ -431,8 +475,7 @@ export function TransactionList({
       manual_price: '',
       exclude_from_estimate: false
     })
-    setExchangeRate(null)
-    setSuggestedRate(null)
+    resetTransferRateState()
   }
 
   // When opening the Add form, load defaults
@@ -450,6 +493,7 @@ export function TransactionList({
       manual_price: '',
       exclude_from_estimate: false
     })
+    resetTransferRateState()
     setIsAccountOpen(false)
     setIsAdding(true)
   }
@@ -465,30 +509,54 @@ export function TransactionList({
       category_id: defaults.category_id,
       amount_to: defaults.amount_to || ''
     })
-    setExchangeRate(null)
-    setSuggestedRate(null)
+    resetTransferRateState()
+  }
+
+  const handleTransferAccountChange = (
+    field: 'account_id' | 'to_account_id',
+    accountId: string,
+  ) => {
+    resetTransferRateState()
+    setFormData(prev => ({ ...prev, [field]: accountId, amount_to: '' }))
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (isSubmitting) return
+
+    const amount = parseAmount(formData.amount)
+    if (amount === null || amount <= 0) {
+      showAlert({ type: 'error', message: 'Please enter a valid amount greater than 0' })
+      return
+    }
     
     setIsSubmitting(true)
     try {
-      const amount = parseFloat(formData.amount.replace(/\s/g, ''))
       const wasEditing = !!editingId
       const savedType = formData.type
       const savedAsUpcoming = isUpcomingForm
 
       if (formData.type === 'transfer') {
         // Handle transfer
-        const amountTo = parseFloat(formData.amount_to.replace(/\s/g, '')) || amount
+        const sourceAccount = accounts.find(a => a.id === formData.account_id)
         const toAccount = accounts.find(a => a.id === formData.to_account_id)
+        const isSameCurrency = sourceAccount && toAccount
+          && sourceAccount.currency === toAccount.currency
+        const receivedDraft = parseAmount(formData.amount_to)
+        const parsedAmountTo = receivedDraft ?? (isSameCurrency ? amount : null)
+        if (parsedAmountTo === null || parsedAmountTo <= 0) {
+          throw new Error('Please enter a valid amount to receive greater than 0')
+        }
+        const amountTo = parsedAmountTo
         let price = undefined
         
         // For transfers to investment accounts, include price
         if (toAccount?.type === 'investment' && formData.manual_price) {
-          price = parseFloat(formData.manual_price.replace(/\s/g, ''))
+          const parsedPrice = parseAmount(formData.manual_price)
+          if (parsedPrice === null || parsedPrice <= 0) {
+            throw new Error('Please enter a valid price greater than 0')
+          }
+          price = parsedPrice
           console.log(`Transfer to investment: ${amountTo} shares @ $${price}`)
         }
 
@@ -547,7 +615,11 @@ export function TransactionList({
           let price = undefined
           
           if (account?.type === 'investment' && formData.manual_price) {
-            price = parseFloat(formData.manual_price)
+            const parsedPrice = parseAmount(formData.manual_price)
+            if (parsedPrice === null || parsedPrice <= 0) {
+              throw new Error('Please enter a valid price greater than 0')
+            }
+            price = parsedPrice
             console.log(`Using price for ${account.symbol}: $${price}`)
           }
           
@@ -606,34 +678,48 @@ export function TransactionList({
       }
     }
 
-    // Format numbers with spaces
-    const formatNumber = (num: number) => {
-      const str = Math.abs(num).toString()
-      return str.includes('.') 
-        ? (() => { const [integer, decimal] = str.split('.'); return integer.replace(/\B(?=(\d{3})+(?!\d))/g, ' ') + '.' + decimal })()
-        : str.replace(/\B(?=(\d{3})+(?!\d))/g, ' ')
-    }
+    const formatNumber = (num: number) => formatAmount(Math.abs(num), { maximumFractionDigits: 8 })
     
     const relatedTx = (tx as Transaction & { relatedTx?: Transaction }).relatedTx
       || (tx.linked_transaction_id ? allKnownTransactions.find(t => t.id === tx.linked_transaction_id) : undefined)
+
+    resetTransferRateState()
 
     if (tx.linked_transaction_id && relatedTx) {
       const outgoing = tx.amount < 0 ? tx : relatedTx
       const incoming = tx.amount < 0 ? relatedTx : tx
       const transferNote = (outgoing.description || '').split(' - ').slice(1).join(' - ')
+      const outgoingAccount = accounts.find(account => account.id === outgoing.account_id)
+      const incomingAccount = accounts.find(account => account.id === incoming.account_id)
+      const incomingValue = incomingAccount?.type === 'investment' && incoming.quantity !== undefined
+        ? Math.abs(incoming.quantity)
+        : Math.abs(incoming.amount)
+      const existingRate = Math.abs(outgoing.amount) > 0
+        ? incomingValue / Math.abs(outgoing.amount)
+        : null
 
       setFormData({
         account_id: outgoing.account_id,
         to_account_id: incoming.account_id,
         category_id: '',
         amount: formatNumber(outgoing.amount),
-        amount_to: formatNumber(incoming.amount),
+        amount_to: formatNumber(incomingValue),
         description: transferNote,
         date: outgoing.date,
         type: 'transfer',
         manual_price: '',
         exclude_from_estimate: false
       })
+      const isDifferentCurrency = outgoingAccount && incomingAccount
+        && outgoingAccount.currency !== incomingAccount.currency
+      const historicalRate = isDifferentCurrency ? existingRate : null
+      editedTransferPairRef.current = getTransferPairKey(outgoing.account_id, incoming.account_id)
+      setSkipAutoCalc(true)
+      setExchangeRate(historicalRate)
+      setExchangeRateDraft(historicalRate === null
+        ? ''
+        : formatCalculatedAmount(historicalRate, { maximumFractionDigits: 12 })
+      )
       setEditingId(outgoing.id)
       setIsAccountOpen(false)
       setIsAdding(true)
@@ -800,8 +886,9 @@ export function TransactionList({
   const handleBulkTransactionConfirm = async (bulkTransactions: BulkTransaction[]) => {
     // Create all transactions one by one
     for (const tx of bulkTransactions) {
-      const amount = parseFloat(tx.amount.replace(/\s/g, ''))
-      const finalAmount = tx.type === 'expense' ? -Math.abs(amount) : Math.abs(amount)
+      const amount = parseAmount(tx.amount)
+      const numericAmount = amount ?? 0
+      const finalAmount = tx.type === 'expense' ? -Math.abs(numericAmount) : Math.abs(numericAmount)
       
       await apiFetch(`${API_BASE_URL}/transactions`, {
         method: 'POST',
@@ -860,8 +947,8 @@ export function TransactionList({
   // For transfer preview
   const fromAccount = accounts.find(a => a.id === formData.account_id)
   const toAccount = accounts.find(a => a.id === formData.to_account_id)
-  const transferAmount = parseFloat(formData.amount.replace(/\s/g, '')) || 0
-  const transferAmountTo = parseFloat(formData.amount_to.replace(/\s/g, '')) || transferAmount
+  const transferAmount = parseAmount(formData.amount) || 0
+  const transferAmountTo = parseAmount(formData.amount_to) || transferAmount
   const isEditingTransfer = !!editingId && formData.type === 'transfer'
   const isEditingStandardTransaction = !!editingId && formData.type !== 'transfer'
 
@@ -1304,7 +1391,7 @@ export function TransactionList({
                     <Select 
                       id="from_account" 
                       value={formData.account_id} 
-                      onChange={e => setFormData({...formData, account_id: e.target.value})}
+                      onChange={e => handleTransferAccountChange('account_id', e.target.value)}
                       required
                     >
                       <option value="">Select Account</option>
@@ -1318,7 +1405,7 @@ export function TransactionList({
                     <Select 
                       id="to_account" 
                       value={formData.to_account_id} 
-                      onChange={e => setFormData({...formData, to_account_id: e.target.value})}
+                      onChange={e => handleTransferAccountChange('to_account_id', e.target.value)}
                       required
                     >
                       <option value="">Select Account</option>
@@ -1333,19 +1420,13 @@ export function TransactionList({
                     <Label htmlFor="transfer_amount">
                       Amount to Send {fromAccount && `(${fromAccount.currency})`}
                     </Label>
-                    <Input 
+                    <AmountInput
                       id="transfer_amount" 
-                      type="text"
-                      inputMode="decimal"
                       value={formData.amount} 
-                      onChange={e => {
-                        let value = e.target.value.replace(/\s/g, '')
-                        if (!/^\d*\.?\d*$/.test(value)) return
-                        const formatted = value.includes('.') 
-                          ? (() => { const [integer, decimal] = value.split('.'); return integer.replace(/\B(?=(\d{3})+(?!\d))/g, ' ') + '.' + decimal })() 
-                          : value.replace(/\B(?=(\d{3})+(?!\d))/g, ' ')
-                        setFormData({...formData, amount: formatted})
-                      }} 
+                      onValueChange={amount => {
+                        setSkipAutoCalc(false)
+                        setFormData({...formData, amount})
+                      }}
                       placeholder="0.00" 
                       required 
                     />
@@ -1354,37 +1435,33 @@ export function TransactionList({
                     <Label htmlFor="transfer_amount_to">
                       {toAccount?.type === 'investment' ? 'Shares to Receive' : `Amount to Receive ${toAccount ? `(${toAccount.currency})` : ''}`}
                     </Label>
-                    <Input 
+                    <AmountInput
                       id="transfer_amount_to" 
-                      type="text"
-                      inputMode="decimal"
                       value={formData.amount_to} 
-                      onChange={e => {
-                        let value = e.target.value.replace(/\s/g, '')
-                        if (!/^\d*\.?\d*$/.test(value)) return
-                        const formatted = value.includes('.') 
-                          ? (() => { const [integer, decimal] = value.split('.'); return integer.replace(/\B(?=(\d{3})+(?!\d))/g, ' ') + '.' + decimal })() 
-                          : value.replace(/\B(?=(\d{3})+(?!\d))/g, ' ')
+                      onValueChange={amountTo => {
+                        manualRateOverrideRef.current = true
                         setSkipAutoCalc(true)
-                        setFormData({...formData, amount_to: formatted})
+                        setFormData({...formData, amount_to: amountTo})
                         
                         // Recalculate exchange rate if different currencies
-                        if (fromAccount && toAccount && formData.amount && value) {
-                          const amountFrom = parseFloat(formData.amount.replace(/\s/g, '')) || 0
-                          const amountTo = parseFloat(value) || 0
+                        if (fromAccount && toAccount && formData.amount && amountTo) {
+                          const amountFrom = parseAmount(formData.amount) || 0
+                          const receivedAmount = parseAmount(amountTo) || 0
                           
-                          if (fromAccount.currency !== toAccount.currency && amountFrom > 0 && amountTo > 0) {
+                          if (fromAccount.currency !== toAccount.currency && amountFrom > 0 && receivedAmount > 0) {
                             // Different currency: recalculate exchange rate
                             // Formula: amount_to = amount_from × rate
                             // So: rate = amount_to / amount_from
-                            const newRate = amountTo / amountFrom
+                            const newRate = receivedAmount / amountFrom
                             setExchangeRate(newRate)
+                            setExchangeRateDraft(formatCalculatedAmount(newRate, { maximumFractionDigits: 12 }))
                           }
                         }
                       }}
                       onBlur={() => setSkipAutoCalc(false)}
                       placeholder="0.00" 
                       required
+                      disabled={!!fromAccount && !!toAccount && fromAccount.currency === toAccount.currency}
                     />
                   </div>
                 </div>
@@ -1404,29 +1481,22 @@ export function TransactionList({
                             Suggested: 1 {fromAccount.currency} = {suggestedRate} {toAccount.currency}
                           </p>
                         )}
-                        <Input 
+                        <AmountInput
                           id="exchange_rate"
-                          type="text"
-                          inputMode="decimal"
-                          value={exchangeRate !== null ? exchangeRate.toString() : ''} 
-                          onChange={e => {
-                            let value = e.target.value.replace(/\s/g, '')
-                            if (value === '') {
-                              setExchangeRate(null)
-                              return
-                            }
-                            if (!/^\d*\.?\d*$/.test(value)) return
-                            const rate = parseFloat(value)
-                            if (!isNaN(rate) && rate > 0) {
-                              setExchangeRate(rate)
-                            }
-                          }} 
+                          value={exchangeRateDraft}
+                          onValueChange={value => {
+                            manualRateOverrideRef.current = true
+                            setSkipAutoCalc(false)
+                            setExchangeRateDraft(value)
+                            const rate = parseAmount(value, { allowNegative: false })
+                            setExchangeRate(rate !== null && rate > 0 ? rate : null)
+                          }}
                           placeholder="Enter custom rate"
                           className="bg-background"
                         />
                         {exchangeRate && formData.amount && (
                           <p className="text-xs text-muted-foreground">
-                            {parseFloat(formData.amount.replace(/\s/g, ''))} {fromAccount.currency} = {parseFloat(formData.amount.replace(/\s/g, '')) * exchangeRate} {toAccount.currency}
+                            {formData.amount} {fromAccount.currency} = {formatCalculatedAmount((parseAmount(formData.amount) || 0) * exchangeRate, { maximumFractionDigits: toAccount.type === 'investment' ? 8 : 2 })} {toAccount.currency}
                           </p>
                         )}
                       </>
@@ -1438,19 +1508,10 @@ export function TransactionList({
                 {toAccount?.type === 'investment' && (
                   <div className="space-y-2">
                     <Label htmlFor="transfer_price">Price per Share in USD (optional - leave blank to auto-fetch)</Label>
-                    <Input 
+                    <AmountInput
                       id="transfer_price" 
-                      type="text"
-                      inputMode="decimal"
                       value={formData.manual_price} 
-                      onChange={e => {
-                        let value = e.target.value.replace(/\s/g, '')
-                        if (!/^\d*\.?\d*$/.test(value)) return
-                        const formatted = value.includes('.') 
-                          ? (() => { const [integer, decimal] = value.split('.'); return integer.replace(/\B(?=(\d{3})+(?!\d))/g, ' ') + '.' + decimal })() 
-                          : value.replace(/\B(?=(\d{3})+(?!\d))/g, ' ')
-                        setFormData({...formData, manual_price: formatted})
-                      }} 
+                      onValueChange={manualPrice => setFormData({...formData, manual_price: manualPrice})}
                       placeholder="Auto-fetch from market data" 
                     />
                     <p className="text-xs text-gray-500">For old dates (before 2020), enter the price manually for accuracy</p>
@@ -1485,18 +1546,18 @@ export function TransactionList({
                     <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Preview</p>
                     <div className="flex items-center justify-between text-sm">
                       <span>{fromAccount.name}</span>
-                      <span className="text-destructive font-medium">-{transferAmount} {fromAccount.currency}</span>
+                      <span className="text-destructive font-medium">-{formatAmount(transferAmount)} {fromAccount.currency}</span>
                     </div>
                     <div className="flex items-center justify-between text-sm">
                       <span>{toAccount.name}</span>
                       <span className="text-success font-medium">
-                        +{transferAmountTo} {toAccount.type === 'investment' ? 'shares' : toAccount.currency}
+                        +{formatAmount(transferAmountTo, { maximumFractionDigits: 8 })} {toAccount.type === 'investment' ? 'shares' : toAccount.currency}
                       </span>
                     </div>
                     {toAccount.type === 'investment' && formData.manual_price && (
                       <div className="flex items-center justify-between text-xs text-muted-foreground pt-1 border-t border-border/50">
                         <span>@ ${formData.manual_price}/share</span>
-                        <span>${(transferAmountTo * parseFloat(formData.manual_price)).toFixed(2)} USD value</span>
+                        <span>${formatCalculatedAmount(transferAmountTo * (parseAmount(formData.manual_price) || 0), { maximumFractionDigits: 2 })} USD value</span>
                       </div>
                     )}
                   </div>
@@ -1513,19 +1574,10 @@ export function TransactionList({
                 <div className="grid grid-cols-2 gap-3 overflow-hidden">
                   <div className="space-y-2 min-w-0">
                     <Label htmlFor="amount">{accounts.find(a => a.id === formData.account_id)?.type === 'investment' ? 'Shares' : 'Amount'}</Label>
-                    <Input 
+                    <AmountInput
                       id="amount" 
-                      type="text"
-                      inputMode="decimal"
                       value={formData.amount} 
-                      onChange={e => {
-                        let value = e.target.value.replace(/\s/g, '')
-                        if (!/^\d*\.?\d*$/.test(value)) return
-                        const formatted = value.includes('.') 
-                          ? (() => { const [integer, decimal] = value.split('.'); return integer.replace(/\B(?=(\d{3})+(?!\d))/g, ' ') + '.' + decimal })() 
-                          : value.replace(/\B(?=(\d{3})+(?!\d))/g, ' ')
-                        setFormData({...formData, amount: formatted})
-                      }} 
+                      onValueChange={amount => setFormData({...formData, amount})}
                       placeholder="0" 
                       required 
                     />
@@ -1582,19 +1634,10 @@ export function TransactionList({
                   {accounts.find(a => a.id === formData.account_id)?.type === 'investment' && (
                     <div className="space-y-2 col-span-2">
                       <Label htmlFor="manual_price">Price per Share (optional - leave blank to auto-fetch)</Label>
-                      <Input 
+                      <AmountInput
                         id="manual_price" 
-                        type="text"
-                        inputMode="decimal"
                         value={formData.manual_price} 
-                        onChange={e => {
-                          let value = e.target.value.replace(/\s/g, '')
-                          if (!/^\d*\.?\d*$/.test(value)) return
-                          const formatted = value.includes('.') 
-                            ? (() => { const [integer, decimal] = value.split('.'); return integer.replace(/\B(?=(\d{3})+(?!\d))/g, ' ') + '.' + decimal })() 
-                            : value.replace(/\B(?=(\d{3})+(?!\d))/g, ' ')
-                          setFormData({...formData, manual_price: formatted})
-                        }} 
+                        onValueChange={manualPrice => setFormData({...formData, manual_price: manualPrice})}
                         placeholder="Auto-fetch from market data" 
                       />
                       <p className="text-xs text-gray-500">For old dates (before 2020), enter the price manually for accuracy</p>

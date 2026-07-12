@@ -8,6 +8,8 @@ import { Select } from '../common/select'
 import { Plus, Trash2, Edit2, Clock, TrendingDown, TrendingUp, AlertTriangle, Calendar, ChevronLeft, ChevronRight, ChevronDown, Loader2 } from 'lucide-react'
 import { useAlert } from '../../context/AlertContext'
 import { usePrivacy } from '../../context/PrivacyContext'
+import { AmountInput } from '../common/amount-input'
+import { formatAmount, parseAmount } from '../../lib/amount'
 
 // Helper function to convert Date to local YYYY-MM-DD string (no timezone conversion)
 function toLocalDateString(date: Date): string {
@@ -45,7 +47,7 @@ type RecurringSchedule = {
   to_account_id?: string
   category_id?: string
   amount: number
-  amount_to?: number
+  amount_to?: number | null
   description?: string
   is_active: boolean
   created_at: number
@@ -153,8 +155,8 @@ export function RecurringTransactions({
     e.preventDefault()
     if (isSubmitting) return
 
-    const amount = parseFloat(formData.amount.replace(/\s/g, ''))
-    if (isNaN(amount) || amount <= 0) {
+    const amount = parseAmount(formData.amount)
+    if (amount === null || amount <= 0) {
       showAlert({ type: 'error', message: 'Please enter a valid amount' })
       return
     }
@@ -195,10 +197,13 @@ export function RecurringTransactions({
     } else if (formData.type === 'transfer') {
       payload.to_account_id = formData.to_account_id
       if (formData.amount_to) {
-        const amountTo = parseFloat(formData.amount_to.replace(/\s/g, ''))
-        if (!isNaN(amountTo) && amountTo > 0) {
-          payload.amount_to = amountTo
+        const amountTo = parseAmount(formData.amount_to)
+        if (amountTo === null || amountTo <= 0) {
+          showAlert({ type: 'error', message: 'Please enter a valid amount to receive' })
+          setIsSubmitting(false)
+          return
         }
+        payload.amount_to = amountTo
       }
     }
 
@@ -273,8 +278,10 @@ export function RecurringTransactions({
       account_id: schedule.account_id,
       to_account_id: schedule.to_account_id || '',
       category_id: schedule.category_id || '',
-      amount: Math.abs(schedule.amount).toString(),
-      amount_to: schedule.amount_to?.toString() || '',
+      amount: formatAmount(Math.abs(schedule.amount), { maximumFractionDigits: 8 }),
+      amount_to: schedule.amount_to === undefined || schedule.amount_to === null
+        ? ''
+        : formatAmount(schedule.amount_to, { maximumFractionDigits: 8 }),
       description: schedule.description || '',
       transaction_type: schedule.amount < 0 ? 'expense' : 'income',
       limit_type: limit_type,
@@ -1145,24 +1152,10 @@ export function RecurringTransactions({
 
                   <div className="space-y-2">
                     <Label htmlFor="amount">Amount</Label>
-                    <Input
+                    <AmountInput
                       id="amount"
-                      type="text"
-                      inputMode="decimal"
                       value={formData.amount}
-                      onChange={e => {
-                        let value = e.target.value.replace(/\s/g, '')
-                        if (!/^\d*\.?\d*$/.test(value)) return
-                        const formatted = value.includes('.')
-                          ? (() => { const [integer, decimal] = value.split('.'); return integer.replace(/\B(?=(\d{3})+(?!\d))/g, ' ') + '.' + decimal })()
-                          : value.replace(/\B(?=(\d{3})+(?!\d))/g, ' ')
-                        setFormData({ ...formData, amount: formatted })
-                      }}
-                      onKeyDown={e => {
-                        if (e.key.length === 1 && !/[0-9.]/.test(e.key) && !e.ctrlKey && !e.metaKey) {
-                          e.preventDefault()
-                        }
-                      }}
+                      onValueChange={amount => setFormData({ ...formData, amount })}
                       required
                     />
                   </div>
@@ -1211,48 +1204,20 @@ export function RecurringTransactions({
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="amount_from">Amount to Send</Label>
-                    <Input
+                    <AmountInput
                       id="amount_from"
-                      type="text"
-                      inputMode="decimal"
                       value={formData.amount}
-                      onChange={e => {
-                        let value = e.target.value.replace(/\s/g, '')
-                        if (!/^\d*\.?\d*$/.test(value)) return
-                        const formatted = value.includes('.')
-                          ? (() => { const [integer, decimal] = value.split('.'); return integer.replace(/\B(?=(\d{3})+(?!\d))/g, ' ') + '.' + decimal })()
-                          : value.replace(/\B(?=(\d{3})+(?!\d))/g, ' ')
-                        setFormData({ ...formData, amount: formatted })
-                      }}
-                      onKeyDown={e => {
-                        if (e.key.length === 1 && !/[0-9.]/.test(e.key) && !e.ctrlKey && !e.metaKey) {
-                          e.preventDefault()
-                        }
-                      }}
+                      onValueChange={amount => setFormData({ ...formData, amount })}
                       required
                     />
                   </div>
 
                   <div className="space-y-2">
                     <Label htmlFor="amount_to">Amount to Receive (optional)</Label>
-                    <Input
+                    <AmountInput
                       id="amount_to"
-                      type="text"
-                      inputMode="decimal"
                       value={formData.amount_to}
-                      onChange={e => {
-                        let value = e.target.value.replace(/\s/g, '')
-                        if (!/^\d*\.?\d*$/.test(value)) return
-                        const formatted = value.includes('.')
-                          ? (() => { const [integer, decimal] = value.split('.'); return integer.replace(/\B(?=(\d{3})+(?!\d))/g, ' ') + '.' + decimal })()
-                          : value.replace(/\B(?=(\d{3})+(?!\d))/g, ' ')
-                        setFormData({ ...formData, amount_to: formatted })
-                      }}
-                      onKeyDown={e => {
-                        if (e.key.length === 1 && !/[0-9.]/.test(e.key) && !e.ctrlKey && !e.metaKey) {
-                          e.preventDefault()
-                        }
-                      }}
+                      onValueChange={amountTo => setFormData({ ...formData, amount_to: amountTo })}
                       placeholder="Leave empty if same currency"
                     />
                   </div>

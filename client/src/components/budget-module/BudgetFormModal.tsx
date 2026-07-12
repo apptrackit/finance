@@ -5,6 +5,8 @@ import { Select } from '../common/select'
 import { Button } from '../common/button'
 import { useAlert } from '../../context/AlertContext'
 import type { Budget, BudgetFormData, BudgetAccountScope, BudgetCategoryScope, BudgetPeriod } from './types'
+import { AmountInput } from '../common/amount-input'
+import { formatAmount, parseAmount } from '../../lib/amount'
 
 type Account = {
   id: string
@@ -92,7 +94,7 @@ export function BudgetFormModal({
 
     setForm({
       name: initialData.name ?? '',
-      amount: String(initialData.amount),
+      amount: formatAmount(initialData.amount),
       period: initialData.period,
       year: year || currentYear,
       month: month || 1,
@@ -111,7 +113,7 @@ export function BudgetFormModal({
 
   const handleSave = async () => {
     setError(null)
-    const amountValue = Number(form.amount)
+    const amountValue = parseAmount(form.amount)
     if (!amountValue || amountValue <= 0) {
       setError('Enter a valid amount greater than 0.')
       return
@@ -185,12 +187,11 @@ export function BudgetFormModal({
           </div>
           <div>
             <label className="text-xs font-semibold text-muted-foreground">Amount ({masterCurrency})</label>
-            <Input
-              type="number"
+            <AmountInput
               min="0"
               placeholder="100000"
               value={form.amount}
-              onChange={(event) => setForm(prev => ({ ...prev, amount: event.target.value }))}
+              onValueChange={amount => setForm(prev => ({ ...prev, amount }))}
             />
           </div>
         </div>
