@@ -79,6 +79,7 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
   const [quotes, setQuotes] = useState<Record<string, MarketQuote>>({})
   const [categories, setCategories] = useState<Category[]>([])
   const [showChoiceModal, setShowChoiceModal] = useState(false)
+  const [showSingleModal, setShowSingleModal] = useState(false)
   const [showSplitModal, setShowSplitModal] = useState(false)
   const [pendingAdjustment, setPendingAdjustment] = useState<{
     payload: any,
@@ -484,14 +485,15 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
     return currency === 'HUF' ? `${sign}${formatted} ${symbol}` : `${sign}${symbol}${formatted}`
   }
 
-  const handleSingleTransaction = async () => {
+  const handleSingleTransactionConfirm = async (transaction: SplitTransaction) => {
     if (!pendingAdjustment) return
 
     try {
       const { payload, accountId } = pendingAdjustment
 
-      // Send the payload with single transaction
+      // Send the payload with the transaction details chosen by the user.
       payload.adjustWithTransaction = true
+      payload.splitTransactions = [transaction]
 
       await apiFetch(`${API_BASE_URL}/accounts/${accountId}`, {
         method: 'PUT',
@@ -503,7 +505,7 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
       setIsAdding(false)
       resetForm()
       setPendingAdjustment(null)
-      setShowChoiceModal(false)
+      setShowSingleModal(false)
       onAccountAdded()
       
       showAlert({
@@ -1136,13 +1138,33 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
             setShowChoiceModal(false)
             setPendingAdjustment(null)
           }}
-          onSingleTransaction={handleSingleTransaction}
+          onSingleTransaction={() => {
+            setShowChoiceModal(false)
+            setShowSingleModal(true)
+          }}
           onSplitTransaction={() => {
             setShowChoiceModal(false)
             setShowSplitModal(true)
           }}
           adjustmentAmount={pendingAdjustment.newBalance - pendingAdjustment.oldBalance}
           currency={pendingAdjustment.payload.currency}
+        />
+      )}
+
+      {/* Single Transaction Modal */}
+      {pendingAdjustment && (
+        <SplitTransactionModal
+          isOpen={showSingleModal}
+          onClose={() => {
+            setShowSingleModal(false)
+            setPendingAdjustment(null)
+          }}
+          onConfirm={splits => handleSingleTransactionConfirm(splits[0])}
+          totalAmount={pendingAdjustment.newBalance - pendingAdjustment.oldBalance}
+          accountCurrency={pendingAdjustment.payload.currency}
+          categories={categories}
+          defaultDate={new Date().toISOString().split('T')[0]}
+          mode="single"
         />
       )}
 
