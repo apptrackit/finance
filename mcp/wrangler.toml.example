@@ -1,0 +1,17 @@
+name = "finance-mcp"
+main = "src/index.ts"
+compatibility_date = "2026-07-01"
+workers_dev = false
+
+[[d1_databases]]
+binding = "DB"
+database_name = "finance-db"
+database_id = "your-d1-database-id"
+
+[vars]
+CF_ACCESS_TEAM_DOMAIN = "https://your-team.cloudflareaccess.com"
+CF_ACCESS_AUD = "your-access-application-audience-tag"
+ALLOWED_EMAIL = "you@example.com"
+
+# Configure the custom hostname and Cloudflare Access Managed OAuth in the
+# Cloudflare dashboard. Never enable DISABLE_ACCESS_AUTH in production.

@@ -5,11 +5,6 @@ type RawTransactionRow = Omit<Transaction, 'exclude_from_estimate'> & {
   status?: TransactionStatus | null
 }
 
-type RawExpenseRow = RawTransactionRow & {
-  account_name: string
-  category_name: string | null
-}
-
 type D1Value = string | number | null
 
 export class TransactionRepository {
@@ -216,24 +211,4 @@ export class TransactionRepository {
       && cleanupResult.meta.changes === 0
   }
 
-  async findRecentExpensesFromCashAccounts(startDate: string, endDate: string): Promise<(Transaction & { account_name: string; category_name?: string })[]> {
-    const query = `
-      SELECT t.*, a.name as account_name, c.name as category_name
-      FROM transactions t
-      INNER JOIN accounts a ON t.account_id = a.id
-      LEFT JOIN categories c ON t.category_id = c.id
-      WHERE a.type = 'cash'
-        AND t.amount < 0
-        AND t.status = 'posted'
-        AND t.date >= ?
-        AND t.date <= ?
-      ORDER BY t.date DESC
-    `
-    const { results } = await this.db.prepare(query).bind(startDate, endDate).all<RawExpenseRow>()
-    return results.map(r => ({
-      ...this.mapTransaction(r),
-      account_name: r.account_name,
-      category_name: r.category_name ?? undefined
-    }))
-  }
 }

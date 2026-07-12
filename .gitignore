@@ -122,6 +122,8 @@ dev-dist
 .dev.vars
 api/wrangler.toml
 api/wrangler.prod.toml
+mcp/wrangler.toml
+mcp/.dev.vars
 .deploy-config
 
 # Database backups (may contain sensitive data)
@@ -136,4 +138,3 @@ client/.env.production
 .DS_Store
 Thumbs.db
 sw.js
-

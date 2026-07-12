@@ -1,15 +1,19 @@
 {
   "name": "finance-manager",
-  "version": "2.4",
+  "version": "2.5",
   "private": true,
   "workspaces": [
     "client",
-    "api"
+    "api",
+    "mcp"
   ],
   "scripts": {
     "dev": "concurrently \"npm run dev -w client\" \"npm run dev -w api\"",
     "build": "npm run build -w client",
-    "deploy": "./deploy.sh"
+    "build:mcp": "npm run build -w mcp",
+    "test:mcp": "npm run test -w mcp",
+    "deploy": "./deploy.sh",
+    "deploy:mcp": "./deploy.sh --mcp"
   },
   "devDependencies": {
     "concurrently": "^8.2.2"

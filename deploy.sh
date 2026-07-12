@@ -1,6 +1,17 @@
 #!/bin/bash
 set -e
 
+MCP_PREFERENCE_OVERRIDE=""
+case "${1:-}" in
+  "") ;;
+  --mcp) MCP_PREFERENCE_OVERRIDE="true" ;;
+  --no-mcp) MCP_PREFERENCE_OVERRIDE="false" ;;
+  *)
+    echo "Usage: ./deploy.sh [--mcp|--no-mcp]" >&2
+    exit 2
+    ;;
+esac
+
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 DIM='\033[2m'
@@ -52,16 +63,38 @@ step() {
 
 # ─── Config helpers ───────────────────────────────────────────────────────────
 
-CONFIG_FILE="$(git rev-parse --show-toplevel 2>/dev/null || echo .)/.deploy-config"
+ROOT_DIR="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+cd "$ROOT_DIR"
+CONFIG_FILE="${ROOT_DIR}/.deploy-config"
 
-get_cfg() { grep "^${1}=" "$CONFIG_FILE" 2>/dev/null | cut -d= -f2-; }
+get_cfg() {
+  awk -v key="$1" '
+    index($0, key "=") == 1 { value = substr($0, length(key) + 2) }
+    END { if (value != "") print value }
+  ' "$CONFIG_FILE" 2>/dev/null
+}
 
 set_cfg() {
-  if grep -q "^${1}=" "$CONFIG_FILE" 2>/dev/null; then
-    sed -i '' "s|^${1}=.*|${1}=${2}|" "$CONFIG_FILE"
+  local key="$1" value="$2" tmp
+  tmp=$(mktemp "${CONFIG_FILE}.XXXXXX")
+  if [ -f "$CONFIG_FILE" ]; then
+    # Keep the last known value and collapse any duplicate entries for this key.
+    awk -v key="$key" -v value="$value" '
+      index($0, key "=") == 1 {
+        if (!written) {
+          print key "=" value
+          written = 1
+        }
+        next
+      }
+      { print }
+      END { if (!written) print key "=" value }
+    ' "$CONFIG_FILE" > "$tmp"
   else
-    echo "${1}=${2}" >> "$CONFIG_FILE"
+    printf '%s=%s\n' "$key" "$value" > "$tmp"
   fi
+  mv "$tmp" "$CONFIG_FILE"
+  chmod 600 "$CONFIG_FILE"
 }
 
 need() {
@@ -75,12 +108,64 @@ need() {
       printf "%s: " "$label" >&2; read -r val
     fi
     [ -z "$val" ] && err "${label} is required."
-    set_cfg "$key" "$val"
   fi
+  set_cfg "$key" "$val"
   printf '%s' "$val"
 }
 
-d1() { npx wrangler d1 execute finance-db --remote --yes --config wrangler.prod.toml "$@"; }
+need_default() {
+  local key="$1" default="$2" val
+  val=$(get_cfg "$key")
+  [ -n "$val" ] || val="$default"
+  set_cfg "$key" "$val"
+  printf '%s' "$val"
+}
+
+legacy_mcp_value() {
+  local key="$1" file="${ROOT_DIR}/mcp/wrangler.toml"
+  [ -f "$file" ] || return 0
+  sed -nE "s/^[[:space:]]*${key}[[:space:]]*=[[:space:]]*\"([^\"]*)\"[[:space:]]*(#.*)?$/\1/p" "$file" | head -n 1
+}
+
+need_with_fallback() {
+  local key="$1" label="$2" fallback="$3" secret="${4:-}" val
+  val=$(get_cfg "$key")
+  [ -n "$val" ] || val="$fallback"
+  if [ -z "$val" ]; then
+    if [ -n "$secret" ]; then
+      printf "%s: " "$label" >&2; read -rs val; echo >&2
+    else
+      printf "%s: " "$label" >&2; read -r val
+    fi
+    [ -z "$val" ] && err "${label} is required."
+  fi
+  set_cfg "$key" "$val"
+  printf '%s' "$val"
+}
+
+resolve_mcp_preference() {
+  local saved answer
+
+  if [ -n "$MCP_PREFERENCE_OVERRIDE" ]; then
+    DEPLOY_MCP="$MCP_PREFERENCE_OVERRIDE"
+  else
+    saved=$(get_cfg "DEPLOY_MCP")
+    case "$saved" in
+      true|yes|y|1) DEPLOY_MCP="true" ;;
+      false|no|n|0) DEPLOY_MCP="false" ;;
+      "")
+        printf "Deploy the read-only MCP server too? (y/N) "
+        read -r answer
+        [[ "$answer" =~ ^[Yy]$ ]] && DEPLOY_MCP="true" || DEPLOY_MCP="false"
+        ;;
+      *) err "DEPLOY_MCP must be true or false in .deploy-config." ;;
+    esac
+  fi
+
+  set_cfg "DEPLOY_MCP" "$DEPLOY_MCP"
+}
+
+d1() { npx wrangler d1 execute "$DATABASE_NAME" --remote --yes --config wrangler.prod.toml "$@"; }
 
 migration_is_new() {
   local count
@@ -106,9 +191,19 @@ fi
 echo ""
 PROJECT_NAME=$(need PROJECT_NAME   "Project name")
 DATABASE_ID=$(need  DATABASE_ID    "Database ID")
+DATABASE_NAME=$(need_default DATABASE_NAME "finance-db")
 API_SECRET=$(need   API_SECRET     "API secret"                       secret)
 ORIGINS=$(need      ALLOWED_ORIGINS "Allowed origins (comma-separated)")
-PUB_KEY=$(need      PUBLIC_API_KEY  "Public API key (or 'off')")
+resolve_mcp_preference
+
+if [ "$DEPLOY_MCP" = "true" ]; then
+  LEGACY_MCP_WORKER_NAME=$(legacy_mcp_value "name")
+  [ -n "$LEGACY_MCP_WORKER_NAME" ] || LEGACY_MCP_WORKER_NAME="finance-mcp"
+  MCP_WORKER_NAME=$(need_with_fallback MCP_WORKER_NAME "MCP Worker name" "$LEGACY_MCP_WORKER_NAME")
+  MCP_ACCESS_TEAM_DOMAIN=$(need_with_fallback MCP_ACCESS_TEAM_DOMAIN "Cloudflare Access team domain" "$(legacy_mcp_value "CF_ACCESS_TEAM_DOMAIN")")
+  MCP_ACCESS_AUD=$(need_with_fallback MCP_ACCESS_AUD "Cloudflare Access application audience" "$(legacy_mcp_value "CF_ACCESS_AUD")")
+  MCP_ALLOWED_EMAIL=$(need_with_fallback MCP_ALLOWED_EMAIL "Allowed MCP email" "$(legacy_mcp_value "ALLOWED_EMAIL")")
+fi
 echo ""
 
 # ─── Wrangler check ───────────────────────────────────────────────────────────
@@ -149,7 +244,7 @@ __dirname = "'/'"
 
 [[d1_databases]]
 binding = "DB"
-database_name = "finance-db"
+database_name = "${DATABASE_NAME}"
 database_id = "${DATABASE_ID}"
 
 [triggers]
@@ -159,7 +254,7 @@ TOML
 # ─── Secrets ──────────────────────────────────────────────────────────────────
 
 echo "  Secrets"
-for entry in "API_SECRET:${API_SECRET}" "ALLOWED_ORIGINS:${ORIGINS}" "PUBLIC_API_KEY:${PUB_KEY}"; do
+for entry in "API_SECRET:${API_SECRET}" "ALLOWED_ORIGINS:${ORIGINS}"; do
   key="${entry%%:*}"
   val="${entry#*:}"
   spin "    %-20s" "$key" &
@@ -234,6 +329,33 @@ else
   printf "\r  %-22s${RED}failed${NC}\033[K\n" "API"
   echo "" >&2; cat "$TMPOUT" >&2
   exit 1
+fi
+
+# ─── MCP ─────────────────────────────────────────────────────────────────────
+
+if [ "$DEPLOY_MCP" = "true" ]; then
+  cd ../mcp
+
+  cat > wrangler.toml << TOML
+name = "${MCP_WORKER_NAME}"
+main = "src/index.ts"
+compatibility_date = "2026-07-01"
+workers_dev = false
+
+[[d1_databases]]
+binding = "DB"
+database_name = "${DATABASE_NAME}"
+database_id = "${DATABASE_ID}"
+
+[vars]
+CF_ACCESS_TEAM_DOMAIN = "${MCP_ACCESS_TEAM_DOMAIN}"
+CF_ACCESS_AUD = "${MCP_ACCESS_AUD}"
+ALLOWED_EMAIL = "${MCP_ALLOWED_EMAIL}"
+TOML
+
+  step "MCP tests" npm run test
+  step "MCP typecheck" npm run build
+  step "MCP deploy" npx wrangler deploy --minify --config wrangler.toml
 fi
 
 # ─── Client ───────────────────────────────────────────────────────────────────
