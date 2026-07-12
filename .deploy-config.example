@@ -1,7 +1,7 @@
 # Private deployment configuration. Copy this to .deploy-config or let
 # ./deploy.sh create it interactively. Do not commit the real file.
 
-PROJECT_NAME=finance-client
+PROJECT_NAME=finance
 DATABASE_NAME=finance-db
 DATABASE_ID=your-d1-database-id
 API_SECRET=your-browser-api-key
