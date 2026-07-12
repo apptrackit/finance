@@ -587,8 +587,7 @@ curl -H "X-API-Key: your-key" \
 
 ---
 
-**API Version**: 1.1.4  
-**Client Version**: 1.2.3  
+**Application Version**: 2.5
 **License**: MIT  
 **Maintained by**: apptrackit
 
