@@ -96,6 +96,18 @@ describe('FinanceService read-only calculations', () => {
     expect(result.accounts.find(row => row.id === 'portfolio')).toMatchObject({ investment_quantity: null, converted_balance: null })
   })
 
+  it('uses null rather than zero for an account balance with a missing exchange rate', async () => {
+    accounts.push({ id: 'eur-cash', name: 'EUR cash', type: 'cash', balance: 100, currency: 'EUR' })
+    try {
+      const result = await service.accountsSummary({ currency: 'HUF' })
+      expect(result.accounts.find(row => row.id === 'eur-cash')).toMatchObject({ converted_balance: null, reporting_currency: 'HUF' })
+      expect(result.totals).toEqual({ cash_balance: 1000, non_investment_net_worth: 1500 })
+      expect(result.conversion_status).toBe('partial')
+    } finally {
+      accounts.pop()
+    }
+  })
+
   it('supports both spending and income breakdowns while excluding transfers and investments', async () => {
     const spending = await service.flowBreakdown({ start_date: '2026-07-01', end_date: '2026-07-31', flow_type: 'expense', group_by: 'category', currency: 'HUF' })
     const income = await service.flowBreakdown({ start_date: '2026-07-01', end_date: '2026-07-31', flow_type: 'income', group_by: 'category', currency: 'HUF' })
@@ -120,6 +132,16 @@ describe('FinanceService read-only calculations', () => {
   it('reconstructs historical balances and respects cash exclusions', async () => {
     const result = await service.balanceTrend({ start_date: '2026-07-05', end_date: '2026-07-31', interval: 'month', currency: 'HUF' })
     expect(result.series).toEqual([expect.objectContaining({ date: '2026-07-31', cash_balance: 1000, non_investment_net_worth: 1500 })])
+  })
+
+  it('reconstructs daily historical balances while reversing each later transaction once', async () => {
+    const result = await service.balanceTrend({ start_date: '2026-07-04', end_date: '2026-07-07', interval: 'day', currency: 'HUF' })
+    expect(result.series.map(row => [row.date, row.cash_balance])).toEqual([
+      ['2026-07-04', 800],
+      ['2026-07-05', 1300],
+      ['2026-07-06', 1100],
+      ['2026-07-07', 1000],
+    ])
   })
 
   it('computes budget risk from posted, pending, and pace data', async () => {

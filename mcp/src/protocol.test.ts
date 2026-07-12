@@ -46,6 +46,19 @@ describe('MCP protocol surface', () => {
     }
   })
 
+  it('does not clone an authorized JSON-RPC request to populate diagnostics', async () => {
+    const request = new Request('http://localhost/mcp', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 'single-parse', method: 'initialize', params: {} }),
+    })
+    Object.defineProperty(request, 'clone', { value: () => { throw new Error('request body was cloned') } })
+
+    const response = await worker.fetch(request, env)
+
+    expect(response.status).toBe(200)
+  })
+
   it('advertises the complete schema-described read-only finance surface', async () => {
     const response = await worker.fetch(new Request('http://localhost/mcp', {
       method: 'POST',

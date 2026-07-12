@@ -44,21 +44,15 @@ function diagnosticFor(request: Request): Diagnostic {
   }
 }
 
-async function inspectJsonRpcRequest(request: Request, diagnostic: Diagnostic) {
-  if (request.method !== 'POST') return
-  try {
-    const payload = await request.clone().json<unknown>()
-    const first = Array.isArray(payload) ? payload[0] : payload
-    if (!first || typeof first !== 'object' || Array.isArray(first)) return
-    const rpc = first as Record<string, unknown>
-    if (typeof rpc.method === 'string') diagnostic.jsonrpc_method = rpc.method.slice(0, 120)
-    if (typeof rpc.id === 'string' || typeof rpc.id === 'number' || rpc.id === null) diagnostic.jsonrpc_id = typeof rpc.id === 'string' ? rpc.id.slice(0, 120) : rpc.id
-    if (rpc.method === 'tools/call' && rpc.params && typeof rpc.params === 'object' && !Array.isArray(rpc.params)) {
-      const name = (rpc.params as Record<string, unknown>).name
-      if (typeof name === 'string') diagnostic.tool_name = name.slice(0, 120)
-    }
-  } catch {
-    // The actual parser returns the JSON-RPC parse error; diagnostics never consume the original body.
+function inspectJsonRpcPayload(payload: unknown, diagnostic: Diagnostic) {
+  const first = Array.isArray(payload) ? payload[0] : payload
+  if (!first || typeof first !== 'object' || Array.isArray(first)) return
+  const rpc = first as Record<string, unknown>
+  if (typeof rpc.method === 'string') diagnostic.jsonrpc_method = rpc.method.slice(0, 120)
+  if (typeof rpc.id === 'string' || typeof rpc.id === 'number' || rpc.id === null) diagnostic.jsonrpc_id = typeof rpc.id === 'string' ? rpc.id.slice(0, 120) : rpc.id
+  if (rpc.method === 'tools/call' && rpc.params && typeof rpc.params === 'object' && !Array.isArray(rpc.params)) {
+    const name = (rpc.params as Record<string, unknown>).name
+    if (typeof name === 'string') diagnostic.tool_name = name.slice(0, 120)
   }
 }
 
@@ -116,7 +110,6 @@ export default {
     if (url.pathname === '/health') return json({ status: 'ok', service: SERVER_INFO.name })
     if (url.pathname !== '/mcp') return json({ error: 'Not found' }, 404)
     const diagnostic = diagnosticFor(request)
-    await inspectJsonRpcRequest(request, diagnostic)
     let parsedBody: JsonRpcRequest | JsonRpcRequest[] | undefined
     try {
       await verifyAccess(request, env)
@@ -133,6 +126,7 @@ export default {
         const result = rpcError(null, -32700, 'Parse error')
         return finish(diagnostic, json(result, 400), result)
       }
+      inspectJsonRpcPayload(parsedBody, diagnostic)
       const requests = Array.isArray(parsedBody) ? parsedBody : [parsedBody]
       const responses = (await Promise.all(requests.map(item => handleRpc(item, env)))).filter(Boolean)
       if (!responses.length) return finish(diagnostic, new Response(null, { status: 202 }))

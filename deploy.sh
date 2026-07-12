@@ -64,6 +64,7 @@ step() {
 # ─── Config helpers ───────────────────────────────────────────────────────────
 
 ROOT_DIR="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+cd "$ROOT_DIR"
 CONFIG_FILE="${ROOT_DIR}/.deploy-config"
 
 get_cfg() {

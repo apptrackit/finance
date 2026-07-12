@@ -3,6 +3,7 @@ import { addUtcDays, daysBetween, periodEndDates, recurringDates } from './date-
 import { assertDate, assertDateRange, clampLimit, decodeCursor, defaultMonthRange, encodeCursor, enumValue, optionalDate, previousRange, stringArray } from './validation'
 
 type Rates = { values: Record<string, number>; available: boolean }
+type LiveQuote = { price: number; currency: string; marketState: string | null }
 
 function bool(value: number | boolean | undefined) {
   return value === true || value === 1
@@ -45,6 +46,34 @@ export class FinanceService {
     if (source === target) return amount
     const rate = rates.values[source]
     return rate ? amount / rate : 0
+  }
+
+  private async liveQuote(symbol: string): Promise<LiveQuote | null> {
+    try {
+      const response = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=1d`, {
+        headers: { 'User-Agent': 'Mozilla/5.0' },
+        signal: AbortSignal.timeout(8_000),
+      })
+      const data = await response.json<any>()
+      const meta = data?.chart?.result?.[0]?.meta
+      if (!response.ok || !Number.isFinite(meta?.regularMarketPrice)) return null
+      return { price: meta.regularMarketPrice, currency: String(meta.currency || 'USD'), marketState: meta.marketState || null }
+    } catch {
+      return null
+    }
+  }
+
+  private async liveQuotes(accounts: AccountRow[]) {
+    const quotes = new Map<string, LiveQuote | null>()
+    let next = 0
+    const worker = async () => {
+      while (next < accounts.length) {
+        const account = accounts[next++]
+        quotes.set(account.id, await this.liveQuote(account.symbol!))
+      }
+    }
+    await Promise.all(Array.from({ length: Math.min(4, accounts.length) }, worker))
+    return quotes
   }
 
   private conversionWarnings(accounts: AccountRow[], target: string, rates: Rates) {
@@ -95,9 +124,10 @@ export class FinanceService {
     let nonInvestmentNetWorth = 0
     const summaries = accounts.map(account => {
       const isInvestment = account.type === 'investment'
-      const convertedBalance = isInvestment ? null : round(this.convert(account.balance, account.currency, currency, rates))
-      if (!isInvestment && !bool(account.exclude_from_cash_balance)) cashTotal += convertedBalance || 0
-      if (!isInvestment && !bool(account.exclude_from_net_worth)) nonInvestmentNetWorth += convertedBalance || 0
+      const missingRate = account.currency !== currency && !rates.values[account.currency]
+      const convertedBalance = isInvestment || missingRate ? null : round(this.convert(account.balance, account.currency, currency, rates))
+      if (!isInvestment && !bool(account.exclude_from_cash_balance)) cashTotal += convertedBalance ?? 0
+      if (!isInvestment && !bool(account.exclude_from_net_worth)) nonInvestmentNetWorth += convertedBalance ?? 0
       return {
         id: account.id,
         name: account.name,
@@ -306,14 +336,21 @@ export class FinanceService {
     const relevantTransactions = transactions.filter(transaction => accountIds.has(transaction.account_id))
     const warnings = this.conversionWarnings(accounts, currency, rates)
     const points = periodEndDates(startDate, endDate, interval)
+    const laterChanges = new Map(accounts.map(account => [account.id, 0]))
+    for (const transaction of relevantTransactions) {
+      laterChanges.set(transaction.account_id, (laterChanges.get(transaction.account_id) || 0) + transaction.amount)
+    }
+    let transactionIndex = 0
     const series = points.map(date => {
+      while (transactionIndex < relevantTransactions.length && relevantTransactions[transactionIndex].date <= date) {
+        const transaction = relevantTransactions[transactionIndex++]
+        laterChanges.set(transaction.account_id, (laterChanges.get(transaction.account_id) || 0) - transaction.amount)
+      }
       let cashBalance = 0
       let netWorth = 0
       const accountBalances = []
       for (const account of accounts) {
-        const laterChange = relevantTransactions
-          .filter(transaction => transaction.account_id === account.id && transaction.date > date)
-          .reduce((sum, transaction) => sum + transaction.amount, 0)
+        const laterChange = laterChanges.get(account.id) || 0
         const nativeBalance = account.balance - laterChange
         const convertedBalance = this.convert(nativeBalance, account.currency, currency, rates)
         if (!bool(account.exclude_from_cash_balance)) cashBalance += convertedBalance
@@ -559,6 +596,7 @@ export class FinanceService {
       this.env.DB.prepare('SELECT * FROM investment_transactions ORDER BY date ASC, rowid ASC').all<InvestmentTransactionRow>(),
     ])
     const investmentAccounts = accounts.filter(item => item.type === 'investment' && !bool(item.exclude_from_net_worth))
+    const quotes = await this.liveQuotes(investmentAccounts.filter(account => account.asset_type !== 'manual' && Boolean(account.symbol)))
     const holdings = []
     const warnings: string[] = []
     let total = 0
@@ -573,23 +611,19 @@ export class FinanceService {
       let nativeValue = account.balance
       let quote: Record<string, unknown> | null = null
       if (account.asset_type !== 'manual' && account.symbol) {
-        try {
-          const response = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(account.symbol)}?interval=1d&range=1d`, { headers: { 'User-Agent': 'Mozilla/5.0' } })
-          const data = await response.json<any>()
-          const meta = data?.chart?.result?.[0]?.meta
-          if (!response.ok || !meta?.regularMarketPrice) throw new Error()
-          nativeValue = account.balance * meta.regularMarketPrice
-          quote = { price: meta.regularMarketPrice, currency: meta.currency || 'USD', market_state: meta.marketState || null }
-          const quoteCurrency = String(meta.currency || 'USD')
+        const liveQuote = quotes.get(account.id)
+        if (liveQuote) {
+          nativeValue = account.balance * liveQuote.price
+          quote = { price: liveQuote.price, currency: liveQuote.currency, market_state: liveQuote.marketState }
+          const quoteCurrency = liveQuote.currency
           const converted = this.convert(nativeValue, quoteCurrency, currency, rates)
           if (quoteCurrency !== currency && !rates.values[quoteCurrency]) warnings.push(`Exchange rate unavailable for ${quoteCurrency}; ${account.symbol} was excluded from ${currency} totals`)
           total += converted
-          holdings.push({ account_id: account.id, name: account.name, symbol: account.symbol, asset_type: account.asset_type, quantity: account.balance, activity_quantity: round(activityQuantity), native_value: round(nativeValue), native_currency: meta.currency || 'USD', value: round(converted), currency, native_net_invested: round(nativeNetInvested), investment_currency: investmentCurrency, net_invested: round(netInvested), gain_loss: round(converted - netInvested), gain_loss_percent: netInvested > 0 ? round((converted - netInvested) / netInvested * 100) : null, quote })
+          holdings.push({ account_id: account.id, name: account.name, symbol: account.symbol, asset_type: account.asset_type, quantity: account.balance, activity_quantity: round(activityQuantity), native_value: round(nativeValue), native_currency: liveQuote.currency, value: round(converted), currency, native_net_invested: round(nativeNetInvested), investment_currency: investmentCurrency, net_invested: round(netInvested), gain_loss: round(converted - netInvested), gain_loss_percent: netInvested > 0 ? round((converted - netInvested) / netInvested * 100) : null, quote })
           continue
-        } catch {
-          warnings.push(`Live quote unavailable for ${account.symbol}`)
-          nativeValue = 0
         }
+        warnings.push(`Live quote unavailable for ${account.symbol}`)
+        nativeValue = 0
       }
       const converted = this.convert(nativeValue, account.currency, currency, rates)
       total += converted
