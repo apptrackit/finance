@@ -12,6 +12,8 @@ import { useAlert } from '../../context/AlertContext'
 import { SplitTransactionModal } from './SplitTransactionModal'
 import type { SplitTransaction } from './SplitTransactionModal'
 import { AdjustmentChoiceModal } from './AdjustmentChoiceModal'
+import { AmountInput } from '../common/amount-input'
+import { formatAmount, parseAmount } from '../../lib/amount'
 
 type Account = {
   id: string
@@ -77,6 +79,7 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
   const [quotes, setQuotes] = useState<Record<string, MarketQuote>>({})
   const [categories, setCategories] = useState<Category[]>([])
   const [showChoiceModal, setShowChoiceModal] = useState(false)
+  const [showSingleModal, setShowSingleModal] = useState(false)
   const [showSplitModal, setShowSplitModal] = useState(false)
   const [pendingAdjustment, setPendingAdjustment] = useState<{
     payload: any,
@@ -269,11 +272,14 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
     setIsSubmitting(true)
     try {
       const wasEditing = !!editingId
-      const balanceValue = formData.balance.replace(/\s/g, '').trim()
+      const balanceValue = parseAmount(formData.balance)
+      if (formData.balance.trim() !== '' && balanceValue === null) {
+        throw new Error('Please enter a valid balance')
+      }
       const payload: any = {
         name: formData.name,
         type: formData.type,
-        balance: balanceValue === '' ? 0 : parseFloat(balanceValue) || 0,
+        balance: balanceValue ?? 0,
         currency: formData.currency
       }
 
@@ -334,18 +340,10 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
   }
 
   const handleEdit = (account: Account) => {
-    const balanceStr = account.balance.toString()
-    const formattedBalance = balanceStr.includes('.') 
-      ? (() => {
-          const [integer, decimal] = balanceStr.split('.')
-          return integer.replace(/\B(?=(\d{3})+(?!\d))/g, ' ') + '.' + decimal
-        })()
-      : balanceStr.replace(/\B(?=(\d{3})+(?!\d))/g, ' ')
-    
     setFormData({
       name: account.name,
       type: account.type,
-      balance: formattedBalance,
+      balance: formatAmount(account.balance, { maximumFractionDigits: 8 }),
       currency: account.currency,
       symbol: account.symbol || '',
       asset_type: account.asset_type || 'stock',
@@ -487,14 +485,15 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
     return currency === 'HUF' ? `${sign}${formatted} ${symbol}` : `${sign}${symbol}${formatted}`
   }
 
-  const handleSingleTransaction = async () => {
+  const handleSingleTransactionConfirm = async (transaction: SplitTransaction) => {
     if (!pendingAdjustment) return
 
     try {
       const { payload, accountId } = pendingAdjustment
 
-      // Send the payload with single transaction
+      // Send the payload with the transaction details chosen by the user.
       payload.adjustWithTransaction = true
+      payload.splitTransactions = [transaction]
 
       await apiFetch(`${API_BASE_URL}/accounts/${accountId}`, {
         method: 'PUT',
@@ -506,7 +505,7 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
       setIsAdding(false)
       resetForm()
       setPendingAdjustment(null)
-      setShowChoiceModal(false)
+      setShowSingleModal(false)
       onAccountAdded()
       
       showAlert({
@@ -637,26 +636,11 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
               )}
               <div className="col-span-2 space-y-2">
                 <Label htmlFor="balance">{formData.type === 'investment' ? 'Initial Quantity (0 if tracking from transactions)' : 'Current Balance'}</Label>
-                <Input
+                <AmountInput
                   id="balance"
-                  type="text"
-                  inputMode="decimal"
                   value={formData.balance}
-                  onChange={e => {
-                    let value = e.target.value.replace(/\s/g, '') // Remove spaces
-                    // Allow only numbers and one decimal point
-                    if (!/^\d*\.?\d*$/.test(value)) return
-                    
-                    // Format with spaces
-                    if (value.includes('.')) {
-                      const [integer, decimal] = value.split('.')
-                      const formatted = integer.replace(/\B(?=(\d{3})+(?!\d))/g, ' ') + (decimal !== undefined ? '.' + decimal : '')
-                      setFormData({ ...formData, balance: formatted })
-                    } else {
-                      const formatted = value.replace(/\B(?=(\d{3})+(?!\d))/g, ' ')
-                      setFormData({ ...formData, balance: formatted })
-                    }
-                  }}
+                  onValueChange={balance => setFormData({ ...formData, balance })}
+                  allowNegative
                   placeholder="0"
                 />
               </div>
@@ -1154,13 +1138,33 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
             setShowChoiceModal(false)
             setPendingAdjustment(null)
           }}
-          onSingleTransaction={handleSingleTransaction}
+          onSingleTransaction={() => {
+            setShowChoiceModal(false)
+            setShowSingleModal(true)
+          }}
           onSplitTransaction={() => {
             setShowChoiceModal(false)
             setShowSplitModal(true)
           }}
           adjustmentAmount={pendingAdjustment.newBalance - pendingAdjustment.oldBalance}
           currency={pendingAdjustment.payload.currency}
+        />
+      )}
+
+      {/* Single Transaction Modal */}
+      {pendingAdjustment && (
+        <SplitTransactionModal
+          isOpen={showSingleModal}
+          onClose={() => {
+            setShowSingleModal(false)
+            setPendingAdjustment(null)
+          }}
+          onConfirm={splits => handleSingleTransactionConfirm(splits[0])}
+          totalAmount={pendingAdjustment.newBalance - pendingAdjustment.oldBalance}
+          accountCurrency={pendingAdjustment.payload.currency}
+          categories={categories}
+          defaultDate={new Date().toISOString().split('T')[0]}
+          mode="single"
         />
       )}
 

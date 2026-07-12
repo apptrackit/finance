@@ -5,6 +5,8 @@ import { Input } from '../common/input'
 import { Label } from '../common/label'
 import { Select } from '../common/select'
 import { Plus, Trash2, AlertCircle, Percent } from 'lucide-react'
+import { AmountInput } from '../common/amount-input'
+import { formatAmount, formatCalculatedAmount, parseAmount } from '../../lib/amount'
 
 type Category = {
   id: string
@@ -21,6 +23,8 @@ export type SplitTransaction = {
   date: string
 }
 
+type SplitDraft = Omit<SplitTransaction, 'amount'> & { amount: string }
+
 interface SplitTransactionModalProps {
   isOpen: boolean
   onClose: () => void
@@ -29,6 +33,7 @@ interface SplitTransactionModalProps {
   accountCurrency: string
   categories: Category[]
   defaultDate?: string
+  mode?: 'single' | 'split'
 }
 
 export function SplitTransactionModal({
@@ -38,13 +43,15 @@ export function SplitTransactionModal({
   totalAmount,
   accountCurrency,
   categories,
-  defaultDate = new Date().toISOString().split('T')[0]
+  defaultDate = new Date().toISOString().split('T')[0],
+  mode = 'split'
 }: SplitTransactionModalProps) {
-  const [splits, setSplits] = useState<SplitTransaction[]>([
+  const isSingleTransaction = mode === 'single'
+  const [splits, setSplits] = useState<SplitDraft[]>([
     {
       id: crypto.randomUUID(),
       description: '',
-      amount: 0,
+      amount: '',
       category_id: '',
       date: defaultDate
     }
@@ -57,13 +64,15 @@ export function SplitTransactionModal({
         {
           id: crypto.randomUUID(),
           description: '',
-          amount: 0,
+          amount: isSingleTransaction
+            ? formatCalculatedAmount(Math.abs(totalAmount), { maximumFractionDigits: 8 })
+            : '',
           category_id: '',
           date: defaultDate
         }
       ])
     }
-  }, [isOpen, defaultDate])
+  }, [isOpen, defaultDate, isSingleTransaction, totalAmount])
 
   const addSplit = () => {
     setSplits([
@@ -71,7 +80,7 @@ export function SplitTransactionModal({
       {
         id: crypto.randomUUID(),
         description: '',
-        amount: 0,
+        amount: '',
         category_id: '',
         date: defaultDate
       }
@@ -84,7 +93,7 @@ export function SplitTransactionModal({
     }
   }
 
-  const updateSplit = (id: string, field: keyof SplitTransaction, value: string | number) => {
+  const updateSplit = (id: string, field: keyof SplitDraft, value: string) => {
     setSplits(splits.map(s => s.id === id ? { ...s, [field]: value } : s))
   }
 
@@ -92,18 +101,30 @@ export function SplitTransactionModal({
     // Ensure the amount doesn't exceed remaining budget
     const otherSplitsTotal = splits
       .filter(s => s.id !== id)
-      .reduce((sum, s) => sum + (parseFloat(s.amount.toString()) || 0), 0)
+      .reduce((sum, s) => sum + (parseAmount(s.amount) || 0), 0)
     
-    const maxAmount = Math.abs(totalAmount) - Math.abs(otherSplitsTotal)
-    const clampedValue = Math.min(Math.abs(value), Math.abs(maxAmount))
-    const finalValue = totalAmount < 0 ? -clampedValue : clampedValue
+    const maxAmount = Math.max(Math.abs(totalAmount) - Math.abs(otherSplitsTotal), 0)
+    const clampedValue = Math.min(Math.abs(value), maxAmount)
     
-    setSplits(splits.map(s => s.id === id ? { ...s, amount: finalValue } : s))
+    setSplits(splits.map(s => s.id === id
+      ? { ...s, amount: formatCalculatedAmount(clampedValue, { maximumFractionDigits: 8 }) }
+      : s
+    ))
   }
 
   const handleEqualSplit = () => {
-    const amountPerSplit = totalAmount / splits.length
-    setSplits(splits.map(s => ({ ...s, amount: amountPerSplit })))
+    const absoluteTotal = Math.abs(totalAmount)
+    const amountPerSplit = absoluteTotal / splits.length
+    let allocated = 0
+
+    setSplits(splits.map((s, index) => {
+      const value = index === splits.length - 1
+        ? absoluteTotal - allocated
+        : amountPerSplit
+      const amount = formatCalculatedAmount(value, { maximumFractionDigits: 8 })
+      allocated += parseAmount(amount) || 0
+      return { ...s, amount }
+    }))
   }
 
   const handleAutoBalance = () => {
@@ -111,21 +132,24 @@ export function SplitTransactionModal({
     if (splits.length > 0) {
       const otherSplitsTotal = splits
         .slice(0, -1)
-        .reduce((sum, s) => sum + (parseFloat(s.amount.toString()) || 0), 0)
-      const remainingForLast = totalAmount - otherSplitsTotal
+        .reduce((sum, s) => sum + (parseAmount(s.amount) || 0), 0)
+      const remainingForLast = Math.max(Math.abs(totalAmount) - otherSplitsTotal, 0)
       
       setSplits(splits.map((s, idx) => 
         idx === splits.length - 1 
-          ? { ...s, amount: remainingForLast }
+          ? { ...s, amount: formatCalculatedAmount(remainingForLast, { maximumFractionDigits: 8 }) }
           : s
       ))
     }
   }
 
   
-  const totalSplitAmount = splits.reduce((sum, split) => sum + (parseFloat(split.amount.toString()) || 0), 0)
+  const direction = totalAmount < 0 ? -1 : 1
+  const totalSplitAmount = direction * splits.reduce((sum, split) => sum + (parseAmount(split.amount) || 0), 0)
   const remaining = totalAmount - totalSplitAmount
-  const isValid = Math.abs(remaining) < 0.01 && splits.every(s => s.amount !== 0)
+  const isValid = Math.abs(remaining) < 0.01 && splits.every(s =>
+    (parseAmount(s.amount) || 0) > 0 && Boolean(s.category_id) && Boolean(s.date)
+  )
 
   const getSplitPercentage = (amount: number) => {
     if (totalAmount === 0) return 0
@@ -134,14 +158,20 @@ export function SplitTransactionModal({
 
   const handleConfirm = () => {
     if (isValid) {
-      onConfirm(splits)
+      onConfirm(splits.map(split => ({
+        ...split,
+        amount: direction * (parseAmount(split.amount) || 0)
+      })))
       onClose()
     }
   }
 
   const handleQuickFill = () => {
     if (splits.length === 1 && totalAmount !== 0) {
-      setSplits([{ ...splits[0], amount: totalAmount }])
+      setSplits([{
+        ...splits[0],
+        amount: formatCalculatedAmount(Math.abs(totalAmount), { maximumFractionDigits: 8 })
+      }])
     }
   }
 
@@ -150,68 +180,74 @@ export function SplitTransactionModal({
   const filteredCategories = categories.filter(c => c.type === transactionType)
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Split Adjustment">
+    <Modal isOpen={isOpen} onClose={onClose} title={isSingleTransaction ? 'Single Adjustment' : 'Split Adjustment'}>
       <div className="space-y-4 sm:space-y-6">
         {/* Info */}
         <div className="bg-secondary/30 rounded-lg p-3 sm:p-4 border border-border/30">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 mb-2">
             <span className="text-xs sm:text-sm font-medium">Total Amount:</span>
             <span className={`text-base sm:text-lg font-semibold ${totalAmount >= 0 ? 'text-green-500' : 'text-red-500'}`}>
-              {totalAmount >= 0 ? '+' : ''}{totalAmount.toFixed(2)} {accountCurrency}
+              {totalAmount >= 0 ? '+' : '-'}{formatCalculatedAmount(Math.abs(totalAmount), { maximumFractionDigits: 8 })} {accountCurrency}
             </span>
           </div>
           {Math.abs(remaining) > 0.01 && (
             <div className="flex items-center gap-2 mt-2 text-xs sm:text-sm">
               <AlertCircle className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-orange-500 flex-shrink-0" />
               <span className="text-orange-500 font-medium">
-                Remaining: {remaining >= 0 ? '+' : ''}{remaining.toFixed(2)} {accountCurrency}
+                Remaining: {remaining >= 0 ? '+' : '-'}{formatCalculatedAmount(Math.abs(remaining), { maximumFractionDigits: 8 })} {accountCurrency}
               </span>
             </div>
           )}
         </div>
 
         {/* Quick Actions */}
-        <div className="flex gap-2 flex-wrap">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={handleEqualSplit}
-            className="flex-1"
-          >
-            <Percent className="h-3 w-3 mr-1" />
-            Split Equally
-          </Button>
-          {Math.abs(remaining) > 0.01 && (
+        {!isSingleTransaction && (
+          <div className="flex gap-2 flex-wrap">
             <Button
               type="button"
               variant="outline"
               size="sm"
-              onClick={handleAutoBalance}
+              onClick={handleEqualSplit}
               className="flex-1"
             >
-              Auto-Balance
+              <Percent className="h-3 w-3 mr-1" />
+              Split Equally
             </Button>
-          )}
-        </div>
+            {Math.abs(remaining) > 0.01 && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleAutoBalance}
+                className="flex-1"
+              >
+                Auto-Balance
+              </Button>
+            )}
+          </div>
+        )}
 
         {/* Splits */}
         <div className="space-y-3 sm:space-y-4 max-h-[60vh] sm:max-h-96 overflow-y-auto">
           {splits.map((split, index) => {
-            const percentage = getSplitPercentage(split.amount)
-            const absAmount = Math.abs(split.amount)
+            const absAmount = parseAmount(split.amount) || 0
+            const percentage = getSplitPercentage(absAmount)
             const maxSliderValue = Math.abs(totalAmount)
             
             return (
               <div key={split.id} className="bg-secondary/20 rounded-lg p-3 sm:p-4 border border-border/30 space-y-2 sm:space-y-3">
                 <div className="flex items-center justify-between mb-1 sm:mb-2">
                   <div className="flex items-center gap-1.5 sm:gap-2">
-                    <span className="text-xs sm:text-sm font-medium text-muted-foreground">Split {index + 1}</span>
-                    <span className="text-xs px-1.5 sm:px-2 py-0.5 bg-primary/10 text-primary rounded-full font-medium">
-                      {percentage.toFixed(1)}%
+                    <span className="text-xs sm:text-sm font-medium text-muted-foreground">
+                      {isSingleTransaction ? 'Transaction details' : `Split ${index + 1}`}
                     </span>
+                    {!isSingleTransaction && (
+                      <span className="text-xs px-1.5 sm:px-2 py-0.5 bg-primary/10 text-primary rounded-full font-medium">
+                        {percentage.toFixed(1)}%
+                      </span>
+                    )}
                   </div>
-                  {splits.length > 1 && (
+                  {!isSingleTransaction && splits.length > 1 && (
                     <button
                       onClick={() => removeSplit(split.id)}
                       className="text-red-500 hover:text-red-600 transition-colors p-1 -mr-1 active:scale-95"
@@ -222,11 +258,11 @@ export function SplitTransactionModal({
                 </div>
 
                 {/* Visual Slider */}
-                <div className="space-y-1.5 sm:space-y-2">
+                {!isSingleTransaction && <div className="space-y-1.5 sm:space-y-2">
                   <div className="flex items-center justify-between text-xs text-muted-foreground">
                     <span className="text-xs">Adjust amount</span>
                     <span className="font-medium text-foreground text-xs sm:text-sm">
-                      {split.amount >= 0 ? '+' : ''}{absAmount.toFixed(2)} {accountCurrency}
+                      {totalAmount >= 0 ? '+' : '-'}{formatCalculatedAmount(absAmount, { maximumFractionDigits: 8 })} {accountCurrency}
                     </span>
                   </div>
                   <input
@@ -246,9 +282,9 @@ export function SplitTransactionModal({
                   />
                   <div className="flex justify-between text-xs text-muted-foreground">
                     <span>0</span>
-                    <span>{maxSliderValue.toFixed(0)} {accountCurrency}</span>
+                    <span>{formatAmount(maxSliderValue)} {accountCurrency}</span>
                   </div>
-                </div>
+                </div>}
 
                 <div className="grid grid-cols-2 gap-3">
                   <div className="col-span-2">
@@ -263,14 +299,23 @@ export function SplitTransactionModal({
 
                   <div>
                     <Label htmlFor={`amount-${split.id}`}>Amount</Label>
-                    <Input
+                    <AmountInput
                       id={`amount-${split.id}`}
-                      type="number"
                       step="0.01"
-                      value={absAmount || ''}
-                      onChange={e => {
-                        const value = parseFloat(e.target.value) || 0
-                        updateSplitAmount(split.id, totalAmount < 0 ? -value : value)
+                      value={split.amount}
+                      disabled={isSingleTransaction}
+                      onValueChange={value => {
+                        const numericValue = parseAmount(value)
+                        const otherSplitsTotal = splits
+                          .filter(item => item.id !== split.id)
+                          .reduce((sum, item) => sum + (parseAmount(item.amount) || 0), 0)
+                        const maxAmount = Math.max(Math.abs(totalAmount) - otherSplitsTotal, 0)
+
+                        if (numericValue !== null && numericValue > maxAmount) {
+                          updateSplitAmount(split.id, maxAmount)
+                        } else {
+                          updateSplit(split.id, 'amount', value)
+                        }
                       }}
                       placeholder="0.00"
                     />
@@ -308,7 +353,7 @@ export function SplitTransactionModal({
         </div>
 
         {/* Quick Fill Button */}
-        {splits.length === 1 && totalAmount !== 0 && (
+        {!isSingleTransaction && splits.length === 1 && totalAmount !== 0 && (
           <Button
             type="button"
             variant="outline"
@@ -320,15 +365,17 @@ export function SplitTransactionModal({
         )}
 
         {/* Add Split Button */}
-        <Button
-          type="button"
-          variant="outline"
-          onClick={addSplit}
-          className="w-full"
-        >
-          <Plus className="h-4 w-4 mr-2" />
-          Add Another Split
-        </Button>
+        {!isSingleTransaction && (
+          <Button
+            type="button"
+            variant="outline"
+            onClick={addSplit}
+            className="w-full"
+          >
+            <Plus className="h-4 w-4 mr-2" />
+            Add Another Split
+          </Button>
+        )}
 
         {/* Actions */}
         <div className="flex gap-3">
@@ -346,7 +393,7 @@ export function SplitTransactionModal({
             disabled={!isValid}
             className="flex-1"
           >
-            Confirm Split
+            {isSingleTransaction ? 'Confirm Transaction' : 'Confirm Split'}
           </Button>
         </div>
       </div>

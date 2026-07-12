@@ -6,6 +6,8 @@ import { Label } from '../common/label'
 import { Select } from '../common/select'
 import { Plus, Trash2, AlertCircle, Percent } from 'lucide-react'
 import { useAlert } from '../../context/AlertContext'
+import { AmountInput } from '../common/amount-input'
+import { formatCalculatedAmount, parseAmount } from '../../lib/amount'
 
 type Category = {
   id: string
@@ -103,20 +105,9 @@ export function BulkTransactionModal({
     }))
   }
 
-  const formatAmount = (value: string): string => {
-    const cleaned = value.replace(/\s/g, '')
-    if (!/^\d*\.?\d*$/.test(cleaned)) return value
-    
-    if (cleaned.includes('.')) {
-      const [integer, decimal] = cleaned.split('.')
-      return integer.replace(/\B(?=(\d{3})+(?!\d))/g, ' ') + '.' + (decimal || '')
-    }
-    return cleaned.replace(/\B(?=(\d{3})+(?!\d))/g, ' ')
-  }
-
-  const parsedTotal = parseFloat(totalAmount.replace(/\s/g, '')) || 0
+  const parsedTotal = parseAmount(totalAmount) || 0
   const allocatedAmount = transactions.reduce((sum, t) => {
-    return sum + (parseFloat(t.amount.replace(/\s/g, '')) || 0)
+    return sum + (parseAmount(t.amount) || 0)
   }, 0)
   const remaining = parsedTotal - allocatedAmount
 
@@ -125,7 +116,7 @@ export function BulkTransactionModal({
     Math.abs(remaining) < 0.01 &&
     transactions.every(t => 
       t.amount && 
-      parseFloat(t.amount.replace(/\s/g, '')) > 0 && 
+      (parseAmount(t.amount) ?? 0) > 0 &&
       t.account_id
     )
 
@@ -154,10 +145,15 @@ export function BulkTransactionModal({
 
   const handleEqualSplit = () => {
     if (parsedTotal <= 0 || transactions.length === 0) return
-    const amountPerSplit = parsedTotal / transactions.length
-    setTransactions(transactions.map(t => ({
+    const totalCents = Math.round(parsedTotal * 100)
+    const baseCents = Math.floor(totalCents / transactions.length)
+    const extraCents = totalCents % transactions.length
+    setTransactions(transactions.map((t, index) => ({
       ...t,
-      amount: formatAmount(amountPerSplit.toFixed(2))
+      amount: formatCalculatedAmount(
+        (baseCents + (index < extraCents ? 1 : 0)) / 100,
+        { maximumFractionDigits: 2 },
+      )
     })))
   }
 
@@ -165,12 +161,12 @@ export function BulkTransactionModal({
     // Put all remaining amount into the last transaction
     if (transactions.length > 0 && remaining > 0) {
       const lastTx = transactions[transactions.length - 1]
-      const currentAmount = parseFloat(lastTx.amount.replace(/\s/g, '')) || 0
+      const currentAmount = parseAmount(lastTx.amount) || 0
       const newAmount = currentAmount + remaining
       
       setTransactions(transactions.map((t, idx) => 
         idx === transactions.length - 1 
-          ? { ...t, amount: formatAmount(newAmount.toFixed(2)) }
+          ? { ...t, amount: formatCalculatedAmount(newAmount, { maximumFractionDigits: 2 }) }
           : t
       ))
     }
@@ -178,12 +174,12 @@ export function BulkTransactionModal({
 
   const handleQuickFill = () => {
     if (transactions.length === 1 && parsedTotal > 0) {
-      setTransactions([{ ...transactions[0], amount: formatAmount(parsedTotal.toFixed(2)) }])
+      setTransactions([{ ...transactions[0], amount: formatCalculatedAmount(parsedTotal, { maximumFractionDigits: 2 }) }])
     }
   }
 
   const getPercentage = (amount: string) => {
-    const val = parseFloat(amount.replace(/\s/g, '')) || 0
+    const val = parseAmount(amount) || 0
     if (parsedTotal === 0) return 0
     return (val / parsedTotal) * 100
   }
@@ -199,11 +195,9 @@ export function BulkTransactionModal({
         <div className="bg-secondary/30 rounded-lg p-3 sm:p-4 border border-border/30 space-y-3">
           <div className="space-y-1.5">
             <Label className="text-xs font-medium">Total Amount</Label>
-            <Input
-              type="text"
-              inputMode="decimal"
+            <AmountInput
               value={totalAmount}
-              onChange={e => setTotalAmount(formatAmount(e.target.value))}
+              onValueChange={setTotalAmount}
               placeholder="Enter total amount to split"
               className="h-11 sm:h-10 text-lg font-semibold"
             />
@@ -241,14 +235,14 @@ export function BulkTransactionModal({
               <div className="flex items-center justify-between text-sm">
                 <span className="text-muted-foreground">Allocated:</span>
                 <span className={`font-medium ${Math.abs(remaining) < 0.01 ? 'text-green-500' : 'text-foreground'}`}>
-                  {allocatedAmount.toLocaleString()} / {parsedTotal.toLocaleString()} {accountCurrency}
+                  {formatCalculatedAmount(allocatedAmount, { maximumFractionDigits: 2 })} / {formatCalculatedAmount(parsedTotal, { maximumFractionDigits: 2 })} {accountCurrency}
                 </span>
               </div>
               {Math.abs(remaining) >= 0.01 && (
                 <div className="flex items-center gap-2 mt-2 text-xs sm:text-sm">
                   <AlertCircle className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-orange-500 flex-shrink-0" />
                   <span className="text-orange-500 font-medium">
-                    Remaining: {remaining.toFixed(2)} {accountCurrency}
+                    Remaining: {formatCalculatedAmount(remaining, { maximumFractionDigits: 2 })} {accountCurrency}
                   </span>
                 </div>
               )}
@@ -299,7 +293,7 @@ export function BulkTransactionModal({
         <div className="space-y-3 max-h-[45vh] sm:max-h-80 overflow-y-auto -mx-1 px-1">
           {transactions.map((tx, index) => {
             const percentage = getPercentage(tx.amount)
-            const txAmount = parseFloat(tx.amount.replace(/\s/g, '')) || 0
+            const txAmount = parseAmount(tx.amount) || 0
             
             return (
               <div key={tx.id} className="bg-secondary/20 rounded-lg p-3 border border-border/30 space-y-2.5">
@@ -335,7 +329,7 @@ export function BulkTransactionModal({
                       value={txAmount}
                       onChange={(e) => {
                         const value = parseFloat(e.target.value)
-                        updateTransaction(tx.id, 'amount', formatAmount(value.toFixed(2)))
+                        updateTransaction(tx.id, 'amount', formatCalculatedAmount(value, { maximumFractionDigits: 2 }))
                       }}
                       className="w-full h-3 sm:h-2 bg-secondary rounded-lg appearance-none cursor-pointer accent-primary touch-manipulation"
                       style={{
@@ -348,12 +342,10 @@ export function BulkTransactionModal({
                 <div className="grid grid-cols-2 gap-2 sm:gap-3">
                   <div className="space-y-1">
                     <Label htmlFor={`amount-${tx.id}`} className="text-[11px] sm:text-xs">Amount</Label>
-                    <Input
+                    <AmountInput
                       id={`amount-${tx.id}`}
-                      type="text"
-                      inputMode="decimal"
                       value={tx.amount}
-                      onChange={e => updateTransaction(tx.id, 'amount', formatAmount(e.target.value))}
+                      onValueChange={amount => updateTransaction(tx.id, 'amount', amount)}
                       placeholder="0"
                       className="h-10 sm:h-9 text-sm"
                     />
