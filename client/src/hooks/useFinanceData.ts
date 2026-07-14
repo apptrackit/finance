@@ -36,7 +36,7 @@ export type Transaction = {
 
 const formatInvestmentTransactionDescription = (transaction: any) => {
   const price = Number(transaction.price)
-  const fallback = `${transaction.quantity} shares @ $${price}`
+  const fallback = `${transaction.quantity} shares @ ${Number.isFinite(price) ? price : ''}`.trim()
   const notes = transaction.notes as string | undefined
 
   // Older investment transfers recorded the cash-to-share FX rate in their
@@ -46,7 +46,7 @@ const formatInvestmentTransactionDescription = (transaction: any) => {
     const source = notes.replace(/\s*\([^)]*\)/, '')
     const noteSuffix = source.match(/\s-\s.*$/)?.[0] || ''
     const sourceName = source.replace(/\s-\s.*$/, '').trim()
-    return `${sourceName} (${transaction.quantity} shares @ $${price.toFixed(2)}/share)${noteSuffix}`
+    return `${sourceName} (${transaction.quantity} shares @ ${price.toFixed(2)}/share)${noteSuffix}`
   }
 
   return notes || fallback
