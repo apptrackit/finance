@@ -133,9 +133,12 @@ export function TransactionList({
   const [exchangeRateDraft, setExchangeRateDraft] = useState('')
   const [suggestedRate, setSuggestedRate] = useState<number | null>(null)
   const [isLoadingRate, setIsLoadingRate] = useState(false)
-  const [skipAutoCalc, setSkipAutoCalc] = useState(false)
   const rateRequestSequenceRef = useRef(0)
   const manualRateOverrideRef = useRef(false)
+  const manuallyEditedTransferFieldsRef = useRef({
+    amount_to: false,
+    manual_price: false,
+  })
   const editedTransferPairRef = useRef<string | null>(null)
   const [activeTxId, setActiveTxId] = useState<string | null>(null)
   const [categoryFilter, setCategoryFilter] = useState<string>('all')
@@ -322,9 +325,11 @@ export function TransactionList({
     }
   }, [formData.account_id, formData.to_account_id, formData.type, accounts, editingId])
 
-  // Auto-calculate amount_to when amount or rate changes
+  // Auto-calculate the received amount only until the user enters it themselves.
+  // A manual value must remain the source of truth even if the amount, rate, or
+  // selected accounts subsequently change.
   useEffect(() => {
-    if (formData.type !== 'transfer' || skipAutoCalc) return
+    if (formData.type !== 'transfer' || manuallyEditedTransferFieldsRef.current.amount_to) return
 
     const fromAccount = accounts.find(a => a.id === formData.account_id)
     const toAccount = accounts.find(a => a.id === formData.to_account_id)
@@ -345,13 +350,14 @@ export function TransactionList({
     } else if (!formData.amount) {
       setFormData(prev => prev.amount_to ? ({ ...prev, amount_to: '' }) : prev)
     }
-  }, [formData.amount, exchangeRate, formData.type, formData.account_id, formData.to_account_id, accounts, skipAutoCalc])
+  }, [formData.amount, exchangeRate, formData.type, formData.account_id, formData.to_account_id, accounts])
 
   // Auto-fetch price for investment accounts when date or account changes
   useEffect(() => {
     const fetchHistoricalPrice = async () => {
-      // Skip auto-fetch if manual_price is already set (e.g., from editing)
-      if (formData.manual_price) {
+      // Never overwrite a price that the user has edited, including a deliberate
+      // empty value. This also protects against a pending fetch resolving late.
+      if (manuallyEditedTransferFieldsRef.current.manual_price || formData.manual_price) {
         return
       }
       
@@ -409,14 +415,20 @@ export function TransactionList({
               const price = chartData.quotes[closestIdx].close
               const priceDate = new Date(chartData.quotes[closestIdx].date).toLocaleDateString()
               console.log(`Auto-filled price for ${investmentAccount.symbol} on ${priceDate}: $${price}`)
-              setFormData(prev => ({ ...prev, manual_price: price.toFixed(2) }))
+              if (!manuallyEditedTransferFieldsRef.current.manual_price) {
+                setFormData(prev => ({ ...prev, manual_price: price.toFixed(2) }))
+              }
             } else {
               console.warn(`No price data within 3 days of ${formData.date}, leaving manual_price empty`)
-              setFormData(prev => ({ ...prev, manual_price: '' }))
+              if (!manuallyEditedTransferFieldsRef.current.manual_price) {
+                setFormData(prev => ({ ...prev, manual_price: '' }))
+              }
             }
           } else {
             // No chart data, clear manual_price
-            setFormData(prev => ({ ...prev, manual_price: '' }))
+            if (!manuallyEditedTransferFieldsRef.current.manual_price) {
+              setFormData(prev => ({ ...prev, manual_price: '' }))
+            }
           }
         }
       } catch (e) {
@@ -461,11 +473,11 @@ export function TransactionList({
 
   const resetTransferRateState = () => {
     manualRateOverrideRef.current = false
+    manuallyEditedTransferFieldsRef.current = { amount_to: false, manual_price: false }
     editedTransferPairRef.current = null
     setExchangeRate(null)
     setExchangeRateDraft('')
     setSuggestedRate(null)
-    setSkipAutoCalc(false)
   }
 
   const resetForm = () => {
@@ -721,7 +733,8 @@ export function TransactionList({
         && outgoingAccount.currency !== incomingAccount.currency
       const historicalRate = isDifferentCurrency ? existingRate : null
       editedTransferPairRef.current = getTransferPairKey(outgoing.account_id, incoming.account_id)
-      setSkipAutoCalc(true)
+      manuallyEditedTransferFieldsRef.current.amount_to = true
+      manualRateOverrideRef.current = true
       setExchangeRate(historicalRate)
       setExchangeRateDraft(historicalRate === null
         ? ''
@@ -1437,8 +1450,7 @@ export function TransactionList({
                       id="transfer_amount" 
                       value={formData.amount} 
                       onValueChange={amount => {
-                        setSkipAutoCalc(false)
-                        setFormData({...formData, amount})
+                        setFormData(prev => ({ ...prev, amount }))
                       }}
                       placeholder="0.00" 
                       required 
@@ -1452,9 +1464,9 @@ export function TransactionList({
                       id="transfer_amount_to" 
                       value={formData.amount_to} 
                       onValueChange={amountTo => {
+                        manuallyEditedTransferFieldsRef.current.amount_to = true
                         manualRateOverrideRef.current = true
-                        setSkipAutoCalc(true)
-                        setFormData({...formData, amount_to: amountTo})
+                        setFormData(prev => ({ ...prev, amount_to: amountTo }))
                         
                         // Recalculate exchange rate if different currencies
                         if (fromAccount && toAccount && formData.amount && amountTo) {
@@ -1471,7 +1483,6 @@ export function TransactionList({
                           }
                         }
                       }}
-                      onBlur={() => setSkipAutoCalc(false)}
                       placeholder="0.00" 
                       required
                       disabled={!!fromAccount && !!toAccount && fromAccount.currency === toAccount.currency}
@@ -1499,7 +1510,6 @@ export function TransactionList({
                           value={exchangeRateDraft}
                           onValueChange={value => {
                             manualRateOverrideRef.current = true
-                            setSkipAutoCalc(false)
                             setExchangeRateDraft(value)
                             const rate = parseAmount(value, { allowNegative: false })
                             setExchangeRate(rate !== null && rate > 0 ? rate : null)
@@ -1524,7 +1534,10 @@ export function TransactionList({
                     <AmountInput
                       id="transfer_price" 
                       value={formData.manual_price} 
-                      onValueChange={manualPrice => setFormData({...formData, manual_price: manualPrice})}
+                      onValueChange={manualPrice => {
+                        manuallyEditedTransferFieldsRef.current.manual_price = true
+                        setFormData(prev => ({ ...prev, manual_price: manualPrice }))
+                      }}
                       placeholder="Auto-fetch from market data" 
                     />
                     <p className="text-xs text-gray-500">For old dates (before 2020), enter the price manually for accuracy</p>
@@ -1648,9 +1661,12 @@ export function TransactionList({
                     <div className="space-y-2 col-span-2">
                       <Label htmlFor="manual_price">Price per Share (optional - leave blank to auto-fetch)</Label>
                       <AmountInput
-                        id="manual_price" 
-                        value={formData.manual_price} 
-                        onValueChange={manualPrice => setFormData({...formData, manual_price: manualPrice})}
+                        id="manual_price"
+                        value={formData.manual_price}
+                        onValueChange={manualPrice => {
+                          manuallyEditedTransferFieldsRef.current.manual_price = true
+                          setFormData(prev => ({ ...prev, manual_price: manualPrice }))
+                        }}
                         placeholder="Auto-fetch from market data" 
                       />
                       <p className="text-xs text-gray-500">For old dates (before 2020), enter the price manually for accuracy</p>
