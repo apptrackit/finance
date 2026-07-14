@@ -21,6 +21,7 @@ export type Transaction = {
   account_id: string
   category_id?: string
   amount: number
+  price?: number
   description?: string
   date: string
   linked_transaction_id?: string
@@ -31,6 +32,39 @@ export type Transaction = {
   created_at?: number | null
   updated_at?: number | null
 }
+
+const formatInvestmentTransactionDescription = (transaction: any) => {
+  const price = Number(transaction.price)
+  const fallback = `${transaction.quantity} shares @ $${price}`
+  const notes = transaction.notes as string | undefined
+
+  // Older investment transfers recorded the cash-to-share FX rate in their
+  // note. Show the stored purchase price instead; the rate is not the price
+  // per share and rounds down to 0.0000 for HUF purchases.
+  if (notes?.startsWith('Transfer from ') && Number.isFinite(price) && price > 0) {
+    const source = notes.replace(/\s*\([^)]*\)/, '')
+    const noteSuffix = source.match(/\s-\s.*$/)?.[0] || ''
+    const sourceName = source.replace(/\s-\s.*$/, '').trim()
+    return `${sourceName} (${transaction.quantity} shares @ $${price.toFixed(2)}/share)${noteSuffix}`
+  }
+
+  return notes || fallback
+}
+
+const mapInvestmentTransaction = (transaction: any) => ({
+  id: transaction.id,
+  account_id: transaction.account_id,
+  amount: transaction.type === 'buy' ? transaction.total_amount : -transaction.total_amount,
+  quantity: transaction.type === 'buy' ? transaction.quantity : -transaction.quantity,
+  price: transaction.price,
+  description: formatInvestmentTransactionDescription(transaction),
+  date: transaction.date,
+  is_recurring: false,
+  category_id: undefined,
+  linked_transaction_id: undefined,
+  created_at: transaction.created_at,
+  updated_at: transaction.updated_at ?? transaction.created_at,
+})
 
 export type Category = {
   id: string
@@ -96,20 +130,7 @@ export function useFinanceData(
         .then((txs: any[]) =>
           txs
             .filter(itx => itx.date >= dateRange.startDate && itx.date <= dateRange.endDate)
-            .map((itx: any) => ({
-              id: itx.id,
-              account_id: itx.account_id,
-              amount: itx.type === 'buy' ? itx.total_amount : -itx.total_amount,
-              quantity: itx.type === 'buy' ? itx.quantity : -itx.quantity,
-              description: itx.notes || `${itx.quantity} shares @ $${itx.price}`,
-              date: itx.date,
-              is_recurring: false,
-              category_id: undefined,
-              linked_transaction_id: undefined,
-              created_at: itx.created_at,
-              updated_at: itx.updated_at ?? itx.created_at,
-            }))
-        )
+          .map(mapInvestmentTransaction))
         .catch(() => [])
     )
 
@@ -142,20 +163,7 @@ export function useFinanceData(
       const investmentTxPromises = investmentAccounts.map((acc: Account) =>
         apiFetch(`${API_BASE_URL}/investment-transactions?account_id=${acc.id}`)
           .then(res => res.json())
-          .then((txs: any[]) =>
-            txs.map((itx: any) => ({
-              id: itx.id,
-              account_id: itx.account_id,
-              amount: itx.type === 'buy' ? itx.total_amount : -itx.total_amount,
-              quantity: itx.type === 'buy' ? itx.quantity : -itx.quantity,
-              description: itx.notes || `${itx.quantity} shares @ $${itx.price}`,
-              date: itx.date,
-              category_id: undefined,
-              linked_transaction_id: undefined,
-              created_at: itx.created_at,
-              updated_at: itx.updated_at ?? itx.created_at,
-            }))
-          )
+          .then((txs: any[]) => txs.map(mapInvestmentTransaction))
           .catch(() => [])
       )
 

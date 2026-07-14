@@ -19,7 +19,7 @@ function isValidAccountCurrency(data: { type?: 'cash' | 'investment', currency?:
 const accountCurrencyError = {
   message: `Cash and manual investment currencies must be one of: ${SUPPORTED_CURRENCIES.join(', ')}. Stocks use SHARE and crypto uses its ticker.`,
   path: ['currency']
-} as const
+}
 
 export const CreateAccountSchema = z.object({
   name: z.string().min(1, 'Name is required').max(100),

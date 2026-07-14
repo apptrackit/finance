@@ -57,11 +57,17 @@ export class TransferService {
     const outgoingId = crypto.randomUUID()
     const incomingId = crypto.randomUUID()
 
-    // Build description with exchange rate info if currencies differ
+    // Build descriptions that distinguish a share price from the FX rate used
+    // to convert the cash amount into the share quantity.
     let outgoingDesc = `Transfer to ${toAccount.name}`
     let incomingDesc = `Transfer from ${fromAccount.name}`
 
-    if (fromAccount.currency !== toAccount.currency) {
+    if (toAccount.type === 'investment') {
+      const priceDetails = dto.price ? ` @ $${dto.price.toFixed(2)}/share` : ''
+      const purchaseDetails = `${dto.amount_to.toFixed(8)} shares${priceDetails}`
+      outgoingDesc += ` (${purchaseDetails})`
+      incomingDesc += ` (${purchaseDetails})`
+    } else if (fromAccount.currency !== toAccount.currency) {
       const effectiveRate = dto.amount_to / dto.amount_from
       outgoingDesc += ` (${dto.amount_to.toFixed(2)} ${toAccount.currency} @ ${effectiveRate.toFixed(4)})`
       incomingDesc += ` (${dto.amount_from.toFixed(2)} ${fromAccount.currency} @ ${effectiveRate.toFixed(4)})`

@@ -17,6 +17,7 @@ export type Transaction = {
   category_id?: string
   amount: number
   quantity?: number
+  price?: number
   description?: string
   date: string
   is_recurring: boolean

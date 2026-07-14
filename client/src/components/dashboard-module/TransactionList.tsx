@@ -21,6 +21,7 @@ type Transaction = {
   category_id?: string | null
   amount: number
   quantity?: number
+  price?: number
   description?: string | null
   date: string
   linked_transaction_id?: string
@@ -583,14 +584,15 @@ export function TransactionList({
           await apiFetch(`${API_BASE_URL}/transactions/${editingId}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              account_id: formData.account_id,
-              to_account_id: formData.to_account_id,
-              amount,
-              amount_to: amountTo,
-              description: formData.description,
-              date: formData.date,
-            }),
+              body: JSON.stringify({
+                account_id: formData.account_id,
+                to_account_id: formData.to_account_id,
+                amount,
+                amount_to: amountTo,
+                description: formData.description,
+                date: formData.date,
+                price,
+              }),
           })
           setEditingId(null)
         } else {
@@ -713,6 +715,9 @@ export function TransactionList({
       const incomingValue = incomingAccount?.type === 'investment' && incoming.quantity !== undefined
         ? Math.abs(incoming.quantity)
         : Math.abs(incoming.amount)
+      const investmentPrice = incomingAccount?.type === 'investment' && incoming.price !== undefined
+        ? formatNumber(incoming.price)
+        : ''
       const existingRate = Math.abs(outgoing.amount) > 0
         ? incomingValue / Math.abs(outgoing.amount)
         : null
@@ -726,7 +731,7 @@ export function TransactionList({
         description: transferNote,
         date: outgoing.date,
         type: 'transfer',
-        manual_price: '',
+        manual_price: investmentPrice,
         exclude_from_estimate: false
       })
       const isDifferentCurrency = outgoingAccount && incomingAccount
@@ -735,6 +740,7 @@ export function TransactionList({
       editedTransferPairRef.current = getTransferPairKey(outgoing.account_id, incoming.account_id)
       manuallyEditedTransferFieldsRef.current.amount_to = true
       manualRateOverrideRef.current = true
+      manuallyEditedTransferFieldsRef.current.manual_price = incomingAccount?.type === 'investment' && incoming.price !== undefined
       setExchangeRate(historicalRate)
       setExchangeRateDraft(historicalRate === null
         ? ''

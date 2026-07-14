@@ -150,12 +150,10 @@ export function InvestmentDetailModal({
                             </span>
                           </div>
                           <div className={`text-sm text-muted-foreground ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
-                            {new Date(tx.date).toLocaleString('en-US', { 
+                            {new Date(`${tx.date}T00:00:00`).toLocaleDateString('en-US', {
                               month: 'short', 
                               day: 'numeric', 
                               year: 'numeric',
-                              hour: '2-digit',
-                              minute: '2-digit'
                             })}
                             {tx.description && ` • ${tx.description}`}
                           </div>
