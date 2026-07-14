@@ -63,7 +63,8 @@ export class TransferService {
     let incomingDesc = `Transfer from ${fromAccount.name}`
 
     if (toAccount.type === 'investment') {
-      const priceDetails = dto.price ? ` @ $${dto.price.toFixed(2)}/share` : ''
+      const quoteCurrency = toAccount.quote_currency || 'USD'
+      const priceDetails = dto.price ? ` @ ${quoteCurrency} ${dto.price.toFixed(2)}/share` : ''
       const purchaseDetails = `${dto.amount_to.toFixed(8)} shares${priceDetails}`
       outgoingDesc += ` (${purchaseDetails})`
       incomingDesc += ` (${purchaseDetails})`

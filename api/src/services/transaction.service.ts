@@ -377,7 +377,8 @@ export class TransactionService {
     let investmentNotes = investmentTx.notes
     if (note !== undefined) {
       const fromAccount = accounts.get(fromAccountId)!
-      const purchaseDetails = `${amountTo.toFixed(8)} shares${price > 0 ? ` @ $${price.toFixed(2)}/share` : ''}`
+      const quoteCurrency = toAccount.quote_currency || 'USD'
+      const purchaseDetails = `${amountTo.toFixed(8)} shares${price > 0 ? ` @ ${quoteCurrency} ${price.toFixed(2)}/share` : ''}`
       outgoingDescription = `Transfer to ${toAccount.name} (${purchaseDetails})`
       investmentNotes = `Transfer from ${fromAccount.name} (${purchaseDetails})`
       if (note) {

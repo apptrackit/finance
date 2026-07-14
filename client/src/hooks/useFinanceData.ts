@@ -8,6 +8,7 @@ export type Account = {
   type: 'cash' | 'investment'
   balance: number
   currency: string
+  quote_currency?: string
   symbol?: string
   asset_type?: 'stock' | 'crypto' | 'manual'
   exclude_from_net_worth?: boolean
@@ -223,14 +224,16 @@ export function useFinanceData(
           valueInAccountCurrency = acc.balance
         } else {
           const totalQuantity = acc.balance
-          const priceUSD = (acc.symbol && quotes[acc.symbol]?.regularMarketPrice) || 0
-          const valueUSD = priceUSD * totalQuantity
+          const quote = acc.symbol ? quotes[acc.symbol] : null
+          const quotePrice = quote?.regularMarketPrice || 0
+          const quoteCurrency = (acc.quote_currency || quote?.currency || 'USD').toUpperCase()
+          const valueInQuoteCurrency = quotePrice * totalQuantity
 
-          if (masterCurrency === 'USD') {
-            valueInAccountCurrency = valueUSD
+          if (quoteCurrency === masterCurrency) {
+            valueInAccountCurrency = valueInQuoteCurrency
           } else {
-            const usdToMasterRate = rates['USD'] || 1
-            valueInAccountCurrency = valueUSD / usdToMasterRate
+            const masterToQuoteRate = rates[quoteCurrency]
+            valueInAccountCurrency = masterToQuoteRate ? valueInQuoteCurrency / masterToQuoteRate : valueInQuoteCurrency
           }
           totalValueInMasterCurrency += valueInAccountCurrency
           continue

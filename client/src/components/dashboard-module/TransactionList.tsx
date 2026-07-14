@@ -38,6 +38,7 @@ type Account = {
   name: string
   balance: number
   currency: string
+  quote_currency?: string
   type: 'cash' | 'investment'
   symbol?: string
   asset_type?: 'stock' | 'crypto' | 'manual'
@@ -1536,7 +1537,7 @@ export function TransactionList({
                 {/* Manual Price field for transfers to investment accounts */}
                 {toAccount?.type === 'investment' && (
                   <div className="space-y-2">
-                    <Label htmlFor="transfer_price">Price per Share in USD (optional - leave blank to auto-fetch)</Label>
+                    <Label htmlFor="transfer_price">Price per Share in {toAccount.quote_currency || 'trading currency'} (optional - leave blank to auto-fetch)</Label>
                     <AmountInput
                       id="transfer_price" 
                       value={formData.manual_price} 
@@ -1588,8 +1589,8 @@ export function TransactionList({
                     </div>
                     {toAccount.type === 'investment' && formData.manual_price && (
                       <div className="flex items-center justify-between text-xs text-muted-foreground pt-1 border-t border-border/50">
-                        <span>@ ${formData.manual_price}/share</span>
-                        <span>${formatCalculatedAmount(transferAmountTo * (parseAmount(formData.manual_price) || 0), { maximumFractionDigits: 2 })} USD value</span>
+                        <span>@ {toAccount.quote_currency || 'trading currency'} {formData.manual_price}/share</span>
+                        <span>{formatCalculatedAmount(transferAmountTo * (parseAmount(formData.manual_price) || 0), { maximumFractionDigits: 2 })} {toAccount.quote_currency || 'trading currency'} value</span>
                       </div>
                     )}
                   </div>

@@ -13,6 +13,7 @@ export interface CreateAccountDto {
   type: AccountType
   balance: number
   currency?: string
+  quote_currency?: string
   symbol?: string
   asset_type?: AssetType
   exclude_from_net_worth?: boolean
@@ -24,6 +25,7 @@ export interface UpdateAccountDto {
   type?: AccountType
   balance?: number
   currency?: string
+  quote_currency?: string
   symbol?: string
   asset_type?: AssetType
   exclude_from_net_worth?: boolean
@@ -38,6 +40,7 @@ export interface AccountResponseDto {
   type: AccountType
   balance: number
   currency: string
+  quote_currency?: string
   symbol?: string
   asset_type?: AssetType
   exclude_from_net_worth?: boolean

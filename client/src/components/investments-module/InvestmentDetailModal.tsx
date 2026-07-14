@@ -55,20 +55,20 @@ export function InvestmentDetailModal({
               <div>
                 <div className="text-xs text-muted-foreground">Current Value</div>
                 <div className={`text-lg font-bold ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
-                  {privacyMode === 'hidden' ? '••••••' : formatValue(position.displayValue, account)}
+                  {privacyMode === 'hidden' ? '••••••' : formatValue(position.displayValue, account, position.quoteCurrency)}
                 </div>
               </div>
               <div>
                 <div className="text-xs text-muted-foreground">Net Invested</div>
                 <div className={`text-lg font-bold ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
-                  {privacyMode === 'hidden' ? '••••••' : formatValue(position.netInvested, account)}
+                  {privacyMode === 'hidden' ? '••••••' : formatValue(position.nativeInvested, account, position.quoteCurrency)}
                 </div>
               </div>
               {position.currentPrice > 0 && (
                 <div>
                   <div className="text-xs text-muted-foreground">Current Price</div>
                   <div className={`text-lg font-bold ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
-                    {privacyMode === 'hidden' ? '••••••' : formatValue(position.currentPrice, account)}
+                  {privacyMode === 'hidden' ? '••••••' : formatValue(position.currentPrice, account, position.quoteCurrency)}
                   </div>
                 </div>
               )}
@@ -169,7 +169,7 @@ export function InvestmentDetailModal({
                         </div>
                         {tx.quantity !== undefined && (
                           <div className="text-sm text-muted-foreground">
-                            ${Math.abs(tx.amount).toFixed(2)} USD
+                            {formatValue(Math.abs(tx.amount), undefined, account.quote_currency || position.quoteCurrency)}
                           </div>
                         )}
                       </div>

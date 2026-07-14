@@ -20,12 +20,16 @@ const accountCurrencyError = {
   message: `Cash and manual investment currencies must be one of: ${SUPPORTED_CURRENCIES.join(', ')}. Stocks use SHARE and crypto uses its ticker.`,
   path: ['currency']
 }
+const quoteCurrencySchema = z.string().toUpperCase().refine(c => SUPPORTED_CURRENCIES.includes(c), {
+  message: `Quote currency must be one of: ${SUPPORTED_CURRENCIES.join(', ')}`
+}).optional()
 
 export const CreateAccountSchema = z.object({
   name: z.string().min(1, 'Name is required').max(100),
   type: z.enum(['cash', 'investment']),
   balance: z.number().finite('Balance must be a finite number'),
   currency: z.string().toUpperCase().optional(),
+  quote_currency: quoteCurrencySchema,
   symbol: z.string().max(20).optional(),
   asset_type: z.enum(['stock', 'crypto', 'manual']).optional(),
   exclude_from_net_worth: z.boolean().optional(),
@@ -47,6 +51,7 @@ export const UpdateAccountSchema = z.object({
   type: z.enum(['cash', 'investment']).optional(),
   balance: z.number().finite().optional(),
   currency: z.string().toUpperCase().optional(),
+  quote_currency: quoteCurrencySchema,
   symbol: z.string().max(20).optional(),
   asset_type: z.enum(['stock', 'crypto', 'manual']).optional(),
   exclude_from_net_worth: z.boolean().optional(),

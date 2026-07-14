@@ -7,6 +7,7 @@ export interface Account {
   type: AccountType
   balance: number
   currency: string
+  quote_currency?: string
   symbol?: string
   asset_type?: AssetType
   exclude_from_net_worth?: boolean

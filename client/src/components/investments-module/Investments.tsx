@@ -8,6 +8,18 @@ import { PortfolioSummary } from './PortfolioSummary'
 import { HoldingsList } from './HoldingsList'
 import { InvestmentDetailModal } from './InvestmentDetailModal'
 
+const formatInvestmentTransactionDescription = (transaction: any, quoteCurrency: string) => {
+  const price = Number(transaction.price)
+  const notes = transaction.notes as string | undefined
+  if (notes?.startsWith('Transfer from ') && Number.isFinite(price) && price > 0) {
+    const source = notes.replace(/\s*\([^)]*\)/, '')
+    const noteSuffix = source.match(/\s-\s.*$/)?.[0] || ''
+    const sourceName = source.replace(/\s-\s.*$/, '').trim()
+    return `${sourceName} (${transaction.quantity} shares @ ${quoteCurrency} ${price.toFixed(2)}/share)${noteSuffix}`
+  }
+  return notes || `${transaction.quantity} shares @ ${quoteCurrency} ${price}`
+}
+
 export function Investments() {
   const [investmentAccounts, setInvestmentAccounts] = useState<Account[]>([])
   const [allTransactions, setAllTransactions] = useState<Transaction[]>([])
@@ -48,7 +60,8 @@ export function Investments() {
           account_id: itx.account_id,
           amount: itx.type === 'buy' ? itx.total_amount : -itx.total_amount,
           quantity: itx.type === 'buy' ? itx.quantity : -itx.quantity,
-          description: itx.notes || `${itx.quantity} shares @ $${itx.price}`,
+          price: itx.price,
+          description: formatInvestmentTransactionDescription(itx, acc.quote_currency || 'trading currency'),
           date: itx.date,
           is_recurring: false
         })

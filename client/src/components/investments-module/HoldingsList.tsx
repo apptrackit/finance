@@ -86,14 +86,14 @@ export function HoldingsList({
                       )}
                     </div>
                     <div className={`text-sm text-muted-foreground ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
-                      {privacyMode === 'hidden' ? '•••• invested' : `${formatValue(position.netInvested, position.account)} invested`}
+                      {privacyMode === 'hidden' ? '•••• invested' : `${formatValue(position.nativeInvested, position.account, position.quoteCurrency)} invested`}
                     </div>
                   </div>
                 </div>
                 
                 <div className="text-right">
                   <div className={`text-xl font-bold ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
-                    {privacyMode === 'hidden' ? '••••••' : formatValue(position.displayValue, position.account)}
+                    {privacyMode === 'hidden' ? '••••••' : formatValue(position.displayValue, position.account, position.quoteCurrency)}
                   </div>
                   {position.account.asset_type !== 'manual' && (
                     <div className={`text-sm text-muted-foreground ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
@@ -102,7 +102,7 @@ export function HoldingsList({
                     </div>
                   )}
                   <div className={`text-sm text-muted-foreground ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
-                    {privacyMode === 'hidden' ? '•••• ' : `${position.account.symbol || position.account.name}`} {position.currentPrice > 0 && `@ $${position.currentPrice.toLocaleString()}`}
+                    {privacyMode === 'hidden' ? '•••• ' : `${position.account.symbol || position.account.name}`} {position.currentPrice > 0 && `@ ${formatValue(position.currentPrice, undefined, position.quoteCurrency)}`}
                   </div>
                   <div className={`text-sm font-semibold mt-1 flex items-center justify-end gap-1 ${position.priceFetchError ? 'text-yellow-600 dark:text-yellow-400' : position.gainLoss >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'} ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
                     {position.priceFetchError ? (

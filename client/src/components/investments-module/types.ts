@@ -4,6 +4,7 @@ export type Account = {
   type: 'cash' | 'investment' | 'credit'
   balance: number
   currency: string
+  quote_currency?: string
   symbol?: string
   asset_type?: 'stock' | 'crypto' | 'manual'
   exclude_from_net_worth?: boolean
@@ -45,6 +46,8 @@ export type Position = {
   currentValue: number
   displayValue: number
   currentPrice: number
+  quoteCurrency: string
+  nativeInvested: number
   gainLoss: number
   gainLossPercent: number
   transactions: Transaction[]

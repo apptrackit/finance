@@ -21,6 +21,7 @@ type Account = {
   type: 'cash' | 'investment'
   balance: number
   currency: string
+  quote_currency?: string
   symbol?: string
   asset_type?: 'stock' | 'crypto' | 'manual'
   exclude_from_net_worth?: boolean
@@ -61,6 +62,7 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
     type: 'cash',
     balance: '',
     currency: 'HUF',
+    quote_currency: 'USD',
     symbol: '',
     asset_type: 'stock' as 'stock' | 'crypto' | 'manual',
     adjustWithTransaction: false,
@@ -175,8 +177,10 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
         return sum + (account.balance / rate)
       } else if (account.symbol && quotes[account.symbol]) {
         // For stocks/crypto, balance is the quantity, multiply by current price
-        const currentPrice = quotes[account.symbol].regularMarketPrice || 0
-        return sum + (account.balance * currentPrice)
+        const quote = quotes[account.symbol]
+        const currentPrice = quote.regularMarketPrice || 0
+        const quoteCurrency = (account.quote_currency || quote.currency || 'USD').toUpperCase()
+        return sum + (account.balance * currentPrice) / (quoteCurrency === 'USD' ? 1 : exchangeRates[quoteCurrency] || 1)
       }
       return sum
     }, 0)
@@ -200,8 +204,10 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
         const rate = exchangeRates[account.currency] || 1
         valueUSD = account.balance / rate
       } else if (account.symbol && quotes[account.symbol]) {
-        const currentPrice = quotes[account.symbol].regularMarketPrice || 0
-        valueUSD = account.balance * currentPrice
+        const quote = quotes[account.symbol]
+        const currentPrice = quote.regularMarketPrice || 0
+        const quoteCurrency = (account.quote_currency || quote.currency || 'USD').toUpperCase()
+        valueUSD = (account.balance * currentPrice) / (quoteCurrency === 'USD' ? 1 : exchangeRates[quoteCurrency] || 1)
       }
       investmentPercentages[account.id] = totalInvestmentUSD > 0 ? (valueUSD / totalInvestmentUSD) * 100 : 0
     })
@@ -212,7 +218,7 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
   const { cashPercentages, investmentPercentages } = calculatePercentages()
 
   const resetForm = () => {
-    setFormData({ name: '', type: 'cash', balance: '', currency: 'HUF', symbol: '', asset_type: 'stock', adjustWithTransaction: false, exclude_from_net_worth: false, exclude_from_cash_balance: false })
+    setFormData({ name: '', type: 'cash', balance: '', currency: 'HUF', quote_currency: 'USD', symbol: '', asset_type: 'stock', adjustWithTransaction: false, exclude_from_net_worth: false, exclude_from_cash_balance: false })
     setShowSymbolSearch(false)
     setSearchQuery('')
     setSearchResults([])
@@ -239,26 +245,40 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
     }
   }
 
-  const handleSelectAsset = (asset: any) => {
+  const handleSelectAsset = async (asset: any) => {
     const assetType = asset.quoteType === 'CRYPTOCURRENCY' ? 'crypto' : 'stock'
     // For crypto, currency is the crypto symbol (e.g., BTC). For stocks, use 'SHARE'
     const currency = assetType === 'crypto' ? asset.symbol.split('-')[0] : 'SHARE'
+    const initialQuoteCurrency = typeof asset.currency === 'string' ? asset.currency.toUpperCase() : 'USD'
     setFormData({
       ...formData,
       name: asset.shortname || asset.longname || asset.symbol,
       symbol: asset.symbol,
       asset_type: assetType,
-      currency: currency
+      currency: currency,
+      quote_currency: initialQuoteCurrency
     })
     setShowSymbolSearch(false)
     setSearchQuery('')
     setSearchResults([])
+    try {
+      const response = await apiFetch(`${API_BASE_URL}/market/quote?symbol=${encodeURIComponent(asset.symbol)}`)
+      const quote = await response.json()
+      if (response.ok && typeof quote.currency === 'string') {
+        setFormData(current => current.symbol === asset.symbol
+          ? { ...current, quote_currency: quote.currency.toUpperCase() }
+          : current)
+      }
+    } catch (error) {
+      console.error('Failed to determine quote currency:', error)
+    }
   }
 
   const handleManualAsset = () => {
     setFormData({
       ...formData,
       currency: 'HUF',
+      quote_currency: 'HUF',
       asset_type: 'manual'
     })
     setShowSymbolSearch(false)
@@ -280,7 +300,8 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
         name: formData.name,
         type: formData.type,
         balance: balanceValue ?? 0,
-        currency: formData.currency
+        currency: formData.currency,
+        quote_currency: formData.type === 'investment' && formData.asset_type !== 'manual' ? formData.quote_currency : undefined
       }
 
       if (formData.type === 'investment') {
@@ -345,6 +366,7 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
       type: account.type,
       balance: formatAmount(account.balance, { maximumFractionDigits: 8 }),
       currency: account.currency,
+      quote_currency: account.quote_currency || (account.symbol ? quotes[account.symbol]?.currency : undefined) || 'USD',
       symbol: account.symbol || '',
       asset_type: account.asset_type || 'stock',
       adjustWithTransaction: false,
@@ -646,21 +668,37 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
               </div>
 
               {formData.type === 'investment' && formData.symbol && (
-                <div className="col-span-2 p-3 bg-secondary/30 rounded-lg flex justify-between items-center">
-                  <div>
-                    <div className="font-bold">{formData.symbol}</div>
-                    <div className="text-sm text-muted-foreground">{formData.name}</div>
+                <>
+                  <div className="col-span-2 p-3 bg-secondary/30 rounded-lg flex justify-between items-center">
+                    <div>
+                      <div className="font-bold">{formData.symbol}</div>
+                      <div className="text-sm text-muted-foreground">{formData.name}</div>
+                    </div>
+                    {!editingId && (
+                      <button
+                        type="button"
+                        onClick={() => { setShowSymbolSearch(true); setFormData({ ...formData, symbol: '', name: '' }) }}
+                        className="text-xs text-primary hover:underline"
+                      >
+                        Change
+                      </button>
+                    )}
                   </div>
-                  {!editingId && (
-                    <button
-                      type="button"
-                      onClick={() => { setShowSymbolSearch(true); setFormData({ ...formData, symbol: '', name: '' }) }}
-                      className="text-xs text-primary hover:underline"
+                  <div className="space-y-2">
+                    <Label htmlFor="quote-currency">Trading currency</Label>
+                    <Select
+                      id="quote-currency"
+                      value={formData.quote_currency}
+                      onChange={e => setFormData({ ...formData, quote_currency: e.target.value })}
                     >
-                      Change
-                    </button>
-                  )}
-                </div>
+                      <option value="EUR">🇪🇺 EUR</option>
+                      <option value="USD">🇺🇸 USD</option>
+                      <option value="GBP">🇬🇧 GBP</option>
+                      <option value="CHF">🇨🇭 CHF</option>
+                      <option value="HUF">🇭🇺 HUF</option>
+                    </Select>
+                  </div>
+                </>
               )}
 
               {formData.type === 'investment' && manualMode && !formData.symbol && (
@@ -901,7 +939,8 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
                   aValueUSD = a.balance / aRate
                 } else if (a.symbol && quotes[a.symbol]) {
                   const aPrice = quotes[a.symbol].regularMarketPrice || 0
-                  aValueUSD = a.balance * aPrice
+                  const aQuoteCurrency = (a.quote_currency || quotes[a.symbol].currency || 'USD').toUpperCase()
+                  aValueUSD = (a.balance * aPrice) / (aQuoteCurrency === 'USD' ? 1 : exchangeRates[aQuoteCurrency] || 1)
                 }
                 
                 if (b.asset_type === 'manual') {
@@ -909,7 +948,8 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
                   bValueUSD = b.balance / bRate
                 } else if (b.symbol && quotes[b.symbol]) {
                   const bPrice = quotes[b.symbol].regularMarketPrice || 0
-                  bValueUSD = b.balance * bPrice
+                  const bQuoteCurrency = (b.quote_currency || quotes[b.symbol].currency || 'USD').toUpperCase()
+                  bValueUSD = (b.balance * bPrice) / (bQuoteCurrency === 'USD' ? 1 : exchangeRates[bQuoteCurrency] || 1)
                 }
                 
                 return bValueUSD - aValueUSD // Sort descending (most to least)
@@ -974,7 +1014,7 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
                             </p>
                             {quote?.regularMarketPrice && (
                               <p className="text-[10px] sm:text-xs text-muted-foreground">
-                                @ ${quote.regularMarketPrice.toFixed(2)}
+                                @ {currencySymbols[(account.quote_currency || quote.currency || 'USD').toUpperCase()] || (account.quote_currency || quote.currency || 'USD')} {quote.regularMarketPrice.toFixed(2)}
                               </p>
                             )}
                           </div>
