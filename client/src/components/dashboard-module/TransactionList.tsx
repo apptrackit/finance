@@ -359,7 +359,7 @@ export function TransactionList({
     const fetchHistoricalPrice = async () => {
       // Never overwrite a price that the user has edited, including a deliberate
       // empty value. This also protects against a pending fetch resolving late.
-      if (manuallyEditedTransferFieldsRef.current.manual_price || formData.manual_price) {
+      if (manuallyEditedTransferFieldsRef.current.manual_price) {
         return
       }
       
