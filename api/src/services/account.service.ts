@@ -29,6 +29,7 @@ export class AccountService {
       type: dto.type,
       balance: dto.balance,
       currency: currency.toUpperCase(),
+      quote_currency: dto.quote_currency?.trim().toUpperCase(),
       symbol: dto.symbol,
       asset_type: dto.asset_type,
       exclude_from_net_worth: dto.exclude_from_net_worth,
@@ -62,6 +63,13 @@ export class AccountService {
       updates.currency = currency.toUpperCase()
     } else {
       delete (updates as any).currency
+    }
+
+    const quoteCurrency = dto.quote_currency?.trim()
+    if (quoteCurrency) {
+      updates.quote_currency = quoteCurrency.toUpperCase()
+    } else {
+      delete (updates as any).quote_currency
     }
 
     await this.accountRepo.update(id, updates)

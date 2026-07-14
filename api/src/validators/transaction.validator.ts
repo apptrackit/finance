@@ -20,6 +20,7 @@ export const UpdateTransactionSchema = z.object({
   category_id: z.string().nullable().optional(),
   amount: z.number().finite().refine(n => n !== 0, 'Amount cannot be zero').optional(),
   amount_to: z.number().finite().positive('amount_to must be positive').optional(),
+  price: z.number().finite().positive('price must be positive').optional(),
   description: z.string().max(500).nullable().optional(),
   date: z.string().regex(dateRegex, 'Date must be YYYY-MM-DD').optional(),
   exclude_from_estimate: z.boolean().optional(),

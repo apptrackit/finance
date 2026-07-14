@@ -34,6 +34,11 @@
   Pragma: no-cache
   Expires: 0
 
+/site.webmanifest
+  Cache-Control: no-cache, no-store, must-revalidate
+  Pragma: no-cache
+  Expires: 0
+
 /registerSW.js
   Cache-Control: no-cache, no-store, must-revalidate
   Pragma: no-cache

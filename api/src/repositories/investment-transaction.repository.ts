@@ -38,6 +38,21 @@ export class InvestmentTransactionRepository {
     ).run()
   }
 
+  async update(id: string, transaction: Omit<InvestmentTransaction, 'id' | 'created_at'>): Promise<void> {
+    await this.db.prepare(
+      'UPDATE investment_transactions SET account_id = ?, type = ?, quantity = ?, price = ?, total_amount = ?, date = ?, notes = ? WHERE id = ?'
+    ).bind(
+      transaction.account_id,
+      transaction.type,
+      transaction.quantity,
+      transaction.price,
+      transaction.total_amount,
+      transaction.date,
+      transaction.notes || null,
+      id
+    ).run()
+  }
+
   async delete(id: string): Promise<void> {
     await this.db.prepare('DELETE FROM investment_transactions WHERE id = ?').bind(id).run()
   }

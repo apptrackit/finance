@@ -55,6 +55,50 @@ describe('Account validators', () => {
     expect(result.success).toBe(true)
   })
 
+  it('accepts the SHARE unit used for stock investment quantities', () => {
+    const result = CreateAccountSchema.safeParse({
+      name: 'Vanguard FTSE All-World',
+      type: 'investment',
+      balance: 0,
+      currency: 'SHARE',
+      symbol: 'VWCE.MI',
+      asset_type: 'stock',
+    })
+    expect(result.success).toBe(true)
+  })
+
+  it('accepts a crypto ticker as the investment unit', () => {
+    const result = CreateAccountSchema.safeParse({
+      name: 'Bitcoin',
+      type: 'investment',
+      balance: 0,
+      currency: 'BTC',
+      symbol: 'BTC-USD',
+      asset_type: 'crypto',
+    })
+    expect(result.success).toBe(true)
+  })
+
+  it('rejects investment units for cash accounts', () => {
+    const result = CreateAccountSchema.safeParse({
+      name: 'Checking Account',
+      type: 'cash',
+      balance: 100,
+      currency: 'SHARE',
+    })
+    expect(result.success).toBe(false)
+  })
+
+  it('rejects an investment unit without an investment asset type', () => {
+    const result = CreateAccountSchema.safeParse({
+      name: 'Invalid investment',
+      type: 'investment',
+      balance: 0,
+      currency: 'SHARE',
+    })
+    expect(result.success).toBe(false)
+  })
+
   it('allows partial update with no fields', () => {
     const result = UpdateAccountSchema.safeParse({})
     expect(result.success).toBe(true)

@@ -163,6 +163,11 @@ export class TransactionService {
       if (linkedTx) {
         return await this.updateTransferPair(oldTx, linkedTx, dto)
       }
+
+      const linkedInvestmentTx = await this.investmentTransactionRepo.findById(oldTx.linked_transaction_id)
+      if (linkedInvestmentTx) {
+        return await this.updateInvestmentTransfer(oldTx, linkedInvestmentTx, dto)
+      }
     }
 
     const oldAccount = await this.accountRepo.findById(oldTx.account_id)
@@ -313,6 +318,95 @@ export class TransactionService {
     })
 
     const updated = await this.transactionRepo.findById(requestedId)
+    return updated!
+  }
+
+  private async updateInvestmentTransfer(
+    outgoing: Transaction,
+    investmentTx: InvestmentTransaction,
+    dto: UpdateTransactionDto
+  ): Promise<Transaction> {
+    const fromAccountId = dto.account_id || outgoing.account_id
+    const toAccountId = dto.to_account_id || investmentTx.account_id
+    const amountFrom = Math.abs(dto.amount ?? outgoing.amount)
+    const amountTo = dto.amount_to ?? investmentTx.quantity
+    const price = dto.price ?? investmentTx.price
+    const date = dto.date || outgoing.date
+    const note = dto.description !== undefined ? dto.description : undefined
+    const now = Date.now()
+
+    if (fromAccountId === toAccountId) {
+      throw new Error('Cannot transfer to same account')
+    }
+    if (amountFrom <= 0 || amountTo <= 0 || price < 0) {
+      throw new Error('Transfer amounts and price must be valid')
+    }
+
+    const accountIds = new Set([outgoing.account_id, investmentTx.account_id, fromAccountId, toAccountId])
+    const accounts = new Map<string, Account>()
+    for (const accountId of accountIds) {
+      const account = await this.accountRepo.findById(accountId)
+      if (!account) throw new Error('Account not found')
+      this.assertAccountUnlocked(account)
+      accounts.set(accountId, account)
+    }
+
+    const toAccount = accounts.get(toAccountId)!
+    if (toAccount.type !== 'investment') {
+      throw new Error('Investment transfer must target an investment account')
+    }
+
+    const balanceDeltas = new Map<string, number>()
+    const addDelta = (accountId: string, delta: number) => {
+      balanceDeltas.set(accountId, (balanceDeltas.get(accountId) || 0) + delta)
+    }
+
+    // Revert the original cash and share movements, then apply the new ones.
+    addDelta(outgoing.account_id, -outgoing.amount)
+    addDelta(investmentTx.account_id, -investmentTx.quantity)
+    addDelta(fromAccountId, -amountFrom)
+    addDelta(toAccountId, amountTo)
+
+    for (const [accountId, delta] of balanceDeltas) {
+      if (delta === 0) continue
+      const account = accounts.get(accountId)!
+      await this.accountRepo.updateBalance(accountId, account.balance + delta, now)
+    }
+
+    let outgoingDescription = outgoing.description
+    let investmentNotes = investmentTx.notes
+    if (note !== undefined) {
+      const fromAccount = accounts.get(fromAccountId)!
+      const quoteCurrency = toAccount.quote_currency || 'USD'
+      const purchaseDetails = `${amountTo.toFixed(8)} shares${price > 0 ? ` @ ${quoteCurrency} ${price.toFixed(2)}/share` : ''}`
+      outgoingDescription = `Transfer to ${toAccount.name} (${purchaseDetails})`
+      investmentNotes = `Transfer from ${fromAccount.name} (${purchaseDetails})`
+      if (note) {
+        outgoingDescription += ` - ${note}`
+        investmentNotes += ` - ${note}`
+      }
+    }
+
+    await this.transactionRepo.update(outgoing.id, {
+      account_id: fromAccountId,
+      category_id: null,
+      amount: -amountFrom,
+      description: outgoingDescription,
+      date,
+      exclude_from_estimate: false,
+      updated_at: now
+    })
+    await this.investmentTransactionRepo.update(investmentTx.id, {
+      account_id: toAccountId,
+      type: investmentTx.type,
+      quantity: amountTo,
+      price,
+      total_amount: amountTo * price,
+      date,
+      notes: investmentNotes
+    })
+
+    const updated = await this.transactionRepo.findById(outgoing.id)
     return updated!
   }
 

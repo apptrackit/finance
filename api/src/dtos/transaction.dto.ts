@@ -18,6 +18,7 @@ export interface UpdateTransactionDto {
   category_id?: string | null
   amount?: number
   amount_to?: number
+  price?: number
   description?: string | null
   date?: string
   exclude_from_estimate?: boolean

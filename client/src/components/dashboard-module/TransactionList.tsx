@@ -21,6 +21,7 @@ type Transaction = {
   category_id?: string | null
   amount: number
   quantity?: number
+  price?: number
   description?: string | null
   date: string
   linked_transaction_id?: string
@@ -37,6 +38,7 @@ type Account = {
   name: string
   balance: number
   currency: string
+  quote_currency?: string
   type: 'cash' | 'investment'
   symbol?: string
   asset_type?: 'stock' | 'crypto' | 'manual'
@@ -133,9 +135,12 @@ export function TransactionList({
   const [exchangeRateDraft, setExchangeRateDraft] = useState('')
   const [suggestedRate, setSuggestedRate] = useState<number | null>(null)
   const [isLoadingRate, setIsLoadingRate] = useState(false)
-  const [skipAutoCalc, setSkipAutoCalc] = useState(false)
   const rateRequestSequenceRef = useRef(0)
   const manualRateOverrideRef = useRef(false)
+  const manuallyEditedTransferFieldsRef = useRef({
+    amount_to: false,
+    manual_price: false,
+  })
   const editedTransferPairRef = useRef<string | null>(null)
   const [activeTxId, setActiveTxId] = useState<string | null>(null)
   const [categoryFilter, setCategoryFilter] = useState<string>('all')
@@ -322,9 +327,11 @@ export function TransactionList({
     }
   }, [formData.account_id, formData.to_account_id, formData.type, accounts, editingId])
 
-  // Auto-calculate amount_to when amount or rate changes
+  // Auto-calculate the received amount only until the user enters it themselves.
+  // A manual value must remain the source of truth even if the amount, rate, or
+  // selected accounts subsequently change.
   useEffect(() => {
-    if (formData.type !== 'transfer' || skipAutoCalc) return
+    if (formData.type !== 'transfer' || manuallyEditedTransferFieldsRef.current.amount_to) return
 
     const fromAccount = accounts.find(a => a.id === formData.account_id)
     const toAccount = accounts.find(a => a.id === formData.to_account_id)
@@ -345,13 +352,14 @@ export function TransactionList({
     } else if (!formData.amount) {
       setFormData(prev => prev.amount_to ? ({ ...prev, amount_to: '' }) : prev)
     }
-  }, [formData.amount, exchangeRate, formData.type, formData.account_id, formData.to_account_id, accounts, skipAutoCalc])
+  }, [formData.amount, exchangeRate, formData.type, formData.account_id, formData.to_account_id, accounts])
 
   // Auto-fetch price for investment accounts when date or account changes
   useEffect(() => {
     const fetchHistoricalPrice = async () => {
-      // Skip auto-fetch if manual_price is already set (e.g., from editing)
-      if (formData.manual_price) {
+      // Never overwrite a price that the user has edited, including a deliberate
+      // empty value. This also protects against a pending fetch resolving late.
+      if (manuallyEditedTransferFieldsRef.current.manual_price) {
         return
       }
       
@@ -409,14 +417,20 @@ export function TransactionList({
               const price = chartData.quotes[closestIdx].close
               const priceDate = new Date(chartData.quotes[closestIdx].date).toLocaleDateString()
               console.log(`Auto-filled price for ${investmentAccount.symbol} on ${priceDate}: $${price}`)
-              setFormData(prev => ({ ...prev, manual_price: price.toFixed(2) }))
+              if (!manuallyEditedTransferFieldsRef.current.manual_price) {
+                setFormData(prev => ({ ...prev, manual_price: price.toFixed(2) }))
+              }
             } else {
               console.warn(`No price data within 3 days of ${formData.date}, leaving manual_price empty`)
-              setFormData(prev => ({ ...prev, manual_price: '' }))
+              if (!manuallyEditedTransferFieldsRef.current.manual_price) {
+                setFormData(prev => ({ ...prev, manual_price: '' }))
+              }
             }
           } else {
             // No chart data, clear manual_price
-            setFormData(prev => ({ ...prev, manual_price: '' }))
+            if (!manuallyEditedTransferFieldsRef.current.manual_price) {
+              setFormData(prev => ({ ...prev, manual_price: '' }))
+            }
           }
         }
       } catch (e) {
@@ -461,11 +475,11 @@ export function TransactionList({
 
   const resetTransferRateState = () => {
     manualRateOverrideRef.current = false
+    manuallyEditedTransferFieldsRef.current = { amount_to: false, manual_price: false }
     editedTransferPairRef.current = null
     setExchangeRate(null)
     setExchangeRateDraft('')
     setSuggestedRate(null)
-    setSkipAutoCalc(false)
   }
 
   const resetForm = () => {
@@ -571,14 +585,15 @@ export function TransactionList({
           await apiFetch(`${API_BASE_URL}/transactions/${editingId}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              account_id: formData.account_id,
-              to_account_id: formData.to_account_id,
-              amount,
-              amount_to: amountTo,
-              description: formData.description,
-              date: formData.date,
-            }),
+              body: JSON.stringify({
+                account_id: formData.account_id,
+                to_account_id: formData.to_account_id,
+                amount,
+                amount_to: amountTo,
+                description: formData.description,
+                date: formData.date,
+                price,
+              }),
           })
           setEditingId(null)
         } else {
@@ -701,6 +716,9 @@ export function TransactionList({
       const incomingValue = incomingAccount?.type === 'investment' && incoming.quantity !== undefined
         ? Math.abs(incoming.quantity)
         : Math.abs(incoming.amount)
+      const investmentPrice = incomingAccount?.type === 'investment' && incoming.price !== undefined
+        ? formatNumber(incoming.price)
+        : ''
       const existingRate = Math.abs(outgoing.amount) > 0
         ? incomingValue / Math.abs(outgoing.amount)
         : null
@@ -714,14 +732,16 @@ export function TransactionList({
         description: transferNote,
         date: outgoing.date,
         type: 'transfer',
-        manual_price: '',
+        manual_price: investmentPrice,
         exclude_from_estimate: false
       })
       const isDifferentCurrency = outgoingAccount && incomingAccount
         && outgoingAccount.currency !== incomingAccount.currency
       const historicalRate = isDifferentCurrency ? existingRate : null
       editedTransferPairRef.current = getTransferPairKey(outgoing.account_id, incoming.account_id)
-      setSkipAutoCalc(true)
+      manuallyEditedTransferFieldsRef.current.amount_to = true
+      manualRateOverrideRef.current = true
+      manuallyEditedTransferFieldsRef.current.manual_price = incomingAccount?.type === 'investment' && incoming.price !== undefined
       setExchangeRate(historicalRate)
       setExchangeRateDraft(historicalRate === null
         ? ''
@@ -1437,8 +1457,7 @@ export function TransactionList({
                       id="transfer_amount" 
                       value={formData.amount} 
                       onValueChange={amount => {
-                        setSkipAutoCalc(false)
-                        setFormData({...formData, amount})
+                        setFormData(prev => ({ ...prev, amount }))
                       }}
                       placeholder="0.00" 
                       required 
@@ -1452,9 +1471,9 @@ export function TransactionList({
                       id="transfer_amount_to" 
                       value={formData.amount_to} 
                       onValueChange={amountTo => {
+                        manuallyEditedTransferFieldsRef.current.amount_to = true
                         manualRateOverrideRef.current = true
-                        setSkipAutoCalc(true)
-                        setFormData({...formData, amount_to: amountTo})
+                        setFormData(prev => ({ ...prev, amount_to: amountTo }))
                         
                         // Recalculate exchange rate if different currencies
                         if (fromAccount && toAccount && formData.amount && amountTo) {
@@ -1471,7 +1490,6 @@ export function TransactionList({
                           }
                         }
                       }}
-                      onBlur={() => setSkipAutoCalc(false)}
                       placeholder="0.00" 
                       required
                       disabled={!!fromAccount && !!toAccount && fromAccount.currency === toAccount.currency}
@@ -1499,7 +1517,6 @@ export function TransactionList({
                           value={exchangeRateDraft}
                           onValueChange={value => {
                             manualRateOverrideRef.current = true
-                            setSkipAutoCalc(false)
                             setExchangeRateDraft(value)
                             const rate = parseAmount(value, { allowNegative: false })
                             setExchangeRate(rate !== null && rate > 0 ? rate : null)
@@ -1520,11 +1537,14 @@ export function TransactionList({
                 {/* Manual Price field for transfers to investment accounts */}
                 {toAccount?.type === 'investment' && (
                   <div className="space-y-2">
-                    <Label htmlFor="transfer_price">Price per Share in USD (optional - leave blank to auto-fetch)</Label>
+                    <Label htmlFor="transfer_price">Price per Share in {toAccount.quote_currency || 'trading currency'} (optional - leave blank to auto-fetch)</Label>
                     <AmountInput
                       id="transfer_price" 
                       value={formData.manual_price} 
-                      onValueChange={manualPrice => setFormData({...formData, manual_price: manualPrice})}
+                      onValueChange={manualPrice => {
+                        manuallyEditedTransferFieldsRef.current.manual_price = true
+                        setFormData(prev => ({ ...prev, manual_price: manualPrice }))
+                      }}
                       placeholder="Auto-fetch from market data" 
                     />
                     <p className="text-xs text-gray-500">For old dates (before 2020), enter the price manually for accuracy</p>
@@ -1569,8 +1589,8 @@ export function TransactionList({
                     </div>
                     {toAccount.type === 'investment' && formData.manual_price && (
                       <div className="flex items-center justify-between text-xs text-muted-foreground pt-1 border-t border-border/50">
-                        <span>@ ${formData.manual_price}/share</span>
-                        <span>${formatCalculatedAmount(transferAmountTo * (parseAmount(formData.manual_price) || 0), { maximumFractionDigits: 2 })} USD value</span>
+                        <span>@ {toAccount.quote_currency || 'trading currency'} {formData.manual_price}/share</span>
+                        <span>{formatCalculatedAmount(transferAmountTo * (parseAmount(formData.manual_price) || 0), { maximumFractionDigits: 2 })} {toAccount.quote_currency || 'trading currency'} value</span>
                       </div>
                     )}
                   </div>
@@ -1648,9 +1668,12 @@ export function TransactionList({
                     <div className="space-y-2 col-span-2">
                       <Label htmlFor="manual_price">Price per Share (optional - leave blank to auto-fetch)</Label>
                       <AmountInput
-                        id="manual_price" 
-                        value={formData.manual_price} 
-                        onValueChange={manualPrice => setFormData({...formData, manual_price: manualPrice})}
+                        id="manual_price"
+                        value={formData.manual_price}
+                        onValueChange={manualPrice => {
+                          manuallyEditedTransferFieldsRef.current.manual_price = true
+                          setFormData(prev => ({ ...prev, manual_price: manualPrice }))
+                        }}
                         placeholder="Auto-fetch from market data" 
                       />
                       <p className="text-xs text-gray-500">For old dates (before 2020), enter the price manually for accuracy</p>
