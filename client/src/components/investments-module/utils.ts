@@ -53,11 +53,11 @@ export const calculatePosition = (
   // Get current market price if available
   let currentPrice = 0
   let priceFetchError = false
-  let quoteCurrency = account.quote_currency || 'USD'
+  let quoteCurrency = (account.asset_type === 'manual' ? account.currency : account.quote_currency || 'USD').toUpperCase()
   if (account.asset_type !== 'manual' && account.symbol) {
     if (quotes[account.symbol]) {
       currentPrice = quotes[account.symbol].regularMarketPrice || 0
-      quoteCurrency = quotes[account.symbol].currency || quoteCurrency
+      quoteCurrency = (quotes[account.symbol].currency || quoteCurrency).toUpperCase()
     } else {
       // Symbol exists but no quote data - price fetch failed
       priceFetchError = true
