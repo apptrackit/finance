@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-const SUPPORTED_CURRENCIES = ['HUF', 'EUR', 'USD', 'GBP', 'CHF', 'PLN', 'CZK', 'RON']
+const SUPPORTED_CURRENCIES = ['HUF', 'EUR', 'USD', 'GBP', 'CHF', 'PLN', 'CZK', 'RON', 'MXN']
 
 function isValidAccountCurrency(data: { type?: 'cash' | 'investment', currency?: string, asset_type?: 'stock' | 'crypto' | 'manual' }) {
   if (!data.currency) return true

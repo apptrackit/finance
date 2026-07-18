@@ -16,6 +16,16 @@ describe('Account validators', () => {
     expect(result.success).toBe(true)
   })
 
+  it('accepts Mexican pesos for cash accounts', () => {
+    const result = CreateAccountSchema.safeParse({
+      name: 'Mexico Checking',
+      type: 'cash',
+      balance: 100,
+      currency: 'MXN',
+    })
+    expect(result.success).toBe(true)
+  })
+
   it('rejects empty name', () => {
     const result = CreateAccountSchema.safeParse({
       name: '',
