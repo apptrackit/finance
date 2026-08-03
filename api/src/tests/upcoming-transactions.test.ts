@@ -76,6 +76,9 @@ describe('upcoming transactions', () => {
     })
 
     expect('status' in result && result.status).toBe('pending')
+    expect('pending_kind' in result && result.pending_kind).toBe('upcoming')
+    expect('review_source' in result && result.review_source).toBe('manual')
+    expect('review_flags' in result && result.review_flags).toEqual([])
     expect(accounts['account-1'].balance).toBe(1000)
     expect(accountRepo.updateBalance).not.toHaveBeenCalled()
   })
@@ -363,5 +366,68 @@ describe('upcoming transactions', () => {
     expect(result.amount).toBe(700)
     expect(accounts['account-1'].balance).toBe(1000)
     expect(accountRepo.updateBalance).not.toHaveBeenCalled()
+  })
+
+  it('preserves MCP review metadata when a draft is edited', async () => {
+    const accounts = { 'account-1': makeAccount() }
+    const transactions: Record<string, Transaction> = {
+      'tx-1': {
+        id: 'tx-1',
+        account_id: 'account-1',
+        amount: -250,
+        date: '2026-07-07',
+        status: 'pending',
+        pending_kind: 'mcp_review',
+        review_source: 'chatgpt_mcp',
+        review_batch_id: 'batch-1',
+        review_flags: ['possible_duplicate'],
+      },
+    }
+    const { service, accountRepo } = createService(transactions, accounts)
+
+    const result = await service.updateTransaction('tx-1', {
+      amount: -275,
+      category_id: 'groceries',
+    })
+
+    expect(result).toMatchObject({
+      status: 'pending',
+      pending_kind: 'mcp_review',
+      review_source: 'chatgpt_mcp',
+      review_batch_id: 'batch-1',
+      review_flags: ['possible_duplicate'],
+      amount: -275,
+      category_id: 'groceries',
+    })
+    expect(accountRepo.updateBalance).not.toHaveBeenCalled()
+  })
+
+  it('preserves MCP review provenance after confirmation', async () => {
+    const accounts = { 'account-1': makeAccount() }
+    const transactions: Record<string, Transaction> = {
+      'tx-1': {
+        id: 'tx-1',
+        account_id: 'account-1',
+        amount: -250,
+        date: '2000-01-01',
+        status: 'pending',
+        pending_kind: 'mcp_review',
+        review_source: 'chatgpt_mcp',
+        review_batch_id: 'batch-1',
+        review_flags: ['possible_duplicate'],
+      },
+    }
+    const { service } = createService(transactions, accounts)
+
+    const result = await service.confirmTransaction('tx-1')
+
+    expect(result).toMatchObject({
+      status: 'posted',
+      pending_kind: 'mcp_review',
+      review_source: 'chatgpt_mcp',
+      review_batch_id: 'batch-1',
+      review_flags: ['possible_duplicate'],
+    })
+    expect(accounts['account-1'].balance).toBe(750)
   })
 })

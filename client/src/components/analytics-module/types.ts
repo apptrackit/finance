@@ -1,3 +1,5 @@
+import type { PendingKind, ReviewSource } from '../../lib/transaction-review'
+
 export type Transaction = {
   id: string
   account_id: string
@@ -7,6 +9,10 @@ export type Transaction = {
   date: string
   linked_transaction_id?: string
   status?: 'posted' | 'pending' | 'cancelled'
+  pending_kind?: PendingKind | null
+  review_source?: ReviewSource | null
+  review_batch_id?: string | null
+  review_flags?: unknown
 }
 
 export type Category = {

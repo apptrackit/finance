@@ -1,9 +1,17 @@
-import type { AccountRow, BudgetRow, CategoryRow, Env, InvestmentTransactionRow, RecurringScheduleRow, TransactionRow } from './types'
+import type { AccountRow, BudgetRow, CanonicalReviewDraft, CategoryRow, Env, InvestmentTransactionRow, RecurringScheduleRow, ReviewDraftInput, ReviewDraftProposalPayload, TransactionRow } from './types'
 import { addUtcDays, daysBetween, periodEndDates, recurringDates } from './date-series'
 import { assertDate, assertDateRange, clampLimit, decodeCursor, defaultMonthRange, encodeCursor, enumValue, optionalDate, previousRange, stringArray } from './validation'
+import { signProposal, verifyProposal } from './review-drafts'
 
 type Rates = { values: Record<string, number>; available: boolean }
 type LiveQuote = { price: number; currency: string; marketState: string | null }
+type DuplicateCandidate = Pick<TransactionRow, 'id' | 'date' | 'amount' | 'description' | 'status' | 'pending_kind'>
+type ReviewDraftResultRow = TransactionRow & {
+  account_name: string
+  account_currency: string
+  category_name?: string | null
+  category_type?: 'income' | 'expense' | null
+}
 
 function bool(value: number | boolean | undefined) {
   return value === true || value === 1
@@ -103,17 +111,223 @@ export class FinanceService {
     return {
       as_of: new Date().toISOString(),
       default_currency: 'HUF',
-      supported_currencies: ['HUF', 'EUR', 'USD', 'GBP', 'CHF', 'PLN', 'CZK', 'RON'],
+      supported_currencies: ['HUF', 'EUR', 'USD', 'GBP', 'CHF', 'PLN', 'CZK', 'RON', 'MXN'],
       available_date_range: { start_date: range?.min_date || null, end_date: range?.max_date || null },
       accounts: accounts.map(a => ({ id: a.id, name: a.name, type: a.type, currency: a.currency, excluded_from_net_worth: bool(a.exclude_from_net_worth), excluded_from_cash_balance: bool(a.exclude_from_cash_balance), locked: bool(a.is_locked) })),
       categories,
       semantics: {
         posted_transactions_affect_balances: true,
-        pending_transactions_are_projected_only: true,
+        pending_transactions_do_not_affect_balances: true,
+        upcoming_pending_transactions_are_projected: true,
+        mcp_review_drafts_require_manual_app_confirmation: true,
+        mcp_review_drafts_affect_balances_or_projections: false,
         linked_transactions_are_transfers: true,
         investment_account_balance_meaning: 'quantity for market-priced assets; monetary balance for manual assets',
       },
     }
+  }
+
+  private async assertReviewDraftDimensions(items: CanonicalReviewDraft[]) {
+    const [accounts, categories] = await Promise.all([this.accounts(), this.categories()])
+    const accountMap = new Map(accounts.map(account => [account.id, account]))
+    const categoryMap = new Map(categories.map(category => [category.id, category]))
+    items.forEach((item, index) => {
+      const account = accountMap.get(item.account_id)
+      if (!account) throw new Error(`items[${index}].account_id does not identify an existing account`)
+      if (bool(account.is_locked)) throw new Error(`items[${index}].account_id identifies locked account "${account.name}"`)
+      if (account.type === 'investment') throw new Error(`items[${index}].account_id identifies an investment account; v1 supports only income and expenses on cash or credit accounts`)
+      if (item.category_id) {
+        const category = categoryMap.get(item.category_id)
+        if (!category) throw new Error(`items[${index}].category_id does not identify an existing category`)
+        if (category.type !== item.type) throw new Error(`items[${index}].category_id is an ${category.type} category but the draft type is ${item.type}`)
+      }
+    })
+    return { accountMap, categoryMap }
+  }
+
+  private async duplicateCandidates(item: CanonicalReviewDraft) {
+    return (await this.env.DB.prepare(
+      "SELECT id, date, amount, description, status, pending_kind FROM transactions WHERE account_id = ? AND ABS(amount - ?) < 0.000000001 AND date >= date(?, '-3 days') AND date <= date(?, '+3 days') AND COALESCE(status, 'posted') != 'cancelled' AND linked_transaction_id IS NULL ORDER BY date DESC, rowid DESC LIMIT 5"
+    ).bind(item.account_id, item.signed_amount, item.date, item.date).all<DuplicateCandidate>()).results
+  }
+
+  async prepareReviewDrafts(args: Record<string, unknown>) {
+    const inputs = args.items as ReviewDraftInput[]
+    if (!Array.isArray(inputs) || inputs.length < 1 || inputs.length > 20) throw new Error('items must contain from 1 to 20 transactions')
+    const items: CanonicalReviewDraft[] = inputs.map((input, index) => {
+      const type = input.type
+      if (type !== 'income' && type !== 'expense') throw new Error(`items[${index}].type must be income or expense`)
+      if (typeof input.amount !== 'number' || !Number.isFinite(input.amount) || input.amount <= 0) throw new Error(`items[${index}].amount must be a positive finite number`)
+      if (input.amount > 1_000_000_000_000_000) throw new Error(`items[${index}].amount is too large`)
+      const accountId = typeof input.account_id === 'string' ? input.account_id.trim() : ''
+      if (!accountId) throw new Error(`items[${index}].account_id is required`)
+      const categoryId = typeof input.category_id === 'string' && input.category_id.trim() ? input.category_id.trim() : null
+      const description = typeof input.description === 'string' && input.description.trim() ? input.description.trim() : null
+      if (description && description.length > 500) throw new Error(`items[${index}].description must be at most 500 characters`)
+      const date = assertDate(input.date, `items[${index}].date`)
+      return {
+        draft_id: crypto.randomUUID(),
+        type,
+        amount: input.amount,
+        signed_amount: type === 'income' ? input.amount : -input.amount,
+        account_id: accountId,
+        category_id: categoryId,
+        description,
+        date,
+        exclude_from_estimate: input.exclude_from_estimate === true,
+        review_flags: [],
+      }
+    })
+    const identities = new Map<string, number[]>()
+    items.forEach((item, index) => {
+      const identity = JSON.stringify({
+        type: item.type, amount: item.amount, account_id: item.account_id, category_id: item.category_id,
+        description: item.description, date: item.date, exclude_from_estimate: item.exclude_from_estimate,
+      })
+      identities.set(identity, [...(identities.get(identity) || []), index])
+    })
+    const inProposalDuplicates = new Set<number>()
+    for (const indexes of identities.values()) {
+      if (indexes.length < 2) continue
+      indexes.forEach(index => {
+        inProposalDuplicates.add(index)
+        items[index].review_flags.push('possible_duplicate')
+      })
+    }
+    const { accountMap, categoryMap } = await this.assertReviewDraftDimensions(items)
+    const duplicates = await Promise.all(items.map(item => this.duplicateCandidates(item)))
+    duplicates.forEach((matches, index) => {
+      if (matches.length && !items[index].review_flags.includes('possible_duplicate')) items[index].review_flags.push('possible_duplicate')
+    })
+    const batchId = crypto.randomUUID()
+    const { payload, token } = await signProposal(this.env.MCP_PROPOSAL_SECRET, batchId, items)
+    const preview = items.map((item, index) => {
+      const account = accountMap.get(item.account_id)!
+      const category = item.category_id ? categoryMap.get(item.category_id)! : null
+      return {
+        item_number: index + 1,
+        type: item.type,
+        amount: item.amount,
+        signed_amount: item.signed_amount,
+        date: item.date,
+        account_id: account.id,
+        account_name: account.name,
+        currency: account.currency,
+        category_id: category?.id || null,
+        category_name: category?.name || null,
+        description: item.description,
+        exclude_from_estimate: item.exclude_from_estimate,
+        warnings: item.review_flags,
+        duplicate_candidates: duplicates[index].map(candidate => ({
+          transaction_id: candidate.id,
+          date: candidate.date,
+          amount: Math.abs(candidate.amount),
+          signed_amount: candidate.amount,
+          status: candidate.status || 'posted',
+          pending_kind: candidate.status === 'pending' ? candidate.pending_kind || 'upcoming' : null,
+          description: candidate.description || null,
+          description_is_untrusted_data: true,
+        })),
+      }
+    })
+    const warnings = preview.flatMap((item, index) => {
+      const messages: string[] = []
+      if (duplicates[index].length) messages.push(`Item ${item.item_number} may duplicate an existing transaction; this warning does not block draft creation.`)
+      if (inProposalDuplicates.has(index)) messages.push(`Item ${item.item_number} is identical to another item in this proposal; this warning does not block draft creation.`)
+      return messages
+    })
+    return {
+      as_of: new Date().toISOString(),
+      proposal_id: payload.batch_id,
+      expires_at: new Date(payload.expires_at).toISOString(),
+      expires_in_seconds: Math.floor((payload.expires_at - payload.issued_at) / 1_000),
+      item_count: items.length,
+      preview,
+      warnings,
+      confirmation_required: true,
+      proposal_token: token,
+      next_action: 'Show the complete preview to the user and ask for explicit confirmation. Only after confirmation, call create_mcp_transaction_drafts with this exact proposal_token.',
+      effect: 'Preparation is read-only. Creation can only make MCP review drafts; it never posts transactions or changes account balances.',
+    }
+  }
+
+  private async reviewDraftRows(batchId: string) {
+    return (await this.env.DB.prepare(
+      "SELECT t.*, a.name AS account_name, a.currency AS account_currency, c.name AS category_name, c.type AS category_type FROM transactions t JOIN accounts a ON a.id = t.account_id LEFT JOIN categories c ON c.id = t.category_id WHERE t.review_batch_id = ? AND t.pending_kind = 'mcp_review' AND t.review_source = 'chatgpt_mcp' ORDER BY t.created_at ASC, t.rowid ASC"
+    ).bind(batchId).all<ReviewDraftResultRow>()).results
+  }
+
+  private reviewDraftCreationResult(payload: ReviewDraftProposalPayload, rows: ReviewDraftResultRow[], idempotentReplay: boolean) {
+    return {
+      as_of: new Date().toISOString(),
+      batch_id: payload.batch_id,
+      item_count: rows.length,
+      idempotent_replay: idempotentReplay,
+      result: 'mcp_review_drafts_created',
+      drafts: rows.map(row => {
+        let reviewFlags: string[] = []
+        try {
+          const parsed = JSON.parse(row.review_flags || '[]')
+          if (Array.isArray(parsed)) reviewFlags = parsed.filter(flag => typeof flag === 'string')
+        } catch { /* Invalid legacy flags are returned as an empty list. */ }
+        return {
+          id: row.id,
+          type: row.amount > 0 ? 'income' : 'expense',
+          amount: Math.abs(row.amount),
+          signed_amount: row.amount,
+          date: row.date,
+          account_id: row.account_id,
+          account_name: row.account_name,
+          currency: row.account_currency,
+          category_id: row.category_id || null,
+          category_name: row.category_name || null,
+          description: row.description || null,
+          exclude_from_estimate: bool(row.exclude_from_estimate),
+          status: row.status || 'pending',
+          pending_kind: row.pending_kind || 'mcp_review',
+          review_source: row.review_source || 'chatgpt_mcp',
+          review_batch_id: row.review_batch_id || payload.batch_id,
+          review_flags: reviewFlags,
+        }
+      }),
+      effect: 'These are MCP review drafts only. No account balance was changed and no transaction was posted.',
+      next_action: 'Review each draft in the Finance Manager MCP Review section. Edit, confirm, or decline it there.',
+    }
+  }
+
+  async createReviewDrafts(args: Record<string, unknown>) {
+    const token = String(args.proposal_token || '')
+    const payload = await verifyProposal(this.env.MCP_PROPOSAL_SECRET, token)
+    const now = Date.now()
+    if (payload.issued_at > now + 60_000) throw new Error('proposal_token was issued too far in the future')
+    const existing = await this.env.DB.prepare('SELECT id, proposal_hash, created_at FROM mcp_draft_batches WHERE id = ?').bind(payload.batch_id).first<{ id: string; proposal_hash: string; created_at: number }>()
+    if (existing) {
+      if (existing.proposal_hash !== payload.proposal_hash) throw new Error('proposal_token conflicts with the existing MCP draft batch')
+      return this.reviewDraftCreationResult(payload, await this.reviewDraftRows(payload.batch_id), true)
+    }
+    if (now >= payload.expires_at) throw new Error('proposal_token has expired; prepare a fresh preview and obtain explicit user confirmation again')
+    payload.items.forEach((item, index) => assertDate(item.date, `proposal_token.items[${index}].date`))
+    await this.assertReviewDraftDimensions(payload.items)
+    const createdAt = Date.now()
+    const statements: D1PreparedStatement[] = [
+      this.env.DB.prepare('INSERT INTO mcp_draft_batches (id, proposal_hash, created_at) VALUES (?, ?, ?)').bind(payload.batch_id, payload.proposal_hash, createdAt),
+    ]
+    for (const item of payload.items) {
+      statements.push(this.env.DB.prepare(
+        "INSERT INTO transactions (id, account_id, category_id, amount, description, date, linked_transaction_id, exclude_from_estimate, status, confirmed_at, cancelled_at, created_at, updated_at, pending_kind, review_source, review_batch_id, review_flags) VALUES (?, ?, ?, ?, ?, ?, NULL, ?, 'pending', NULL, NULL, ?, ?, 'mcp_review', 'chatgpt_mcp', ?, ?)"
+      ).bind(item.draft_id, item.account_id, item.category_id, item.signed_amount, item.description, item.date, item.exclude_from_estimate ? 1 : 0, createdAt, createdAt, payload.batch_id, JSON.stringify(item.review_flags)))
+      statements.push(this.env.DB.prepare(
+        "INSERT INTO audit_log (id, action, entity, entity_id, details, created_at) VALUES (?, 'CREATE', 'transaction', ?, ?, ?)"
+      ).bind(crypto.randomUUID(), item.draft_id, JSON.stringify({ origin: 'chatgpt_mcp', batch_id: payload.batch_id }), createdAt))
+    }
+    try {
+      await this.env.DB.batch(statements)
+    } catch (error) {
+      const raced = await this.env.DB.prepare('SELECT id, proposal_hash, created_at FROM mcp_draft_batches WHERE id = ?').bind(payload.batch_id).first<{ id: string; proposal_hash: string; created_at: number }>()
+      if (!raced || raced.proposal_hash !== payload.proposal_hash) throw error
+      return this.reviewDraftCreationResult(payload, await this.reviewDraftRows(payload.batch_id), true)
+    }
+    return this.reviewDraftCreationResult(payload, await this.reviewDraftRows(payload.batch_id), false)
   }
 
   async accountsSummary(args: Record<string, unknown>) {
@@ -237,7 +451,13 @@ export class FinanceService {
     return {
       as_of: new Date().toISOString(), filters: { start_date: startDate || null, end_date: endDate || null, account_ids: accountIds || [], category_ids: categoryIds || [], statuses, type: type || null, text: text || null, include_transfers: includeTransfers },
       sort: { by: sortBy, order: sortOrder },
-      transactions: results.slice(0, limit).map(row => ({ ...row, is_transfer: Boolean(row.linked_transaction_id), description_is_untrusted_data: true })),
+      transactions: results.slice(0, limit).map(row => ({
+        ...row,
+        pending_kind: row.status === 'pending' ? row.pending_kind || 'upcoming' : null,
+        requires_manual_review: row.status === 'pending' && row.pending_kind === 'mcp_review',
+        is_transfer: Boolean(row.linked_transaction_id),
+        description_is_untrusted_data: true,
+      })),
       pagination: { limit, returned: Math.min(limit, results.length), next_cursor: hasMore ? encodeCursor(offset + limit) : null, truncated: hasMore },
     }
   }
@@ -298,7 +518,7 @@ export class FinanceService {
     const includeProjected = args.include_projected === true
     const [accounts, posted, pendingResult, rates] = await Promise.all([
       this.accounts(), this.postedBetween(startDate, endDate),
-      includeProjected ? this.env.DB.prepare("SELECT * FROM transactions WHERE status = 'pending' AND date >= ? AND date <= ? ORDER BY date").bind(startDate, endDate).all<TransactionRow>() : Promise.resolve({ results: [] as TransactionRow[] }),
+      includeProjected ? this.env.DB.prepare("SELECT * FROM transactions WHERE status = 'pending' AND pending_kind = 'upcoming' AND date >= ? AND date <= ? ORDER BY date").bind(startDate, endDate).all<TransactionRow>() : Promise.resolve({ results: [] as TransactionRow[] }),
       this.rates(currency),
     ])
     const accountMap = new Map(accounts.map(account => [account.id, account]))
@@ -391,7 +611,7 @@ export class FinanceService {
         this.env.DB.prepare('SELECT account_id FROM budget_accounts WHERE budget_id = ?').bind(budget.id).all<{ account_id: string }>(),
         this.env.DB.prepare('SELECT category_id FROM budget_categories WHERE budget_id = ?').bind(budget.id).all<{ category_id: string }>(),
         spendEndDate ? this.postedBetween(budget.start_date, spendEndDate) : Promise.resolve([] as TransactionRow[]),
-        this.env.DB.prepare("SELECT * FROM transactions WHERE status = 'pending' AND date >= ? AND date <= ? ORDER BY date").bind(pendingStartDate, budget.end_date).all<TransactionRow>(),
+        this.env.DB.prepare("SELECT * FROM transactions WHERE status = 'pending' AND pending_kind = 'upcoming' AND date >= ? AND date <= ? ORDER BY date").bind(pendingStartDate, budget.end_date).all<TransactionRow>(),
       ])
       const scopedBudget = { ...budget, account_ids: accountIds.results.map(row => row.account_id), category_ids: categoryIds.results.map(row => row.category_id) }
       let spent = 0
@@ -442,7 +662,7 @@ export class FinanceService {
     const [accounts, categories, schedules, pending, rates] = await Promise.all([
       this.accounts(), this.categories(),
       this.env.DB.prepare('SELECT * FROM recurring_schedules WHERE is_active = 1 ORDER BY created_at DESC').all<RecurringScheduleRow>(),
-      this.env.DB.prepare("SELECT * FROM transactions WHERE status = 'pending' AND date >= ? AND date <= ? ORDER BY date ASC, rowid DESC LIMIT 101").bind(startDate, endDate).all<TransactionRow>(),
+      this.env.DB.prepare("SELECT * FROM transactions WHERE status = 'pending' AND pending_kind = 'upcoming' AND date >= ? AND date <= ? ORDER BY date ASC, rowid DESC LIMIT 101").bind(startDate, endDate).all<TransactionRow>(),
       this.rates(currency),
     ])
     const accountMap = new Map(accounts.map(account => [account.id, account]))
@@ -532,7 +752,7 @@ export class FinanceService {
     const earliest = ranges[0].start
     const [accounts, categories, transactions, pending, schedules, rates] = await Promise.all([
       this.accounts(), this.categories(), this.postedBetween(earliest, asOf),
-      this.env.DB.prepare("SELECT * FROM transactions WHERE status = 'pending' AND date > ? AND date <= ? ORDER BY date").bind(asOf, currentEndDate.toISOString().slice(0, 10)).all<TransactionRow>(),
+      this.env.DB.prepare("SELECT * FROM transactions WHERE status = 'pending' AND pending_kind = 'upcoming' AND date > ? AND date <= ? ORDER BY date").bind(asOf, currentEndDate.toISOString().slice(0, 10)).all<TransactionRow>(),
       this.env.DB.prepare('SELECT * FROM recurring_schedules WHERE is_active = 1').all<RecurringScheduleRow>(),
       this.rates(currency),
     ])

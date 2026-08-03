@@ -2,6 +2,7 @@ export type Env = {
   DB: D1Database
   CF_ACCESS_TEAM_DOMAIN: string
   CF_ACCESS_AUD: string
+  MCP_PROPOSAL_SECRET: string
   ALLOWED_EMAIL?: string
   DISABLE_ACCESS_AUTH?: string
 }
@@ -31,8 +32,46 @@ export type TransactionRow = {
   exclude_from_estimate?: number | boolean
   is_recurring?: number | boolean
   status?: 'posted' | 'pending' | 'cancelled' | null
+  pending_kind?: 'upcoming' | 'mcp_review' | null
+  review_source?: 'manual' | 'chatgpt_mcp' | null
+  review_batch_id?: string | null
+  review_flags?: string | null
   created_at?: number | null
   updated_at?: number | null
+}
+
+export type ReviewDraftType = 'income' | 'expense'
+
+export type ReviewDraftInput = {
+  type: ReviewDraftType
+  amount: number
+  account_id: string
+  date: string
+  category_id?: string | null
+  description?: string | null
+  exclude_from_estimate?: boolean
+}
+
+export type CanonicalReviewDraft = {
+  draft_id: string
+  type: ReviewDraftType
+  amount: number
+  signed_amount: number
+  account_id: string
+  category_id: string | null
+  description: string | null
+  date: string
+  exclude_from_estimate: boolean
+  review_flags: string[]
+}
+
+export type ReviewDraftProposalPayload = {
+  version: 1
+  batch_id: string
+  issued_at: number
+  expires_at: number
+  proposal_hash: string
+  items: CanonicalReviewDraft[]
 }
 
 export type BudgetRow = {
