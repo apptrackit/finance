@@ -23,9 +23,8 @@ export class TransactionRepository {
 
     try {
       const parsed: unknown = JSON.parse(value)
-      return Array.isArray(parsed) && parsed.every(flag => typeof flag === 'string')
-        ? parsed
-        : []
+      if (!Array.isArray(parsed)) return []
+      return parsed.filter((flag): flag is string => typeof flag === 'string')
     } catch {
       return []
     }
