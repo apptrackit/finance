@@ -98,8 +98,11 @@ This script handles:
 2. **API deployment** — Deploys backend to Cloudflare Workers
 3. **Client build & deploy** — Builds React app and deploys to Cloudflare Pages
 
-On its first run it also asks whether to deploy the read-only Finance MCP
-Worker. That choice is stored privately in `.deploy-config`; use
+On its first run it also asks whether to deploy the Finance MCP Worker. The
+Worker provides read-only analysis tools plus review-only transaction draft
+creation; MCP-created drafts never affect balances until they are confirmed in
+the Finance Manager UI. That deployment choice is stored privately in
+`.deploy-config`; use
 `npm run deploy:mcp` to include MCP immediately, or `npm run deploy -- --no-mcp`
 to change the saved default. See [the MCP deployment guide](mcp/README.md).
 

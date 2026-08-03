@@ -12,6 +12,7 @@ import { usePrivacy } from './context/PrivacyContext'
 import { startOfMonth, endOfMonth, format } from 'date-fns'
 import { Budget } from './components/budget-module/Budget'
 import { useFinanceData } from './hooks/useFinanceData'
+import { isUpcomingProjectionTransaction } from './lib/transaction-review'
 
 type View = 'dashboard' | 'analytics' | 'settings' | 'investments' | 'recurring' | 'budget'
 
@@ -120,7 +121,9 @@ function App() {
       return sum + account.balance / rate
     }, 0)
 
-  const pendingPeriodTransactions = upcomingTransactions.filter(t =>
+  const projectableUpcomingTransactions = upcomingTransactions.filter(isUpcomingProjectionTransaction)
+
+  const pendingPeriodTransactions = projectableUpcomingTransactions.filter(t =>
     t.date >= dateRange.startDate && t.date <= dateRange.endDate
   )
 
@@ -140,14 +143,14 @@ function App() {
     })
     .reduce((sum, t) => sum + Math.abs(convertToMasterCurrency(t.amount, t.account_id)), 0)
 
-  const pendingCashDelta = upcomingTransactions
+  const pendingCashDelta = projectableUpcomingTransactions
     .filter(t => {
       const account = accounts.find(a => a.id === t.account_id)
       return account?.type === 'cash' && !(account.exclude_from_cash_balance && account.exclude_from_net_worth)
     })
     .reduce((sum, t) => sum + convertToMasterCurrency(t.amount, t.account_id), 0)
 
-  const pendingNetWorthDelta = upcomingTransactions
+  const pendingNetWorthDelta = projectableUpcomingTransactions
     .filter(t => {
       const account = accounts.find(a => a.id === t.account_id)
       return account?.type !== 'investment' && !account?.exclude_from_net_worth

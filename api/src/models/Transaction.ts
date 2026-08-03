@@ -1,4 +1,6 @@
 export type TransactionStatus = 'posted' | 'pending' | 'cancelled'
+export type TransactionPendingKind = 'upcoming' | 'mcp_review'
+export type TransactionReviewSource = 'manual' | 'chatgpt_mcp'
 
 export interface Transaction {
   id: string
@@ -12,6 +14,10 @@ export interface Transaction {
   exclude_from_estimate?: boolean
   is_recurring?: boolean
   status?: TransactionStatus
+  pending_kind?: TransactionPendingKind
+  review_source?: TransactionReviewSource
+  review_batch_id?: string | null
+  review_flags?: string[]
   confirmed_at?: number | null
   cancelled_at?: number | null
   created_at?: number | null

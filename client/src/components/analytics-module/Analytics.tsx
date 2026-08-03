@@ -18,6 +18,7 @@ import { IncomeBreakdownChart } from './IncomeBreakdownChart'
 import { TopExpensesList } from './TopExpensesList'
 import { PredictionChart } from './PredictionChart'
 import type { Transaction, Category, Account, TimePeriod, SpendingEstimate, ChartDataPoint, TrendDataPoint } from './types'
+import { isUpcomingProjectionTransaction } from '../../lib/transaction-review'
 
 type AnalyticsProps = {
   transactions: Transaction[]
@@ -89,12 +90,17 @@ export function Analytics({
 
   const show = (id: WidgetId) => widgetVisibility[id]
 
+  const projectableUpcomingTransactions = useMemo(
+    () => upcomingTransactions.filter(isUpcomingProjectionTransaction),
+    [upcomingTransactions]
+  )
+
   const transactionsForAnalytics = useMemo(() => {
     if (projectionMode === 'projected') {
-      return [...transactions, ...upcomingTransactions]
+      return [...transactions, ...projectableUpcomingTransactions]
     }
     return transactions
-  }, [projectionMode, transactions, upcomingTransactions])
+  }, [projectionMode, transactions, projectableUpcomingTransactions])
 
   const customDateRange = useMemo(() => {
     if (period === 'month') {
@@ -734,7 +740,7 @@ export function Analytics({
                   : 'text-muted-foreground hover:text-foreground hover:bg-secondary/70'
               }`}
             >
-              Projected{upcomingTransactions.length > 0 ? ` (${upcomingTransactions.length})` : ''}
+              Projected{projectableUpcomingTransactions.length > 0 ? ` (${projectableUpcomingTransactions.length})` : ''}
             </button>
           </div>
         </div>

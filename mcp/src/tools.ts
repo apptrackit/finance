@@ -1,12 +1,50 @@
 import { FinanceService } from './finance-service'
 
 const READ_ONLY = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false } as const
+const DRAFT_WRITE = { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false } as const
 const DATE = { type: 'string', pattern: '^\\d{4}-\\d{2}-\\d{2}$', description: 'Calendar date in YYYY-MM-DD format.' } as const
 const CURRENCY = { type: 'string', pattern: '^[A-Za-z]{3}$', default: 'HUF', description: 'Three-letter reporting currency code. Case-insensitive.' } as const
 const RECORD = { type: 'object', properties: {}, additionalProperties: true } as const
 const RECORDS = { type: 'array', items: RECORD } as const
 const STRINGS = { type: 'array', items: { type: 'string' } } as const
 const WARNINGS = { type: 'array', items: { type: 'string' } } as const
+const NULLABLE_STRING = { type: ['string', 'null'] } as const
+
+const DUPLICATE_CANDIDATE = {
+  type: 'object',
+  required: ['transaction_id', 'date', 'amount', 'signed_amount', 'status', 'pending_kind', 'description', 'description_is_untrusted_data'],
+  properties: {
+    transaction_id: { type: 'string' }, date: { type: 'string' }, amount: { type: 'number' }, signed_amount: { type: 'number' },
+    status: { type: 'string' }, pending_kind: NULLABLE_STRING, description: NULLABLE_STRING,
+    description_is_untrusted_data: { type: 'boolean' },
+  },
+  additionalProperties: false,
+} as const
+
+const REVIEW_PREVIEW_ITEM = {
+  type: 'object',
+  required: ['item_number', 'type', 'amount', 'signed_amount', 'date', 'account_id', 'account_name', 'currency', 'category_id', 'category_name', 'description', 'exclude_from_estimate', 'warnings', 'duplicate_candidates'],
+  properties: {
+    item_number: { type: 'integer' }, type: { type: 'string', enum: ['income', 'expense'] }, amount: { type: 'number' }, signed_amount: { type: 'number' }, date: { type: 'string' },
+    account_id: { type: 'string' }, account_name: { type: 'string' }, currency: { type: 'string' }, category_id: NULLABLE_STRING,
+    category_name: NULLABLE_STRING, description: NULLABLE_STRING, exclude_from_estimate: { type: 'boolean' }, warnings: WARNINGS,
+    duplicate_candidates: { type: 'array', items: DUPLICATE_CANDIDATE },
+  },
+  additionalProperties: false,
+} as const
+
+const CREATED_REVIEW_DRAFT = {
+  type: 'object',
+  required: ['id', 'type', 'amount', 'signed_amount', 'date', 'account_id', 'account_name', 'currency', 'category_id', 'category_name', 'description', 'exclude_from_estimate', 'status', 'pending_kind', 'review_source', 'review_batch_id', 'review_flags'],
+  properties: {
+    id: { type: 'string' }, type: { type: 'string', enum: ['income', 'expense'] }, amount: { type: 'number' }, signed_amount: { type: 'number' }, date: { type: 'string' },
+    account_id: { type: 'string' }, account_name: { type: 'string' }, currency: { type: 'string' }, category_id: NULLABLE_STRING,
+    category_name: NULLABLE_STRING, description: NULLABLE_STRING, exclude_from_estimate: { type: 'boolean' }, status: { type: 'string' },
+    pending_kind: { type: 'string', enum: ['mcp_review'] }, review_source: { type: 'string', enum: ['chatgpt_mcp'] },
+    review_batch_id: { type: 'string' }, review_flags: WARNINGS,
+  },
+  additionalProperties: false,
+} as const
 
 function output(required: readonly string[], properties: Record<string, unknown>) {
   return { type: 'object', required, properties, additionalProperties: false } as const
@@ -23,6 +61,59 @@ export const TOOL_DEFINITIONS = [
       available_date_range: RECORD, accounts: RECORDS, categories: RECORDS, semantics: RECORD,
     }),
     annotations: READ_ONLY,
+  },
+  {
+    name: 'prepare_mcp_transaction_drafts',
+    title: 'Preview MCP transaction drafts',
+    description: 'Use this before creating any finance draft. Validate 1–20 income or expense transactions, resolve account/category names, and show the complete returned preview to the user. Ask for explicit confirmation of every item. This is read-only and never saves or posts transactions. One item always represents one transaction; do not split a receipt automatically. Duplicate-looking items are warnings only and must not be silently removed. Prefer a logical category when supported by the available dimensions, but leave category_id null rather than guessing when uncertain.',
+    inputSchema: {
+      type: 'object',
+      required: ['items'],
+      properties: {
+        items: {
+          type: 'array', minItems: 1, maxItems: 20,
+          items: {
+            type: 'object',
+            required: ['type', 'amount', 'account_id', 'date'],
+            properties: {
+              type: { type: 'string', enum: ['income', 'expense'], description: 'Controls the sign; amount itself must always be positive.' },
+              amount: { type: 'number', exclusiveMinimum: 0, maximum: 1_000_000_000_000_000, description: 'Positive amount in the selected account currency.' },
+              account_id: { type: 'string', minLength: 1, maxLength: 128 },
+              date: DATE,
+              category_id: { type: ['string', 'null'], minLength: 1, maxLength: 128, description: 'Optional. Must match the income/expense type. Use null when categorization is genuinely uncertain.' },
+              description: { type: ['string', 'null'], maxLength: 500 },
+              exclude_from_estimate: { type: 'boolean', default: false },
+            },
+            additionalProperties: false,
+          },
+        },
+      },
+      additionalProperties: false,
+    },
+    outputSchema: output(['as_of', 'proposal_id', 'expires_at', 'expires_in_seconds', 'item_count', 'preview', 'warnings', 'confirmation_required', 'proposal_token', 'next_action', 'effect'], {
+      as_of: { type: 'string' }, proposal_id: { type: 'string' }, expires_at: { type: 'string' }, expires_in_seconds: { type: 'integer' },
+      item_count: { type: 'integer' }, preview: { type: 'array', items: REVIEW_PREVIEW_ITEM }, warnings: WARNINGS,
+      confirmation_required: { type: 'boolean' }, proposal_token: { type: 'string' }, next_action: { type: 'string' }, effect: { type: 'string' },
+    }),
+    annotations: READ_ONLY,
+    _meta: { 'openai/toolInvocation/invoking': 'Preparing MCP review preview…', 'openai/toolInvocation/invoked': 'MCP review preview ready' },
+  },
+  {
+    name: 'create_mcp_transaction_drafts',
+    title: 'Create MCP review drafts',
+    description: 'Use this only after prepare_mcp_transaction_drafts and only after the user explicitly confirms the complete returned preview. Pass the exact unmodified proposal_token and no transaction fields. This idempotent tool creates pending MCP review drafts only: it cannot post, confirm, edit, decline, delete, transfer, invest, or change account balances. Say “MCP review drafts created,” never say the transactions were saved or posted, and direct the user to the Finance Manager MCP Review section.',
+    inputSchema: {
+      type: 'object', required: ['proposal_token'],
+      properties: { proposal_token: { type: 'string', minLength: 1, maxLength: 50_000, description: 'Exact short-lived token returned by prepare_mcp_transaction_drafts.' } },
+      additionalProperties: false,
+    },
+    outputSchema: output(['as_of', 'batch_id', 'item_count', 'idempotent_replay', 'result', 'drafts', 'effect', 'next_action'], {
+      as_of: { type: 'string' }, batch_id: { type: 'string' }, item_count: { type: 'integer' }, idempotent_replay: { type: 'boolean' },
+      result: { type: 'string', enum: ['mcp_review_drafts_created'] }, drafts: { type: 'array', items: CREATED_REVIEW_DRAFT },
+      effect: { type: 'string' }, next_action: { type: 'string' },
+    }),
+    annotations: DRAFT_WRITE,
+    _meta: { 'openai/toolInvocation/invoking': 'Creating MCP review drafts…', 'openai/toolInvocation/invoked': 'MCP review drafts created' },
   },
   {
     name: 'get_accounts_summary',
@@ -185,15 +276,33 @@ type JsonSchema = {
   enum?: readonly unknown[]
   additionalProperties?: boolean
   minimum?: number
+  exclusiveMinimum?: number
   maximum?: number
+  minLength?: number
   maxLength?: number
+  minItems?: number
   maxItems?: number
   pattern?: string
 }
 
+function hasType(schema: JsonSchema, type: string) {
+  return schema.type === type || (Array.isArray(schema.type) && schema.type.includes(type))
+}
+
+function matchesType(value: unknown, type: string) {
+  if (type === 'null') return value === null
+  if (type === 'array') return Array.isArray(value)
+  if (type === 'object') return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+  if (type === 'integer') return typeof value === 'number' && Number.isInteger(value)
+  if (type === 'number') return typeof value === 'number' && Number.isFinite(value)
+  return typeof value === type
+}
+
 function validateSchema(value: unknown, schema: JsonSchema, path = 'arguments'): void {
   if (schema.enum && !schema.enum.includes(value)) throw new Error(`${path} must be one of: ${schema.enum.join(', ')}`)
-  if (schema.type === 'object') {
+  const types = typeof schema.type === 'string' ? [schema.type] : schema.type
+  if (types && !types.some(type => matchesType(value, type))) throw new Error(`${path} must be ${types.join(' or ')}`)
+  if (hasType(schema, 'object') && value !== null && typeof value === 'object' && !Array.isArray(value)) {
     if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error(`${path} must be an object`)
     const record = value as Record<string, unknown>
     for (const key of schema.required || []) if (record[key] === undefined) throw new Error(`${path}.${key} is required`)
@@ -205,20 +314,27 @@ function validateSchema(value: unknown, schema: JsonSchema, path = 'arguments'):
       if (record[key] !== undefined) validateSchema(record[key], child, `${path}.${key}`)
     }
   }
-  if (schema.type === 'array') {
+  if (hasType(schema, 'array') && Array.isArray(value)) {
     if (!Array.isArray(value)) throw new Error(`${path} must be an array`)
+    if (schema.minItems !== undefined && value.length < schema.minItems) throw new Error(`${path} must contain at least ${schema.minItems} items`)
     if (schema.maxItems !== undefined && value.length > schema.maxItems) throw new Error(`${path} may contain at most ${schema.maxItems} items`)
     if (schema.items) value.forEach((item, index) => validateSchema(item, schema.items!, `${path}[${index}]`))
   }
-  if (schema.type === 'string') {
+  if (hasType(schema, 'string') && typeof value === 'string') {
     if (typeof value !== 'string') throw new Error(`${path} must be a string`)
+    if (schema.minLength !== undefined && value.length < schema.minLength) throw new Error(`${path} must be at least ${schema.minLength} characters`)
     if (schema.maxLength !== undefined && value.length > schema.maxLength) throw new Error(`${path} must be at most ${schema.maxLength} characters`)
     if (schema.pattern && !new RegExp(schema.pattern).test(value)) throw new Error(`${path} has an invalid format`)
   }
-  if (schema.type === 'boolean' && typeof value !== 'boolean') throw new Error(`${path} must be a boolean`)
-  if (schema.type === 'integer') {
+  if (hasType(schema, 'integer') && typeof value === 'number') {
     if (typeof value !== 'number' || !Number.isInteger(value)) throw new Error(`${path} must be an integer`)
     if (schema.minimum !== undefined && value < schema.minimum) throw new Error(`${path} must be at least ${schema.minimum}`)
+    if (schema.maximum !== undefined && value > schema.maximum) throw new Error(`${path} must be at most ${schema.maximum}`)
+  }
+  if (hasType(schema, 'number') && typeof value === 'number') {
+    if (!Number.isFinite(value)) throw new Error(`${path} must be a finite number`)
+    if (schema.minimum !== undefined && value < schema.minimum) throw new Error(`${path} must be at least ${schema.minimum}`)
+    if (schema.exclusiveMinimum !== undefined && value <= schema.exclusiveMinimum) throw new Error(`${path} must be greater than ${schema.exclusiveMinimum}`)
     if (schema.maximum !== undefined && value > schema.maximum) throw new Error(`${path} must be at most ${schema.maximum}`)
   }
 }
@@ -229,6 +345,8 @@ export async function callTool(service: FinanceService, name: string, args: Reco
   validateSchema(args, definition.inputSchema as JsonSchema)
   switch (name) {
     case 'list_finance_dimensions': return service.listDimensions()
+    case 'prepare_mcp_transaction_drafts': return service.prepareReviewDrafts(args)
+    case 'create_mcp_transaction_drafts': return service.createReviewDrafts(args)
     case 'get_accounts_summary': return service.accountsSummary(args)
     case 'get_finance_overview': return service.overview(args)
     case 'search_transactions': return service.searchTransactions(args)

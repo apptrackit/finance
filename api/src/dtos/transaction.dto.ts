@@ -1,4 +1,4 @@
-import { TransactionStatus } from '../models/Transaction'
+import { TransactionPendingKind, TransactionReviewSource, TransactionStatus } from '../models/Transaction'
 
 export interface CreateTransactionDto {
   account_id: string
@@ -36,6 +36,10 @@ export interface TransactionResponseDto {
   exclude_from_estimate?: boolean
   is_recurring?: boolean
   status: TransactionStatus
+  pending_kind: TransactionPendingKind
+  review_source: TransactionReviewSource
+  review_batch_id?: string | null
+  review_flags: string[]
   confirmed_at?: number | null
   cancelled_at?: number | null
   created_at?: number | null

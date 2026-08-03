@@ -19,7 +19,7 @@ const transactions: TransactionRow[] = [
   { id: 'expense', account_id: 'cash', category_id: 'food', amount: -200, date: '2026-07-06', status: 'posted' },
   { id: 'transfer', account_id: 'cash', amount: -100, date: '2026-07-07', status: 'posted', linked_transaction_id: 'transfer-other' },
   { id: 'investment', account_id: 'portfolio', amount: 50, date: '2026-07-08', status: 'posted' },
-  { id: 'pending', account_id: 'cash', category_id: 'food', amount: -75, date: '2026-07-20', status: 'pending' },
+  { id: 'pending', account_id: 'cash', category_id: 'food', amount: -75, date: '2026-07-20', status: 'pending', pending_kind: 'upcoming' },
 ]
 
 const budgets: BudgetRow[] = [{ id: 'monthly', name: 'Monthly', amount: 300, period: 'monthly', start_date: '2026-07-01', end_date: '2026-07-31', account_scope: 'all', category_scope: 'all', currency: 'HUF', created_at: 0, updated_at: 0 }]
@@ -51,7 +51,8 @@ function fakeDb() {
           if (sql.includes('FROM investment_transactions')) return { results: investmentTransactions as T[] }
           if (sql.includes('JOIN accounts a')) {
             const limit = Number(bindings.at(-2)); const offset = Number(bindings.at(-1))
-            const rows = transactions.filter(row => row.status === 'posted').slice(offset, offset + limit)
+            const requestedStatus = bindings.includes('pending') && !bindings.includes('posted') ? 'pending' : 'posted'
+            const rows = transactions.filter(row => row.status === requestedStatus).slice(offset, offset + limit)
             return { results: rows as T[] }
           }
           if (sql.includes("status = 'posted'") && sql.includes('date > ?')) {
@@ -64,7 +65,7 @@ function fakeDb() {
           }
           if (sql.includes("status = 'pending'")) {
             const [start, end] = bindings as string[]
-            return { results: transactions.filter(row => row.status === 'pending' && row.date >= start && (!end || row.date <= end)) as T[] }
+            return { results: transactions.filter(row => row.status === 'pending' && (!sql.includes("pending_kind = 'upcoming'") || (row.pending_kind || 'upcoming') === 'upcoming') && row.date >= start && (!end || row.date <= end)) as T[] }
           }
           return { results: [] as T[] }
         },
@@ -96,6 +97,11 @@ describe('FinanceService read-only calculations', () => {
     expect(result.accounts.find(row => row.id === 'portfolio')).toMatchObject({ investment_quantity: null, converted_balance: null })
   })
 
+  it('advertises MXN as a supported account and reporting currency', async () => {
+    const result = await service.listDimensions()
+    expect(result.supported_currencies).toContain('MXN')
+  })
+
   it('uses null rather than zero for an account balance with a missing exchange rate', async () => {
     accounts.push({ id: 'eur-cash', name: 'EUR cash', type: 'cash', balance: 100, currency: 'EUR' })
     try {
@@ -124,9 +130,39 @@ describe('FinanceService read-only calculations', () => {
     expect(result.transactions.every(row => row.description_is_untrusted_data)).toBe(true)
   })
 
+  it('marks pending MCP review rows as requiring manual review in transaction search', async () => {
+    transactions.push({ id: 'mcp-review', account_id: 'cash', category_id: 'food', amount: -25, date: '2026-07-10', status: 'pending', pending_kind: 'mcp_review', review_source: 'chatgpt_mcp' })
+    try {
+      const result = await service.searchTransactions({ filters: { statuses: ['pending'] } })
+      const rows = result.transactions as Array<Record<string, unknown>>
+      expect(rows.find(row => row.id === 'mcp-review')).toMatchObject({ pending_kind: 'mcp_review', requires_manual_review: true })
+      expect(rows.find(row => row.id === 'pending')).toMatchObject({ pending_kind: 'upcoming', requires_manual_review: false })
+    } finally {
+      transactions.pop()
+    }
+  })
+
   it('keeps projected cash flow separate from posted totals', async () => {
     const result = await service.cashflowTrend({ start_date: '2026-07-01', end_date: '2026-07-31', interval: 'month', include_projected: true, currency: 'HUF' })
     expect(result.series).toEqual([expect.objectContaining({ period: '2026-07', income: 500, expenses: 200, net_flow: 300, projected_expenses: 75, projected_net_flow: -75 })])
+  })
+
+  it('excludes MCP review drafts from every projection while retaining normal upcoming transactions', async () => {
+    transactions.push({ id: 'mcp-review', account_id: 'cash', category_id: 'food', amount: -900, date: '2026-07-20', status: 'pending', pending_kind: 'mcp_review', review_source: 'chatgpt_mcp' })
+    try {
+      const [cashflow, budget, recurring, spending] = await Promise.all([
+        service.cashflowTrend({ start_date: '2026-07-01', end_date: '2026-07-31', interval: 'month', include_projected: true, currency: 'HUF' }),
+        service.budgetStatus({ as_of: '2026-07-15', currency: 'HUF' }),
+        service.recurringForecast({ start_date: '2026-07-01', end_date: '2026-08-31', currency: 'HUF' }),
+        service.spendingForecast({ as_of: '2026-07-15', period: 'month', currency: 'HUF', lookback_periods: 1 }),
+      ])
+      expect(cashflow.series[0].projected_expenses).toBe(75)
+      expect(budget.budgets[0].pending_spend).toBe(75)
+      expect(recurring.summary.pending_expenses).toBe(75)
+      expect(spending.forecast.known_upcoming_expenses).toBe(125)
+    } finally {
+      transactions.pop()
+    }
   })
 
   it('reconstructs historical balances and respects cash exclusions', async () => {

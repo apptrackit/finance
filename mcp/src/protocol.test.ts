@@ -59,7 +59,7 @@ describe('MCP protocol surface', () => {
     expect(response.status).toBe(200)
   })
 
-  it('advertises the complete schema-described read-only finance surface', async () => {
+  it('advertises the complete schema-described finance surface with one non-destructive write tool', async () => {
     const response = await worker.fetch(new Request('http://localhost/mcp', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -69,6 +69,8 @@ describe('MCP protocol surface', () => {
 
     expect(body.result.tools.map(tool => tool.name)).toEqual([
       'list_finance_dimensions',
+      'prepare_mcp_transaction_drafts',
+      'create_mcp_transaction_drafts',
       'get_accounts_summary',
       'get_finance_overview',
       'search_transactions',
@@ -81,10 +83,24 @@ describe('MCP protocol surface', () => {
       'get_portfolio',
       'get_investment_activity',
     ])
-    expect(body.result.tools.every(tool => tool.annotations.readOnlyHint && !tool.annotations.destructiveHint)).toBe(true)
+    const create = body.result.tools.find(tool => tool.name === 'create_mcp_transaction_drafts')!
+    expect(body.result.tools.filter(tool => tool !== create).every(tool => tool.annotations.readOnlyHint)).toBe(true)
+    expect(create.annotations).toMatchObject({ readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false })
+    expect(body.result.tools.every(tool => !tool.annotations.destructiveHint)).toBe(true)
     expect(body.result.tools.every(tool => tool.description.startsWith('Use this'))).toBe(true)
     expect(body.result.tools.every(tool => tool.inputSchema && tool.outputSchema)).toBe(true)
     expect(() => JSON.stringify(body.result.tools)).not.toThrow()
+  })
+
+  it('instructs the model to preview, confirm, and describe creations as review drafts only', async () => {
+    const response = await worker.fetch(new Request('http://localhost/mcp', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 'instructions', method: 'initialize', params: {} }),
+    }), env)
+    const body = await response.json() as { result: { instructions: string } }
+    expect(body.result.instructions).toContain('ask for explicit confirmation')
+    expect(body.result.instructions).toContain('MCP review drafts created')
+    expect(body.result.instructions).toContain('never posts transactions or changes balances')
   })
 
   it('rejects unknown mutation tools without touching D1', async () => {
@@ -109,6 +125,26 @@ describe('MCP protocol surface', () => {
 
     expect(body.result.isError).toBe(true)
     expect(body.result.content[0].text).toContain('at most 100')
+  })
+
+  it('bounds draft batches and requires positive amounts before querying D1', async () => {
+    const response = await worker.fetch(new Request('http://localhost/mcp', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 'prepare-invalid', method: 'tools/call', params: { name: 'prepare_mcp_transaction_drafts', arguments: { items: [{ type: 'expense', amount: 0, account_id: 'cash', date: '2026-08-03' }] } } }),
+    }), env)
+    const body = await response.json() as { result: { isError: boolean; content: Array<{ text: string }> } }
+    expect(body.result.isError).toBe(true)
+    expect(body.result.content[0].text).toContain('greater than 0')
+  })
+
+  it('allows the write tool to accept only the prepared proposal token', async () => {
+    const response = await worker.fetch(new Request('http://localhost/mcp', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 'create-invalid', method: 'tools/call', params: { name: 'create_mcp_transaction_drafts', arguments: { proposal_token: 'signed-token', amount: 10 } } }),
+    }), env)
+    const body = await response.json() as { result: { isError: boolean; content: Array<{ text: string }> } }
+    expect(body.result.isError).toBe(true)
+    expect(body.result.content[0].text).toContain('amount is not allowed')
   })
 
   it('rejects malformed JSON-RPC envelopes', async () => {

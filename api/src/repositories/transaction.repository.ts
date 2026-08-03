@@ -1,8 +1,16 @@
-import { Transaction, TransactionStatus } from '../models/Transaction'
+import {
+  Transaction,
+  TransactionPendingKind,
+  TransactionReviewSource,
+  TransactionStatus,
+} from '../models/Transaction'
 
-type RawTransactionRow = Omit<Transaction, 'exclude_from_estimate'> & {
+type RawTransactionRow = Omit<Transaction, 'exclude_from_estimate' | 'pending_kind' | 'review_source' | 'review_flags'> & {
   exclude_from_estimate: number
   status?: TransactionStatus | null
+  pending_kind?: TransactionPendingKind | null
+  review_source?: TransactionReviewSource | null
+  review_flags?: string | null
 }
 
 type D1Value = string | number | null
@@ -10,11 +18,27 @@ type D1Value = string | number | null
 export class TransactionRepository {
   constructor(private db: D1Database) {}
 
+  private parseReviewFlags(value?: string | null): string[] {
+    if (!value) return []
+
+    try {
+      const parsed: unknown = JSON.parse(value)
+      return Array.isArray(parsed) && parsed.every(flag => typeof flag === 'string')
+        ? parsed
+        : []
+    } catch {
+      return []
+    }
+  }
+
   private mapTransaction(raw: RawTransactionRow): Transaction {
     return {
       ...raw,
       exclude_from_estimate: raw.exclude_from_estimate === 1,
-      status: raw.status || 'posted'
+      status: raw.status || 'posted',
+      pending_kind: raw.pending_kind || 'upcoming',
+      review_source: raw.review_source || 'manual',
+      review_flags: this.parseReviewFlags(raw.review_flags),
     }
   }
 
@@ -30,7 +54,7 @@ export class TransactionRepository {
 
   async create(transaction: Transaction): Promise<void> {
     await this.db.prepare(
-      'INSERT INTO transactions (id, account_id, category_id, amount, description, date, linked_transaction_id, exclude_from_estimate, status, confirmed_at, cancelled_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+      'INSERT INTO transactions (id, account_id, category_id, amount, description, date, linked_transaction_id, exclude_from_estimate, status, pending_kind, review_source, review_batch_id, review_flags, confirmed_at, cancelled_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
     ).bind(
       transaction.id,
       transaction.account_id,
@@ -41,6 +65,10 @@ export class TransactionRepository {
       transaction.linked_transaction_id || null,
       transaction.exclude_from_estimate ? 1 : 0,
       transaction.status || 'posted',
+      transaction.pending_kind || 'upcoming',
+      transaction.review_source || 'manual',
+      transaction.review_batch_id ?? null,
+      JSON.stringify(transaction.review_flags || []),
       transaction.confirmed_at ?? null,
       transaction.cancelled_at ?? null,
       transaction.created_at ?? Date.now(),
@@ -79,6 +107,22 @@ export class TransactionRepository {
     if (updates.status !== undefined) {
       fields.push('status = ?')
       values.push(updates.status)
+    }
+    if (updates.pending_kind !== undefined) {
+      fields.push('pending_kind = ?')
+      values.push(updates.pending_kind)
+    }
+    if (updates.review_source !== undefined) {
+      fields.push('review_source = ?')
+      values.push(updates.review_source)
+    }
+    if (updates.review_batch_id !== undefined) {
+      fields.push('review_batch_id = ?')
+      values.push(updates.review_batch_id)
+    }
+    if (updates.review_flags !== undefined) {
+      fields.push('review_flags = ?')
+      values.push(JSON.stringify(updates.review_flags))
     }
     if (updates.confirmed_at !== undefined) {
       fields.push('confirmed_at = ?')

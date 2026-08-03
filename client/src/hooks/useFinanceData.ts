@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { API_BASE_URL, apiFetch } from '../config'
 import { getMasterCurrency } from '../components/settings-module/Settings'
+import type { PendingKind, ReviewSource } from '../lib/transaction-review'
 
 export type Account = {
   id: string
@@ -28,6 +29,10 @@ export type Transaction = {
   linked_transaction_id?: string
   exclude_from_estimate?: boolean
   status?: 'posted' | 'pending' | 'cancelled'
+  pending_kind?: PendingKind | null
+  review_source?: ReviewSource | null
+  review_batch_id?: string | null
+  review_flags?: unknown
   confirmed_at?: number | null
   cancelled_at?: number | null
   created_at?: number | null
