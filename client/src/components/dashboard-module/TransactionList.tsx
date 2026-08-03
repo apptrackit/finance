@@ -1822,9 +1822,6 @@ export function TransactionList({
                 </span>
                 <div className="flex-1 h-px bg-violet-500/20" />
               </div>
-              <p className="px-0.5 text-[9px] sm:text-[10px] text-muted-foreground">
-                Drafts from ChatGPT stay out of balances and projections until you confirm them.
-              </p>
               <div className="space-y-1 pt-0.5">
                 {mcpReviewTransactions.map(tx => renderPendingTransaction(tx, tx.date <= today))}
               </div>
