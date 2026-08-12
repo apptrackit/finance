@@ -79,7 +79,6 @@ describe('MCP protocol surface', () => {
       'get_balance_trend',
       'get_budget_status',
       'get_recurring_forecast',
-      'get_spending_forecast',
       'get_portfolio',
       'get_investment_activity',
     ])

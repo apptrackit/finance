@@ -39,7 +39,7 @@ Finance Manager MCP Review section → edit / confirm / decline manually
 - Preparation returns a 15-minute HMAC-SHA-256 proposal token. The create tool accepts only that token, verifies its signature, proposal hash, lifetime, and clock skew, and revalidates account/category safety before writing.
 - Creation inserts the batch marker, every pending transaction, and one minimal audit entry per draft in a single D1 batch. Retrying the same token returns the original draft rows instead of creating duplicates.
 - Duplicate detection is warning-only, both against nearby existing transactions and within the proposed batch. It never blocks draft creation.
-- MCP review rows have `status=pending`, `pending_kind=mcp_review`, and `review_source=chatgpt_mcp`. They are excluded from balances, budgets, cash-flow projections, recurring forecasts, and spending forecasts until manually confirmed.
+- MCP review rows have `status=pending`, `pending_kind=mcp_review`, and `review_source=chatgpt_mcp`. They are excluded from balances, budgets, cash-flow projections, and recurring forecasts until manually confirmed.
 - Transaction results are paginated to at most 100 records and descriptions are explicitly marked as untrusted data.
 - Chart and forecast series are bounded. Tool responses disclose their date range, reporting currency, conversion status, warnings, and truncation state where applicable.
 - Missing exchange rates cause affected values to be excluded and clearly warned about, rather than mixing currencies into an incorrect total.
@@ -59,7 +59,6 @@ Finance Manager MCP Review section → edit / confirm / decline manually
 | `get_balance_trend` | Reconstructed historical cash and non-investment net-worth series |
 | `get_budget_status` | Budget utilization, pending spend, pace forecast, and risk |
 | `get_recurring_forecast` | Recurring occurrences and one-time pending transactions |
-| `get_spending_forecast` | Weekly/monthly planning estimate from history, run rate, and known upcoming spend |
 | `get_portfolio` | Holdings, live valuation, allocation, cost basis, and gain/loss coverage |
 | `get_investment_activity` | Paginated investment buys and sells |
 

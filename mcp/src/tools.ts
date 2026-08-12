@@ -231,19 +231,6 @@ export const TOOL_DEFINITIONS = [
     _meta: { 'openai/toolInvocation/invoking': 'Forecasting recurring activity…', 'openai/toolInvocation/invoked': 'Recurring forecast ready' },
   },
   {
-    name: 'get_spending_forecast',
-    title: 'Get spending forecast',
-    description: 'Use this when the user asks for an expected weekly or monthly spending total. Combines actual spend-to-date, completed-period history, current run rate, known pending expenses, and active recurring expenses while respecting exclude-from-estimate flags.',
-    inputSchema: { type: 'object', properties: { as_of: DATE, period: { type: 'string', enum: ['week', 'month'], default: 'month' }, currency: CURRENCY, category_ids: { type: 'array', maxItems: 50, items: { type: 'string', maxLength: 128 } }, lookback_periods: { type: 'integer', minimum: 1, maximum: 24 } }, additionalProperties: false },
-    outputSchema: output(['as_of', 'evaluated_on', 'period', 'currency', 'current_period', 'forecast', 'history', 'category_breakdown', 'filters', 'conversion_status', 'warnings', 'methodology'], {
-      as_of: { type: 'string' }, evaluated_on: { type: 'string' }, period: { type: 'string' }, currency: { type: 'string' },
-      current_period: RECORD, forecast: RECORD, history: RECORDS, category_breakdown: RECORDS, filters: RECORD,
-      conversion_status: { type: 'string' }, warnings: WARNINGS, methodology: { type: 'string' },
-    }),
-    annotations: READ_ONLY,
-    _meta: { 'openai/toolInvocation/invoking': 'Forecasting spending…', 'openai/toolInvocation/invoked': 'Spending forecast ready' },
-  },
-  {
     name: 'get_portfolio',
     title: 'Get investment portfolio',
     description: 'Use this when the user asks for current investment holdings, allocation, valuation, invested amount, or gain/loss. Uses live quotes when available and returns valuation warnings; use get_investment_activity for individual buys and sells.',
@@ -355,7 +342,6 @@ export async function callTool(service: FinanceService, name: string, args: Reco
     case 'get_balance_trend': return service.balanceTrend(args)
     case 'get_budget_status': return service.budgetStatus(args)
     case 'get_recurring_forecast': return service.recurringForecast(args)
-    case 'get_spending_forecast': return service.spendingForecast(args)
     case 'get_portfolio': return service.portfolio(args)
     case 'get_investment_activity': return service.investmentActivity(args)
     default: throw new Error(`Unknown tool: ${name}`)

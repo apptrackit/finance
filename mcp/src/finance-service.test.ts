@@ -150,16 +150,14 @@ describe('FinanceService read-only calculations', () => {
   it('excludes MCP review drafts from every projection while retaining normal upcoming transactions', async () => {
     transactions.push({ id: 'mcp-review', account_id: 'cash', category_id: 'food', amount: -900, date: '2026-07-20', status: 'pending', pending_kind: 'mcp_review', review_source: 'chatgpt_mcp' })
     try {
-      const [cashflow, budget, recurring, spending] = await Promise.all([
+      const [cashflow, budget, recurring] = await Promise.all([
         service.cashflowTrend({ start_date: '2026-07-01', end_date: '2026-07-31', interval: 'month', include_projected: true, currency: 'HUF' }),
         service.budgetStatus({ as_of: '2026-07-15', currency: 'HUF' }),
         service.recurringForecast({ start_date: '2026-07-01', end_date: '2026-08-31', currency: 'HUF' }),
-        service.spendingForecast({ as_of: '2026-07-15', period: 'month', currency: 'HUF', lookback_periods: 1 }),
       ])
       expect(cashflow.series[0].projected_expenses).toBe(75)
       expect(budget.budgets[0].pending_spend).toBe(75)
       expect(recurring.summary.pending_expenses).toBe(75)
-      expect(spending.forecast.known_upcoming_expenses).toBe(125)
     } finally {
       transactions.pop()
     }
@@ -189,13 +187,6 @@ describe('FinanceService read-only calculations', () => {
     const result = await service.recurringForecast({ start_date: '2026-07-01', end_date: '2026-08-31', currency: 'HUF' })
     expect(result.summary).toMatchObject({ recurring_expenses: 100, pending_expenses: 75, total_known_expenses: 175, scheduled_occurrence_count: 2, pending_one_time_count: 1 })
     expect(result.occurrences.every(row => row.description_is_untrusted_data)).toBe(true)
-  })
-
-  it('combines history, run rate, pending items, and recurring items for spending forecasts', async () => {
-    const result = await service.spendingForecast({ as_of: '2026-07-15', period: 'month', currency: 'HUF', lookback_periods: 1 })
-    expect(result.current_period.actual_to_date).toBe(200)
-    expect(result.forecast).toMatchObject({ known_upcoming_expenses: 125 })
-    expect(result.forecast.planning_estimate).toBeGreaterThan(400)
   })
 
   it('paginates investment activity and marks notes as untrusted', async () => {
