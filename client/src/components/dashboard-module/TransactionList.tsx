@@ -1034,7 +1034,7 @@ export function TransactionList({
   const mcpReviewTransactions = visibleUpcomingTransactions
     .filter(isMcpReviewTransaction)
     .filter(applyFilters)
-    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
 
   // Keep legacy pending rows visible as upcoming while the migration rolls out.
   // Projection calculations are stricter and require pending_kind === 'upcoming'.
