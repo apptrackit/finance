@@ -5,7 +5,7 @@ import { Label } from '../common/label'
 import { Select } from '../common/select'
 import { Card, CardContent, CardHeader, CardTitle } from '../common/card'
 import { Modal } from '../common/modal'
-import { Plus, X, ArrowDownLeft, ArrowUpRight, Receipt, Pencil, Trash2, Check, ArrowRightLeft, ChevronLeft, ChevronRight, ChevronDown, Calendar, Layers, Search, Clock, CircleCheck, CircleX, AlertCircle, Bot } from 'lucide-react'
+import { Plus, X, ArrowDownLeft, ArrowUpRight, Receipt, Pencil, Trash2, Check, ArrowRightLeft, ChevronLeft, ChevronRight, ChevronDown, Calendar, Layers, Search, Clock, CircleCheck, CircleX, AlertCircle, Bot, Loader2 } from 'lucide-react'
 import { format, addMonths, subMonths, startOfMonth, endOfMonth, addDays, differenceInDays } from 'date-fns'
 import { API_BASE_URL, apiFetch } from '../../config'
 import { usePrivacy } from '../../context/PrivacyContext'
@@ -14,7 +14,7 @@ import { DateRangePicker } from '../common/DateRangePicker'
 import { BulkTransactionModal, type BulkTransaction } from './BulkTransactionModal'
 import { AmountInput } from '../common/amount-input'
 import { formatAmount, formatCalculatedAmount, parseAmount } from '../../lib/amount'
-import type { PendingKind, ReviewSource } from '../../lib/transaction-review'
+import type { PendingKind } from '../../lib/transaction-review'
 import { hasPossibleDuplicateFlag, isMcpReviewTransaction } from '../../lib/transaction-review'
 
 type Transaction = {
@@ -30,7 +30,6 @@ type Transaction = {
   exclude_from_estimate?: boolean
   status?: 'posted' | 'pending' | 'cancelled'
   pending_kind?: PendingKind | null
-  review_source?: ReviewSource | null
   review_batch_id?: string | null
   review_flags?: unknown
   confirmed_at?: number | null
@@ -156,6 +155,7 @@ export function TransactionList({
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [pendingActionId, setPendingActionId] = useState<string | null>(null)
+  const [resolvedPendingIds, setResolvedPendingIds] = useState<Set<string>>(() => new Set())
   const [isAccountOpen, setIsAccountOpen] = useState(false)
   const [badgeNow, setBadgeNow] = useState(() => Date.now())
   
@@ -862,6 +862,8 @@ export function TransactionList({
       }
 
       refreshRecentBadges()
+      setResolvedPendingIds(ids => new Set(ids).add(tx.id))
+      setActiveTxId(activeId => activeId === tx.id ? null : activeId)
       onTransactionAdded()
       showAlert({
         type: 'success',
@@ -905,6 +907,8 @@ export function TransactionList({
         throw new Error(data.error || 'Failed to decline transaction')
       }
 
+      setResolvedPendingIds(ids => new Set(ids).add(tx.id))
+      setActiveTxId(activeId => activeId === tx.id ? null : activeId)
       onTransactionAdded()
       showAlert({
         type: 'success',
@@ -1023,17 +1027,18 @@ export function TransactionList({
     return catMatch && matchesSearch(tx)
   }
 
-  const mcpReviewCount = upcomingTransactions.filter(isMcpReviewTransaction).length
-  const standardPendingCount = upcomingTransactions.length - mcpReviewCount
+  const visibleUpcomingTransactions = upcomingTransactions.filter(tx => !resolvedPendingIds.has(tx.id))
+  const mcpReviewCount = visibleUpcomingTransactions.filter(isMcpReviewTransaction).length
+  const standardPendingCount = visibleUpcomingTransactions.length - mcpReviewCount
 
-  const mcpReviewTransactions = upcomingTransactions
+  const mcpReviewTransactions = visibleUpcomingTransactions
     .filter(isMcpReviewTransaction)
     .filter(applyFilters)
     .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
 
   // Keep legacy pending rows visible as upcoming while the migration rolls out.
   // Projection calculations are stricter and require pending_kind === 'upcoming'.
-  const pendingFilteredTransactions = upcomingTransactions
+  const pendingFilteredTransactions = visibleUpcomingTransactions
     .filter(tx => !isMcpReviewTransaction(tx))
     .filter(applyFilters)
     .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
@@ -1095,6 +1100,8 @@ export function TransactionList({
     const shouldHide = privacyMode === 'hidden' || (isInvestmentTx && shouldHideInvestment())
     const locked = isLocked(tx.account_id)
     const isMcpReview = isMcpReviewTransaction(tx)
+    const isPendingAction = pendingActionId === tx.id
+    const actionsDisabled = pendingActionId !== null
     const possibleDuplicate = isMcpReview && hasPossibleDuplicateFlag(tx.review_flags)
     const formattedDate = format(
       new Date(tx.date),
@@ -1126,13 +1133,13 @@ export function TransactionList({
         onClick={() => setActiveTxId(activeTxId === tx.id ? null : tx.id)}
       >
         <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-          <div className={`h-8 w-8 sm:h-10 sm:w-10 rounded-lg sm:rounded-xl flex items-center justify-center flex-shrink-0 ${
+          <div className={`h-8 w-8 sm:h-10 sm:w-10 rounded-lg sm:rounded-xl flex items-center justify-center flex-shrink-0 text-base sm:text-lg ${
             isMcpReview
-              ? 'bg-violet-500/10 text-violet-500'
+              ? tx.amount >= 0 ? 'bg-success/10' : 'bg-secondary'
               : ready ? 'bg-success/10 text-success' : 'bg-primary/10 text-primary'
           }`}>
             {isMcpReview
-              ? <Bot className="h-4 w-4 sm:h-5 sm:w-5" />
+              ? getCategoryIcon(tx.category_id)
               : ready
                 ? <AlertCircle className="h-4 w-4 sm:h-5 sm:w-5" />
                 : <Clock className="h-4 w-4 sm:h-5 sm:w-5" />}
@@ -1147,18 +1154,12 @@ export function TransactionList({
               <span>•</span>
               <span className="truncate">{getAccountName(tx.account_id)}</span>
             </div>
-            {isMcpReview && (
+            {possibleDuplicate && (
               <div className="mt-1 flex flex-wrap items-center gap-1.5">
-                <span className="inline-flex items-center gap-1 rounded-full border border-violet-500/20 bg-violet-500/10 px-1.5 py-0.5 text-[9px] sm:text-[10px] font-medium text-violet-600 dark:text-violet-300">
-                  <Bot className="h-2.5 w-2.5" />
-                  {tx.review_source === 'chatgpt_mcp' ? 'Created by ChatGPT' : 'MCP review draft'}
+                <span className="inline-flex items-center gap-1 rounded-full border border-amber-500/25 bg-amber-500/10 px-1.5 py-0.5 text-[9px] sm:text-[10px] font-medium text-amber-700 dark:text-amber-300">
+                  <AlertCircle className="h-2.5 w-2.5" />
+                  Possible duplicate
                 </span>
-                {possibleDuplicate && (
-                  <span className="inline-flex items-center gap-1 rounded-full border border-amber-500/25 bg-amber-500/10 px-1.5 py-0.5 text-[9px] sm:text-[10px] font-medium text-amber-700 dark:text-amber-300">
-                    <AlertCircle className="h-2.5 w-2.5" />
-                    Possible duplicate
-                  </span>
-                )}
               </div>
             )}
           </div>
@@ -1180,20 +1181,23 @@ export function TransactionList({
                     size="icon"
                     variant="ghost"
                     className="h-7 w-7 sm:h-8 sm:w-8 text-success hover:text-success"
-                    disabled={pendingActionId === tx.id}
+                    disabled={actionsDisabled}
                     onClick={(e) => {
                       e.stopPropagation()
                       handleConfirmUpcoming(tx)
                     }}
                     title={isMcpReview ? 'Confirm MCP review draft' : 'Confirm transaction'}
                   >
-                    <CircleCheck className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
+                    {isPendingAction
+                      ? <Loader2 className="h-3 w-3 sm:h-3.5 sm:w-3.5 animate-spin" />
+                      : <CircleCheck className="h-3 w-3 sm:h-3.5 sm:w-3.5" />}
                   </Button>
                 )}
                 <Button
                   size="icon"
                   variant="ghost"
                   className="h-7 w-7 sm:h-8 sm:w-8"
+                  disabled={actionsDisabled}
                   onClick={(e) => {
                     e.stopPropagation()
                     handleEdit(tx)
@@ -1207,14 +1211,16 @@ export function TransactionList({
                     size="icon"
                     variant="ghost"
                     className="h-7 w-7 sm:h-8 sm:w-8 text-destructive hover:text-destructive"
-                    disabled={pendingActionId === tx.id}
+                    disabled={actionsDisabled}
                     onClick={(e) => {
                       e.stopPropagation()
                       handleDeclineUpcoming(tx)
                     }}
                     title={isMcpReview ? 'Decline MCP review draft' : 'Decline transaction'}
                   >
-                    <CircleX className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
+                    {isPendingAction
+                      ? <Loader2 className="h-3 w-3 sm:h-3.5 sm:w-3.5 animate-spin" />
+                      : <CircleX className="h-3 w-3 sm:h-3.5 sm:w-3.5" />}
                   </Button>
                 ) : (
                   <Button
