@@ -1036,6 +1036,19 @@ export function TransactionList({
     .filter(applyFilters)
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
 
+  // MCP drafts keep their original transaction date, so group them by that
+  // date just like posted transactions. This gives each review item a clear
+  // calendar context instead of making the user work it out from "N days ago".
+  const groupedMcpReviewTransactions = mcpReviewTransactions.reduce((groups, tx) => {
+    if (!groups[tx.date]) groups[tx.date] = []
+    groups[tx.date].push(tx)
+    return groups
+  }, {} as Record<string, Transaction[]>)
+
+  const sortedMcpReviewDates = Object.keys(groupedMcpReviewTransactions).sort((a, b) =>
+    new Date(b).getTime() - new Date(a).getTime()
+  )
+
   // Keep legacy pending rows visible as upcoming while the migration rolls out.
   // Projection calculations are stricter and require pending_kind === 'upcoming'.
   const pendingFilteredTransactions = visibleUpcomingTransactions
@@ -1110,9 +1123,7 @@ export function TransactionList({
 
     const statusLabel = isMcpReview
       ? ready
-        ? daysFromToday < 0
-          ? `Ready to confirm • ${Math.abs(daysFromToday)} day${Math.abs(daysFromToday) === 1 ? '' : 's'} past date`
-          : 'Ready to confirm today'
+        ? 'Ready to confirm'
         : `Confirm on ${formattedDate}`
       : ready
         ? daysFromToday < 0
@@ -1828,8 +1839,22 @@ export function TransactionList({
                 </span>
                 <div className="flex-1 h-px bg-violet-500/20" />
               </div>
-              <div className="space-y-1 pt-0.5">
-                {mcpReviewTransactions.map(tx => renderPendingTransaction(tx, tx.date <= today))}
+              <div className="space-y-3 pt-0.5">
+                {sortedMcpReviewDates.map(date => (
+                  <div key={date} className="space-y-1.5">
+                    <div className="flex items-center gap-1.5 sm:gap-2">
+                      <div className="text-[10px] sm:text-xs font-medium text-muted-foreground">
+                        {new Date(date).getFullYear() !== new Date().getFullYear()
+                          ? format(new Date(date), 'EEEE, MMM d, yyyy')
+                          : format(new Date(date), 'EEEE, MMM d')}
+                      </div>
+                      <div className="flex-1 h-px bg-violet-500/20" />
+                    </div>
+                    <div className="space-y-1">
+                      {groupedMcpReviewTransactions[date].map(tx => renderPendingTransaction(tx, tx.date <= today))}
+                    </div>
+                  </div>
+                ))}
               </div>
             </section>
           )}
