@@ -9,12 +9,10 @@ type PerAccountTrendChartProps = {
   account: Account
   data: TrendDataPoint[]
   index: number
-  masterCurrency: string
-  convertToMasterCurrency: (amount: number, accountId: string) => number
   className?: string
 }
 
-export function PerAccountTrendChart({ account, data, index, masterCurrency, convertToMasterCurrency, className }: PerAccountTrendChartProps) {
+export function PerAccountTrendChart({ account, data, index, className }: PerAccountTrendChartProps) {
   const { privacyMode } = usePrivacy()
 
   return (
@@ -24,7 +22,7 @@ export function PerAccountTrendChart({ account, data, index, masterCurrency, con
           <span className="text-base sm:text-lg">{account.icon || '💳'}</span>
           <CardTitle className="text-sm sm:text-base truncate flex-1">{account.name}</CardTitle>
           <span className={`text-xs text-muted-foreground flex-shrink-0 ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
-            {privacyMode === 'hidden' ? '••••••' : convertToMasterCurrency(account.balance, account.id).toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})} {masterCurrency}
+            {privacyMode === 'hidden' ? '••••••' : account.balance.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})} {account.currency}
           </span>
         </div>
       </CardHeader>
@@ -71,7 +69,7 @@ export function PerAccountTrendChart({ account, data, index, masterCurrency, con
                         <div className="bg-card border border-border rounded-lg p-2 shadow-lg">
                           <p className="text-xs text-muted-foreground mb-1">{label}</p>
                           <p className={`text-sm font-bold ${privacyMode === 'hidden' ? 'select-none' : ''}`} style={{ color: COLORS[index % COLORS.length] }}>
-                            {privacyMode === 'hidden' ? '••••••' : `${Number(value)?.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})} ${masterCurrency}`}
+                            {privacyMode === 'hidden' ? '••••••' : `${Number(value)?.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})} ${account.currency}`}
                           </p>
                         </div>
                       )

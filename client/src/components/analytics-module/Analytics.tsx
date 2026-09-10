@@ -350,7 +350,7 @@ export function Analytics({
     })
   }, [transactionsForAnalytics, accounts, period, exchangeRates, masterCurrency, customDateRange])
 
-  // Per-account Net Worth Trend data in master currency (exclude investment accounts)
+  // Per-account trends remain in each account's native currency (exclude investment accounts).
   const perAccountTrendData = useMemo(() => {
     return accounts
       .filter(account => account.type !== 'investment')
@@ -413,7 +413,7 @@ export function Analytics({
           .map(([date, balance]) => ({
             date,
             formattedDate: format(new Date(date), 'MMM d'),
-            balance: convertToMasterCurrency(balance, account.id)
+            balance
           }))
           .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
 
@@ -437,7 +437,7 @@ export function Analytics({
         }
       })
       .filter(({ hasTransactions }) => hasTransactions)
-  }, [accounts, transactionsForAnalytics, period, exchangeRates, masterCurrency, customDateRange])
+  }, [accounts, transactionsForAnalytics, period, customDateRange])
 
   // Get expense categories for filter
   const expenseCategories = useMemo(() => {
@@ -833,8 +833,6 @@ export function Analytics({
                 account={account}
                 data={data}
                 index={index}
-                masterCurrency={masterCurrency}
-                convertToMasterCurrency={convertToMasterCurrency}
                 className={perAccountTrendData.length % 2 !== 0 && index === perAccountTrendData.length - 1 ? 'lg:col-span-2' : ''}
               />
             ))}
