@@ -62,7 +62,7 @@ export function AICashOutlookChart({ snapshot }: AICashOutlookChartProps) {
     const min = Math.min(...values)
     const max = Math.max(...values)
     const padding = Math.max((max - min) * 0.12, Math.abs(max) * 0.04, 1)
-    return [Math.max(0, min - padding), max + padding]
+    return [min - padding, max + padding]
   }, [chartData])
 
   if (!snapshot || chartData.length < 8) return null

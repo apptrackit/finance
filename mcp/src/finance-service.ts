@@ -27,6 +27,15 @@ type OutlookCoverage = {
   data_quality_label: 'high' | 'moderate' | 'limited'
 }
 
+type OutlookCoverageInputs = {
+  dimensions: {
+    available_date_range: { start_date: string | null; end_date: string | null }
+    accounts: Array<{ type: string }>
+  }
+  summary: { conversion_status: string }
+  portfolio: { valuation_status: string }
+}
+
 function bool(value: number | boolean | undefined) {
   return value === true || value === 1
 }
@@ -165,10 +174,7 @@ export class FinanceService {
     }
   }
 
-  private async outlookCoverage() {
-    const [dimensions, summary, portfolio] = await Promise.all([
-      this.listDimensions(), this.accountsSummary({ currency: 'HUF' }), this.portfolio({ currency: 'HUF' }),
-    ])
+  private computeOutlookCoverage({ dimensions, summary, portfolio }: OutlookCoverageInputs): OutlookCoverage {
     const start = dimensions.available_date_range.start_date
     const end = dimensions.available_date_range.end_date
     const historyDays = start && end ? Math.max(0, daysBetween(start, end)) : 0
@@ -190,12 +196,19 @@ export class FinanceService {
       sources: ['accounts', 'posted_transactions', 'recurring_schedules', 'upcoming_transactions', 'budgets', 'portfolio'],
       history: { start_date: start, end_date: end, days: historyDays },
       latest_posted_transaction_date: end,
-      conversion_status: summary.conversion_status as 'complete' | 'partial',
+      conversion_status: summary.conversion_status === 'complete' ? 'complete' : 'partial',
       portfolio_valuation_status: portfolio.valuation_status,
       data_quality_reasons: reasons,
       data_quality_score: score,
       data_quality_label: label,
     } satisfies OutlookCoverage
+  }
+
+  private async outlookCoverage() {
+    const [dimensions, summary, portfolio] = await Promise.all([
+      this.listDimensions(), this.accountsSummary({ currency: 'HUF' }), this.portfolio({ currency: 'HUF' }),
+    ])
+    return this.computeOutlookCoverage({ dimensions, summary, portfolio })
   }
 
   async listDimensions() {
@@ -516,10 +529,10 @@ export class FinanceService {
     const today = new Date().toISOString().slice(0, 10)
     const historyStart = addUtcDays(today, -89)
     const futureEnd = addUtcDays(today, 90)
-    const [revision, latestRow, coverage, accounts, overview, cashflow, budgets, recurring, portfolio] = await Promise.all([
+    const [revision, latestRow, dimensions, accounts, overview, cashflow, budgets, recurring, portfolio] = await Promise.all([
       this.financialDataRevision(),
       this.latestOutlookRow(),
-      this.outlookCoverage(),
+      this.listDimensions(),
       this.accountsSummary({ currency: 'HUF' }),
       this.overview({ currency: 'HUF', start_date: historyStart, end_date: today }),
       this.cashflowTrend({ currency: 'HUF', start_date: historyStart, end_date: today, interval: 'month', include_projected: false }),
@@ -527,6 +540,7 @@ export class FinanceService {
       this.recurringForecast({ currency: 'HUF', start_date: today, end_date: futureEnd }),
       this.portfolio({ currency: 'HUF' }),
     ])
+    const coverage = this.computeOutlookCoverage({ dimensions, summary: accounts, portfolio })
     return {
       as_of: new Date().toISOString(),
       source_revision: revision.revision,
