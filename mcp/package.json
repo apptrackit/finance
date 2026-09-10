@@ -6,7 +6,8 @@
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
     "build": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:staging": "node scripts/staging-smoke.mjs"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20240208.0",

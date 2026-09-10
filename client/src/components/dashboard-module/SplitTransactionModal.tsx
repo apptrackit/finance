@@ -28,7 +28,7 @@ type SplitDraft = Omit<SplitTransaction, 'amount'> & { amount: string }
 interface SplitTransactionModalProps {
   isOpen: boolean
   onClose: () => void
-  onConfirm: (splits: SplitTransaction[]) => void
+  onConfirm: (splits: SplitTransaction[]) => void | Promise<void>
   totalAmount: number
   accountCurrency: string
   categories: Category[]
@@ -56,6 +56,7 @@ export function SplitTransactionModal({
       date: defaultDate
     }
   ])
+  const [isConfirming, setIsConfirming] = useState(false)
 
   // Reset splits when modal opens
   useEffect(() => {
@@ -156,13 +157,16 @@ export function SplitTransactionModal({
     return (Math.abs(amount) / Math.abs(totalAmount)) * 100
   }
 
-  const handleConfirm = () => {
-    if (isValid) {
-      onConfirm(splits.map(split => ({
+  const handleConfirm = async () => {
+    if (!isValid || isConfirming) return
+    setIsConfirming(true)
+    try {
+      await onConfirm(splits.map(split => ({
         ...split,
         amount: direction * (parseAmount(split.amount) || 0)
       })))
-      onClose()
+    } finally {
+      setIsConfirming(false)
     }
   }
 
@@ -390,10 +394,10 @@ export function SplitTransactionModal({
           <Button
             type="button"
             onClick={handleConfirm}
-            disabled={!isValid}
+            disabled={!isValid || isConfirming}
             className="flex-1"
           >
-            {isSingleTransaction ? 'Confirm Transaction' : 'Confirm Split'}
+            {isConfirming ? 'Confirming…' : isSingleTransaction ? 'Confirm Transaction' : 'Confirm Split'}
           </Button>
         </div>
       </div>

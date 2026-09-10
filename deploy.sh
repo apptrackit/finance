@@ -121,21 +121,6 @@ need_default() {
   printf '%s' "$val"
 }
 
-need_generated_secret() {
-  local key="$1" val
-  val=$(get_cfg "$key")
-  if [ -z "$val" ]; then
-    if command -v openssl >/dev/null 2>&1; then
-      val=$(openssl rand -hex 32)
-    else
-      val=$(node -e "process.stdout.write(require('crypto').randomBytes(32).toString('hex'))")
-    fi
-  fi
-  [ -n "$val" ] || err "Could not generate ${key}."
-  set_cfg "$key" "$val"
-  printf '%s' "$val"
-}
-
 legacy_mcp_value() {
   local key="$1" file="${ROOT_DIR}/mcp/wrangler.toml"
   [ -f "$file" ] || return 0
@@ -218,7 +203,6 @@ if [ "$DEPLOY_MCP" = "true" ]; then
   MCP_ACCESS_TEAM_DOMAIN=$(need_with_fallback MCP_ACCESS_TEAM_DOMAIN "Cloudflare Access team domain" "$(legacy_mcp_value "CF_ACCESS_TEAM_DOMAIN")")
   MCP_ACCESS_AUD=$(need_with_fallback MCP_ACCESS_AUD "Cloudflare Access application audience" "$(legacy_mcp_value "CF_ACCESS_AUD")")
   MCP_ALLOWED_EMAIL=$(need_with_fallback MCP_ALLOWED_EMAIL "Allowed MCP email" "$(legacy_mcp_value "ALLOWED_EMAIL")")
-  MCP_PROPOSAL_SECRET=$(need_generated_secret MCP_PROPOSAL_SECRET)
 fi
 echo ""
 
@@ -371,18 +355,6 @@ TOML
 
   step "MCP tests" npm run test
   step "MCP typecheck" npm run build
-
-  spin "  %-22s" "MCP signing secret" &
-  SPIN_PID=$!
-  if echo "$MCP_PROPOSAL_SECRET" | npx wrangler versions secret put MCP_PROPOSAL_SECRET --config wrangler.toml >"$TMPOUT" 2>&1; then
-    kill_spinner
-    printf "\r  %-22s${GREEN}ok${NC}\033[K\n" "MCP signing secret"
-  else
-    kill_spinner
-    printf "\r  %-22s${RED}failed${NC}\033[K\n" "MCP signing secret"
-    echo "" >&2; cat "$TMPOUT" >&2
-    err "Failed to set MCP proposal signing secret"
-  fi
 
   step "MCP deploy" npx wrangler deploy --minify --config wrangler.toml
 fi

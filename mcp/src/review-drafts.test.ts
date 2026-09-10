@@ -1,9 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { FinanceService } from './finance-service'
-import { signProposal } from './review-drafts'
-import type { AccountRow, CanonicalReviewDraft, CategoryRow, Env, TransactionRow } from './types'
-
-const SECRET = 'test-proposal-secret-that-is-at-least-32-characters-long'
+import type { AccountRow, CategoryRow, Env, StoredReviewDraftProposal, TransactionRow } from './types'
 
 function reviewDb() {
   const accounts: AccountRow[] = [
@@ -19,6 +16,7 @@ function reviewDb() {
     { id: 'existing', account_id: 'cash', category_id: 'food', amount: -25, description: 'Lunch', date: '2026-08-02', status: 'posted' },
   ]
   const batches = new Map<string, { id: string; proposal_hash: string; created_at: number }>()
+  const proposals = new Map<string, StoredReviewDraftProposal>()
   const audits: Array<{ id: string; entity_id: string; details: string; created_at: number }> = []
   const batchSizes: number[] = []
 
@@ -45,11 +43,20 @@ function reviewDb() {
         return { results: [] as T[] }
       },
       async first<T>() {
+        if (sql.includes('FROM mcp_draft_proposals')) return (proposals.get(String(bindings[0])) || null) as T | null
         if (sql.includes('FROM mcp_draft_batches')) return (batches.get(String(bindings[0])) || null) as T | null
         return null
       },
       async run() {
-        if (sql.startsWith('INSERT INTO mcp_draft_batches')) {
+        if (sql.startsWith('INSERT INTO mcp_draft_proposals')) {
+          const [id, proposalHash, itemsJson, createdAt, expiresAt] = bindings as [string, string, string, number, number]
+          if (proposals.has(id)) throw new Error('UNIQUE constraint failed: mcp_draft_proposals.id')
+          proposals.set(id, { id, proposal_hash: proposalHash, items_json: itemsJson, created_at: createdAt, expires_at: expiresAt, consumed_at: null })
+        } else if (sql.startsWith('UPDATE mcp_draft_proposals')) {
+          const [consumedAt, id] = bindings as [number, string]
+          const proposal = proposals.get(id)
+          if (proposal && proposal.consumed_at === null) proposal.consumed_at = consumedAt
+        } else if (sql.startsWith('INSERT INTO mcp_draft_batches')) {
           const [id, proposalHash, createdAt] = bindings as [string, string, number]
           if (batches.has(id)) throw new Error('UNIQUE constraint failed: mcp_draft_batches.id')
           batches.set(id, { id, proposal_hash: proposalHash, created_at: createdAt })
@@ -81,27 +88,28 @@ function reviewDb() {
     },
   } as unknown as Env['DB']
 
-  return { DB, accounts, categories, transactions, batches, audits, batchSizes }
+  return { DB, accounts, categories, transactions, batches, proposals, audits, batchSizes }
 }
 
 function serviceWith(db: ReturnType<typeof reviewDb>) {
-  return new FinanceService({ DB: db.DB, MCP_PROPOSAL_SECRET: SECRET } as Env)
+  return new FinanceService({ DB: db.DB } as Env)
 }
 
 afterEach(() => vi.restoreAllMocks())
 
 describe('MCP review draft preparation and creation', () => {
-  it('prepares a canonical preview without writing and warns about possible existing duplicates', async () => {
+  it('stores a canonical 24-hour proposal and warns about possible existing duplicates', async () => {
     const db = reviewDb()
     const result = await serviceWith(db).prepareReviewDrafts({ items: [{ type: 'expense', amount: 25, account_id: 'cash', category_id: 'food', description: ' Lunch ', date: '2026-08-02' }] })
 
-    expect(result).toMatchObject({ item_count: 1, confirmation_required: true, warnings: [expect.stringContaining('does not block')] })
+    expect(result).toMatchObject({ item_count: 1, confirmation_required: true, expires_in_seconds: 86_400, warnings: [expect.stringContaining('does not block')] })
+    expect(result.proposal_id).toMatch(/^[0-9a-f-]{36}$/)
+    expect(Object.keys(result)).not.toContain(['proposal', 'token'].join('_'))
     expect(result.preview[0]).toMatchObject({ type: 'expense', amount: 25, signed_amount: -25, account_name: 'Daily cash', currency: 'HUF', category_name: 'Food', description: 'Lunch', warnings: ['possible_duplicate'] })
     expect(result.preview[0].duplicate_candidates).toEqual([expect.objectContaining({ transaction_id: 'existing', description_is_untrusted_data: true })])
-    expect(result.proposal_token).toContain('.')
+    expect(db.proposals.get(result.proposal_id)).toMatchObject({ consumed_at: null })
     expect(db.batches.size).toBe(0)
     expect(db.transactions).toHaveLength(1)
-    expect(db.audits).toHaveLength(0)
   })
 
   it('keeps identical transactions in the same proposal and treats them as warning-only duplicates', async () => {
@@ -115,65 +123,55 @@ describe('MCP review draft preparation and creation', () => {
     expect(result.warnings.every(message => message.includes('identical to another item'))).toBe(true)
   })
 
-  it('atomically creates pending MCP review drafts and audit entries without changing balances', async () => {
+  it('creates only pending MCP review drafts and marks the proposal consumed', async () => {
     const db = reviewDb()
     const service = serviceWith(db)
     const beforeBalance = db.accounts[0].balance
     const prepared = await service.prepareReviewDrafts({ items: [{ type: 'income', amount: 100, account_id: 'cash', category_id: 'salary', description: 'Pay', date: '2026-08-03' }] })
-    const created = await service.createReviewDrafts({ proposal_token: prepared.proposal_token })
+    const created = await service.createReviewDrafts({ proposal_id: prepared.proposal_id })
 
     expect(created).toMatchObject({ item_count: 1, idempotent_replay: false, result: 'mcp_review_drafts_created' })
     expect(created.drafts[0]).toMatchObject({ type: 'income', amount: 100, signed_amount: 100, status: 'pending', pending_kind: 'mcp_review', review_source: 'chatgpt_mcp' })
+    expect(db.proposals.get(prepared.proposal_id)?.consumed_at).toEqual(expect.any(Number))
     expect(db.accounts[0].balance).toBe(beforeBalance)
-    expect(db.batchSizes).toEqual([3])
+    expect(db.batchSizes).toEqual([4])
     expect(db.batches.size).toBe(1)
     expect(db.audits).toHaveLength(1)
     expect(JSON.parse(db.audits[0].details)).toEqual({ origin: 'chatgpt_mcp', batch_id: created.batch_id })
     expect(db.audits[0].details).not.toContain('Pay')
   })
 
-  it('returns the original drafts on same-token retries, including after proposal expiry', async () => {
+  it('returns the original drafts on a successful retry, even after expiry', async () => {
     const db = reviewDb()
     const service = serviceWith(db)
     const now = Date.UTC(2026, 7, 3, 12)
     const clock = vi.spyOn(Date, 'now').mockReturnValue(now)
     const prepared = await service.prepareReviewDrafts({ items: [{ type: 'expense', amount: 10, account_id: 'cash', date: '2026-08-03' }] })
-    const first = await service.createReviewDrafts({ proposal_token: prepared.proposal_token })
-    clock.mockReturnValue(now + 60 * 60_000)
-    const replay = await service.createReviewDrafts({ proposal_token: prepared.proposal_token })
+    const first = await service.createReviewDrafts({ proposal_id: prepared.proposal_id })
+    clock.mockReturnValue(now + 25 * 60 * 60_000)
+    const replay = await service.createReviewDrafts({ proposal_id: prepared.proposal_id })
 
     expect(replay.idempotent_replay).toBe(true)
     expect(replay.drafts.map(row => row.id)).toEqual(first.drafts.map(row => row.id))
     expect(db.transactions).toHaveLength(2)
     expect(db.audits).toHaveLength(1)
-    expect(db.batchSizes).toEqual([3])
+    expect(db.batchSizes).toEqual([4])
   })
 
-  it('rejects tampered and expired proposal tokens before writing', async () => {
+  it('returns stable errors for expired, consumed, invalid, and missing proposal IDs', async () => {
     const db = reviewDb()
     const service = serviceWith(db)
     const now = Date.UTC(2026, 7, 3, 12)
     const clock = vi.spyOn(Date, 'now').mockReturnValue(now)
-    const prepared = await service.prepareReviewDrafts({ items: [{ type: 'expense', amount: 10, account_id: 'cash', date: '2026-08-03' }] })
-    const last = prepared.proposal_token.at(-1)
-    const tampered = `${prepared.proposal_token.slice(0, -1)}${last === 'A' ? 'B' : 'A'}`
-    await expect(service.createReviewDrafts({ proposal_token: tampered })).rejects.toThrow('signature')
-    clock.mockReturnValue(now + 15 * 60_000)
-    await expect(service.createReviewDrafts({ proposal_token: prepared.proposal_token })).rejects.toThrow('expired')
+    const expired = await service.prepareReviewDrafts({ items: [{ type: 'expense', amount: 10, account_id: 'cash', date: '2026-08-03' }] })
+    clock.mockReturnValue(now + 24 * 60 * 60_000)
+    await expect(service.createReviewDrafts({ proposal_id: expired.proposal_id })).rejects.toThrow('[proposal_expired]')
+    const consumed = await service.prepareReviewDrafts({ items: [{ type: 'expense', amount: 11, account_id: 'cash', date: '2026-08-03' }] })
+    db.proposals.get(consumed.proposal_id)!.consumed_at = Date.now()
+    await expect(service.createReviewDrafts({ proposal_id: consumed.proposal_id })).rejects.toThrow('[proposal_already_consumed]')
+    await expect(service.createReviewDrafts({ proposal_id: 'not-a-proposal' })).rejects.toThrow('[invalid_proposal_id]')
+    await expect(service.createReviewDrafts({ proposal_id: crypto.randomUUID() })).rejects.toThrow('[proposal_not_found]')
     expect(db.batches.size).toBe(0)
-    expect(db.audits).toHaveLength(0)
-  })
-
-  it('rejects proposal tokens issued too far in the future', async () => {
-    const db = reviewDb()
-    const now = Date.UTC(2026, 7, 3, 12)
-    vi.spyOn(Date, 'now').mockReturnValue(now)
-    const item: CanonicalReviewDraft = {
-      draft_id: crypto.randomUUID(), type: 'expense', amount: 10, signed_amount: -10, account_id: 'cash', category_id: null,
-      description: null, date: '2026-08-03', exclude_from_estimate: false, review_flags: [],
-    }
-    const { token } = await signProposal(SECRET, crypto.randomUUID(), [item], now + 61_000)
-    await expect(serviceWith(db).createReviewDrafts({ proposal_token: token })).rejects.toThrow('too far in the future')
   })
 
   it('rejects locked and investment accounts and mismatched categories while allowing uncategorized drafts', async () => {

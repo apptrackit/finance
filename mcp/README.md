@@ -1,6 +1,6 @@
 # Finance MCP server
 
-This directory contains the only AI-facing component in Finance Manager: a remote MCP server deployed as a Cloudflare Worker. Most tools are read-only. Its two narrow write capabilities create review drafts that must still be confirmed manually in the Finance Manager UI, and append-only AI Financial Forecast snapshots. ChatGPT connects directly to the Worker; no Mac bridge, Codex app-server, frontend chat, OpenAI API key, or separate model billing is involved.
+This directory contains the only AI-facing component in Finance Manager: a remote MCP server deployed as a Cloudflare Worker. Most tools are read-only. Its only financial write capability creates review drafts that must still be confirmed manually in the Finance Manager UI; preparation persists an expiring proposal only, and forecasts are append-only derived analytics snapshots. ChatGPT connects directly to the Worker; no Mac bridge, Codex app-server, frontend chat, OpenAI API key, or separate model billing is involved.
 
 ```text
 ChatGPT custom MCP app
@@ -18,7 +18,7 @@ The draft workflow is deliberately two-step:
 receipt or transaction list
         │
         ▼
-prepare_mcp_transaction_drafts (read-only validation + preview)
+prepare_mcp_transaction_drafts (validation + expiring proposal + preview)
         │ ChatGPT shows every item and asks for explicit confirmation
         ▼
 create_mcp_transaction_drafts (one atomic, idempotent batch)
@@ -33,11 +33,11 @@ Finance Manager MCP Review section → edit / confirm / decline manually
 - The Worker independently verifies the Access JWT signature, issuer, audience, expiry, and optional allowed email.
 - `workers.dev` is disabled.
 - The model receives only bounded tool results. There is no arbitrary SQL tool and no tool that can post, confirm, edit, decline, delete, transfer, invest, or update a balance.
-- Every tool is non-destructive and closed-world. Read tools advertise `readOnlyHint: true`; both narrowly scoped write tools advertise `readOnlyHint: false`, `destructiveHint: false`, `idempotentHint: true`, and `openWorldHint: false`.
+- Every tool is non-destructive and closed-world. Read tools advertise `readOnlyHint: true`; proposal preparation advertises its non-financial persistence with `readOnlyHint: false` and `idempotentHint: false`; the creation and forecast writes advertise `readOnlyHint: false`, `destructiveHint: false`, `idempotentHint: true`, and `openWorldHint: false`.
 - Every tool has explicit input and output JSON Schemas. Inputs reject unknown fields and invalid dates before querying D1.
 - Draft preparation accepts 1–20 income/expense items. Accounts must exist, be unlocked, and be non-investment accounts. Categories are optional, but any supplied category must exist and match the income/expense type.
-- Preparation returns a 15-minute HMAC-SHA-256 proposal token. The create tool accepts only that token, verifies its signature, proposal hash, lifetime, and clock skew, and revalidates account/category safety before writing.
-- Creation inserts the batch marker, every pending transaction, and one minimal audit entry per draft in a single D1 batch. Retrying the same token returns the original draft rows instead of creating duplicates.
+- Preparation stores the canonical proposal in D1 and returns only an opaque proposal ID that expires after 24 hours. Creation looks it up, verifies its stored checksum and expiry, and revalidates account/category safety before writing.
+- Creation marks the proposal consumed, inserts the batch marker, every pending transaction, and one minimal audit entry per draft in a single D1 batch. Retrying a successful creation with the same proposal ID returns the original draft rows instead of creating duplicates.
 - Duplicate detection is warning-only, both against nearby existing transactions and within the proposed batch. It never blocks draft creation.
 - MCP review rows have `status=pending`, `pending_kind=mcp_review`, and `review_source=chatgpt_mcp`. They are excluded from balances, budgets, cash-flow projections, and recurring forecasts until manually confirmed.
 - Transaction results are paginated to at most 100 records and descriptions are explicitly marked as untrusted data.
@@ -51,8 +51,8 @@ Finance Manager MCP Review section → edit / confirm / decline manually
 | `list_finance_dimensions` | Account/category IDs, currencies, history bounds, and data semantics |
 | `get_financial_outlook_context` | Start a HUF AI financial forecast with bounded financial context, data coverage, and latest-snapshot freshness |
 | `create_financial_outlook_snapshot` | Immediately publish one validated, immutable, idempotent HUF forecast snapshot; cannot modify financial source data |
-| `prepare_mcp_transaction_drafts` | Validate and preview 1–20 income/expense drafts; returns a short-lived signed proposal token without writing |
-| `create_mcp_transaction_drafts` | After explicit confirmation, atomically create pending MCP review drafts from the exact proposal token |
+| `prepare_mcp_transaction_drafts` | Validate and preview 1–20 income/expense drafts; stores an expiring canonical proposal and returns its opaque ID |
+| `create_mcp_transaction_drafts` | After explicit confirmation, atomically create pending MCP review drafts from the proposal ID |
 | `get_accounts_summary` | Per-account cash/credit balances, exclusions, and locks |
 | `get_finance_overview` | A compact current-period snapshot and previous-period comparison |
 | `search_transactions` | Bounded transaction-level lookup, including pending/cancelled/largest searches |
@@ -96,20 +96,11 @@ Transfers are excluded from income and expense aggregates. Investment accounts a
    version. Existing app registrations may keep the previously approved
    read-only tool snapshot until their actions are refreshed.
 
-The root deploy script generates and stores `MCP_PROPOSAL_SECRET`, then uploads it as a Worker secret. For standalone deployment, configure it separately; never put the value in `wrangler.toml`:
-
-```bash
-cd mcp
-openssl rand -hex 32 | npx wrangler secret put MCP_PROPOSAL_SECRET
-```
-
-Rotating this secret invalidates uncreated proposal tokens. Already-created batches remain idempotently identifiable in D1.
-
 For a standalone/manual deployment, copy `wrangler.toml.example` to the
 gitignored `wrangler.toml`, set its values, then run the MCP test, build, and
 deploy scripts from this workspace.
 
-`DISABLE_ACCESS_AUTH=true` is for local Wrangler tests only. Never configure it in production. `MCP_PROPOSAL_SECRET` must contain at least 32 characters.
+`DISABLE_ACCESS_AUTH=true` is for local Wrangler tests only. Never configure it in production.
 
 ## Connect from ChatGPT
 
@@ -124,4 +115,6 @@ Because this contains sensitive personal financial data, review ChatGPT Data Con
 
 ## Verification
 
-Run `npm run test:mcp` and `npm run build:mcp` from the repository root. The tests cover Access authentication, protocol behavior, schema validation, proposal signing/tampering/expiry, account and category safety, warning-only duplicates, atomic audit-backed draft creation, idempotent retries, projection isolation, pagination, exclusions, currency failures, budgets, forecasts, and bounded time series.
+Run `npm run test:mcp` and `npm run build:mcp` from the repository root. The tests cover Access authentication, protocol behavior, schema validation, stored proposal expiry and consumption, account and category safety, warning-only duplicates, atomic audit-backed draft creation, idempotent retries, projection isolation, pagination, exclusions, currency failures, budgets, forecasts, and bounded time series.
+
+For the post-deployment staging smoke test, run `npm run test:staging -w mcp` with a staging-only `MCP_SMOKE_URL` plus either `MCP_SMOKE_ACCESS_TOKEN` or a Cloudflare Access service-token ID and secret. The script refuses non-staging URLs, then runs prepare → confirmed create → idempotent retry and verifies one pending `mcp_review` draft.

@@ -85,8 +85,10 @@ describe('MCP protocol surface', () => {
       'get_investment_activity',
     ])
     const writes = body.result.tools.filter(tool => !tool.annotations.readOnlyHint)
-    expect(writes.map(tool => tool.name)).toEqual(['create_financial_outlook_snapshot', 'create_mcp_transaction_drafts'])
-    expect(writes.every(tool => tool.annotations.destructiveHint === false && tool.annotations.idempotentHint && tool.annotations.openWorldHint === false)).toBe(true)
+    expect(writes.map(tool => tool.name)).toEqual(['create_financial_outlook_snapshot', 'prepare_mcp_transaction_drafts', 'create_mcp_transaction_drafts'])
+    expect(writes.every(tool => tool.annotations.destructiveHint === false && tool.annotations.openWorldHint === false)).toBe(true)
+    expect(writes.find(tool => tool.name === 'prepare_mcp_transaction_drafts')?.annotations.idempotentHint).toBe(false)
+    expect(writes.filter(tool => tool.name !== 'prepare_mcp_transaction_drafts').every(tool => tool.annotations.idempotentHint)).toBe(true)
     expect(body.result.tools.every(tool => !tool.annotations.destructiveHint)).toBe(true)
     expect(body.result.tools.every(tool => tool.description.includes('Use'))).toBe(true)
     expect(body.result.tools.every(tool => tool.inputSchema && tool.outputSchema)).toBe(true)
@@ -141,10 +143,10 @@ describe('MCP protocol surface', () => {
     expect(body.result.content[0].text).toContain('greater than 0')
   })
 
-  it('allows the write tool to accept only the prepared proposal token', async () => {
+  it('allows the write tool to accept only the prepared proposal ID', async () => {
     const response = await worker.fetch(new Request('http://localhost/mcp', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ jsonrpc: '2.0', id: 'create-invalid', method: 'tools/call', params: { name: 'create_mcp_transaction_drafts', arguments: { proposal_token: 'signed-token', amount: 10 } } }),
+      body: JSON.stringify({ jsonrpc: '2.0', id: 'create-invalid', method: 'tools/call', params: { name: 'create_mcp_transaction_drafts', arguments: { proposal_id: crypto.randomUUID(), amount: 10 } } }),
     }), env)
     const body = await response.json() as { result: { isError: boolean; content: Array<{ text: string }> } }
     expect(body.result.isError).toBe(true)

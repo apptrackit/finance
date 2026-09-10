@@ -1,7 +1,6 @@
-import type { AccountRow, BudgetRow, CanonicalReviewDraft, CategoryRow, Env, InvestmentTransactionRow, RecurringScheduleRow, ReviewDraftInput, ReviewDraftProposalPayload, TransactionRow } from './types'
+import { MCP_WORKER_VERSION, type AccountRow, type BudgetRow, type CanonicalReviewDraft, type CategoryRow, type Env, type InvestmentTransactionRow, type RecurringScheduleRow, type ReviewDraftInput, type StoredReviewDraftProposal, type TransactionRow } from './types'
 import { addUtcDays, daysBetween, periodEndDates, recurringDates } from './date-series'
 import { assertDate, assertDateRange, clampLimit, decodeCursor, defaultMonthRange, encodeCursor, enumValue, optionalDate, previousRange, stringArray } from './validation'
-import { signProposal, verifyProposal } from './review-drafts'
 import { FinancialOutlookSnapshotRow, parseFinancialOutlookInput, parseSnapshot, sha256 } from './financial-outlook'
 
 type Rates = { values: Record<string, number>; available: boolean }
@@ -15,6 +14,36 @@ type ReviewDraftResultRow = TransactionRow & {
 }
 
 type FinancialDataRevision = { revision: number; updated_at: number }
+
+const MCP_PROPOSAL_LIFETIME_MS = 24 * 60 * 60_000
+
+type McpProposalErrorCode =
+  | 'invalid_proposal_id'
+  | 'proposal_not_found'
+  | 'proposal_expired'
+  | 'proposal_already_consumed'
+  | 'proposal_corrupt'
+
+class McpProposalError extends Error {
+  constructor(readonly code: McpProposalErrorCode, message: string) {
+    super(`[${code}] ${message}`)
+    this.name = 'McpProposalError'
+  }
+}
+
+function proposalLog(action: 'prepare' | 'create', proposalId: string | null, outcome: 'success' | 'error' | 'idempotent_replay', errorCode?: string) {
+  console.log(JSON.stringify({
+    event: `mcp.review_draft_${action}`,
+    proposal_id: proposalId,
+    worker_version: MCP_WORKER_VERSION,
+    outcome,
+    error_code: errorCode || null,
+  }))
+}
+
+function proposalError(code: McpProposalErrorCode, message: string) {
+  return new McpProposalError(code, message)
+}
 
 type OutlookCoverage = {
   sources: string[]
@@ -261,6 +290,15 @@ export class FinanceService {
   }
 
   async prepareReviewDrafts(args: Record<string, unknown>) {
+    try {
+      return await this.prepareReviewDraftsInternal(args)
+    } catch (error) {
+      proposalLog('prepare', null, 'error', 'proposal_prepare_failed')
+      throw error
+    }
+  }
+
+  private async prepareReviewDraftsInternal(args: Record<string, unknown>) {
     const inputs = args.items as ReviewDraftInput[]
     if (!Array.isArray(inputs) || inputs.length < 1 || inputs.length > 20) throw new Error('items must contain from 1 to 20 transactions')
     const items: CanonicalReviewDraft[] = inputs.map((input, index) => {
@@ -308,8 +346,10 @@ export class FinanceService {
     duplicates.forEach((matches, index) => {
       if (matches.length && !items[index].review_flags.includes('possible_duplicate')) items[index].review_flags.push('possible_duplicate')
     })
-    const batchId = crypto.randomUUID()
-    const { payload, token } = await signProposal(this.env.MCP_PROPOSAL_SECRET, batchId, items)
+    const proposalId = crypto.randomUUID()
+    const createdAt = Date.now()
+    const expiresAt = createdAt + MCP_PROPOSAL_LIFETIME_MS
+    const proposalHash = await sha256(JSON.stringify(items))
     const preview = items.map((item, index) => {
       const account = accountMap.get(item.account_id)!
       const category = item.category_id ? categoryMap.get(item.category_id)! : null
@@ -345,18 +385,26 @@ export class FinanceService {
       if (inProposalDuplicates.has(index)) messages.push(`Item ${item.item_number} is identical to another item in this proposal; this warning does not block draft creation.`)
       return messages
     })
+    try {
+      await this.env.DB.prepare(
+        'INSERT INTO mcp_draft_proposals (id, proposal_hash, items_json, created_at, expires_at, consumed_at) VALUES (?, ?, ?, ?, ?, NULL)'
+      ).bind(proposalId, proposalHash, JSON.stringify(items), createdAt, expiresAt).run()
+    } catch (error) {
+      proposalLog('prepare', proposalId, 'error', 'proposal_store_failed')
+      throw error
+    }
+    proposalLog('prepare', proposalId, 'success')
     return {
       as_of: new Date().toISOString(),
-      proposal_id: payload.batch_id,
-      expires_at: new Date(payload.expires_at).toISOString(),
-      expires_in_seconds: Math.floor((payload.expires_at - payload.issued_at) / 1_000),
+      proposal_id: proposalId,
+      expires_at: new Date(expiresAt).toISOString(),
+      expires_in_seconds: Math.floor(MCP_PROPOSAL_LIFETIME_MS / 1_000),
       item_count: items.length,
       preview,
       warnings,
       confirmation_required: true,
-      proposal_token: token,
-      next_action: 'Show the complete preview to the user and ask for explicit confirmation. Only after confirmation, call create_mcp_transaction_drafts with this exact proposal_token.',
-      effect: 'Preparation is read-only. Creation can only make MCP review drafts; it never posts transactions or changes account balances.',
+      next_action: 'Show the complete preview to the user and ask for explicit confirmation. Only after confirmation, call create_mcp_transaction_drafts with this proposal_id.',
+      effect: 'Preparation stores an expiring proposal only. Creation can only make MCP review drafts; it never posts transactions or changes account balances.',
     }
   }
 
@@ -366,10 +414,10 @@ export class FinanceService {
     ).bind(batchId).all<ReviewDraftResultRow>()).results
   }
 
-  private reviewDraftCreationResult(payload: ReviewDraftProposalPayload, rows: ReviewDraftResultRow[], idempotentReplay: boolean) {
+  private reviewDraftCreationResult(batchId: string, rows: ReviewDraftResultRow[], idempotentReplay: boolean) {
     return {
       as_of: new Date().toISOString(),
-      batch_id: payload.batch_id,
+      batch_id: batchId,
       item_count: rows.length,
       idempotent_replay: idempotentReplay,
       result: 'mcp_review_drafts_created',
@@ -395,7 +443,7 @@ export class FinanceService {
           status: row.status || 'pending',
           pending_kind: row.pending_kind || 'mcp_review',
           review_source: row.review_source || 'chatgpt_mcp',
-          review_batch_id: row.review_batch_id || payload.batch_id,
+          review_batch_id: row.review_batch_id || batchId,
           review_flags: reviewFlags,
         }
       }),
@@ -404,39 +452,90 @@ export class FinanceService {
     }
   }
 
-  async createReviewDrafts(args: Record<string, unknown>) {
-    const token = String(args.proposal_token || '')
-    const payload = await verifyProposal(this.env.MCP_PROPOSAL_SECRET, token)
-    const now = Date.now()
-    if (payload.issued_at > now + 60_000) throw new Error('proposal_token was issued too far in the future')
-    const existing = await this.env.DB.prepare('SELECT id, proposal_hash, created_at FROM mcp_draft_batches WHERE id = ?').bind(payload.batch_id).first<{ id: string; proposal_hash: string; created_at: number }>()
-    if (existing) {
-      if (existing.proposal_hash !== payload.proposal_hash) throw new Error('proposal_token conflicts with the existing MCP draft batch')
-      return this.reviewDraftCreationResult(payload, await this.reviewDraftRows(payload.batch_id), true)
+  private proposalId(args: Record<string, unknown>) {
+    const proposalId = typeof args.proposal_id === 'string' ? args.proposal_id.trim() : ''
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(proposalId)) {
+      throw proposalError('invalid_proposal_id', 'proposal_id must be a valid proposal identifier')
     }
-    if (now >= payload.expires_at) throw new Error('proposal_token has expired; prepare a fresh preview and obtain explicit user confirmation again')
-    payload.items.forEach((item, index) => assertDate(item.date, `proposal_token.items[${index}].date`))
-    await this.assertReviewDraftDimensions(payload.items)
-    const createdAt = Date.now()
-    const statements: D1PreparedStatement[] = [
-      this.env.DB.prepare('INSERT INTO mcp_draft_batches (id, proposal_hash, created_at) VALUES (?, ?, ?)').bind(payload.batch_id, payload.proposal_hash, createdAt),
-    ]
-    for (const item of payload.items) {
-      statements.push(this.env.DB.prepare(
-        "INSERT INTO transactions (id, account_id, category_id, amount, description, date, linked_transaction_id, exclude_from_estimate, status, confirmed_at, cancelled_at, created_at, updated_at, pending_kind, review_source, review_batch_id, review_flags) VALUES (?, ?, ?, ?, ?, ?, NULL, ?, 'pending', NULL, NULL, ?, ?, 'mcp_review', 'chatgpt_mcp', ?, ?)"
-      ).bind(item.draft_id, item.account_id, item.category_id, item.signed_amount, item.description, item.date, item.exclude_from_estimate ? 1 : 0, createdAt, createdAt, payload.batch_id, JSON.stringify(item.review_flags)))
-      statements.push(this.env.DB.prepare(
-        "INSERT INTO audit_log (id, action, entity, entity_id, details, created_at) VALUES (?, 'CREATE', 'transaction', ?, ?, ?)"
-      ).bind(crypto.randomUUID(), item.draft_id, JSON.stringify({ origin: 'chatgpt_mcp', batch_id: payload.batch_id }), createdAt))
-    }
+    return proposalId
+  }
+
+  private parseStoredProposal(row: StoredReviewDraftProposal) {
+    let items: CanonicalReviewDraft[]
     try {
-      await this.env.DB.batch(statements)
-    } catch (error) {
-      const raced = await this.env.DB.prepare('SELECT id, proposal_hash, created_at FROM mcp_draft_batches WHERE id = ?').bind(payload.batch_id).first<{ id: string; proposal_hash: string; created_at: number }>()
-      if (!raced || raced.proposal_hash !== payload.proposal_hash) throw error
-      return this.reviewDraftCreationResult(payload, await this.reviewDraftRows(payload.batch_id), true)
+      items = JSON.parse(row.items_json) as CanonicalReviewDraft[]
+    } catch {
+      throw proposalError('proposal_corrupt', 'stored proposal data is invalid')
     }
-    return this.reviewDraftCreationResult(payload, await this.reviewDraftRows(payload.batch_id), false)
+    if (!Array.isArray(items) || items.length < 1 || items.length > 20) throw proposalError('proposal_corrupt', 'stored proposal data is invalid')
+    items.forEach((item, index) => {
+      if (!item || typeof item !== 'object'
+        || typeof item.draft_id !== 'string' || !item.draft_id
+        || (item.type !== 'income' && item.type !== 'expense')
+        || typeof item.amount !== 'number' || !Number.isFinite(item.amount) || item.amount <= 0
+        || item.signed_amount !== (item.type === 'income' ? item.amount : -item.amount)
+        || typeof item.account_id !== 'string' || !item.account_id
+        || (item.category_id !== null && typeof item.category_id !== 'string')
+        || (item.description !== null && typeof item.description !== 'string')
+        || typeof item.exclude_from_estimate !== 'boolean'
+        || !Array.isArray(item.review_flags) || item.review_flags.some(flag => typeof flag !== 'string')) {
+        throw proposalError('proposal_corrupt', `stored proposal item ${index + 1} is invalid`)
+      }
+      try { assertDate(item.date, `stored proposal item ${index + 1} date`) } catch { throw proposalError('proposal_corrupt', `stored proposal item ${index + 1} is invalid`) }
+    })
+    return items
+  }
+
+  async createReviewDrafts(args: Record<string, unknown>) {
+    let proposalId: string | null = null
+    try {
+      proposalId = this.proposalId(args)
+      const proposal = await this.env.DB.prepare(
+        'SELECT id, proposal_hash, items_json, created_at, expires_at, consumed_at FROM mcp_draft_proposals WHERE id = ?'
+      ).bind(proposalId).first<StoredReviewDraftProposal>()
+      if (!proposal) throw proposalError('proposal_not_found', 'proposal_id was not found')
+      const existing = await this.env.DB.prepare('SELECT id, proposal_hash, created_at FROM mcp_draft_batches WHERE id = ?').bind(proposalId).first<{ id: string; proposal_hash: string; created_at: number }>()
+      if (existing) {
+        if (existing.proposal_hash !== proposal.proposal_hash) throw proposalError('proposal_corrupt', 'proposal data conflicts with the created draft batch')
+        const result = this.reviewDraftCreationResult(proposalId, await this.reviewDraftRows(proposalId), true)
+        proposalLog('create', proposalId, 'idempotent_replay')
+        return result
+      }
+      if (proposal.consumed_at !== null && proposal.consumed_at !== undefined) throw proposalError('proposal_already_consumed', 'proposal_id was already consumed')
+      const now = Date.now()
+      if (now >= proposal.expires_at) throw proposalError('proposal_expired', 'proposal_id has expired; prepare a fresh preview and obtain explicit confirmation again')
+      const items = this.parseStoredProposal(proposal)
+      if (await sha256(JSON.stringify(items)) !== proposal.proposal_hash) throw proposalError('proposal_corrupt', 'stored proposal checksum does not match')
+      await this.assertReviewDraftDimensions(items)
+      const createdAt = Date.now()
+      const statements: D1PreparedStatement[] = [
+        this.env.DB.prepare('UPDATE mcp_draft_proposals SET consumed_at = ? WHERE id = ? AND consumed_at IS NULL').bind(createdAt, proposalId),
+        this.env.DB.prepare('INSERT INTO mcp_draft_batches (id, proposal_hash, created_at) VALUES (?, ?, ?)').bind(proposalId, proposal.proposal_hash, createdAt),
+      ]
+      for (const item of items) {
+        statements.push(this.env.DB.prepare(
+          "INSERT INTO transactions (id, account_id, category_id, amount, description, date, linked_transaction_id, exclude_from_estimate, status, confirmed_at, cancelled_at, created_at, updated_at, pending_kind, review_source, review_batch_id, review_flags) VALUES (?, ?, ?, ?, ?, ?, NULL, ?, 'pending', NULL, NULL, ?, ?, 'mcp_review', 'chatgpt_mcp', ?, ?)"
+        ).bind(item.draft_id, item.account_id, item.category_id, item.signed_amount, item.description, item.date, item.exclude_from_estimate ? 1 : 0, createdAt, createdAt, proposalId, JSON.stringify(item.review_flags)))
+        statements.push(this.env.DB.prepare(
+          "INSERT INTO audit_log (id, action, entity, entity_id, details, created_at) VALUES (?, 'CREATE', 'transaction', ?, ?, ?)"
+        ).bind(crypto.randomUUID(), item.draft_id, JSON.stringify({ origin: 'chatgpt_mcp', batch_id: proposalId }), createdAt))
+      }
+      try {
+        await this.env.DB.batch(statements)
+      } catch (error) {
+        const raced = await this.env.DB.prepare('SELECT id, proposal_hash, created_at FROM mcp_draft_batches WHERE id = ?').bind(proposalId).first<{ id: string; proposal_hash: string; created_at: number }>()
+        if (!raced || raced.proposal_hash !== proposal.proposal_hash) throw error
+        const result = this.reviewDraftCreationResult(proposalId, await this.reviewDraftRows(proposalId), true)
+        proposalLog('create', proposalId, 'idempotent_replay')
+        return result
+      }
+      const result = this.reviewDraftCreationResult(proposalId, await this.reviewDraftRows(proposalId), false)
+      proposalLog('create', proposalId, 'success')
+      return result
+    } catch (error) {
+      proposalLog('create', proposalId, 'error', error instanceof McpProposalError ? error.code : 'proposal_create_failed')
+      throw error
+    }
   }
 
   async accountsSummary(args: Record<string, unknown>) {
