@@ -1,6 +1,6 @@
 # Finance MCP server
 
-This directory contains the only AI-facing component in Finance Manager: a remote MCP server deployed as a Cloudflare Worker. Most tools are read-only. Its only write capability creates review drafts that must still be confirmed manually in the Finance Manager UI. ChatGPT connects directly to the Worker; no Mac bridge, Codex app-server, frontend chat, OpenAI API key, or separate model billing is involved.
+This directory contains the only AI-facing component in Finance Manager: a remote MCP server deployed as a Cloudflare Worker. Most tools are read-only. Its two narrow write capabilities create review drafts that must still be confirmed manually in the Finance Manager UI, and append-only AI Financial Forecast snapshots. ChatGPT connects directly to the Worker; no Mac bridge, Codex app-server, frontend chat, OpenAI API key, or separate model billing is involved.
 
 ```text
 ChatGPT custom MCP app
@@ -33,7 +33,7 @@ Finance Manager MCP Review section → edit / confirm / decline manually
 - The Worker independently verifies the Access JWT signature, issuer, audience, expiry, and optional allowed email.
 - `workers.dev` is disabled.
 - The model receives only bounded tool results. There is no arbitrary SQL tool and no tool that can post, confirm, edit, decline, delete, transfer, invest, or update a balance.
-- Every tool is non-destructive and closed-world. Read tools advertise `readOnlyHint: true`; the sole draft-creation tool advertises `readOnlyHint: false`, `destructiveHint: false`, `idempotentHint: true`, and `openWorldHint: false`.
+- Every tool is non-destructive and closed-world. Read tools advertise `readOnlyHint: true`; both narrowly scoped write tools advertise `readOnlyHint: false`, `destructiveHint: false`, `idempotentHint: true`, and `openWorldHint: false`.
 - Every tool has explicit input and output JSON Schemas. Inputs reject unknown fields and invalid dates before querying D1.
 - Draft preparation accepts 1–20 income/expense items. Accounts must exist, be unlocked, and be non-investment accounts. Categories are optional, but any supplied category must exist and match the income/expense type.
 - Preparation returns a 15-minute HMAC-SHA-256 proposal token. The create tool accepts only that token, verifies its signature, proposal hash, lifetime, and clock skew, and revalidates account/category safety before writing.
@@ -49,6 +49,8 @@ Finance Manager MCP Review section → edit / confirm / decline manually
 | Tool | Use it for |
 | --- | --- |
 | `list_finance_dimensions` | Account/category IDs, currencies, history bounds, and data semantics |
+| `get_financial_outlook_context` | Start a HUF AI financial forecast with bounded financial context, data coverage, and latest-snapshot freshness |
+| `create_financial_outlook_snapshot` | Immediately publish one validated, immutable, idempotent HUF forecast snapshot; cannot modify financial source data |
 | `prepare_mcp_transaction_drafts` | Validate and preview 1–20 income/expense drafts; returns a short-lived signed proposal token without writing |
 | `create_mcp_transaction_drafts` | After explicit confirmation, atomically create pending MCP review drafts from the exact proposal token |
 | `get_accounts_summary` | Per-account cash/credit balances, exclusions, and locks |

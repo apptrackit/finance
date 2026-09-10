@@ -59,7 +59,7 @@ describe('MCP protocol surface', () => {
     expect(response.status).toBe(200)
   })
 
-  it('advertises the complete schema-described finance surface with one non-destructive write tool', async () => {
+  it('advertises the complete schema-described finance surface with two non-destructive write tools', async () => {
     const response = await worker.fetch(new Request('http://localhost/mcp', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -69,6 +69,8 @@ describe('MCP protocol surface', () => {
 
     expect(body.result.tools.map(tool => tool.name)).toEqual([
       'list_finance_dimensions',
+      'get_financial_outlook_context',
+      'create_financial_outlook_snapshot',
       'prepare_mcp_transaction_drafts',
       'create_mcp_transaction_drafts',
       'get_accounts_summary',
@@ -82,11 +84,11 @@ describe('MCP protocol surface', () => {
       'get_portfolio',
       'get_investment_activity',
     ])
-    const create = body.result.tools.find(tool => tool.name === 'create_mcp_transaction_drafts')!
-    expect(body.result.tools.filter(tool => tool !== create).every(tool => tool.annotations.readOnlyHint)).toBe(true)
-    expect(create.annotations).toMatchObject({ readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false })
+    const writes = body.result.tools.filter(tool => !tool.annotations.readOnlyHint)
+    expect(writes.map(tool => tool.name)).toEqual(['create_financial_outlook_snapshot', 'create_mcp_transaction_drafts'])
+    expect(writes.every(tool => tool.annotations.destructiveHint === false && tool.annotations.idempotentHint && tool.annotations.openWorldHint === false)).toBe(true)
     expect(body.result.tools.every(tool => !tool.annotations.destructiveHint)).toBe(true)
-    expect(body.result.tools.every(tool => tool.description.startsWith('Use this'))).toBe(true)
+    expect(body.result.tools.every(tool => tool.description.includes('Use'))).toBe(true)
     expect(body.result.tools.every(tool => tool.inputSchema && tool.outputSchema)).toBe(true)
     expect(() => JSON.stringify(body.result.tools)).not.toThrow()
   })
@@ -100,6 +102,9 @@ describe('MCP protocol surface', () => {
     expect(body.result.instructions).toContain('ask for explicit confirmation')
     expect(body.result.instructions).toContain('MCP review drafts created')
     expect(body.result.instructions).toContain('never posts transactions or changes balances')
+    expect(body.result.instructions).toContain('first call get_financial_outlook_context')
+    expect(body.result.instructions).toContain('call create_financial_outlook_snapshot in the same request before replying')
+    expect(body.result.instructions).toContain('Do not provide an unsaved chat-only forecast')
   })
 
   it('rejects unknown mutation tools without touching D1', async () => {

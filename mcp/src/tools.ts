@@ -10,6 +10,30 @@ const STRINGS = { type: 'array', items: { type: 'string' } } as const
 const WARNINGS = { type: 'array', items: { type: 'string' } } as const
 const NULLABLE_STRING = { type: ['string', 'null'] } as const
 
+const OUTLOOK_RANGE = {
+  type: 'object', required: ['low', 'expected', 'high'],
+  properties: {
+    low: { type: 'number', minimum: -1_000_000_000_000_000, maximum: 1_000_000_000_000_000 },
+    expected: { type: 'number', minimum: -1_000_000_000_000_000, maximum: 1_000_000_000_000_000 },
+    high: { type: 'number', minimum: -1_000_000_000_000_000, maximum: 1_000_000_000_000_000 },
+  }, additionalProperties: false,
+} as const
+
+const OUTLOOK_HORIZON = {
+  type: 'object', required: ['days', 'cash_balance'],
+  properties: {
+    days: { type: 'integer', enum: [7, 30, 90] }, cash_balance: OUTLOOK_RANGE,
+  }, additionalProperties: false,
+} as const
+
+const CASH_BALANCE_PATH_POINT = {
+  type: 'object', required: ['day', 'low', 'expected', 'high'],
+  properties: {
+    day: { type: 'integer', minimum: 0, maximum: 90 },
+    ...OUTLOOK_RANGE.properties,
+  }, additionalProperties: false,
+} as const
+
 const DUPLICATE_CANDIDATE = {
   type: 'object',
   required: ['transaction_id', 'date', 'amount', 'signed_amount', 'status', 'pending_kind', 'description', 'description_is_untrusted_data'],
@@ -61,6 +85,38 @@ export const TOOL_DEFINITIONS = [
       available_date_range: RECORD, accounts: RECORDS, categories: RECORDS, semantics: RECORD,
     }),
     annotations: READ_ONLY,
+  },
+  {
+    name: 'get_financial_outlook_context',
+    title: 'Get financial outlook context',
+    description: 'Start every AI financial forecast with this HUF-only overview. It returns bounded balances, cash flow, budgets, known future movements, portfolio coverage, the latest forecast freshness, and the policy for whether regeneration is warranted. Use additional Finance Manager read tools only when this context is incomplete or ambiguous.',
+    inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+    outputSchema: output(['as_of', 'source_revision', 'source_revision_updated_at', 'currency', 'generation_policy', 'latest_forecast', 'source_coverage', 'core_data'], {
+      as_of: { type: 'string' }, source_revision: { type: 'integer' }, source_revision_updated_at: { type: 'string' }, currency: { type: 'string', enum: ['HUF'] },
+      generation_policy: RECORD, latest_forecast: RECORD, source_coverage: RECORD, core_data: RECORD,
+    }),
+    annotations: READ_ONLY,
+    _meta: { 'openai/toolInvocation/invoking': 'Preparing financial outlook context…', 'openai/toolInvocation/invoked': 'Financial outlook context ready' },
+  },
+  {
+    name: 'create_financial_outlook_snapshot',
+    title: 'Publish AI financial forecast',
+    description: 'Persist a compact, immutable HUF cash forecast after get_financial_outlook_context. Provide a low, expected, and high cash-balance range for 7, 30, and 90 days, plus a 46–91 point daily or near-daily cash_balance_path from day 0 through day 90 for the Expected cash trend chart. Day 0 must reflect the current liquid cash from context. Include a point no more than every 2 days, exact matching points for days 7, 30, and 90, and exact known payday or material planned-spending days where possible. Do not invent discrete events; represent ordinary baseline spending as gradual cash movement between known events. This writes only an append-only analytics snapshot and cannot change accounts, transactions, budgets, schedules, investments, or settings. Use only when the user asked to generate or publish a forecast, or an authorized scheduled run determined regeneration is warranted. A current source_revision is required; retries with the same idempotency_key return the existing snapshot.',
+    inputSchema: {
+      type: 'object', required: ['idempotency_key', 'source_revision', 'source_queried_at', 'headline', 'horizons', 'cash_balance_path'],
+      properties: {
+        idempotency_key: { type: 'string', minLength: 8, maxLength: 128 }, source_revision: { type: 'integer', minimum: 0 }, source_queried_at: { type: 'string', minLength: 20, maxLength: 64 }, headline: { type: 'string', minLength: 1, maxLength: 240 },
+        horizons: { type: 'array', minItems: 3, maxItems: 3, items: OUTLOOK_HORIZON },
+        cash_balance_path: { type: 'array', minItems: 46, maxItems: 91, items: CASH_BALANCE_PATH_POINT },
+        drivers: { type: 'array', maxItems: 4, items: { type: 'string', minLength: 1, maxLength: 280 } },
+        risks: { type: 'array', maxItems: 4, items: { type: 'string', minLength: 1, maxLength: 280 } },
+        assumptions: { type: 'array', maxItems: 5, items: { type: 'string', minLength: 1, maxLength: 280 } },
+        suggestions: { type: 'array', maxItems: 3, items: { type: 'string', minLength: 1, maxLength: 280 } },
+      }, additionalProperties: false,
+    },
+    outputSchema: output(['snapshot', 'idempotent_replay'], { snapshot: RECORD, idempotent_replay: { type: 'boolean' } }),
+    annotations: DRAFT_WRITE,
+    _meta: { 'openai/toolInvocation/invoking': 'Publishing financial forecast…', 'openai/toolInvocation/invoked': 'Financial forecast published' },
   },
   {
     name: 'prepare_mcp_transaction_drafts',
@@ -332,6 +388,8 @@ export async function callTool(service: FinanceService, name: string, args: Reco
   validateSchema(args, definition.inputSchema as JsonSchema)
   switch (name) {
     case 'list_finance_dimensions': return service.listDimensions()
+    case 'get_financial_outlook_context': return service.financialOutlookContext()
+    case 'create_financial_outlook_snapshot': return service.createFinancialOutlookSnapshot(args)
     case 'prepare_mcp_transaction_drafts': return service.prepareReviewDrafts(args)
     case 'create_mcp_transaction_drafts': return service.createReviewDrafts(args)
     case 'get_accounts_summary': return service.accountsSummary(args)

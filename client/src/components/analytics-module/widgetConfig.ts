@@ -7,8 +7,8 @@ export type WidgetId =
   | 'account-trends'
   | 'income-breakdown'
   | 'spending-breakdown'
-  | 'spending-estimates'
   | 'top-expenses'
+  | 'ai-financial-forecast'
 
 export interface WidgetDef {
   id: WidgetId
@@ -69,16 +69,17 @@ export const WIDGET_DEFS: WidgetDef[] = [
     defaultVisible: true,
   },
   {
-    id: 'spending-estimates',
-    label: 'Spending Estimates',
-    description: 'Predicted weekly and monthly spending based on your patterns',
-    defaultVisible: true,
-  },
-  {
     id: 'top-expenses',
     label: 'Top Expenses',
     description: 'Your 5 largest transactions for the selected period',
     defaultVisible: true,
+  },
+  {
+    id: 'ai-financial-forecast',
+    label: 'AI Financial Forecast',
+    description: 'AI-generated 7-, 30-, and 90-day cash forecast with report history',
+    defaultVisible: true,
+    note: 'Independent of the selected date range',
   },
 ]
 

@@ -2,6 +2,7 @@ import type { AccountRow, BudgetRow, CanonicalReviewDraft, CategoryRow, Env, Inv
 import { addUtcDays, daysBetween, periodEndDates, recurringDates } from './date-series'
 import { assertDate, assertDateRange, clampLimit, decodeCursor, defaultMonthRange, encodeCursor, enumValue, optionalDate, previousRange, stringArray } from './validation'
 import { signProposal, verifyProposal } from './review-drafts'
+import { FinancialOutlookSnapshotRow, parseFinancialOutlookInput, parseSnapshot, sha256 } from './financial-outlook'
 
 type Rates = { values: Record<string, number>; available: boolean }
 type LiveQuote = { price: number; currency: string; marketState: string | null }
@@ -11,6 +12,19 @@ type ReviewDraftResultRow = TransactionRow & {
   account_currency: string
   category_name?: string | null
   category_type?: 'income' | 'expense' | null
+}
+
+type FinancialDataRevision = { revision: number; updated_at: number }
+
+type OutlookCoverage = {
+  sources: string[]
+  history: { start_date: string | null; end_date: string | null; days: number }
+  latest_posted_transaction_date: string | null
+  conversion_status: 'complete' | 'partial'
+  portfolio_valuation_status: string
+  data_quality_reasons: string[]
+  data_quality_score: number
+  data_quality_label: 'high' | 'moderate' | 'limited'
 }
 
 function bool(value: number | boolean | undefined) {
@@ -100,6 +114,88 @@ export class FinanceService {
     return (await this.env.DB.prepare(
       "SELECT * FROM transactions WHERE status = 'posted' AND date > ? ORDER BY date ASC, rowid ASC"
     ).bind(startDate).all<TransactionRow>()).results
+  }
+
+  private async financialDataRevision() {
+    const revision = await this.env.DB.prepare('SELECT revision, updated_at FROM financial_data_revision WHERE id = 1').first<FinancialDataRevision>()
+    if (!revision) throw new Error('Financial data revision is unavailable; apply the latest Finance Manager migration')
+    return revision
+  }
+
+  private async latestOutlookRow() {
+    return this.env.DB.prepare('SELECT * FROM financial_outlook_snapshots ORDER BY created_at DESC, id DESC LIMIT 1').first<FinancialOutlookSnapshotRow>()
+  }
+
+  private outlookStatus(row: FinancialOutlookSnapshotRow | null, revision: FinancialDataRevision, now = Date.now()) {
+    if (!row) {
+      return {
+        exists: false,
+        freshness: 'historical' as const,
+        data_changed: false,
+        age_days: null,
+        active_horizons: [] as number[],
+        expired_horizons: [] as number[],
+        regeneration_recommended: true,
+      }
+    }
+    const ageDays = Math.max(0, Math.floor((now - Date.parse(row.source_queried_at)) / 86_400_000))
+    const activeHorizons = [7, 30, 90].filter(days => ageDays < days)
+    const expiredHorizons = [7, 30, 90].filter(days => ageDays >= days)
+    const dataChanged = row.source_revision !== revision.revision
+    const freshness = activeHorizons.length === 0
+      ? 'historical'
+      : expiredHorizons.length > 0
+        ? 'partially_expired'
+        : dataChanged
+          ? 'data_changed'
+          : ageDays >= 4
+            ? 'refresh_recommended'
+            : 'up_to_date'
+    return {
+      exists: true,
+      snapshot_id: row.id,
+      created_at: new Date(row.created_at).toISOString(),
+      source_revision: row.source_revision,
+      freshness,
+      data_changed: dataChanged,
+      age_days: ageDays,
+      active_horizons: activeHorizons,
+      expired_horizons: expiredHorizons,
+      regeneration_recommended: dataChanged || ageDays >= 4 || expiredHorizons.length > 0,
+    }
+  }
+
+  private async outlookCoverage() {
+    const [dimensions, summary, portfolio] = await Promise.all([
+      this.listDimensions(), this.accountsSummary({ currency: 'HUF' }), this.portfolio({ currency: 'HUF' }),
+    ])
+    const start = dimensions.available_date_range.start_date
+    const end = dimensions.available_date_range.end_date
+    const historyDays = start && end ? Math.max(0, daysBetween(start, end)) : 0
+    const latestAge = end ? Math.max(0, Math.floor((Date.now() - Date.parse(`${end}T00:00:00Z`)) / 86_400_000)) : 999
+    const hasInvestment = dimensions.accounts.some(account => account.type === 'investment')
+    const historyScore = Math.min(40, Math.round((Math.min(historyDays, 180) / 180) * 40))
+    const recencyScore = latestAge <= 7 ? 35 : latestAge <= 30 ? 20 : 0
+    const conversionScore = summary.conversion_status === 'complete' ? 15 : 5
+    const valuationScore = !hasInvestment || portfolio.valuation_status === 'complete' ? 10 : 0
+    const score = historyScore + recencyScore + conversionScore + valuationScore
+    const label = score >= 80 ? 'high' : score >= 50 ? 'moderate' : 'limited'
+    const reasons = [
+      historyDays ? `${historyDays} days of posted transaction history are available` : 'No posted transaction history is available',
+      latestAge <= 7 ? 'Ledger activity is recent' : latestAge <= 30 ? 'Ledger activity is older than one week' : 'Ledger activity is more than 30 days old',
+      summary.conversion_status === 'complete' ? 'HUF conversion coverage is complete' : 'Some non-HUF amounts are excluded from HUF totals',
+      !hasInvestment ? 'No market-priced investments require valuation' : portfolio.valuation_status === 'complete' ? 'Investment valuation coverage is complete' : 'Investment valuation coverage is incomplete',
+    ]
+    return {
+      sources: ['accounts', 'posted_transactions', 'recurring_schedules', 'upcoming_transactions', 'budgets', 'portfolio'],
+      history: { start_date: start, end_date: end, days: historyDays },
+      latest_posted_transaction_date: end,
+      conversion_status: summary.conversion_status as 'complete' | 'partial',
+      portfolio_valuation_status: portfolio.valuation_status,
+      data_quality_reasons: reasons,
+      data_quality_score: score,
+      data_quality_label: label,
+    } satisfies OutlookCoverage
   }
 
   async listDimensions() {
@@ -414,6 +510,100 @@ export class FinanceService {
       change: { income: round(totals.income - previousTotals.income), expenses: round(totals.expenses - previousTotals.expenses), net_flow: round(totals.net_flow - previousTotals.net_flow) },
       conversion_status: warnings.length ? 'partial' : 'complete', warnings,
     }
+  }
+
+  async financialOutlookContext() {
+    const today = new Date().toISOString().slice(0, 10)
+    const historyStart = addUtcDays(today, -89)
+    const futureEnd = addUtcDays(today, 90)
+    const [revision, latestRow, coverage, accounts, overview, cashflow, budgets, recurring, portfolio] = await Promise.all([
+      this.financialDataRevision(),
+      this.latestOutlookRow(),
+      this.outlookCoverage(),
+      this.accountsSummary({ currency: 'HUF' }),
+      this.overview({ currency: 'HUF', start_date: historyStart, end_date: today }),
+      this.cashflowTrend({ currency: 'HUF', start_date: historyStart, end_date: today, interval: 'month', include_projected: false }),
+      this.budgetStatus({ currency: 'HUF' }),
+      this.recurringForecast({ currency: 'HUF', start_date: today, end_date: futureEnd }),
+      this.portfolio({ currency: 'HUF' }),
+    ])
+    return {
+      as_of: new Date().toISOString(),
+      source_revision: revision.revision,
+      source_revision_updated_at: new Date(revision.updated_at).toISOString(),
+      currency: 'HUF',
+      generation_policy: {
+        refresh_after_days: 4,
+        manual_when_fresh: 'Ask before regenerating a recent unchanged forecast unless the user explicitly asked to regenerate.',
+        scheduled_when_fresh: 'Skip a recent unchanged forecast during scheduled runs.',
+      },
+      latest_forecast: this.outlookStatus(latestRow, revision),
+      source_coverage: coverage,
+      core_data: {
+        accounts,
+        overview,
+        cashflow_trend: cashflow,
+        budgets,
+        known_future: recurring,
+        portfolio,
+      },
+    }
+  }
+
+  async createFinancialOutlookSnapshot(args: Record<string, unknown>) {
+    const input = parseFinancialOutlookInput(args)
+    const payload = {
+      headline: input.headline,
+      horizons: input.horizons,
+      cash_balance_path: input.cash_balance_path,
+      drivers: input.drivers,
+      risks: input.risks,
+      assumptions: input.assumptions,
+      suggestions: input.suggestions,
+    }
+    const payloadJson = JSON.stringify(payload)
+    const payloadHash = await sha256(JSON.stringify({ source_revision: input.source_revision, source_queried_at: input.source_queried_at, payload }))
+    const existing = await this.env.DB.prepare('SELECT * FROM financial_outlook_snapshots WHERE idempotency_key = ?').bind(input.idempotency_key).first<FinancialOutlookSnapshotRow>()
+    if (existing) {
+      if (existing.payload_hash !== payloadHash) throw new Error('idempotency_key conflicts with an existing financial outlook snapshot')
+      return { snapshot: parseSnapshot(existing), idempotent_replay: true }
+    }
+
+    const revision = await this.financialDataRevision()
+    if (revision.revision !== input.source_revision) {
+      throw new Error('Financial data changed after the outlook context was read; refresh the context before publishing')
+    }
+    const coverage = await this.outlookCoverage()
+    const id = crypto.randomUUID()
+    const createdAt = Date.now()
+    const row: FinancialOutlookSnapshotRow = {
+      id,
+      idempotency_key: input.idempotency_key,
+      payload_hash: payloadHash,
+      schema_version: 2,
+      currency: 'HUF',
+      source_revision: input.source_revision,
+      source_queried_at: input.source_queried_at,
+      created_at: createdAt,
+      headline: input.headline,
+      data_quality_score: coverage.data_quality_score,
+      data_quality_label: coverage.data_quality_label,
+      payload: payloadJson,
+      source_coverage: JSON.stringify(coverage),
+    }
+    try {
+      await this.env.DB.batch([
+        this.env.DB.prepare('INSERT INTO financial_outlook_snapshots (id, idempotency_key, payload_hash, schema_version, currency, source_revision, source_queried_at, created_at, headline, data_quality_score, data_quality_label, payload, source_coverage) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+          .bind(row.id, row.idempotency_key, row.payload_hash, row.schema_version, row.currency, row.source_revision, row.source_queried_at, row.created_at, row.headline, row.data_quality_score, row.data_quality_label, row.payload, row.source_coverage),
+        this.env.DB.prepare("INSERT INTO audit_log (id, action, entity, entity_id, details, created_at) VALUES (?, 'CREATE', 'financial_outlook_snapshot', ?, ?, ?)")
+          .bind(crypto.randomUUID(), id, JSON.stringify({ source_revision: input.source_revision, origin: 'chatgpt_mcp' }), createdAt),
+      ])
+    } catch (error) {
+      const raced = await this.env.DB.prepare('SELECT * FROM financial_outlook_snapshots WHERE idempotency_key = ?').bind(input.idempotency_key).first<FinancialOutlookSnapshotRow>()
+      if (raced && raced.payload_hash === payloadHash) return { snapshot: parseSnapshot(raced), idempotent_replay: true }
+      throw error
+    }
+    return { snapshot: parseSnapshot(row), idempotent_replay: false }
   }
 
   async searchTransactions(args: Record<string, unknown>) {

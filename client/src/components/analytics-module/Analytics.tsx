@@ -8,7 +8,7 @@ import { format, subMonths, addMonths, startOfMonth, endOfMonth, isWithinInterva
 import { API_BASE_URL, apiFetch } from '../../config'
 import { convertToMasterCurrency as convertUtil } from './utils'
 import { SummaryCards } from './SummaryCards'
-import { SpendingEstimates } from './SpendingEstimates'
+import { FinancialOutlook } from './FinancialOutlook'
 import { NetWorthTrendChart } from './NetWorthTrendChart'
 import { IncomeChart } from './IncomeChart'
 import { ExpensesChart } from './ExpensesChart'
@@ -17,7 +17,7 @@ import { CategoryBreakdownChart } from './CategoryBreakdownChart'
 import { IncomeBreakdownChart } from './IncomeBreakdownChart'
 import { TopExpensesList } from './TopExpensesList'
 import { PredictionChart } from './PredictionChart'
-import type { Transaction, Category, Account, TimePeriod, SpendingEstimate, ChartDataPoint, TrendDataPoint } from './types'
+import type { Transaction, Category, Account, TimePeriod, FinancialOutlookSnapshot, ChartDataPoint, TrendDataPoint } from './types'
 import { isUpcomingProjectionTransaction } from '../../lib/transaction-review'
 
 type AnalyticsProps = {
@@ -117,8 +117,10 @@ export function Analytics({
     }
     return { startDate: '2000-01-01', endDate: format(new Date(), 'yyyy-MM-dd') }
   }, [period, selectedDate])
-  const [weekEstimate, setWeekEstimate] = useState<SpendingEstimate | null>(null)
-  const [monthEstimate, setMonthEstimate] = useState<SpendingEstimate | null>(null)
+  const [outlookHistory, setOutlookHistory] = useState<FinancialOutlookSnapshot[]>([])
+  const [selectedOutlookId, setSelectedOutlookId] = useState<string | null>(null)
+  const [outlookNextCursor, setOutlookNextCursor] = useState<string | null>(null)
+  const [outlookLoading, setOutlookLoading] = useState(true)
 
   // Show prediction chart only when on default current-month view
   const isCurrentMonthView = useMemo(() => {
@@ -143,31 +145,48 @@ export function Analytics({
     fetchRates()
   }, [masterCurrency])
 
-  // Fetch spending estimates
+  // Fetch the latest persisted AI forecast plus the first page of immutable history.
   useEffect(() => {
-    const fetchEstimates = async () => {
+    const fetchOutlooks = async () => {
       try {
-        const [weekRes, monthRes] = await Promise.all([
-          apiFetch(`${API_BASE_URL}/dashboard/spending-estimate?period=week&currency=${masterCurrency}`),
-          apiFetch(`${API_BASE_URL}/dashboard/spending-estimate?period=month&currency=${masterCurrency}`)
+        const [latestRes, historyRes] = await Promise.all([
+          apiFetch(`${API_BASE_URL}/financial-outlook/latest`),
+          apiFetch(`${API_BASE_URL}/financial-outlook-snapshots?limit=20`),
         ])
-        
-        if (weekRes.ok) {
-          const weekData = await weekRes.json()
-          setWeekEstimate(weekData)
-        }
-        
-        if (monthRes.ok) {
-          const monthData = await monthRes.json()
-          setMonthEstimate(monthData)
-        }
+        if (!latestRes.ok || !historyRes.ok) return
+        const [{ snapshot: latest }, history] = await Promise.all([
+          latestRes.json() as Promise<{ snapshot: FinancialOutlookSnapshot | null }>,
+          historyRes.json() as Promise<{ snapshots: FinancialOutlookSnapshot[]; next_cursor: string | null }>,
+        ])
+        const snapshots = latest && !history.snapshots.some(item => item.id === latest.id)
+          ? [latest, ...history.snapshots]
+          : history.snapshots
+        setOutlookHistory(snapshots)
+        setSelectedOutlookId(latest?.id || snapshots[0]?.id || null)
+        setOutlookNextCursor(history.next_cursor)
       } catch (error) {
-        console.error('Failed to fetch spending estimates:', error)
+        console.error('Failed to fetch financial outlook:', error)
+      } finally {
+        setOutlookLoading(false)
       }
     }
-    
-    fetchEstimates()
-  }, [masterCurrency])
+    fetchOutlooks()
+  }, [])
+
+  const loadMoreOutlooks = async () => {
+    if (!outlookNextCursor) return
+    try {
+      const response = await apiFetch(`${API_BASE_URL}/financial-outlook-snapshots?limit=20&cursor=${encodeURIComponent(outlookNextCursor)}`)
+      if (!response.ok) return
+      const history = await response.json() as { snapshots: FinancialOutlookSnapshot[]; next_cursor: string | null }
+      setOutlookHistory(previous => [...previous, ...history.snapshots.filter(item => !previous.some(existing => existing.id === item.id))])
+      setOutlookNextCursor(history.next_cursor)
+    } catch (error) {
+      console.error('Failed to load older financial outlooks:', error)
+    }
+  }
+
+  const selectedOutlook = outlookHistory.find(item => item.id === selectedOutlookId) || outlookHistory[0] || null
 
   // Wrapper for convertToMasterCurrency utility
   const convertToMasterCurrency = (amount: number, accountId: string): number => {
@@ -651,8 +670,8 @@ export function Analytics({
     'account-trends':         perAccountTrendData.length > 0,
     'income-breakdown':       incomeCategoryData.length > 0,
     'spending-breakdown':     categoryData.length > 0,
-    'spending-estimates':     !!(weekEstimate || monthEstimate),
     'top-expenses':           filteredTransactions.filter(t => t.amount < 0).length > 0,
+    'ai-financial-forecast':  Boolean(selectedOutlook),
   }
 
   if (loading) return <AnalyticsSkeleton />
@@ -835,14 +854,6 @@ export function Analytics({
             )}
           </div>
 
-          {show('spending-estimates') && (
-            <SpendingEstimates
-              weekEstimate={weekEstimate}
-              monthEstimate={monthEstimate}
-              masterCurrency={masterCurrency}
-            />
-          )}
-
           {show('top-expenses') && (
             <TopExpensesList
               transactions={filteredTransactions}
@@ -852,6 +863,18 @@ export function Analytics({
             />
           )}
         </>
+      )}
+
+      {show('ai-financial-forecast') && (
+        <FinancialOutlook
+          snapshot={selectedOutlook}
+          history={outlookHistory}
+          selectedId={selectedOutlookId}
+          loading={outlookLoading}
+          onSelect={setSelectedOutlookId}
+          onLoadMore={loadMoreOutlooks}
+          hasMore={Boolean(outlookNextCursor)}
+        />
       )}
     </div>
   )
