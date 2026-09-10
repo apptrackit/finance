@@ -2,6 +2,7 @@ import { FinanceService } from './finance-service'
 
 const READ_ONLY = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false } as const
 const DRAFT_WRITE = { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false } as const
+const PROPOSAL_PREPARE = { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false } as const
 const DATE = { type: 'string', pattern: '^\\d{4}-\\d{2}-\\d{2}$', description: 'Calendar date in YYYY-MM-DD format.' } as const
 const CURRENCY = { type: 'string', pattern: '^[A-Za-z]{3}$', default: 'HUF', description: 'Three-letter reporting currency code. Case-insensitive.' } as const
 const RECORD = { type: 'object', properties: {}, additionalProperties: true } as const
@@ -121,7 +122,7 @@ export const TOOL_DEFINITIONS = [
   {
     name: 'prepare_mcp_transaction_drafts',
     title: 'Preview MCP transaction drafts',
-    description: 'Use this before creating any finance draft. Validate 1–20 income or expense transactions, resolve account/category names, and show the complete returned preview to the user. Ask for explicit confirmation of every item. This is read-only and never saves or posts transactions. One item always represents one transaction; do not split a receipt automatically. Duplicate-looking items are warnings only and must not be silently removed. Prefer a logical category when supported by the available dimensions, but leave category_id null rather than guessing when uncertain.',
+    description: 'Use this before creating any finance draft. Validate 1–20 income or expense transactions, resolve account/category names, store one expiring proposal, and show the complete returned preview to the user. Ask for explicit confirmation of every item. It never creates or posts a transaction, changes a balance, or makes an MCP review draft. One item always represents one transaction; do not split a receipt automatically. Duplicate-looking items are warnings only and must not be silently removed. Prefer a logical category when supported by the available dimensions, but leave category_id null rather than guessing when uncertain.',
     inputSchema: {
       type: 'object',
       required: ['items'],
@@ -146,21 +147,21 @@ export const TOOL_DEFINITIONS = [
       },
       additionalProperties: false,
     },
-    outputSchema: output(['as_of', 'proposal_id', 'expires_at', 'expires_in_seconds', 'item_count', 'preview', 'warnings', 'confirmation_required', 'proposal_token', 'next_action', 'effect'], {
+    outputSchema: output(['as_of', 'proposal_id', 'expires_at', 'expires_in_seconds', 'item_count', 'preview', 'warnings', 'confirmation_required', 'next_action', 'effect'], {
       as_of: { type: 'string' }, proposal_id: { type: 'string' }, expires_at: { type: 'string' }, expires_in_seconds: { type: 'integer' },
       item_count: { type: 'integer' }, preview: { type: 'array', items: REVIEW_PREVIEW_ITEM }, warnings: WARNINGS,
-      confirmation_required: { type: 'boolean' }, proposal_token: { type: 'string' }, next_action: { type: 'string' }, effect: { type: 'string' },
+      confirmation_required: { type: 'boolean' }, next_action: { type: 'string' }, effect: { type: 'string' },
     }),
-    annotations: READ_ONLY,
+    annotations: PROPOSAL_PREPARE,
     _meta: { 'openai/toolInvocation/invoking': 'Preparing MCP review preview…', 'openai/toolInvocation/invoked': 'MCP review preview ready' },
   },
   {
     name: 'create_mcp_transaction_drafts',
     title: 'Create MCP review drafts',
-    description: 'Use this only after prepare_mcp_transaction_drafts and only after the user explicitly confirms the complete returned preview. Pass the exact unmodified proposal_token and no transaction fields. This idempotent tool creates pending MCP review drafts only: it cannot post, confirm, edit, decline, delete, transfer, invest, or change account balances. Say “MCP review drafts created,” never say the transactions were saved or posted, and direct the user to the Finance Manager MCP Review section.',
+    description: 'Use this only after prepare_mcp_transaction_drafts and only after the user explicitly confirms the complete returned preview. Pass the returned proposal_id and no transaction fields. This idempotent tool creates pending MCP review drafts only: it cannot post, confirm, edit, decline, delete, transfer, invest, or change account balances. Say “MCP review drafts created,” never say the transactions were saved or posted, and direct the user to the Finance Manager MCP Review section.',
     inputSchema: {
-      type: 'object', required: ['proposal_token'],
-      properties: { proposal_token: { type: 'string', minLength: 1, maxLength: 50_000, description: 'Exact short-lived token returned by prepare_mcp_transaction_drafts.' } },
+      type: 'object', required: ['proposal_id'],
+      properties: { proposal_id: { type: 'string', minLength: 36, maxLength: 36, pattern: '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$', description: 'Opaque proposal identifier returned by prepare_mcp_transaction_drafts.' } },
       additionalProperties: false,
     },
     outputSchema: output(['as_of', 'batch_id', 'item_count', 'idempotent_replay', 'result', 'drafts', 'effect', 'next_action'], {

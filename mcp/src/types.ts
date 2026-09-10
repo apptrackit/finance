@@ -2,10 +2,11 @@ export type Env = {
   DB: D1Database
   CF_ACCESS_TEAM_DOMAIN: string
   CF_ACCESS_AUD: string
-  MCP_PROPOSAL_SECRET: string
   ALLOWED_EMAIL?: string
   DISABLE_ACCESS_AUTH?: string
 }
+
+export const MCP_WORKER_VERSION = '1.3.0'
 
 export type AccountRow = {
   id: string
@@ -65,13 +66,13 @@ export type CanonicalReviewDraft = {
   review_flags: string[]
 }
 
-export type ReviewDraftProposalPayload = {
-  version: 1
-  batch_id: string
-  issued_at: number
-  expires_at: number
+export type StoredReviewDraftProposal = {
+  id: string
   proposal_hash: string
-  items: CanonicalReviewDraft[]
+  items_json: string
+  created_at: number
+  expires_at: number
+  consumed_at: number | null
 }
 
 export type BudgetRow = {
