@@ -117,9 +117,14 @@ export async function verifyProposal(secretValue: string | undefined, token: str
   const parts = token.split('.')
   if (parts.length !== 2 || !parts[0] || !parts[1]) throw new Error('proposal_token has an invalid format')
   const signature = base64UrlToBytes(parts[1])
+  // Base64URL has unused trailing bits for some byte lengths. Reject alternate
+  // spellings of the same bytes so an exact signed token cannot be modified.
+  if (bytesToBase64Url(signature) !== parts[1]) throw new Error('proposal_token signature is invalid')
   const valid = await crypto.subtle.verify('HMAC', await importHmacKey(secret), signature, encoder.encode(parts[0]))
   if (!valid) throw new Error('proposal_token signature is invalid')
-  const payload = parsePayload(base64UrlToBytes(parts[0]))
+  const payloadBytes = base64UrlToBytes(parts[0])
+  if (bytesToBase64Url(payloadBytes) !== parts[0]) throw new Error('proposal_token has an invalid format')
+  const payload = parsePayload(payloadBytes)
   if (await proposalHash(payload.items) !== payload.proposal_hash) throw new Error('proposal_token proposal hash is invalid')
   return payload
 }

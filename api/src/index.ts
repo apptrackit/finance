@@ -10,6 +10,7 @@ import { InvestmentTransactionRepository } from './repositories/investment-trans
 import { RecurringScheduleRepository } from './repositories/recurring-schedule.repository'
 import { BudgetRepository } from './repositories/budget.repository'
 import { SettingsRepository } from './repositories/settings.repository'
+import { FinancialOutlookRepository } from './repositories/financial-outlook.repository'
 
 // Services
 import { AccountService } from './services/account.service'
@@ -22,6 +23,7 @@ import { MarketDataService } from './services/market-data.service'
 import { RecurringScheduleService } from './services/recurring-schedule.service'
 import { BudgetService } from './services/budget.service'
 import { SettingsService } from './services/settings.service'
+import { FinancialOutlookService } from './services/financial-outlook.service'
 
 // Controllers
 import { AccountController } from './controllers/account.controller'
@@ -34,6 +36,7 @@ import { MarketDataController } from './controllers/market-data.controller'
 import { RecurringScheduleController } from './controllers/recurring-schedule.controller'
 import { BudgetController } from './controllers/budget.controller'
 import { SettingsController } from './controllers/settings.controller'
+import { FinancialOutlookController } from './controllers/financial-outlook.controller'
 
 // Middleware
 import { corsMiddleware } from './middlewares/cors.middleware'
@@ -65,6 +68,7 @@ function createDependencies(db: D1Database) {
   const recurringScheduleRepo = new RecurringScheduleRepository(db)
   const budgetRepo = new BudgetRepository(db)
   const settingsRepo = new SettingsRepository(db)
+  const financialOutlookRepo = new FinancialOutlookRepository(db)
 
   // Initialize services
   const accountService = new AccountService(accountRepo, transactionRepo)
@@ -77,6 +81,7 @@ function createDependencies(db: D1Database) {
   const recurringScheduleService = new RecurringScheduleService(recurringScheduleRepo, transactionRepo, accountRepo)
   const budgetService = new BudgetService(budgetRepo, accountRepo, categoryRepo)
   const settingsService = new SettingsService(settingsRepo)
+  const financialOutlookService = new FinancialOutlookService(financialOutlookRepo)
 
   // Initialize controllers
   const accountController = new AccountController(accountService)
@@ -89,6 +94,7 @@ function createDependencies(db: D1Database) {
   const recurringScheduleController = new RecurringScheduleController(recurringScheduleService)
   const budgetController = new BudgetController(budgetService)
   const settingsController = new SettingsController(settingsService)
+  const financialOutlookController = new FinancialOutlookController(financialOutlookService)
 
   return {
     accountController,
@@ -100,7 +106,8 @@ function createDependencies(db: D1Database) {
     marketDataController,
     recurringScheduleController,
     budgetController,
-    settingsController
+    settingsController,
+    financialOutlookController
   }
 }
 
@@ -179,6 +186,10 @@ app.post('/transfers', validateBody(CreateTransferSchema), (c) => getControllers
 // Dashboard
 app.get('/dashboard/net-worth', (c) => getControllers(c).dashboardController.getNetWorth(c))
 app.get('/dashboard/spending-estimate', (c) => getControllers(c).dashboardController.getSpendingEstimate(c))
+
+// AI Financial Forecast (read-only; MCP is the only publisher)
+app.get('/financial-outlook/latest', (c) => getControllers(c).financialOutlookController.getLatest(c))
+app.get('/financial-outlook-snapshots', (c) => getControllers(c).financialOutlookController.getHistory(c))
 
 // Market Data
 app.get('/market/search', (c) => getControllers(c).marketDataController.search(c))

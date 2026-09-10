@@ -408,4 +408,6 @@ step "Client deploy" "${DEPLOY_CMD[@]}"
 
 echo ""
 echo -e "${GREEN}Deployed ${PROJECT_NAME}${NC}"
-[ -n "$BRANCH_FLAG" ] && echo -e "${DIM}  ${CURRENT_BRANCH} -> main${NC}"
+if [ -n "$BRANCH_FLAG" ]; then
+  echo -e "${DIM}  ${CURRENT_BRANCH} -> main${NC}"
+fi
