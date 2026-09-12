@@ -5,6 +5,7 @@
   --color-input: hsl(var(--input));
   --color-ring: hsl(var(--ring));
   --color-background: hsl(var(--background));
+  --color-canvas: hsl(var(--canvas));
   --color-foreground: hsl(var(--foreground));
 
   --color-primary: hsl(var(--primary));
@@ -60,25 +61,27 @@
 
 /* Dark theme - Premium Finance Aesthetic */
 :root {
-  --background: 222 47% 6%;
+  /* Canvas: #0C0D12. All application surfaces use #16171F. */
+  --canvas: 230 20% 5.882%;
+  --background: 233.333 16.981% 10.392%;
   --foreground: 210 40% 98%;
   
-  --card: 222 47% 8%;
+  --card: 233.333 16.981% 10.392%;
   --card-foreground: 210 40% 98%;
   
-  --popover: 222 47% 8%;
+  --popover: 233.333 16.981% 10.392%;
   --popover-foreground: 210 40% 98%;
   
   --primary: 142 76% 46%;
   --primary-foreground: 144 80% 10%;
   
-  --secondary: 217 33% 17%;
+  --secondary: 233.333 16.981% 10.392%;
   --secondary-foreground: 210 40% 98%;
   
-  --muted: 217 33% 17%;
+  --muted: 233.333 16.981% 10.392%;
   --muted-foreground: 215 20% 55%;
   
-  --accent: 217 33% 20%;
+  --accent: 233.333 16.981% 10.392%;
   --accent-foreground: 210 40% 98%;
   
   --destructive: 0 72% 51%;
@@ -87,8 +90,8 @@
   --success: 142 76% 46%;
   --success-foreground: 144 80% 10%;
   
-  --border: 217 33% 17%;
-  --input: 217 33% 17%;
+  --border: 233.333 16.981% 10.392%;
+  --input: 233.333 16.981% 10.392%;
   --ring: 142 76% 46%;
   
   --radius: 0.75rem;
@@ -96,25 +99,26 @@
 
 /* Ocean theme — deep navy with cyan */
 .theme-ocean {
-  --background: 220 50% 5%;
+  --canvas: 230 20% 5.882%;
+  --background: 233.333 16.981% 10.392%;
   --foreground: 200 40% 98%;
 
-  --card: 220 50% 7%;
+  --card: 233.333 16.981% 10.392%;
   --card-foreground: 200 40% 98%;
 
-  --popover: 220 50% 7%;
+  --popover: 233.333 16.981% 10.392%;
   --popover-foreground: 200 40% 98%;
 
   --primary: 189 94% 43%;
   --primary-foreground: 189 80% 10%;
 
-  --secondary: 215 40% 14%;
+  --secondary: 233.333 16.981% 10.392%;
   --secondary-foreground: 200 40% 98%;
 
-  --muted: 215 40% 14%;
+  --muted: 233.333 16.981% 10.392%;
   --muted-foreground: 215 25% 52%;
 
-  --accent: 215 40% 17%;
+  --accent: 233.333 16.981% 10.392%;
   --accent-foreground: 200 40% 98%;
 
   --destructive: 0 72% 51%;
@@ -123,32 +127,33 @@
   --success: 160 60% 45%;
   --success-foreground: 160 80% 10%;
 
-  --border: 215 40% 14%;
-  --input: 215 40% 14%;
+  --border: 233.333 16.981% 10.392%;
+  --input: 233.333 16.981% 10.392%;
   --ring: 189 94% 43%;
 }
 
 /* Sunset theme — warm dark with amber */
 .theme-sunset {
-  --background: 20 35% 5%;
+  --canvas: 230 20% 5.882%;
+  --background: 233.333 16.981% 10.392%;
   --foreground: 35 40% 97%;
 
-  --card: 20 35% 7%;
+  --card: 233.333 16.981% 10.392%;
   --card-foreground: 35 40% 97%;
 
-  --popover: 20 35% 7%;
+  --popover: 233.333 16.981% 10.392%;
   --popover-foreground: 35 40% 97%;
 
   --primary: 25 95% 53%;
   --primary-foreground: 25 80% 10%;
 
-  --secondary: 20 28% 15%;
+  --secondary: 233.333 16.981% 10.392%;
   --secondary-foreground: 35 40% 97%;
 
-  --muted: 20 28% 15%;
+  --muted: 233.333 16.981% 10.392%;
   --muted-foreground: 20 15% 52%;
 
-  --accent: 20 28% 18%;
+  --accent: 233.333 16.981% 10.392%;
   --accent-foreground: 35 40% 97%;
 
   --destructive: 0 72% 51%;
@@ -157,32 +162,33 @@
   --success: 142 60% 45%;
   --success-foreground: 144 80% 10%;
 
-  --border: 20 28% 15%;
-  --input: 20 28% 15%;
+  --border: 233.333 16.981% 10.392%;
+  --input: 233.333 16.981% 10.392%;
   --ring: 25 95% 53%;
 }
 
 /* Violet theme — dark purple atmosphere */
 .theme-violet {
-  --background: 260 35% 5%;
+  --canvas: 230 20% 5.882%;
+  --background: 233.333 16.981% 10.392%;
   --foreground: 270 40% 98%;
 
-  --card: 260 35% 7%;
+  --card: 233.333 16.981% 10.392%;
   --card-foreground: 270 40% 98%;
 
-  --popover: 260 35% 7%;
+  --popover: 233.333 16.981% 10.392%;
   --popover-foreground: 270 40% 98%;
 
   --primary: 258 90% 66%;
   --primary-foreground: 260 80% 10%;
 
-  --secondary: 255 28% 15%;
+  --secondary: 233.333 16.981% 10.392%;
   --secondary-foreground: 270 40% 98%;
 
-  --muted: 255 28% 15%;
+  --muted: 233.333 16.981% 10.392%;
   --muted-foreground: 255 15% 52%;
 
-  --accent: 255 28% 18%;
+  --accent: 233.333 16.981% 10.392%;
   --accent-foreground: 270 40% 98%;
 
   --destructive: 0 72% 51%;
@@ -191,8 +197,8 @@
   --success: 142 60% 45%;
   --success-foreground: 144 80% 10%;
 
-  --border: 255 28% 15%;
-  --input: 255 28% 15%;
+  --border: 233.333 16.981% 10.392%;
+  --input: 233.333 16.981% 10.392%;
   --ring: 258 90% 66%;
 }
 
@@ -201,7 +207,7 @@
     @apply border-border;
   }
   body {
-    @apply bg-background text-foreground antialiased;
+    @apply bg-canvas text-foreground antialiased;
     font-feature-settings: "rlig" 1, "calt" 1;
   }
 }
