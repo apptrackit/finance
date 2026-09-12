@@ -5,7 +5,7 @@ import { Label } from '../common/label'
 import { Select } from '../common/select'
 import { Card, CardContent, CardHeader, CardTitle } from '../common/card'
 import { Modal } from '../common/modal'
-import { Plus, X, ArrowDownLeft, ArrowUpRight, Receipt, Pencil, Trash2, Check, ArrowRightLeft, ChevronLeft, ChevronRight, ChevronDown, Calendar, Layers, Search, Clock, CircleCheck, CircleX, AlertCircle, Bot, Loader2 } from 'lucide-react'
+import { Plus, X, ArrowDownLeft, ArrowUpRight, Receipt, Pencil, Trash2, Check, ArrowRight, ArrowRightLeft, ChevronLeft, ChevronRight, ChevronDown, Calendar, Layers, Search, Clock, CircleCheck, CircleX, AlertCircle, Bot, Loader2 } from 'lucide-react'
 import { format, addMonths, subMonths, startOfMonth, endOfMonth, addDays, differenceInDays } from 'date-fns'
 import { API_BASE_URL, apiFetch } from '../../config'
 import { usePrivacy } from '../../context/PrivacyContext'
@@ -15,7 +15,7 @@ import { BulkTransactionModal, type BulkTransaction } from './BulkTransactionMod
 import { AmountInput } from '../common/amount-input'
 import { formatAmount, formatCalculatedAmount, parseAmount } from '../../lib/amount'
 import type { PendingKind } from '../../lib/transaction-review'
-import { hasPossibleDuplicateFlag, isMcpReviewTransaction } from '../../lib/transaction-review'
+import { getMcpReviewBalanceDeltas, hasPossibleDuplicateFlag, isMcpReviewTransaction } from '../../lib/transaction-review'
 
 type Transaction = {
   id: string
@@ -1030,6 +1030,11 @@ export function TransactionList({
   const visibleUpcomingTransactions = upcomingTransactions.filter(tx => !resolvedPendingIds.has(tx.id))
   const mcpReviewCount = visibleUpcomingTransactions.filter(isMcpReviewTransaction).length
   const standardPendingCount = visibleUpcomingTransactions.length - mcpReviewCount
+  const mcpReviewBalanceDeltas = getMcpReviewBalanceDeltas(visibleUpcomingTransactions)
+  const mcpBalancePreviews = accounts.flatMap(account => {
+    const delta = mcpReviewBalanceDeltas.get(account.id)
+    return delta === undefined ? [] : [{ account, acceptedBalance: account.balance + delta }]
+  })
 
   const mcpReviewTransactions = visibleUpcomingTransactions
     .filter(isMcpReviewTransaction)
@@ -1839,6 +1844,30 @@ export function TransactionList({
                 </span>
                 <div className="flex-1 h-px bg-violet-500/20" />
               </div>
+              {mcpBalancePreviews.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 rounded-lg border border-violet-500/15 bg-violet-500/[0.04] p-1.5 sm:p-2">
+                  {mcpBalancePreviews.map(({ account, acceptedBalance }) => {
+                    const hideBalance = privacyMode === 'hidden' || (account.type === 'investment' && shouldHideInvestment())
+                    const formatBalance = (balance: number) => `${balance.toLocaleString('hu-HU', {
+                      minimumFractionDigits: account.currency === 'HUF' ? 0 : 2,
+                      maximumFractionDigits: account.currency === 'HUF' ? 0 : 2,
+                    })} ${account.currency}`
+
+                    return (
+                      <div key={account.id} className="inline-flex items-center gap-1.5 rounded-md bg-background/60 px-2 py-1 text-[10px] sm:text-xs">
+                        <span className="max-w-24 truncate font-medium text-muted-foreground">{account.name}</span>
+                        <span className={hideBalance ? 'select-none text-muted-foreground' : 'text-muted-foreground'}>
+                          {hideBalance ? '••••••' : formatBalance(account.balance)}
+                        </span>
+                        <ArrowRight className="h-3 w-3 flex-shrink-0 text-violet-500" aria-hidden="true" />
+                        <span className={hideBalance ? 'select-none font-semibold text-violet-500' : 'font-semibold text-violet-600 dark:text-violet-300'}>
+                          {hideBalance ? '••••••' : formatBalance(acceptedBalance)}
+                        </span>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
               <div className="space-y-3 pt-0.5">
                 {sortedMcpReviewDates.map(date => (
                   <div key={date} className="space-y-1.5">
