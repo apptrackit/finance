@@ -4,10 +4,11 @@ set -e
 MCP_PREFERENCE_OVERRIDE=""
 case "${1:-}" in
   "") ;;
+  --client) exec "$(cd "$(dirname "$0")" && pwd)/deploy-client.sh" ;;
   --mcp) MCP_PREFERENCE_OVERRIDE="true" ;;
   --no-mcp) MCP_PREFERENCE_OVERRIDE="false" ;;
   *)
-    echo "Usage: ./deploy.sh [--mcp|--no-mcp]" >&2
+    echo "Usage: ./deploy.sh [--client|--mcp|--no-mcp]" >&2
     exit 2
     ;;
 esac

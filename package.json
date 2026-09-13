@@ -13,6 +13,7 @@
     "build:mcp": "npm run build -w mcp",
     "test:mcp": "npm run test -w mcp",
     "deploy": "./deploy.sh",
+    "deploy:client": "./deploy-client.sh",
     "deploy:mcp": "./deploy.sh --mcp"
   },
   "devDependencies": {
