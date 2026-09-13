@@ -61,27 +61,27 @@
 
 /* Dark theme - Premium Finance Aesthetic */
 :root {
-  /* Canvas: #0C0D12. All application surfaces use #16171F. */
-  --canvas: 230 20% 5.882%;
-  --background: 233.333 16.981% 10.392%;
+  /* Canvas: #000610. All application surfaces use #010E21. */
+  --canvas: 217.5 100% 3.137%;
+  --background: 215.625 94.118% 6.667%;
   --foreground: 210 40% 98%;
   
-  --card: 233.333 16.981% 10.392%;
+  --card: 215.625 94.118% 6.667%;
   --card-foreground: 210 40% 98%;
   
-  --popover: 233.333 16.981% 10.392%;
+  --popover: 215.625 94.118% 6.667%;
   --popover-foreground: 210 40% 98%;
   
   --primary: 142 76% 46%;
   --primary-foreground: 144 80% 10%;
   
-  --secondary: 233.333 16.981% 10.392%;
+  --secondary: 215.625 94.118% 6.667%;
   --secondary-foreground: 210 40% 98%;
   
-  --muted: 233.333 16.981% 10.392%;
+  --muted: 215.625 94.118% 6.667%;
   --muted-foreground: 215 20% 55%;
   
-  --accent: 233.333 16.981% 10.392%;
+  --accent: 215.625 94.118% 6.667%;
   --accent-foreground: 210 40% 98%;
   
   --destructive: 0 72% 51%;
@@ -90,8 +90,8 @@
   --success: 142 76% 46%;
   --success-foreground: 144 80% 10%;
   
-  --border: 228.75 16% 19.608%;
-  --input: 233.333 16.981% 10.392%;
+  --border: 213.75 80% 11.765%;
+  --input: 215.625 94.118% 6.667%;
   --ring: 142 76% 46%;
   
   --radius: 0.75rem;
@@ -99,26 +99,26 @@
 
 /* Ocean theme — deep navy with cyan */
 .theme-ocean {
-  --canvas: 230 20% 5.882%;
-  --background: 233.333 16.981% 10.392%;
+  --canvas: 217.5 100% 3.137%;
+  --background: 215.625 94.118% 6.667%;
   --foreground: 200 40% 98%;
 
-  --card: 233.333 16.981% 10.392%;
+  --card: 215.625 94.118% 6.667%;
   --card-foreground: 200 40% 98%;
 
-  --popover: 233.333 16.981% 10.392%;
+  --popover: 215.625 94.118% 6.667%;
   --popover-foreground: 200 40% 98%;
 
   --primary: 189 94% 43%;
   --primary-foreground: 189 80% 10%;
 
-  --secondary: 233.333 16.981% 10.392%;
+  --secondary: 215.625 94.118% 6.667%;
   --secondary-foreground: 200 40% 98%;
 
-  --muted: 233.333 16.981% 10.392%;
+  --muted: 215.625 94.118% 6.667%;
   --muted-foreground: 215 25% 52%;
 
-  --accent: 233.333 16.981% 10.392%;
+  --accent: 215.625 94.118% 6.667%;
   --accent-foreground: 200 40% 98%;
 
   --destructive: 0 72% 51%;
@@ -127,33 +127,33 @@
   --success: 160 60% 45%;
   --success-foreground: 160 80% 10%;
 
-  --border: 228.75 16% 19.608%;
-  --input: 233.333 16.981% 10.392%;
+  --border: 213.75 80% 11.765%;
+  --input: 215.625 94.118% 6.667%;
   --ring: 189 94% 43%;
 }
 
 /* Sunset theme — warm dark with amber */
 .theme-sunset {
-  --canvas: 230 20% 5.882%;
-  --background: 233.333 16.981% 10.392%;
+  --canvas: 217.5 100% 3.137%;
+  --background: 215.625 94.118% 6.667%;
   --foreground: 35 40% 97%;
 
-  --card: 233.333 16.981% 10.392%;
+  --card: 215.625 94.118% 6.667%;
   --card-foreground: 35 40% 97%;
 
-  --popover: 233.333 16.981% 10.392%;
+  --popover: 215.625 94.118% 6.667%;
   --popover-foreground: 35 40% 97%;
 
   --primary: 25 95% 53%;
   --primary-foreground: 25 80% 10%;
 
-  --secondary: 233.333 16.981% 10.392%;
+  --secondary: 215.625 94.118% 6.667%;
   --secondary-foreground: 35 40% 97%;
 
-  --muted: 233.333 16.981% 10.392%;
+  --muted: 215.625 94.118% 6.667%;
   --muted-foreground: 20 15% 52%;
 
-  --accent: 233.333 16.981% 10.392%;
+  --accent: 215.625 94.118% 6.667%;
   --accent-foreground: 35 40% 97%;
 
   --destructive: 0 72% 51%;
@@ -162,33 +162,33 @@
   --success: 142 60% 45%;
   --success-foreground: 144 80% 10%;
 
-  --border: 228.75 16% 19.608%;
-  --input: 233.333 16.981% 10.392%;
+  --border: 213.75 80% 11.765%;
+  --input: 215.625 94.118% 6.667%;
   --ring: 25 95% 53%;
 }
 
 /* Violet theme — dark purple atmosphere */
 .theme-violet {
-  --canvas: 230 20% 5.882%;
-  --background: 233.333 16.981% 10.392%;
+  --canvas: 217.5 100% 3.137%;
+  --background: 215.625 94.118% 6.667%;
   --foreground: 270 40% 98%;
 
-  --card: 233.333 16.981% 10.392%;
+  --card: 215.625 94.118% 6.667%;
   --card-foreground: 270 40% 98%;
 
-  --popover: 233.333 16.981% 10.392%;
+  --popover: 215.625 94.118% 6.667%;
   --popover-foreground: 270 40% 98%;
 
   --primary: 258 90% 66%;
   --primary-foreground: 260 80% 10%;
 
-  --secondary: 233.333 16.981% 10.392%;
+  --secondary: 215.625 94.118% 6.667%;
   --secondary-foreground: 270 40% 98%;
 
-  --muted: 233.333 16.981% 10.392%;
+  --muted: 215.625 94.118% 6.667%;
   --muted-foreground: 255 15% 52%;
 
-  --accent: 233.333 16.981% 10.392%;
+  --accent: 215.625 94.118% 6.667%;
   --accent-foreground: 270 40% 98%;
 
   --destructive: 0 72% 51%;
@@ -197,8 +197,8 @@
   --success: 142 60% 45%;
   --success-foreground: 144 80% 10%;
 
-  --border: 228.75 16% 19.608%;
-  --input: 233.333 16.981% 10.392%;
+  --border: 213.75 80% 11.765%;
+  --input: 215.625 94.118% 6.667%;
   --ring: 258 90% 66%;
 }
 
@@ -216,27 +216,27 @@
   /* Shared 2px outline for every boxed interface surface. */
   :where(.border, .border-2, .border-\[0\.5px\]) {
     border-width: 2px !important;
-    border-color: #2A2D3A !important;
+    border-color: #061B36 !important;
   }
 
   :where(.border-t, .border-y) {
     border-top-width: 2px !important;
-    border-top-color: #2A2D3A !important;
+    border-top-color: #061B36 !important;
   }
 
   :where(.border-r, .border-x) {
     border-right-width: 2px !important;
-    border-right-color: #2A2D3A !important;
+    border-right-color: #061B36 !important;
   }
 
   :where(.border-b, .border-y) {
     border-bottom-width: 2px !important;
-    border-bottom-color: #2A2D3A !important;
+    border-bottom-color: #061B36 !important;
   }
 
   :where(.border-l, .border-x) {
     border-left-width: 2px !important;
-    border-left-color: #2A2D3A !important;
+    border-left-color: #061B36 !important;
   }
 
   .glass {
@@ -246,7 +246,7 @@
       hsl(var(--card) / 0.4) 100%
     );
     backdrop-filter: blur(20px);
-    border: 1px solid hsl(var(--border) / 0.5);
+    border: 2px solid #061B36;
   }
   
   .gradient-border {
