@@ -57,16 +57,26 @@ export function TransactionCalendar({
   const displayTransactions = useMemo(() => {
     const all = transactions
     const byId = new Map(all.map(tx => [tx.id, tx]))
-    const hiddenLinkedIds = new Set<string>()
+    const consumedIds = new Set<string>()
 
     return all.flatMap(tx => {
-      if (!tx.linked_transaction_id) return [tx]
-      if (hiddenLinkedIds.has(tx.id)) return []
-      const related = byId.get(tx.linked_transaction_id)
-      if (!related) return [tx]
-      const primary = tx.amount <= related.amount ? tx : related
+      if (consumedIds.has(tx.id)) return []
+
+      // Transfer records normally link to each other, but this lookup is also
+      // bidirectional so the result is stable no matter which leg is received first.
+      const related = tx.linked_transaction_id
+        ? byId.get(tx.linked_transaction_id)
+        : all.find(candidate => candidate.linked_transaction_id === tx.id)
+
+      if (!related) {
+        consumedIds.add(tx.id)
+        return [tx]
+      }
+
+      const primary = tx.amount < 0 ? tx : related.amount < 0 ? related : tx.amount <= related.amount ? tx : related
       const secondary = primary.id === tx.id ? related : tx
-      hiddenLinkedIds.add(secondary.id)
+      consumedIds.add(primary.id)
+      consumedIds.add(secondary.id)
       return [{ ...primary, relatedTx: secondary }]
     })
   }, [transactions])
