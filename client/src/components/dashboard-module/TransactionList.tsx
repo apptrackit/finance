@@ -1268,7 +1268,7 @@ export function TransactionList({
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2 sm:gap-3">
               <div className="h-7 w-7 sm:h-8 sm:w-8 rounded-lg bg-secondary flex items-center justify-center">
-                <Receipt className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-muted-foreground" />
+                <Layers className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-muted-foreground" />
               </div>
               <div>
                 <CardTitle className="text-sm sm:text-base">Transactions</CardTitle>

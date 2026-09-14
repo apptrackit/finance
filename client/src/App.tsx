@@ -4,7 +4,7 @@ import { TransactionList } from './components/dashboard-module/TransactionList'
 import { Analytics } from './components/analytics-module/Analytics'
 import { Investments } from './components/investments-module/Investments'
 import { RecurringTransactions } from './components/dashboard-module/RecurringTransactions'
-import { Wallet, TrendingUp, TrendingDown, Activity, BarChart3, List, Settings as SettingsIcon, LineChart, Eye, EyeOff, RefreshCw } from 'lucide-react'
+import { Wallet, TrendingUp, TrendingDown, Activity, BarChart3, Send, Settings as SettingsIcon, LineChart, Eye, EyeOff, RefreshCw } from 'lucide-react'
 import Settings from './components/settings-module/Settings'
 import { getMasterCurrency, getStoredMenuVisibility, loadNavigationSettings } from './components/settings-module/settings.storage'
 import { MENU_VISIBILITY_EVENT, type MenuKey } from './components/settings-module/constants'
@@ -165,7 +165,7 @@ function App() {
   const showSeparateCashCard = hasInvestmentAccounts
 
   const navItems: { key: MenuKey; icon: React.ReactNode; label: string }[] = [
-    { key: 'dashboard', icon: <List className="h-4 w-4 lg:h-3.5 lg:w-3.5" />, label: 'Dashboard' },
+    { key: 'dashboard', icon: <Send className="h-4 w-4 lg:h-3.5 lg:w-3.5" />, label: 'Dashboard' },
     { key: 'analytics', icon: <BarChart3 className="h-4 w-4 lg:h-3.5 lg:w-3.5" />, label: 'Analytics' },
     { key: 'investments', icon: <LineChart className="h-4 w-4 lg:h-3.5 lg:w-3.5" />, label: 'Investments' },
     { key: 'recurring', icon: <RefreshCw className="h-4 w-4 lg:h-3.5 lg:w-3.5" />, label: 'Recurring' },

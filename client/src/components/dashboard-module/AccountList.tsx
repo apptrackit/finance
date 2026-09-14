@@ -5,7 +5,7 @@ import { Label } from '../common/label'
 import { Select } from '../common/select'
 import { Card, CardContent, CardHeader, CardTitle } from '../common/card'
 import { Modal } from '../common/modal'
-import { Plus, X, Wallet, Building, Pencil, Trash2, Check, Search, Lock, LockOpen, CircleCheck, CircleX, ChevronDown, Loader2 } from 'lucide-react'
+import { Plus, X, Wallet, CreditCard, Pencil, Trash2, Check, Search, Lock, LockOpen, CircleCheck, CircleX, ChevronDown, Loader2 } from 'lucide-react'
 import { API_BASE_URL, apiFetch } from '../../config'
 import { usePrivacy } from '../../context/PrivacyContext'
 import { useAlert } from '../../context/AlertContext'
@@ -588,7 +588,7 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
           onClick={() => setIsCollapsed(c => !c)}
         >
           <div className="h-7 w-7 sm:h-8 sm:w-8 rounded-lg bg-secondary flex items-center justify-center">
-            <Building className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-muted-foreground" />
+            <CreditCard className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-muted-foreground" />
           </div>
           <CardTitle className="text-sm sm:text-base">Accounts</CardTitle>
           <ChevronDown className={`lg:hidden h-4 w-4 text-muted-foreground transition-transform duration-300 ${isCollapsed ? '' : 'rotate-180'}`} />
