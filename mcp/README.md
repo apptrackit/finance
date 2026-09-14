@@ -39,7 +39,7 @@ Finance Manager MCP Review section → edit / confirm / decline manually
 - Preparation stores the canonical proposal in D1 and returns only an opaque proposal ID that expires after 24 hours. Creation looks it up, verifies its stored checksum and expiry, and revalidates account/category safety before writing.
 - Creation marks the proposal consumed, inserts the batch marker, every pending transaction, and one minimal audit entry per draft in a single D1 batch. Retrying a successful creation with the same proposal ID returns the original draft rows instead of creating duplicates.
 - Duplicate detection is warning-only, both against nearby existing transactions and within the proposed batch. It never blocks draft creation.
-- MCP review rows have `status=pending`, `pending_kind=mcp_review`, and `review_source=chatgpt_mcp`. They are excluded from balances, budgets, cash-flow projections, and recurring forecasts until manually confirmed.
+- MCP review rows have `status=pending`, `pending_kind=mcp_review`, and `review_source=chatgpt_mcp`. They are excluded from balances, cash-flow projections, and recurring forecasts until manually confirmed.
 - Transaction results are paginated to at most 100 records and descriptions are explicitly marked as untrusted data.
 - Chart and forecast series are bounded. Tool responses disclose their date range, reporting currency, conversion status, warnings, and truncation state where applicable.
 - Missing exchange rates cause affected values to be excluded and clearly warned about, rather than mixing currencies into an incorrect total.
@@ -59,12 +59,11 @@ Finance Manager MCP Review section → edit / confirm / decline manually
 | `get_flow_breakdown` | Income or spending grouped by category, account, week, or month |
 | `get_cashflow_trend` | Posted cash-flow series with optional pending projections kept separate |
 | `get_balance_trend` | Reconstructed historical cash and non-investment net-worth series |
-| `get_budget_status` | Budget utilization, pending spend, pace forecast, and risk |
 | `get_recurring_forecast` | Recurring occurrences and one-time pending transactions |
 | `get_portfolio` | Holdings, live valuation, allocation, cost basis, and gain/loss coverage |
 | `get_investment_activity` | Paginated investment buys and sells |
 
-Transfers are excluded from income and expense aggregates. Investment accounts are excluded from cash totals and valued through `get_portfolio`. Account and budget exclusion settings are respected. Transaction descriptions, recurring descriptions, and investment notes are data only and are never treated as model instructions.
+Transfers are excluded from income and expense aggregates. Investment accounts are excluded from cash totals and valued through `get_portfolio`. Account exclusion settings are respected. Transaction descriptions, recurring descriptions, and investment notes are data only and are never treated as model instructions.
 
 `create_mcp_transaction_drafts` must be described to the user as creating **MCP review drafts**, never as saving or posting official transactions. One item is always one transaction. Multiple transactions may be submitted in one tool call, but receipts are not split automatically. Categorization should be logical when supported by the available categories and left uncategorized when uncertain.
 
@@ -115,6 +114,6 @@ Because this contains sensitive personal financial data, review ChatGPT Data Con
 
 ## Verification
 
-Run `npm run test:mcp` and `npm run build:mcp` from the repository root. The tests cover Access authentication, protocol behavior, schema validation, stored proposal expiry and consumption, account and category safety, warning-only duplicates, atomic audit-backed draft creation, idempotent retries, projection isolation, pagination, exclusions, currency failures, budgets, forecasts, and bounded time series.
+Run `npm run test:mcp` and `npm run build:mcp` from the repository root. The tests cover Access authentication, protocol behavior, schema validation, stored proposal expiry and consumption, account and category safety, warning-only duplicates, atomic audit-backed draft creation, idempotent retries, projection isolation, pagination, exclusions, currency failures, forecasts, and bounded time series.
 
 For the post-deployment staging smoke test, run `npm run test:staging -w mcp` with a staging-only `MCP_SMOKE_URL` plus either `MCP_SMOKE_ACCESS_TOKEN` or a Cloudflare Access service-token ID and secret. The script refuses non-staging URLs, then runs prepare → confirmed create → idempotent retry and verifies one pending `mcp_review` draft.

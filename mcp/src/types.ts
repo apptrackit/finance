@@ -75,20 +75,6 @@ export type StoredReviewDraftProposal = {
   consumed_at: number | null
 }
 
-export type BudgetRow = {
-  id: string
-  name?: string | null
-  amount: number
-  period: 'monthly' | 'yearly'
-  start_date: string
-  end_date: string
-  account_scope: 'all' | 'cash' | 'selected'
-  category_scope: 'all' | 'selected'
-  currency?: string | null
-  created_at: number
-  updated_at: number
-}
-
 export type RecurringScheduleRow = {
   id: string
   type: 'transaction' | 'transfer'

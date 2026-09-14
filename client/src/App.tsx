@@ -4,22 +4,21 @@ import { TransactionList } from './components/dashboard-module/TransactionList'
 import { Analytics } from './components/analytics-module/Analytics'
 import { Investments } from './components/investments-module/Investments'
 import { RecurringTransactions } from './components/dashboard-module/RecurringTransactions'
-import { Wallet, TrendingUp, TrendingDown, Activity, BarChart3, List, Settings as SettingsIcon, LineChart, Eye, EyeOff, RefreshCw, PiggyBank } from 'lucide-react'
+import { Wallet, TrendingUp, TrendingDown, Activity, BarChart3, List, Settings as SettingsIcon, LineChart, Eye, EyeOff, RefreshCw } from 'lucide-react'
 import Settings from './components/settings-module/Settings'
 import { getMasterCurrency, getStoredMenuVisibility, loadNavigationSettings } from './components/settings-module/settings.storage'
 import { MENU_VISIBILITY_EVENT, type MenuKey } from './components/settings-module/constants'
 import { usePrivacy } from './context/PrivacyContext'
 import { startOfMonth, endOfMonth, format } from 'date-fns'
-import { Budget } from './components/budget-module/Budget'
 import { useFinanceData } from './hooks/useFinanceData'
 import { isUpcomingProjectionTransaction } from './lib/transaction-review'
 
-type View = 'dashboard' | 'analytics' | 'settings' | 'investments' | 'recurring' | 'budget'
+type View = 'dashboard' | 'analytics' | 'settings' | 'investments' | 'recurring'
 
 function App() {
   const [view, setView] = useState<View>(() => {
     const saved = localStorage.getItem('finance_last_view') as View | null
-    const validViews: View[] = ['dashboard', 'analytics', 'settings', 'investments', 'recurring', 'budget']
+    const validViews: View[] = ['dashboard', 'analytics', 'settings', 'investments', 'recurring']
     return (saved && validViews.includes(saved)) ? saved : 'dashboard'
   })
 
@@ -83,7 +82,7 @@ function App() {
   }, [])
 
   useEffect(() => {
-    const menuOrder: MenuKey[] = ['dashboard', 'analytics', 'investments', 'recurring', 'budget']
+    const menuOrder: MenuKey[] = ['dashboard', 'analytics', 'investments', 'recurring']
     if (view !== 'settings' && !visibleMenus[view]) {
       const next = menuOrder.find(key => visibleMenus[key]) || 'dashboard'
       navigateTo(next)
@@ -168,7 +167,6 @@ function App() {
     { key: 'analytics', icon: <BarChart3 className="h-4 w-4 lg:h-3.5 lg:w-3.5" />, label: 'Analytics' },
     { key: 'investments', icon: <LineChart className="h-4 w-4 lg:h-3.5 lg:w-3.5" />, label: 'Investments' },
     { key: 'recurring', icon: <RefreshCw className="h-4 w-4 lg:h-3.5 lg:w-3.5" />, label: 'Recurring' },
-    { key: 'budget', icon: <PiggyBank className="h-4 w-4 lg:h-3.5 lg:w-3.5" />, label: 'Budget' },
   ]
 
   return (
@@ -454,8 +452,6 @@ function App() {
             <Investments key={investmentRefreshKey} />
           ) : view === 'recurring' ? (
             <RecurringTransactions accounts={accounts} categories={categories} dataLoading={transactionsLoading} />
-          ) : view === 'budget' ? (
-            <Budget accounts={accounts} categories={categories} transactions={allTransactions} masterCurrency={masterCurrency} />
           ) : (
             <Settings />
           )}

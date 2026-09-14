@@ -87,6 +87,8 @@ type MarketQuote = {
   regularMarketChangePercent?: number
 }
 
+const asArray = <T>(value: unknown): T[] => Array.isArray(value) ? value : []
+
 export function useFinanceData(
   dateRange: { startDate: string; endDate: string },
   masterCurrency: string
@@ -126,10 +128,12 @@ export function useFinanceData(
         `${API_BASE_URL}/transactions/date-range?startDate=${dateRange.startDate}&endDate=${dateRange.endDate}`
       )
         .then(res => res.json())
+        .then(asArray<Transaction>)
         .catch(() => [])
 
       const upcomingTxPromise = apiFetch(`${API_BASE_URL}/transactions/upcoming`)
         .then(res => res.json())
+        .then(asArray<Transaction>)
         .catch(() => [])
 
       const investmentAccounts = accountsData.filter((acc): acc is Account =>
@@ -155,7 +159,7 @@ export function useFinanceData(
 
       apiFetch(`${API_BASE_URL}/categories`)
         .then(res => res.json())
-        .then(data => setCategories(data))
+        .then(data => setCategories(asArray<Category>(data)))
         .catch(err => console.error(err))
     } catch (error) {
       console.error('Failed to fetch finance data:', error)
@@ -180,6 +184,7 @@ export function useFinanceData(
 
       const regularTxPromise = apiFetch(`${API_BASE_URL}/transactions`)
         .then(res => res.json())
+        .then(asArray<Transaction>)
         .catch(() => [])
 
       const investmentAccounts = accountsData.filter((acc: Account) => acc.type === 'investment')

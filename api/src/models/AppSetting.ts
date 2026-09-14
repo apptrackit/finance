@@ -4,6 +4,6 @@ export interface AppSetting {
   updated_at: number
 }
 
-export type NavigationMenuKey = 'dashboard' | 'analytics' | 'investments' | 'recurring' | 'budget'
+export type NavigationMenuKey = 'dashboard' | 'analytics' | 'investments' | 'recurring'
 
 export type NavigationMenuVisibility = Record<NavigationMenuKey, boolean>

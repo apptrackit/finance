@@ -87,8 +87,7 @@ export function NavigationCard() {
             { key: 'dashboard', label: 'Dashboard', description: 'Accounts and transactions overview' },
             { key: 'analytics', label: 'Analytics', description: 'Trends, charts, and insights' },
             { key: 'investments', label: 'Investments', description: 'Portfolio and holdings' },
-            { key: 'recurring', label: 'Recurring', description: 'Scheduled transactions' },
-            { key: 'budget', label: 'Budget', description: 'Monthly and yearly plans' }
+            { key: 'recurring', label: 'Recurring', description: 'Scheduled transactions' }
           ].map(item => (
             <div
               key={item.key}

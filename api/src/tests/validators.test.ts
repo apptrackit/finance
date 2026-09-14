@@ -3,7 +3,6 @@ import { CreateAccountSchema, UpdateAccountSchema } from '../validators/account.
 import { CreateTransactionSchema, UpdateTransactionSchema } from '../validators/transaction.validator'
 import { CreateCategorySchema } from '../validators/category.validator'
 import { CreateTransferSchema } from '../validators/transfer.validator'
-import { CreateBudgetSchema } from '../validators/budget.validator'
 
 describe('Account validators', () => {
   it('accepts a valid create account payload', () => {
@@ -238,43 +237,6 @@ describe('Transfer validators', () => {
       amount_from: -100,
       amount_to: -100,
       date: '2026-04-15',
-    })
-    expect(result.success).toBe(false)
-  })
-})
-
-describe('Budget validators', () => {
-  it('accepts a valid monthly budget', () => {
-    const result = CreateBudgetSchema.safeParse({
-      amount: 500000,
-      period: 'monthly',
-      year: 2026,
-      month: 4,
-      account_scope: 'all',
-      category_scope: 'all',
-    })
-    expect(result.success).toBe(true)
-  })
-
-  it('rejects zero or negative amount', () => {
-    const result = CreateBudgetSchema.safeParse({
-      amount: 0,
-      period: 'monthly',
-      year: 2026,
-      account_scope: 'all',
-      category_scope: 'all',
-    })
-    expect(result.success).toBe(false)
-  })
-
-  it('rejects invalid month', () => {
-    const result = CreateBudgetSchema.safeParse({
-      amount: 100,
-      period: 'monthly',
-      year: 2026,
-      month: 13,
-      account_scope: 'all',
-      category_scope: 'all',
     })
     expect(result.success).toBe(false)
   })

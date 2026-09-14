@@ -64,7 +64,7 @@ throw AppError.validation('Amount must be non-zero')
 - **`hooks/useFinanceData.ts`** — single source of truth for all data fetching, state, and mutation callbacks
 - **`config.ts`** — `API_BASE_URL` and `apiFetch` (auth-aware fetch wrapper that injects `X-API-Key`)
 - **`context/`** — `PrivacyContext`, `AlertContext`, `LockedAccountsContext`, `ThemeContext`
-- **`components/`** — organized by feature module: `analytics-module/`, `budget-module/`, `dashboard-module/`, `investments-module/`, `settings-module/`, `common/`
+- **`components/`** — organized by feature module: `analytics-module/`, `dashboard-module/`, `investments-module/`, `settings-module/`, `common/`
 
 In development, the client proxies `/api` to `localhost:8787` (configured in `vite.config.ts`). In production, `apiFetch` calls the full Workers URL directly.
 
@@ -72,7 +72,6 @@ In development, the client proxies `/api` to `localhost:8787` (configured in `vi
 
 D1 (SQLite at Cloudflare edge). Migrations in `api/migrations/`, applied in order:
 - `001-init.sql` — full schema (accounts, transactions, categories, investment_transactions, recurring_schedules)
-- `002-budgets.sql` — budgets table
 - `003-indexes.sql` — performance indexes on hot query columns
 - `004-audit.sql` — audit_log table
 
