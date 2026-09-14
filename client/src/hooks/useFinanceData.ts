@@ -114,51 +114,69 @@ export function useFinanceData(
       .then(data => setNetWorth(data.net_worth))
       .catch(err => console.error(err))
 
-    const accountsRes = await apiFetch(`${API_BASE_URL}/accounts`)
-    const accountsData: Account[] = await accountsRes.json()
-    setAccounts(accountsData)
+    try {
+      const accountsRes = await apiFetch(`${API_BASE_URL}/accounts`, { throwOnError: true })
+      const accountsData: unknown = await accountsRes.json()
+      if (!Array.isArray(accountsData)) {
+        throw new Error('Accounts response was not an array')
+      }
+      setAccounts(accountsData)
 
-    const regularTxPromise = apiFetch(
-      `${API_BASE_URL}/transactions/date-range?startDate=${dateRange.startDate}&endDate=${dateRange.endDate}`
-    )
-      .then(res => res.json())
-      .catch(() => [])
-
-    const upcomingTxPromise = apiFetch(`${API_BASE_URL}/transactions/upcoming`)
-      .then(res => res.json())
-      .catch(() => [])
-
-    const investmentAccounts = accountsData.filter(acc => acc.type === 'investment')
-
-    const investmentTxPromises = investmentAccounts.map(acc =>
-      apiFetch(`${API_BASE_URL}/investment-transactions?account_id=${acc.id}`)
+      const regularTxPromise = apiFetch(
+        `${API_BASE_URL}/transactions/date-range?startDate=${dateRange.startDate}&endDate=${dateRange.endDate}`
+      )
         .then(res => res.json())
-        .then((txs: any[]) =>
-          txs
-            .filter(itx => itx.date >= dateRange.startDate && itx.date <= dateRange.endDate)
-          .map(mapInvestmentTransaction))
         .catch(() => [])
-    )
 
-    const [regularTxs, upcomingTxs, ...investmentTxArrays] = await Promise.all([regularTxPromise, upcomingTxPromise, ...investmentTxPromises])
-    const allTxs = [...regularTxs, ...investmentTxArrays.flat()].sort(
-      (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
-    )
-    setTransactions(allTxs)
-    setUpcomingTransactions(upcomingTxs)
+      const upcomingTxPromise = apiFetch(`${API_BASE_URL}/transactions/upcoming`)
+        .then(res => res.json())
+        .catch(() => [])
 
-    apiFetch(`${API_BASE_URL}/categories`)
-      .then(res => res.json())
-      .then(data => setCategories(data))
-      .catch(err => console.error(err))
-      .finally(() => setTransactionsLoading(false))
+      const investmentAccounts = accountsData.filter((acc): acc is Account =>
+        typeof acc === 'object' && acc !== null && 'type' in acc && acc.type === 'investment'
+      )
+
+      const investmentTxPromises = investmentAccounts.map(acc =>
+        apiFetch(`${API_BASE_URL}/investment-transactions?account_id=${acc.id}`)
+          .then(res => res.json())
+          .then((txs: any[]) =>
+            txs
+              .filter(itx => itx.date >= dateRange.startDate && itx.date <= dateRange.endDate)
+              .map(mapInvestmentTransaction))
+          .catch(() => [])
+      )
+
+      const [regularTxs, upcomingTxs, ...investmentTxArrays] = await Promise.all([regularTxPromise, upcomingTxPromise, ...investmentTxPromises])
+      const allTxs = [...regularTxs, ...investmentTxArrays.flat()].sort(
+        (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
+      )
+      setTransactions(allTxs)
+      setUpcomingTransactions(upcomingTxs)
+
+      apiFetch(`${API_BASE_URL}/categories`)
+        .then(res => res.json())
+        .then(data => setCategories(data))
+        .catch(err => console.error(err))
+    } catch (error) {
+      console.error('Failed to fetch finance data:', error)
+      setAccounts([])
+      setTransactions([])
+      setUpcomingTransactions([])
+      setCategories([])
+    } finally {
+      setTransactionsLoading(false)
+    }
   }, [dateRange.startDate, dateRange.endDate])
 
   const fetchAllTransactions = useCallback(async () => {
     try {
       const accountsData = accounts.length > 0
         ? accounts
-        : await apiFetch(`${API_BASE_URL}/accounts`).then(res => res.json())
+        : await apiFetch(`${API_BASE_URL}/accounts`, { throwOnError: true }).then(res => res.json())
+
+      if (!Array.isArray(accountsData)) {
+        throw new Error('Accounts response was not an array')
+      }
 
       const regularTxPromise = apiFetch(`${API_BASE_URL}/transactions`)
         .then(res => res.json())
