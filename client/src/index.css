@@ -213,29 +213,29 @@
 }
 
 @layer utilities {
-  /* Shared 2px outline for every boxed interface surface. */
+  /* Shared 1px outline for every boxed interface surface. */
   :where(.border, .border-2, .border-\[0\.5px\]) {
-    border-width: 2px !important;
+    border-width: 1px !important;
     border-color: #061B36 !important;
   }
 
   :where(.border-t, .border-y) {
-    border-top-width: 2px !important;
+    border-top-width: 1px !important;
     border-top-color: #061B36 !important;
   }
 
   :where(.border-r, .border-x) {
-    border-right-width: 2px !important;
+    border-right-width: 1px !important;
     border-right-color: #061B36 !important;
   }
 
   :where(.border-b, .border-y) {
-    border-bottom-width: 2px !important;
+    border-bottom-width: 1px !important;
     border-bottom-color: #061B36 !important;
   }
 
   :where(.border-l, .border-x) {
-    border-left-width: 2px !important;
+    border-left-width: 1px !important;
     border-left-color: #061B36 !important;
   }
 
@@ -246,7 +246,7 @@
       hsl(var(--card) / 0.4) 100%
     );
     backdrop-filter: blur(20px);
-    border: 2px solid #061B36;
+    border: 1px solid #061B36;
   }
   
   .gradient-border {
