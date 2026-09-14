@@ -101,6 +101,24 @@
   * {
     @apply border-border;
   }
+
+  /* Recharts makes each SVG focusable for keyboard navigation. The browser's
+     default SVG focus ring appears as a distracting white/blue rectangle after
+     a chart is clicked, so chart interaction keeps its tooltip/cursor instead. */
+  .recharts-wrapper:focus,
+  .recharts-wrapper:focus-visible,
+  .recharts-surface:focus,
+  .recharts-surface:focus-visible {
+    outline: none !important;
+  }
+
+  /* Recharts moves its accessible tooltip layer into a focusable SVG group.
+     That group receives the native blue/white focus rectangle after a click. */
+  .recharts-surface [id^='recharts-zindex-']:focus,
+  .recharts-surface [id^='recharts-zindex-']:focus-visible {
+    outline: none !important;
+  }
+
   body {
     @apply bg-canvas text-foreground antialiased;
     font-feature-settings: "rlig" 1, "calt" 1;
