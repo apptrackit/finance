@@ -15,6 +15,7 @@ type DateRangePickerProps = {
   endDate: string
   onApply: (range: { startDate: string; endDate: string }) => void
   onCancel: () => void
+  monthOnly?: boolean
 }
 
 const toLocalDate = (date: string) => new Date(`${date}T12:00:00`)
@@ -29,10 +30,10 @@ const isWholeMonth = (startDate: string, endDate: string) => {
   return range.startDate === startDate && range.endDate === endDate
 }
 
-export function DateRangePicker({ startDate, endDate, onApply, onCancel }: DateRangePickerProps) {
+export function DateRangePicker({ startDate, endDate, onApply, onCancel, monthOnly = false }: DateRangePickerProps) {
   const isAllTime = startDate === ALL_TIME.startDate && endDate === ALL_TIME.endDate
   const initialMonth = isAllTime ? new Date() : toLocalDate(startDate)
-  const initialMode: PickerMode = isAllTime ? 'all' : isWholeMonth(startDate, endDate) ? 'month' : 'custom'
+  const initialMode: PickerMode = monthOnly ? 'month' : isAllTime ? 'all' : isWholeMonth(startDate, endDate) ? 'month' : 'custom'
 
   const [mode, setMode] = useState<PickerMode>(initialMode)
   const [customRange, setCustomRange] = useState({ startDate, endDate })
@@ -41,7 +42,7 @@ export function DateRangePicker({ startDate, endDate, onApply, onCancel }: DateR
   const [positioning, setPositioning] = useState<'right' | 'left'>('right')
   const pickerRef = useRef<HTMLDivElement>(null)
 
-  const selectedRange = mode === 'all' ? ALL_TIME : mode === 'month' ? monthRange(selectedMonth) : customRange
+  const selectedRange = monthOnly || mode === 'month' ? monthRange(selectedMonth) : mode === 'all' ? ALL_TIME : customRange
   const invalidCustomRange = mode === 'custom' && (!customRange.startDate || !customRange.endDate || customRange.startDate > customRange.endDate)
 
   useEffect(() => {
@@ -95,8 +96,9 @@ export function DateRangePicker({ startDate, endDate, onApply, onCancel }: DateR
               type="button"
               role="tab"
               aria-selected={mode === 'custom'}
+              disabled={monthOnly}
               onClick={() => setMode('custom')}
-              className={`flex min-w-0 items-center justify-center whitespace-nowrap rounded-lg px-1 py-2 text-xs font-medium transition-colors ${mode === 'custom' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
+              className={`flex min-w-0 items-center justify-center whitespace-nowrap rounded-lg px-1 py-2 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${mode === 'custom' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
             >
               Custom
             </button>
@@ -104,8 +106,9 @@ export function DateRangePicker({ startDate, endDate, onApply, onCancel }: DateR
               type="button"
               role="tab"
               aria-selected={mode === 'all'}
+              disabled={monthOnly}
               onClick={() => setMode('all')}
-              className={`flex min-w-0 items-center justify-center whitespace-nowrap rounded-lg px-1 py-2 text-xs font-medium transition-colors ${mode === 'all' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
+              className={`flex min-w-0 items-center justify-center whitespace-nowrap rounded-lg px-1 py-2 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${mode === 'all' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
             >
               All time
             </button>

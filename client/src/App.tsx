@@ -32,6 +32,7 @@ function App() {
   const { privacyMode, togglePrivacyMode, shouldHideNetWorth } = usePrivacy()
 
   const [currentMonth, setCurrentMonth] = useState(new Date())
+  const [isTransactionCalendarOpen, setIsTransactionCalendarOpen] = useState(false)
   const [dateRange, setDateRange] = useState({
     startDate: format(startOfMonth(new Date()), 'yyyy-MM-dd'),
     endDate: format(endOfMonth(new Date()), 'yyyy-MM-dd'),
@@ -425,10 +426,12 @@ function App() {
 
           {view === 'dashboard' ? (
             <div className="grid gap-3 sm:gap-6 grid-cols-1 lg:grid-cols-12">
-              <div className="lg:col-span-4">
-                <AccountList accounts={accounts} onAccountAdded={handleDataChange} loading={transactionsLoading} />
-              </div>
-              <div className="lg:col-span-8">
+              {!isTransactionCalendarOpen && (
+                <div className="lg:col-span-4">
+                  <AccountList accounts={accounts} onAccountAdded={handleDataChange} loading={transactionsLoading} />
+                </div>
+              )}
+              <div className={isTransactionCalendarOpen ? 'lg:col-span-12' : 'lg:col-span-8'}>
                 <TransactionList
                   transactions={transactions}
                   upcomingTransactions={upcomingTransactions}
@@ -445,6 +448,9 @@ function App() {
                       endDate: format(endOfMonth(newMonth), 'yyyy-MM-dd'),
                     })
                   }}
+                  convertToMasterCurrency={convertToMasterCurrency}
+                  masterCurrency={masterCurrency}
+                  onCalendarViewChange={setIsTransactionCalendarOpen}
                 />
               </div>
             </div>
