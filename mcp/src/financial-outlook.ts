@@ -87,8 +87,8 @@ function horizon(value: unknown, index: number): OutlookHorizon {
 }
 
 function cashBalancePath(value: unknown, horizons: OutlookHorizon[]): CashBalancePathPoint[] {
-  if (!Array.isArray(value) || value.length < 46 || value.length > 91) {
-    throw new Error('cash_balance_path must contain 46 to 91 dated cash projections')
+  if (!Array.isArray(value) || value.length !== 91) {
+    throw new Error('cash_balance_path must contain one projection for every day from day 0 through day 90')
   }
   const points = value.map((item, index) => {
     const path = `cash_balance_path[${index}]`
@@ -99,11 +99,8 @@ function cashBalancePath(value: unknown, horizons: OutlookHorizon[]): CashBalanc
     }
     return { day: candidate.day as number, ...range(candidate, path) }
   })
-  if (points[0].day !== 0 || points.at(-1)?.day !== 90 || points.some((point, index) => index > 0 && point.day <= points[index - 1].day)) {
-    throw new Error('cash_balance_path must start at day 0, end at day 90, and use strictly increasing days')
-  }
-  if (points.some((point, index) => index > 0 && point.day - points[index - 1].day > 2)) {
-    throw new Error('cash_balance_path points must be no more than 2 days apart')
+  if (points.some((point, index) => point.day !== index)) {
+    throw new Error('cash_balance_path must include each whole day from day 0 through day 90 in order')
   }
   for (const horizon of horizons) {
     const pathPoint = points.find(point => point.day === horizon.days)

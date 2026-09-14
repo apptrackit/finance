@@ -49,8 +49,8 @@ Finance Manager MCP Review section → edit / confirm / decline manually
 | Tool | Use it for |
 | --- | --- |
 | `list_finance_dimensions` | Account/category IDs, currencies, history bounds, and data semantics |
-| `get_financial_outlook_context` | Start a HUF AI financial forecast with bounded financial context, data coverage, and latest-snapshot freshness |
-| `create_financial_outlook_snapshot` | Immediately publish one validated, immutable, idempotent HUF forecast snapshot; cannot modify financial source data |
+| `get_financial_outlook_context` | Start a HUF AI financial forecast with 90 days of daily actual cash history, category spending/income, known future activity, data coverage, and latest-snapshot freshness |
+| `create_financial_outlook_snapshot` | Immediately publish one validated, immutable, idempotent daily 90-day HUF forecast; cannot modify financial source data |
 | `prepare_mcp_transaction_drafts` | Validate and preview 1–20 income/expense drafts; stores an expiring canonical proposal and returns its opaque ID |
 | `create_mcp_transaction_drafts` | After explicit confirmation, atomically create pending MCP review drafts from the proposal ID |
 | `get_accounts_summary` | Per-account cash/credit balances, exclusions, and locks |

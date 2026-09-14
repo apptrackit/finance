@@ -859,6 +859,9 @@ export function Analytics({
           onSelect={setSelectedOutlookId}
           onLoadMore={loadMoreOutlooks}
           hasMore={Boolean(outlookNextCursor)}
+          transactions={transactions}
+          accounts={accounts}
+          convertToMasterCurrency={convertToMasterCurrency}
         />
       )}
     </div>

@@ -45,6 +45,7 @@ export class FinancialOutlookService {
       source_coverage: coverage,
       horizons: Array.isArray(payload.horizons) ? payload.horizons as FinancialOutlookSnapshot['horizons'] : [],
       cash_balance_path: Array.isArray(payload.cash_balance_path) ? payload.cash_balance_path as FinancialOutlookSnapshot['cash_balance_path'] : [],
+      cash_balance_history: Array.isArray(payload.cash_balance_history) ? payload.cash_balance_history as FinancialOutlookSnapshot['cash_balance_history'] : [],
       drivers: Array.isArray(payload.drivers) ? payload.drivers.filter((item): item is string => typeof item === 'string') : [],
       risks: Array.isArray(payload.risks) ? payload.risks.filter((item): item is string => typeof item === 'string') : [],
       assumptions: Array.isArray(payload.assumptions) ? payload.assumptions.filter((item): item is string => typeof item === 'string') : [],

@@ -621,13 +621,16 @@ export class FinanceService {
     const today = new Date().toISOString().slice(0, 10)
     const historyStart = addUtcDays(today, -89)
     const futureEnd = addUtcDays(today, 90)
-    const [revision, latestRow, dimensions, accounts, overview, cashflow, recurring, portfolio] = await Promise.all([
+    const [revision, latestRow, dimensions, accounts, overview, balanceHistory, cashflow, spendingByCategory, incomeByCategory, recurring, portfolio] = await Promise.all([
       this.financialDataRevision(),
       this.latestOutlookRow(),
       this.listDimensions(),
       this.accountsSummary({ currency: 'HUF' }),
       this.overview({ currency: 'HUF', start_date: historyStart, end_date: today }),
-      this.cashflowTrend({ currency: 'HUF', start_date: historyStart, end_date: today, interval: 'month', include_projected: false }),
+      this.balanceTrend({ currency: 'HUF', start_date: historyStart, end_date: today, interval: 'day' }),
+      this.cashflowTrend({ currency: 'HUF', start_date: historyStart, end_date: today, interval: 'day', include_projected: false }),
+      this.flowBreakdown({ currency: 'HUF', start_date: historyStart, end_date: today, flow_type: 'expense', group_by: 'category' }),
+      this.flowBreakdown({ currency: 'HUF', start_date: historyStart, end_date: today, flow_type: 'income', group_by: 'category' }),
       this.recurringForecast({ currency: 'HUF', start_date: today, end_date: futureEnd }),
       this.portfolio({ currency: 'HUF' }),
     ])
@@ -647,7 +650,10 @@ export class FinanceService {
       core_data: {
         accounts,
         overview,
-        cashflow_trend: cashflow,
+        historical_cash_balance: balanceHistory,
+        historical_cash_flow: cashflow,
+        spending_by_category: spendingByCategory,
+        income_by_category: incomeByCategory,
         known_future: recurring,
         portfolio,
       },
@@ -656,10 +662,60 @@ export class FinanceService {
 
   async createFinancialOutlookSnapshot(args: Record<string, unknown>) {
     const input = parseFinancialOutlookInput(args)
+    const generationDate = new Date().toISOString().slice(0, 10)
+    if (input.source_queried_at.slice(0, 10) !== generationDate) {
+      throw new Error('source_queried_at must be from today\'s financial outlook context')
+    }
+    const historyStart = addUtcDays(generationDate, -89)
+    const futureEnd = addUtcDays(generationDate, 90)
+    const [coverage, historicalBalances, knownFuture] = await Promise.all([
+      this.outlookCoverage(),
+      this.balanceTrend({ currency: 'HUF', start_date: historyStart, end_date: generationDate, interval: 'day' }),
+      this.recurringForecast({ currency: 'HUF', start_date: generationDate, end_date: futureEnd }),
+    ])
+    const currentCash = historicalBalances.series.at(-1)?.cash_balance
+    const dayZero = input.cash_balance_path[0]
+    if (currentCash === undefined || dayZero.low !== currentCash || dayZero.expected !== currentCash || dayZero.high !== currentCash) {
+      throw new Error('cash_balance_path day 0 must equal the current liquid cash balance from the outlook context')
+    }
+    const expectedDeltas = input.cash_balance_path.slice(1).map((point, index) => point.expected - input.cash_balance_path[index].expected)
+    const historicalMovement = historicalBalances.series.some((point, index) => index > 0 && point.cash_balance !== historicalBalances.series[index - 1].cash_balance)
+    if (historicalMovement) {
+      let uniformDays = 1
+      for (let index = 1; index < expectedDeltas.length; index++) {
+        const tolerance = Math.max(10, Math.abs(expectedDeltas[index - 1]) * 0.001)
+        uniformDays = Math.abs(expectedDeltas[index] - expectedDeltas[index - 1]) <= tolerance ? uniformDays + 1 : 1
+        if (uniformDays > 7) {
+          throw new Error('cash_balance_path may not spread spending or income as a straight-line run longer than 7 days; use the daily cash-flow pattern and dated known movements from the outlook context')
+        }
+      }
+    }
+    const materialAmount = Math.max(10_000, Math.abs(currentCash) * 0.015)
+    const knownMovementByDay = new Map<number, number>()
+    const addKnownMovement = (item: Record<string, unknown>) => {
+      const date = typeof item.date === 'string' ? item.date : null
+      const amount = typeof item.amount === 'number' && Number.isFinite(item.amount) ? item.amount : null
+      if (!date || amount === null || Math.abs(amount) < materialAmount) return
+      const day = daysBetween(generationDate, date) - 1
+      if (day < 1 || day > 90) return
+      knownMovementByDay.set(day, (knownMovementByDay.get(day) || 0) + amount)
+    }
+    for (const occurrence of knownFuture.occurrences as Array<Record<string, unknown>>) {
+      if (occurrence.schedule_type === 'transaction') addKnownMovement(occurrence)
+    }
+    for (const pending of knownFuture.pending_one_time_transactions as Array<Record<string, unknown>>) addKnownMovement(pending)
+    for (const [day, movement] of knownMovementByDay) {
+      if (Math.abs(movement) < materialAmount) continue
+      const dailyDelta = expectedDeltas[day - 1]
+      if (Math.sign(dailyDelta) !== Math.sign(movement) || Math.abs(dailyDelta) < Math.abs(movement) * 0.2) {
+        throw new Error(`cash_balance_path day ${day} does not visibly reflect a material known movement on that date; do not distribute dated salary, bills, or planned transactions across other days`)
+      }
+    }
     const payload = {
       headline: input.headline,
       horizons: input.horizons,
       cash_balance_path: input.cash_balance_path,
+      cash_balance_history: historicalBalances.series.map(point => ({ date: point.date, balance: point.cash_balance })),
       drivers: input.drivers,
       risks: input.risks,
       assumptions: input.assumptions,
@@ -677,14 +733,13 @@ export class FinanceService {
     if (revision.revision !== input.source_revision) {
       throw new Error('Financial data changed after the outlook context was read; refresh the context before publishing')
     }
-    const coverage = await this.outlookCoverage()
     const id = crypto.randomUUID()
     const createdAt = Date.now()
     const row: FinancialOutlookSnapshotRow = {
       id,
       idempotency_key: input.idempotency_key,
       payload_hash: payloadHash,
-      schema_version: 2,
+      schema_version: 3,
       currency: 'HUF',
       source_revision: input.source_revision,
       source_queried_at: input.source_queried_at,

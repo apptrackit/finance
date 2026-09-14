@@ -1,10 +1,14 @@
-import { useState, useRef, useEffect } from 'react'
-import { format, startOfMonth, endOfMonth } from 'date-fns'
+import { useEffect, useRef, useState } from 'react'
+import { CalendarDays, ChevronLeft, ChevronRight, Clock3, X } from 'lucide-react'
+import { format, endOfMonth, startOfMonth } from 'date-fns'
 import { Button } from './button'
 import { Input } from './input'
 import { Label } from './label'
 
 const ALL_TIME = { startDate: '1900-01-01', endDate: '2100-12-31' }
+const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+
+type PickerMode = 'month' | 'custom' | 'all'
 
 type DateRangePickerProps = {
   startDate: string
@@ -13,108 +17,167 @@ type DateRangePickerProps = {
   onCancel: () => void
 }
 
+const toLocalDate = (date: string) => new Date(`${date}T12:00:00`)
+
+const monthRange = (date: Date) => ({
+  startDate: format(startOfMonth(date), 'yyyy-MM-dd'),
+  endDate: format(endOfMonth(date), 'yyyy-MM-dd'),
+})
+
+const isWholeMonth = (startDate: string, endDate: string) => {
+  const range = monthRange(toLocalDate(startDate))
+  return range.startDate === startDate && range.endDate === endDate
+}
+
 export function DateRangePicker({ startDate, endDate, onApply, onCancel }: DateRangePickerProps) {
-  const [customRange, setCustomRange] = useState({ startDate, endDate })
-  const pickerRef = useRef<HTMLDivElement>(null)
-  const [positioning, setPositioning] = useState<'right' | 'left'>('right')
-
   const isAllTime = startDate === ALL_TIME.startDate && endDate === ALL_TIME.endDate
+  const initialMonth = isAllTime ? new Date() : toLocalDate(startDate)
+  const initialMode: PickerMode = isAllTime ? 'all' : isWholeMonth(startDate, endDate) ? 'month' : 'custom'
 
-  const now = new Date()
-  const currentMonthRange = {
-    startDate: format(startOfMonth(now), 'yyyy-MM-dd'),
-    endDate: format(endOfMonth(now), 'yyyy-MM-dd'),
-  }
-  const isCurrentMonth = startDate === currentMonthRange.startDate && endDate === currentMonthRange.endDate
+  const [mode, setMode] = useState<PickerMode>(initialMode)
+  const [customRange, setCustomRange] = useState({ startDate, endDate })
+  const [selectedMonth, setSelectedMonth] = useState(initialMonth)
+  const [displayYear, setDisplayYear] = useState(initialMonth.getFullYear())
+  const [positioning, setPositioning] = useState<'right' | 'left'>('right')
+  const pickerRef = useRef<HTMLDivElement>(null)
+
+  const selectedRange = mode === 'all' ? ALL_TIME : mode === 'month' ? monthRange(selectedMonth) : customRange
+  const invalidCustomRange = mode === 'custom' && (!customRange.startDate || !customRange.endDate || customRange.startDate > customRange.endDate)
 
   useEffect(() => {
-    if (pickerRef.current) {
-      const rect = pickerRef.current.getBoundingClientRect()
-      if (rect.left < 8) setPositioning('left')
-      else setPositioning('right')
-    }
+    if (!pickerRef.current) return
+    const rect = pickerRef.current.getBoundingClientRect()
+    setPositioning(rect.left < 8 ? 'left' : 'right')
   }, [])
+
+  const selectMonth = (month: number) => {
+    const next = new Date(displayYear, month, 1)
+    setSelectedMonth(next)
+  }
 
   return (
     <>
-      <div className="fixed inset-0 bg-black/20 z-40 md:hidden" onClick={onCancel} />
+      <div className="fixed inset-0 z-40 bg-black/30 backdrop-blur-[1px] md:hidden" onClick={onCancel} />
 
       <div
         ref={pickerRef}
-        className={`fixed md:absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 md:top-full md:translate-x-0 md:translate-y-0 mt-0 md:mt-2 p-4 bg-background border border-border rounded-lg shadow-lg z-50 w-[min(320px,calc(100vw-2rem))] md:w-auto md:min-w-[280px] ${
+        className={`fixed md:absolute top-1/2 left-1/2 z-50 w-[min(360px,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-2xl border border-border bg-card shadow-2xl md:top-full md:mt-2 md:w-[360px] md:translate-x-0 md:translate-y-0 ${
           positioning === 'right' ? 'md:right-0 md:left-auto' : 'md:left-0 md:right-auto'
         }`}
       >
-        <div className="space-y-3">
-          {/* Quick presets */}
-          <div className="grid grid-cols-2 gap-1.5">
+        <div className="flex items-center justify-between border-b border-border/70 px-4 py-3">
+          <div className="flex items-center gap-2">
+            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/10 text-primary">
+              <CalendarDays className="h-4 w-4" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold">Choose timeframe</p>
+              <p className="text-[11px] text-muted-foreground">{mode === 'all' ? 'Every transaction' : mode === 'custom' ? 'A custom date range' : format(selectedMonth, 'MMMM yyyy')}</p>
+            </div>
+          </div>
+          <button onClick={onCancel} className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground" aria-label="Close timeframe picker">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className="p-3 sm:p-4">
+          <div className="grid gap-1 rounded-xl bg-background/70 p-1" style={{ gridTemplateColumns: 'repeat(3, minmax(0, 1fr))' }} role="tablist" aria-label="Timeframe type">
             <button
-              onClick={() => onApply(currentMonthRange)}
-              className={`px-2 py-1.5 rounded-md text-[11px] font-medium transition-colors ${
-                isCurrentMonth
-                  ? 'bg-primary text-primary-foreground'
-                  : 'bg-secondary/60 text-muted-foreground hover:bg-secondary hover:text-foreground'
-              }`}
+              type="button"
+              role="tab"
+              aria-selected={mode === 'month'}
+              onClick={() => setMode('month')}
+              className={`flex min-w-0 items-center justify-center whitespace-nowrap rounded-lg px-1 py-2 text-xs font-medium transition-colors ${mode === 'month' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
             >
-              Current month
+              Month
             </button>
             <button
-              onClick={() => onApply(ALL_TIME)}
-              className={`px-2 py-1.5 rounded-md text-[11px] font-medium transition-colors ${
-                isAllTime
-                  ? 'bg-primary text-primary-foreground'
-                  : 'bg-secondary/60 text-muted-foreground hover:bg-secondary hover:text-foreground'
-              }`}
+              type="button"
+              role="tab"
+              aria-selected={mode === 'custom'}
+              onClick={() => setMode('custom')}
+              className={`flex min-w-0 items-center justify-center whitespace-nowrap rounded-lg px-1 py-2 text-xs font-medium transition-colors ${mode === 'custom' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
+            >
+              Custom
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={mode === 'all'}
+              onClick={() => setMode('all')}
+              className={`flex min-w-0 items-center justify-center whitespace-nowrap rounded-lg px-1 py-2 text-xs font-medium transition-colors ${mode === 'all' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
             >
               All time
             </button>
           </div>
 
-          {/* Divider */}
-          {!isAllTime && (
-            <>
-              <div className="flex items-center gap-2">
-                <div className="flex-1 h-px bg-border" />
-                <span className="text-[10px] text-muted-foreground">custom</span>
-                <div className="flex-1 h-px bg-border" />
+          {mode === 'month' && (
+            <div className="mt-3">
+              <div className="mb-4 flex items-center justify-between px-1">
+                <button onClick={() => setDisplayYear(year => year - 1)} className="flex h-7 w-7 items-center justify-center rounded-xl border border-border/60 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground" aria-label="Previous year">
+                  <ChevronLeft className="h-4 w-4" />
+                </button>
+                <span className="text-sm font-medium tabular-nums">{displayYear}</span>
+                <button onClick={() => setDisplayYear(year => year + 1)} className="flex h-7 w-7 items-center justify-center rounded-xl border border-border/60 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground" aria-label="Next year">
+                  <ChevronRight className="h-4 w-4" />
+                </button>
               </div>
-
-              <div>
-                <Label className="text-xs">Start Date</Label>
-                <Input
-                  type="date"
-                  value={customRange.startDate}
-                  onChange={(e) => setCustomRange({ ...customRange, startDate: e.target.value })}
-                  className="mt-1 w-full max-w-full [-webkit-appearance:none]"
-                />
+              <div
+                className="grid px-1"
+                style={{
+                  gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
+                  gridTemplateRows: 'repeat(3, 2.5rem)',
+                  columnGap: '0.5rem',
+                  rowGap: '0.5rem',
+                }}
+              >
+                {MONTH_NAMES.map((month, index) => {
+                  const selected = selectedMonth.getFullYear() === displayYear && selectedMonth.getMonth() === index
+                  return (
+                    <button
+                      key={month}
+                      type="button"
+                      onClick={() => selectMonth(index)}
+                      className={`h-full w-full min-w-0 rounded-xl px-1 text-sm font-normal leading-none transition-colors ${selected ? 'bg-primary text-primary-foreground shadow-sm' : 'text-foreground hover:bg-secondary'}`}
+                    >
+                      {month}
+                    </button>
+                  )
+                })}
               </div>
-              <div>
-                <Label className="text-xs">End Date</Label>
-                <Input
-                  type="date"
-                  value={customRange.endDate}
-                  onChange={(e) => setCustomRange({ ...customRange, endDate: e.target.value })}
-                  className="mt-1 w-full max-w-full [-webkit-appearance:none]"
-                />
-              </div>
-              <div className="flex gap-2 pt-1">
-                <Button size="sm" variant="outline" onClick={onCancel} className="flex-1">
-                  Cancel
-                </Button>
-                <Button size="sm" onClick={() => onApply(customRange)} className="flex-1">
-                  Apply
-                </Button>
-              </div>
-            </>
-          )}
-
-          {isAllTime && (
-            <div className="flex gap-2">
-              <Button size="sm" variant="outline" onClick={onCancel} className="w-full">
-                Close
-              </Button>
             </div>
           )}
+
+          {mode === 'custom' && (
+            <div className="mt-4 space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label className="text-xs">Start date</Label>
+                  <Input type="date" value={customRange.startDate} onChange={event => setCustomRange(range => ({ ...range, startDate: event.target.value }))} className="mt-1 w-full [-webkit-appearance:none]" />
+                </div>
+                <div>
+                  <Label className="text-xs">End date</Label>
+                  <Input type="date" value={customRange.endDate} onChange={event => setCustomRange(range => ({ ...range, endDate: event.target.value }))} className="mt-1 w-full [-webkit-appearance:none]" />
+                </div>
+              </div>
+              {invalidCustomRange && <p className="text-xs text-destructive">Choose an end date that is on or after the start date.</p>}
+            </div>
+          )}
+
+          {mode === 'all' && (
+            <div className="mt-4 rounded-xl border border-border/60 bg-background/50 p-4 text-center">
+              <Clock3 className="mx-auto h-5 w-5 text-primary" />
+              <p className="mt-2 text-sm font-medium">Every transaction</p>
+              <p className="mt-1 text-xs text-muted-foreground">Your filters will include the complete history.</p>
+            </div>
+          )}
+        </div>
+
+        <div className="flex gap-2 border-t border-border/70 p-3 sm:p-4">
+          <Button size="sm" variant="outline" onClick={onCancel} className="flex-1">Cancel</Button>
+          <Button size="sm" onClick={() => onApply(selectedRange)} disabled={invalidCustomRange} className="flex-1">
+            Apply timeframe
+          </Button>
         </div>
       </div>
     </>

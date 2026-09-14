@@ -6,7 +6,7 @@ export type Env = {
   DISABLE_ACCESS_AUTH?: string
 }
 
-export const MCP_WORKER_VERSION = '1.3.0'
+export const MCP_WORKER_VERSION = '1.4.0'
 
 export type AccountRow = {
   id: string

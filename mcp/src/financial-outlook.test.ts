@@ -10,7 +10,7 @@ const validInput = {
     days,
     cash_balance: { low: 800, expected: 1_000, high: 1_200 },
   })),
-  cash_balance_path: Array.from({ length: 46 }, (_, index) => index * 2).concat(7).sort((left, right) => left - right).map(day => ({
+  cash_balance_path: Array.from({ length: 91 }, (_, day) => ({
     day,
     ...(day === 7 || day === 30 || day === 90
       ? { low: 800, expected: 1_000, high: 1_200 }
@@ -36,15 +36,15 @@ describe('financial outlook snapshot validation', () => {
     expect(() => parseFinancialOutlookInput(invalid)).toThrow('low <= expected <= high')
   })
 
-  it('requires a complete, ordered AI cash path that agrees with each horizon', () => {
-    expect(() => parseFinancialOutlookInput({ ...validInput, cash_balance_path: validInput.cash_balance_path.slice(0, 45) })).toThrow('46 to 91')
+  it('requires a complete daily AI cash path that agrees with each horizon', () => {
+    expect(() => parseFinancialOutlookInput({ ...validInput, cash_balance_path: validInput.cash_balance_path.slice(0, 90) })).toThrow('every day')
     const mismatched = structuredClone(validInput)
     mismatched.cash_balance_path.find(point => point.day === 7)!.expected = 1_001
     expect(() => parseFinancialOutlookInput(mismatched)).toThrow('exact 7-day')
 
-    const sparse = structuredClone(validInput)
-    sparse.cash_balance_path = sparse.cash_balance_path.filter(point => point.day !== 8)
-    expect(() => parseFinancialOutlookInput(sparse)).toThrow('no more than 2 days apart')
+    const outOfOrder = structuredClone(validInput)
+    outOfOrder.cash_balance_path[8].day = 9
+    expect(() => parseFinancialOutlookInput(outOfOrder)).toThrow('each whole day')
   })
 
   it('rejects invalid revisions, timestamps, and oversized narrative text', () => {

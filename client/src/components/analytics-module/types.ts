@@ -50,6 +50,11 @@ export type FinancialOutlookCashPathPoint = FinancialOutlookRange & {
   day: number
 }
 
+export type FinancialOutlookHistoricalCashPoint = {
+  date: string
+  balance: number
+}
+
 export type FinancialOutlookSnapshot = {
   id: string
   currency: 'HUF'
@@ -61,6 +66,7 @@ export type FinancialOutlookSnapshot = {
   source_coverage: Record<string, unknown>
   horizons: FinancialOutlookHorizon[]
   cash_balance_path: FinancialOutlookCashPathPoint[]
+  cash_balance_history: FinancialOutlookHistoricalCashPoint[]
   drivers: string[]
   risks: string[]
   assumptions: string[]
