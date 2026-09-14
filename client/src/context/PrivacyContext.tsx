@@ -1,6 +1,5 @@
 import { createContext, useContext, useState, type ReactNode } from 'react'
 
-// Cookie helper functions
 const setCookie = (name: string, value: string, days: number = 365) => {
   const expires = new Date()
   expires.setTime(expires.getTime() + days * 24 * 60 * 60 * 1000)
@@ -9,133 +8,88 @@ const setCookie = (name: string, value: string, days: number = 365) => {
 
 const getCookie = (name: string): string | null => {
   const nameEQ = `${name}=`
-  const ca = document.cookie.split(';')
-  for (let c of ca) {
-    c = c.trim()
-    if (c.indexOf(nameEQ) === 0) {
-      return c.substring(nameEQ.length)
-    }
+  for (let cookie of document.cookie.split(';')) {
+    cookie = cookie.trim()
+    if (cookie.indexOf(nameEQ) === 0) return cookie.substring(nameEQ.length)
   }
   return null
 }
 
-// Storage keys
 const PRIVACY_DEFAULT_KEY = 'finance_privacy_default'
 const PRIVACY_INVESTMENTS_KEY = 'finance_privacy_investments'
+const PRIVACY_STARTUP_KEY = 'finance_privacy_startup'
 
 type PrivacyMode = 'visible' | 'hidden'
+export type PrivacyStartupMode = 'none' | 'all' | 'networth'
+
+const getStartupPrivacyMode = (): PrivacyStartupMode => {
+  const saved = getCookie(PRIVACY_STARTUP_KEY) || localStorage.getItem(PRIVACY_STARTUP_KEY)
+  if (saved === 'none' || saved === 'all' || saved === 'networth') return saved
+
+  // Migrate the previous pair of switches to the closest new preference.
+  const legacyDefault = getCookie(PRIVACY_DEFAULT_KEY) || localStorage.getItem(PRIVACY_DEFAULT_KEY)
+  const legacyInvestments = getCookie(PRIVACY_INVESTMENTS_KEY) || localStorage.getItem(PRIVACY_INVESTMENTS_KEY)
+  if (legacyDefault === 'hidden') return 'all'
+  if (legacyInvestments === 'hidden') return 'networth'
+  return 'none'
+}
 
 interface PrivacyContextType {
   privacyMode: PrivacyMode
-  investmentPrivacyMode: PrivacyMode
+  privacyStartupMode: PrivacyStartupMode
   togglePrivacyMode: () => void
-  toggleInvestmentPrivacy: () => void
   setPrivacyMode: (mode: PrivacyMode) => void
-  setInvestmentPrivacyMode: (mode: PrivacyMode) => void
-  defaultPrivacyMode: PrivacyMode
-  defaultInvestmentPrivacyMode: PrivacyMode
-  setDefaultPrivacyMode: (mode: PrivacyMode) => void
-  setDefaultInvestmentPrivacyMode: (mode: PrivacyMode) => void
+  setPrivacyStartupMode: (mode: PrivacyStartupMode) => void
   maskValue: (value: string | number, type?: 'currency' | 'text') => string
   shouldHideInvestment: () => boolean
+  shouldHideNetWorth: () => boolean
 }
 
 const PrivacyContext = createContext<PrivacyContextType | undefined>(undefined)
 
 export function PrivacyProvider({ children }: { children: ReactNode }) {
-  // Load default from cookie/localStorage, then apply it as initial state
-  const [defaultPrivacyMode, setDefaultPrivacyModeState] = useState<PrivacyMode>(() => {
-    const savedDefault = getCookie(PRIVACY_DEFAULT_KEY) || localStorage.getItem(PRIVACY_DEFAULT_KEY)
-    return (savedDefault as PrivacyMode) || 'visible'
-  })
+  const [privacyStartupMode, setPrivacyStartupModeState] = useState<PrivacyStartupMode>(getStartupPrivacyMode)
+  const [privacyMode, setPrivacyModeState] = useState<PrivacyMode>(() => (
+    getStartupPrivacyMode() === 'all' ? 'hidden' : 'visible'
+  ))
 
-  const [defaultInvestmentPrivacyMode, setDefaultInvestmentPrivacyModeState] = useState<PrivacyMode>(() => {
-    const savedDefault = getCookie(PRIVACY_INVESTMENTS_KEY) || localStorage.getItem(PRIVACY_INVESTMENTS_KEY)
-    return (savedDefault as PrivacyMode) || 'visible'
-  })
-
-  const [privacyMode, setPrivacyModeState] = useState<PrivacyMode>(() => {
-    // On initial load, use the default privacy mode setting
-    const savedDefault = getCookie(PRIVACY_DEFAULT_KEY) || localStorage.getItem(PRIVACY_DEFAULT_KEY)
-    return (savedDefault as PrivacyMode) || 'visible'
-  })
-
-  const [investmentPrivacyMode, setInvestmentPrivacyModeState] = useState<PrivacyMode>(() => {
-    // On initial load, use the default investment privacy mode setting
-    const savedDefault = getCookie(PRIVACY_INVESTMENTS_KEY) || localStorage.getItem(PRIVACY_INVESTMENTS_KEY)
-    return (savedDefault as PrivacyMode) || 'visible'
-  })
-
-  // Save default privacy mode to both cookie and localStorage
-  const setDefaultPrivacyMode = (mode: PrivacyMode) => {
-    setDefaultPrivacyModeState(mode)
-    setCookie(PRIVACY_DEFAULT_KEY, mode)
-    localStorage.setItem(PRIVACY_DEFAULT_KEY, mode)
+  const setPrivacyStartupMode = (mode: PrivacyStartupMode) => {
+    setPrivacyStartupModeState(mode)
+    setCookie(PRIVACY_STARTUP_KEY, mode)
+    localStorage.setItem(PRIVACY_STARTUP_KEY, mode)
+    setPrivacyModeState(mode === 'all' ? 'hidden' : 'visible')
   }
 
-  const setDefaultInvestmentPrivacyMode = (mode: PrivacyMode) => {
-    setDefaultInvestmentPrivacyModeState(mode)
-    setCookie(PRIVACY_INVESTMENTS_KEY, mode)
-    localStorage.setItem(PRIVACY_INVESTMENTS_KEY, mode)
-  }
-
-  // Toggle current session's privacy mode
   const togglePrivacyMode = () => {
-    setPrivacyModeState(prev => prev === 'visible' ? 'hidden' : 'visible')
-  }
-
-  const toggleInvestmentPrivacy = () => {
-    setInvestmentPrivacyModeState(prev => prev === 'visible' ? 'hidden' : 'visible')
+    setPrivacyModeState(previous => previous === 'visible' ? 'hidden' : 'visible')
   }
 
   const setPrivacyMode = (mode: PrivacyMode) => {
     setPrivacyModeState(mode)
   }
 
-  const setInvestmentPrivacyMode = (mode: PrivacyMode) => {
-    setInvestmentPrivacyModeState(mode)
-  }
+  const shouldHideInvestment = () => privacyMode === 'hidden'
+  const shouldHideNetWorth = () => privacyMode === 'hidden' || privacyStartupMode === 'networth'
 
-  // Check if investments should be hidden (either all data is hidden OR investment-specific is hidden)
-  const shouldHideInvestment = () => {
-    return privacyMode === 'hidden' || investmentPrivacyMode === 'hidden'
-  }
-
-  // Mask sensitive values
   const maskValue = (value: string | number, type: 'currency' | 'text' = 'currency'): string => {
-    if (privacyMode === 'visible') {
-      return String(value)
-    }
-    
-    if (type === 'currency') {
-      return '••••••'
-    }
-    
-    // For text, preserve length somewhat
-    const strValue = String(value)
-    if (strValue.length <= 3) {
-      return '•••'
-    }
-    return '•'.repeat(Math.min(strValue.length, 8))
+    if (privacyMode === 'visible') return String(value)
+    if (type === 'currency') return '••••••'
+
+    const stringValue = String(value)
+    return stringValue.length <= 3 ? '•••' : '•'.repeat(Math.min(stringValue.length, 8))
   }
 
   return (
-    <PrivacyContext.Provider 
-      value={{ 
-        privacyMode, 
-        investmentPrivacyMode,
-        togglePrivacyMode, 
-        toggleInvestmentPrivacy,
-        setPrivacyMode,
-        setInvestmentPrivacyMode,
-        defaultPrivacyMode,
-        defaultInvestmentPrivacyMode,
-        setDefaultPrivacyMode,
-        setDefaultInvestmentPrivacyMode,
-        maskValue,
-        shouldHideInvestment
-      }}
-    >
+    <PrivacyContext.Provider value={{
+      privacyMode,
+      privacyStartupMode,
+      togglePrivacyMode,
+      setPrivacyMode,
+      setPrivacyStartupMode,
+      maskValue,
+      shouldHideInvestment,
+      shouldHideNetWorth,
+    }}>
       {children}
     </PrivacyContext.Provider>
   )
@@ -143,13 +97,10 @@ export function PrivacyProvider({ children }: { children: ReactNode }) {
 
 export function usePrivacy() {
   const context = useContext(PrivacyContext)
-  if (context === undefined) {
-    throw new Error('usePrivacy must be used within a PrivacyProvider')
-  }
+  if (context === undefined) throw new Error('usePrivacy must be used within a PrivacyProvider')
   return context
 }
 
-// Helper component for displaying masked/unmasked values
 interface PrivateValueProps {
   value: string | number
   type?: 'currency' | 'text'
@@ -158,7 +109,7 @@ interface PrivateValueProps {
 
 export function PrivateValue({ value, type = 'currency', className = '' }: PrivateValueProps) {
   const { maskValue, privacyMode } = usePrivacy()
-  
+
   return (
     <span className={`${className} ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
       {maskValue(value, type)}

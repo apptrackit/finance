@@ -29,7 +29,7 @@ function App() {
   const [masterCurrency, setMasterCurrency] = useState('HUF')
   const [showNetWorth, setShowNetWorth] = useState(false)
   const [visibleMenus, setVisibleMenus] = useState<Record<MenuKey, boolean>>(getStoredMenuVisibility)
-  const { privacyMode, togglePrivacyMode, shouldHideInvestment } = usePrivacy()
+  const { privacyMode, togglePrivacyMode, shouldHideNetWorth } = usePrivacy()
 
   const [currentMonth, setCurrentMonth] = useState(new Date())
   const [dateRange, setDateRange] = useState({
@@ -278,8 +278,8 @@ function App() {
                         <span className="text-xs sm:text-lg text-destructive">Error loading data</span>
                       ) : totalNetWorth !== null ? (
                         <>
-                          <span className={privacyMode === 'hidden' || shouldHideInvestment() ? 'select-none' : ''}>
-                            {(privacyMode === 'hidden' || shouldHideInvestment()) && !showNetWorth
+                          <span className={shouldHideNetWorth() ? 'select-none' : ''}>
+                            {shouldHideNetWorth() && !showNetWorth
                               ? '••••••'
                               : totalNetWorth.toLocaleString('hu-HU', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
                           </span>
@@ -289,7 +289,7 @@ function App() {
                         <div className="h-6 sm:h-10 w-20 sm:w-32 bg-muted animate-pulse rounded" />
                       )}
                     </div>
-                    {(privacyMode === 'hidden' || shouldHideInvestment()) && totalNetWorth !== null && !investmentError && (
+                    {shouldHideNetWorth() && totalNetWorth !== null && !investmentError && (
                       <button
                         onClick={() => setShowNetWorth(!showNetWorth)}
                         className="ml-1 sm:ml-2 p-1 sm:p-1.5 rounded-lg hover:bg-primary/10 transition-colors"
@@ -307,8 +307,8 @@ function App() {
                     {investmentError ? investmentError : projectedNetWorth !== null && pendingNetWorthDelta !== 0 ? (
                       <>
                         After all upcoming{' '}
-                        <span className={privacyMode === 'hidden' || shouldHideInvestment() ? 'select-none' : ''}>
-                          {(privacyMode === 'hidden' || shouldHideInvestment()) && !showNetWorth
+                        <span className={shouldHideNetWorth() ? 'select-none' : ''}>
+                          {shouldHideNetWorth() && !showNetWorth
                             ? '••••••'
                             : projectedNetWorth.toLocaleString('hu-HU', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
                         </span>{' '}
