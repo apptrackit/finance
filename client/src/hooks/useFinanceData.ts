@@ -102,8 +102,10 @@ export function useFinanceData(
   const [allTransactions, setAllTransactions] = useState<Transaction[]>([])
   const [upcomingTransactions, setUpcomingTransactions] = useState<Transaction[]>([])
   const [transactionsLoading, setTransactionsLoading] = useState<boolean>(true)
+  const [allTransactionsLoading, setAllTransactionsLoading] = useState<boolean>(true)
   const [categories, setCategories] = useState<Category[]>([])
   const [exchangeRates, setExchangeRates] = useState<Record<string, number>>({})
+  const [exchangeRatesLoading, setExchangeRatesLoading] = useState<boolean>(true)
   const [investmentRefreshKey, setInvestmentRefreshKey] = useState(0)
 
   const fetchData = useCallback(async () => {
@@ -136,6 +138,14 @@ export function useFinanceData(
         .then(asArray<Transaction>)
         .catch(() => [])
 
+      const categoriesPromise = apiFetch(`${API_BASE_URL}/categories`)
+        .then(res => res.json())
+        .then(asArray<Category>)
+        .catch(error => {
+          console.error(error)
+          return []
+        })
+
       const investmentAccounts = accountsData.filter((acc): acc is Account =>
         typeof acc === 'object' && acc !== null && 'type' in acc && acc.type === 'investment'
       )
@@ -156,11 +166,7 @@ export function useFinanceData(
       )
       setTransactions(allTxs)
       setUpcomingTransactions(upcomingTxs)
-
-      apiFetch(`${API_BASE_URL}/categories`)
-        .then(res => res.json())
-        .then(data => setCategories(asArray<Category>(data)))
-        .catch(err => console.error(err))
+      setCategories(await categoriesPromise)
     } catch (error) {
       console.error('Failed to fetch finance data:', error)
       setAccounts([])
@@ -173,6 +179,7 @@ export function useFinanceData(
   }, [dateRange.startDate, dateRange.endDate])
 
   const fetchAllTransactions = useCallback(async () => {
+    setAllTransactionsLoading(true)
     try {
       const accountsData = accounts.length > 0
         ? accounts
@@ -203,6 +210,8 @@ export function useFinanceData(
       setAllTransactions(allTxs)
     } catch (error) {
       console.error('Failed to fetch all transactions:', error)
+    } finally {
+      setAllTransactionsLoading(false)
     }
   }, [accounts])
 
@@ -308,12 +317,15 @@ export function useFinanceData(
   // Fetch exchange rates for display
   useEffect(() => {
     const fetchRates = async () => {
+      setExchangeRatesLoading(true)
       try {
         const response = await fetch(`https://open.er-api.com/v6/latest/${masterCurrency}`)
         const data = await response.json()
         if (data.rates) setExchangeRates(data.rates)
       } catch {
         console.error('Failed to fetch exchange rates')
+      } finally {
+        setExchangeRatesLoading(false)
       }
     }
     fetchRates()
@@ -334,8 +346,10 @@ export function useFinanceData(
     allTransactions,
     upcomingTransactions,
     transactionsLoading,
+    allTransactionsLoading,
     categories,
     exchangeRates,
+    exchangeRatesLoading,
     investmentRefreshKey,
     handleDataChange,
     fetchInvestmentValue,

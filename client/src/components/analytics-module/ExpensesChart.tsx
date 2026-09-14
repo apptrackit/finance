@@ -1,3 +1,4 @@
+import { memo } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '../common/card'
 import { TrendingDown } from 'lucide-react'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
@@ -13,7 +14,7 @@ type ExpensesChartProps = {
   masterCurrency: string
 }
 
-export function ExpensesChart({ data, selectedCategory, onCategoryChange, categories, masterCurrency }: ExpensesChartProps) {
+export const ExpensesChart = memo(function ExpensesChart({ data, selectedCategory, onCategoryChange, categories, masterCurrency }: ExpensesChartProps) {
   const { privacyMode } = usePrivacy()
   
   // Calculate total sum
@@ -114,4 +115,4 @@ export function ExpensesChart({ data, selectedCategory, onCategoryChange, catego
       </CardContent>
     </Card>
   )
-}
+})

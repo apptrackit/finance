@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo, useEffect, useCallback } from 'react'
 import { Card, CardContent } from '../common/card'
 import { Button } from '../common/button'
 import { BarChart3, Calendar, ChevronLeft, ChevronRight, SlidersHorizontal } from 'lucide-react'
@@ -26,6 +26,7 @@ type AnalyticsProps = {
   categories: Category[]
   accounts: Account[]
   masterCurrency?: string
+  exchangeRates?: Record<string, number>
   loading?: boolean
 }
 
@@ -69,13 +70,13 @@ export function Analytics({
   categories,
   accounts,
   masterCurrency = 'HUF',
+  exchangeRates = {},
   loading = false
 }: AnalyticsProps) {
   const [period, setPeriod] = useState<TimePeriod>('month')
   const [projectionMode, setProjectionMode] = useState<'actual' | 'projected'>('actual')
   const [selectedExpenseCategory, setSelectedExpenseCategory] = useState<string>('all')
   const [selectedIncomeCategory, setSelectedIncomeCategory] = useState<string>('all')
-  const [exchangeRates, setExchangeRates] = useState<Record<string, number>>({})
   const [selectedDate, setSelectedDate] = useState(new Date())
   const [isConfigOpen, setIsConfigOpen] = useState(false)
   const [widgetVisibility, setWidgetVisibility] = useState<Record<WidgetId, boolean>>(loadWidgetVisibility)
@@ -129,22 +130,6 @@ export function Analytics({
     return selectedDate.getMonth() === now.getMonth() && selectedDate.getFullYear() === now.getFullYear()
   }, [period, selectedDate])
 
-  // Fetch exchange rates
-  useEffect(() => {
-    const fetchRates = async () => {
-      try {
-        const response = await fetch(`https://open.er-api.com/v6/latest/${masterCurrency}`)
-        const data = await response.json()
-        if (data.rates) {
-          setExchangeRates(data.rates)
-        }
-      } catch (error) {
-        console.error('Failed to fetch exchange rates:', error)
-      }
-    }
-    fetchRates()
-  }, [masterCurrency])
-
   // Fetch the latest persisted AI forecast plus the first page of immutable history.
   useEffect(() => {
     const fetchOutlooks = async () => {
@@ -189,9 +174,11 @@ export function Analytics({
   const selectedOutlook = outlookHistory.find(item => item.id === selectedOutlookId) || outlookHistory[0] || null
 
   // Wrapper for convertToMasterCurrency utility
-  const convertToMasterCurrency = (amount: number, accountId: string): number => {
-    return convertUtil(amount, accountId, accounts, exchangeRates, masterCurrency)
-  }
+  const convertToMasterCurrency = useCallback(
+    (amount: number, accountId: string): number =>
+      convertUtil(amount, accountId, accounts, exchangeRates, masterCurrency),
+    [accounts, exchangeRates, masterCurrency]
+  )
 
   // Filter transactions by period (exclude investment accounts only)
   const filteredTransactions = useMemo(() => {

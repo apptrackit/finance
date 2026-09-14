@@ -47,8 +47,10 @@ function App() {
     allTransactions,
     upcomingTransactions,
     transactionsLoading,
+    allTransactionsLoading,
     categories,
     exchangeRates,
+    exchangeRatesLoading,
     investmentRefreshKey,
     handleDataChange,
   } = useFinanceData(dateRange, masterCurrency)
@@ -447,7 +449,15 @@ function App() {
               </div>
             </div>
           ) : view === 'analytics' ? (
-            <Analytics transactions={allTransactions} upcomingTransactions={upcomingTransactions} categories={categories} accounts={accounts} masterCurrency={masterCurrency} loading={transactionsLoading} />
+            <Analytics
+              transactions={allTransactions}
+              upcomingTransactions={upcomingTransactions}
+              categories={categories}
+              accounts={accounts}
+              masterCurrency={masterCurrency}
+              exchangeRates={exchangeRates}
+              loading={transactionsLoading || allTransactionsLoading || exchangeRatesLoading}
+            />
           ) : view === 'investments' ? (
             <Investments key={investmentRefreshKey} />
           ) : view === 'recurring' ? (

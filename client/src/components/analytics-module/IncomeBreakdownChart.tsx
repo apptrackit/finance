@@ -1,3 +1,4 @@
+import { memo } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '../common/card'
 import { PieChart as PieChartIcon } from 'lucide-react'
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts'
@@ -16,7 +17,7 @@ type IncomeBreakdownChartProps = {
   masterCurrency: string
 }
 
-export function IncomeBreakdownChart({ data, masterCurrency }: IncomeBreakdownChartProps) {
+export const IncomeBreakdownChart = memo(function IncomeBreakdownChart({ data, masterCurrency }: IncomeBreakdownChartProps) {
   const { privacyMode } = usePrivacy()
 
   return (
@@ -94,4 +95,4 @@ export function IncomeBreakdownChart({ data, masterCurrency }: IncomeBreakdownCh
       </CardContent>
     </Card>
   )
-}
+})
