@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
 
-export type ThemeId = 'emerald' | 'ocean' | 'sunset' | 'violet' | 'mono' | 'redfilter'
+export type ThemeId = 'emerald' | 'mono' | 'redfilter'
 
 export interface Theme {
   id: ThemeId
@@ -16,33 +16,9 @@ export interface Theme {
 export const THEMES: Theme[] = [
   {
     id: 'emerald',
-    name: 'Blue',
-    description: 'Default dark theme with blue accents',
+    name: 'Original',
+    description: 'Default finance theme with blue accents',
     primaryColor: '#5189D8',
-    bgColor: '#000610',
-    cardColor: '#010E21',
-  },
-  {
-    id: 'ocean',
-    name: 'Ocean',
-    description: 'Deep navy with cyan highlights',
-    primaryColor: '#06b6d4',
-    bgColor: '#000610',
-    cardColor: '#010E21',
-  },
-  {
-    id: 'sunset',
-    name: 'Sunset',
-    description: 'Warm dark tones with amber glow',
-    primaryColor: '#f97316',
-    bgColor: '#000610',
-    cardColor: '#010E21',
-  },
-  {
-    id: 'violet',
-    name: 'Violet',
-    description: 'Dark purple atmosphere with violet accents',
-    primaryColor: '#8b5cf6',
     bgColor: '#000610',
     cardColor: '#010E21',
   },
@@ -78,7 +54,7 @@ const ThemeContext = createContext<ThemeContextType | undefined>(undefined)
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [theme, setThemeState] = useState<ThemeId>(() => {
     const saved = localStorage.getItem(THEME_STORAGE_KEY)
-    return (saved as ThemeId) || 'emerald'
+    return THEMES.some(t => t.id === saved) ? saved as ThemeId : 'emerald'
   })
 
   useEffect(() => {
