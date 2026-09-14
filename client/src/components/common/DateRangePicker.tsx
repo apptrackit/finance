@@ -31,6 +31,7 @@ const isWholeMonth = (startDate: string, endDate: string) => {
 }
 
 export function DateRangePicker({ startDate, endDate, onApply, onCancel, monthOnly = false }: DateRangePickerProps) {
+  const currentDate = new Date()
   const isAllTime = startDate === ALL_TIME.startDate && endDate === ALL_TIME.endDate
   const initialMonth = isAllTime ? new Date() : toLocalDate(startDate)
   const initialMode: PickerMode = monthOnly ? 'month' : isAllTime ? 'all' : isWholeMonth(startDate, endDate) ? 'month' : 'custom'
@@ -54,6 +55,7 @@ export function DateRangePicker({ startDate, endDate, onApply, onCancel, monthOn
   const selectMonth = (month: number) => {
     const next = new Date(displayYear, month, 1)
     setSelectedMonth(next)
+    onApply(monthRange(next))
   }
 
   return (
@@ -107,7 +109,7 @@ export function DateRangePicker({ startDate, endDate, onApply, onCancel, monthOn
               role="tab"
               aria-selected={mode === 'all'}
               disabled={monthOnly}
-              onClick={() => setMode('all')}
+              onClick={() => onApply(ALL_TIME)}
               className={`flex min-w-0 items-center justify-center whitespace-nowrap rounded-lg px-1 py-2 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${mode === 'all' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
             >
               All time
@@ -136,12 +138,19 @@ export function DateRangePicker({ startDate, endDate, onApply, onCancel, monthOn
               >
                 {MONTH_NAMES.map((month, index) => {
                   const selected = selectedMonth.getFullYear() === displayYear && selectedMonth.getMonth() === index
+                  const isCurrentMonth = currentDate.getFullYear() === displayYear && currentDate.getMonth() === index
                   return (
                     <button
                       key={month}
                       type="button"
                       onClick={() => selectMonth(index)}
-                      className={`h-full w-full min-w-0 rounded-xl px-1 text-sm font-normal leading-none transition-colors ${selected ? 'bg-primary text-primary-foreground shadow-sm' : 'text-foreground hover:bg-secondary'}`}
+                      aria-current={isCurrentMonth ? 'date' : undefined}
+                      style={!selected && isCurrentMonth ? {
+                        borderColor: 'hsl(var(--primary) / 0.72)',
+                        backgroundColor: 'hsl(var(--primary) / 0.08)',
+                        boxShadow: 'inset 0 0 0 1px hsl(var(--primary) / 0.72)',
+                      } : undefined}
+                      className={`h-full w-full min-w-0 rounded-xl border px-1 text-sm font-normal leading-none transition-colors ${selected ? 'border-primary bg-primary text-primary-foreground shadow-sm' : isCurrentMonth ? 'text-foreground hover:bg-secondary' : 'border-transparent text-foreground hover:bg-secondary'}`}
                     >
                       {month}
                     </button>
@@ -176,12 +185,14 @@ export function DateRangePicker({ startDate, endDate, onApply, onCancel, monthOn
           )}
         </div>
 
-        <div className="flex gap-2 border-t border-border/70 p-3 sm:p-4">
-          <Button size="sm" variant="outline" onClick={onCancel} className="flex-1">Cancel</Button>
-          <Button size="sm" onClick={() => onApply(selectedRange)} disabled={invalidCustomRange} className="flex-1">
-            Apply timeframe
-          </Button>
-        </div>
+        {mode === 'custom' && (
+          <div className="flex gap-2 border-t border-border/70 p-3 sm:p-4">
+            <Button size="sm" variant="outline" onClick={onCancel} className="flex-1">Cancel</Button>
+            <Button size="sm" onClick={() => onApply(selectedRange)} disabled={invalidCustomRange} className="flex-1">
+              Apply timeframe
+            </Button>
+          </div>
+        )}
       </div>
     </>
   )
