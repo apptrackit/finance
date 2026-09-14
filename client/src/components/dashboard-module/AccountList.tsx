@@ -216,7 +216,15 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
     return { cashPercentages, investmentPercentages, totalCashUSD, totalInvestmentUSD }
   }
 
-  const { cashPercentages, investmentPercentages } = calculatePercentages()
+  const { cashPercentages, investmentPercentages, totalCashUSD, totalInvestmentUSD } = calculatePercentages()
+  const totalPortfolioUSD = totalCashUSD + totalInvestmentUSD
+  const cashAllocation = totalPortfolioUSD > 0 ? (totalCashUSD / totalPortfolioUSD) * 100 : 0
+  const investmentAllocation = totalPortfolioUSD > 0 ? (totalInvestmentUSD / totalPortfolioUSD) * 100 : 0
+  const formatHufTotal = (usdValue: number) => {
+    const hufRate = exchangeRates.HUF
+    if (!hufRate) return null
+    return `${Math.round(usdValue * hufRate).toLocaleString('hu-HU')} HUF`
+  }
 
   const resetForm = () => {
     setFormData({ name: '', type: 'cash', balance: '', currency: 'HUF', quote_currency: 'USD', symbol: '', asset_type: 'stock', adjustWithTransaction: false, exclude_from_net_worth: false, exclude_from_cash_balance: false })
@@ -767,7 +775,13 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
         {/* Cash Accounts Section */}
         {accounts.filter(a => a.type === 'cash').length > 0 && (
           <div className="space-y-2 sm:space-y-3 mb-4 sm:mb-6">
-            <h4 className="text-[10px] sm:text-xs font-semibold text-muted-foreground uppercase tracking-wider px-1">Cash Accounts</h4>
+            <div className="flex items-center justify-between px-1">
+              <h4 className="text-[10px] sm:text-xs font-semibold text-muted-foreground uppercase tracking-wider">Cash Accounts</h4>
+              <div className="flex items-center gap-1.5">
+                {privacyMode === 'hidden' ? <span className="text-[9px] font-medium text-muted-foreground sm:text-[10px]">••••••</span> : formatHufTotal(totalCashUSD) && <span className="whitespace-nowrap text-[9px] font-medium tabular-nums text-muted-foreground sm:text-[10px]">{formatHufTotal(totalCashUSD)}</span>}
+                <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[9px] font-semibold normal-case tracking-normal text-primary sm:text-[10px]">{cashAllocation.toFixed(0)}% total</span>
+              </div>
+            </div>
             <div className="space-y-1.5 sm:space-y-2">
               {accounts.filter(a => a.type === 'cash').sort((a, b) => {
                 // Convert balances to USD for comparison
@@ -929,7 +943,13 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
         {/* Investment Accounts Section */}
         {accounts.filter(a => a.type === 'investment').length > 0 && (
           <div className="space-y-2 sm:space-y-3">
-            <h4 className="text-[10px] sm:text-xs font-semibold text-muted-foreground uppercase tracking-wider px-1">Investment Accounts</h4>
+            <div className="flex items-center justify-between px-1">
+              <h4 className="text-[10px] sm:text-xs font-semibold text-muted-foreground uppercase tracking-wider">Investment Accounts</h4>
+              <div className="flex items-center gap-1.5">
+                {privacyMode === 'hidden' ? <span className="text-[9px] font-medium text-muted-foreground sm:text-[10px]">••••••</span> : formatHufTotal(totalInvestmentUSD) && <span className="whitespace-nowrap text-[9px] font-medium tabular-nums text-muted-foreground sm:text-[10px]">{formatHufTotal(totalInvestmentUSD)}</span>}
+                <span className="rounded-full bg-violet-500/10 px-1.5 py-0.5 text-[9px] font-semibold normal-case tracking-normal text-violet-400 sm:text-[10px]">{investmentAllocation.toFixed(0)}% total</span>
+              </div>
+            </div>
             <div className="space-y-1.5 sm:space-y-2">
               {accounts.filter(a => a.type === 'investment').sort((a, b) => {
                 // Calculate USD value for each investment account
