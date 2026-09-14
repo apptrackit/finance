@@ -95,6 +95,11 @@ export function TransactionCalendar({
     return days
   }, [currentMonth])
 
+  const chartDays = useMemo(
+    () => calendarDays.filter(day => isSameMonth(day, currentMonth)),
+    [calendarDays, currentMonth],
+  )
+
   const baseline = useMemo(() => {
     const currentBalance = accounts.filter(a => a.type === 'cash').reduce((sum, account) => sum + convertToMasterCurrency(account.balance, account.id), 0)
     const totalFlow = displayTransactions.reduce((sum, tx) => sum + convertToMasterCurrency(tx.amount, tx.account_id), 0)
@@ -117,12 +122,12 @@ export function TransactionCalendar({
     return sortCalendarTransactions(transactionsByDay[selectedKey] || [], sortOrder)
   }, [selectedKey, sortOrder, transactionsByDay])
   const selectedTotals = getDayTotals(selectedTransactions, convertToMasterCurrency)
-  const chartData = useMemo<CalendarChartPoint[]>(() => calendarDays.map(day => ({
+  const chartData = useMemo<CalendarChartPoint[]>(() => chartDays.map(day => ({
     dateKey: dateKey(day),
     label: format(day, 'd MMM'),
     balance: balanceByDay[dateKey(day)] ?? baseline,
     day,
-  })), [balanceByDay, baseline, calendarDays])
+  })), [balanceByDay, baseline, chartDays])
 
   const nativeAmount = (value: number, accountId: string, compact = false) => {
     if (privacyMode === 'hidden') return '••••••'
@@ -229,10 +234,12 @@ export function TransactionCalendar({
               return (
                 <button
                   key={key}
+                  type="button"
+                  disabled={!isCurrentMonth}
                   onClick={() => setSelectedDate(day)}
-                  className={`flex flex-col items-stretch justify-start ${density === 'detailed' ? 'min-h-[132px] sm:min-h-[178px]' : 'min-h-[76px] sm:min-h-[92px]'} border-b border-r border-border/50 p-1.5 text-left transition-colors sm:p-2 ${isSelected ? 'bg-primary/10 ring-1 ring-inset ring-primary/70' : 'hover:bg-secondary/40'} ${isCurrentMonth ? '' : 'bg-secondary/20 text-muted-foreground/50'}`}
+                  className={`flex flex-col items-stretch justify-start ${density === 'detailed' ? 'min-h-[132px] sm:min-h-[178px]' : 'min-h-[76px] sm:min-h-[92px]'} border-b border-r border-border/50 p-1.5 text-left transition-colors sm:p-2 ${isSelected ? 'bg-primary/10 ring-1 ring-inset ring-primary/70' : 'hover:bg-secondary/40'} ${isCurrentMonth ? '' : 'cursor-default bg-secondary/20 text-muted-foreground/50 disabled:pointer-events-none'}`}
                   aria-pressed={isSelected}
-                  aria-label={`${format(day, 'EEEE MMMM d')}, ${dayTransactions.length} transactions`}
+                  aria-label={`${format(day, 'EEEE MMMM d')}, ${dayTransactions.length} transactions${isCurrentMonth ? '' : ', outside selected month'}`}
                 >
                   <div className="mb-1 flex items-center justify-between">
                     <span className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-semibold sm:h-6 sm:w-6 sm:text-xs ${isToday ? 'bg-primary text-primary-foreground' : ''}`}>{format(day, 'd')}</span>
