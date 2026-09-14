@@ -321,11 +321,11 @@ function App() {
 
               {/* Cash Balance Card */}
               {showSeparateCashCard && (
-                <div className="group relative overflow-hidden rounded-xl sm:rounded-2xl border border-border/50 bg-card p-3 sm:p-6 shadow-xl hover:border-emerald-500/30 transition-colors">
+                <div className="group relative overflow-hidden rounded-xl sm:rounded-2xl border border-border/50 bg-card p-3 sm:p-6 shadow-xl hover:border-primary/30 transition-colors">
                   <div className="flex items-center justify-between mb-1.5 sm:mb-4">
                     <span className="text-[10px] sm:text-sm font-medium text-muted-foreground">Cash</span>
-                    <div className="h-6 w-6 sm:h-8 sm:w-8 rounded-lg bg-emerald-500/10 flex items-center justify-center">
-                      <Wallet className="h-3 w-3 sm:h-4 sm:w-4 text-emerald-500" />
+                    <div className="h-6 w-6 sm:h-8 sm:w-8 rounded-lg bg-primary/10 flex items-center justify-center">
+                      <Wallet className="h-3 w-3 sm:h-4 sm:w-4 text-primary" />
                     </div>
                   </div>
                   <div className="text-lg sm:text-4xl font-bold tracking-tight text-foreground leading-tight">

@@ -786,7 +786,7 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
                     className={`group relative overflow-hidden rounded-lg sm:rounded-xl transition-all duration-300 cursor-pointer ${
                       isExcluded
                         ? 'bg-gradient-to-br from-gray-500/30 to-gray-600/20 border border-gray-500/40 hover:border-gray-500/60 opacity-80'
-                        : 'bg-gradient-to-br from-emerald-500/10 to-emerald-500/5 border border-emerald-500/20 hover:border-emerald-500/40'
+                        : 'bg-gradient-to-br from-primary/10 to-primary/5 border border-primary/20 hover:border-primary/40'
                     }`}
                     onClick={() => {
                       // On mobile, first click shows options, hover works on desktop
@@ -798,7 +798,7 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
                     {/* Percentage bar background (hide if excluded) */}
                     {!isExcluded && (
                       <div 
-                        className="absolute inset-y-0 left-0 bg-gradient-to-r from-emerald-500/20 to-emerald-500/10 transition-all duration-500"
+                        className="absolute inset-y-0 left-0 bg-gradient-to-r from-primary/20 to-primary/10 transition-all duration-500"
                         style={{ width: `${percentage}%` }}
                       />
                     )}
@@ -808,7 +808,7 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
                         <div className={`h-9 w-9 sm:h-12 sm:w-12 rounded-lg sm:rounded-xl flex items-center justify-center shadow-lg ${
                           isExcluded
                             ? 'bg-gradient-to-br from-gray-600 to-gray-700 shadow-gray-600/30'
-                            : 'bg-gradient-to-br from-emerald-500 to-emerald-600 shadow-emerald-500/25'
+                            : 'bg-gradient-to-br from-primary to-primary/80 shadow-primary/25'
                         }`}>
                           <Wallet className="h-4 w-4 sm:h-6 sm:w-6 text-white" />
                         </div>
@@ -816,7 +816,7 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
                           <div className="flex items-center gap-1.5 sm:gap-2 mb-0.5 sm:mb-1">
                             <p className="font-semibold text-sm sm:text-base truncate">{account.name}</p>
                             {!isExcluded && (
-                              <span className="inline-flex items-center justify-center h-4 sm:h-5 px-1.5 sm:px-2 rounded-full bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-[10px] sm:text-xs font-medium">
+                              <span className="inline-flex items-center justify-center h-4 sm:h-5 px-1.5 sm:px-2 rounded-full bg-primary/20 text-primary text-[10px] sm:text-xs font-medium">
                                 {percentage.toFixed(1)}%
                               </span>
                             )}
@@ -840,7 +840,7 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
                           variant="ghost"
                           className={`h-10 w-10 ${
                             account.exclude_from_cash_balance && account.exclude_from_net_worth
-                              ? 'text-emerald-500 hover:bg-emerald-500/20'
+                              ? 'text-primary hover:bg-primary/20'
                               : 'text-red-500 hover:bg-red-500/20'
                           } ${
                             isLocked(account.id) ? 'opacity-50 cursor-not-allowed' : ''
@@ -871,7 +871,7 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
                           size="icon"
                           variant="ghost"
                           disabled={lockingId === account.id}
-                          className={`h-10 w-10 ${isLocked(account.id) ? 'text-amber-500 hover:bg-amber-500/20' : 'hover:bg-emerald-500/20'}`}
+                          className={`h-10 w-10 ${isLocked(account.id) ? 'text-amber-500 hover:bg-amber-500/20' : 'hover:bg-primary/20'}`}
                           onClick={(e) => {
                             e.stopPropagation()
                             if (window.innerWidth < 768 && activeAccountId !== account.id) {
@@ -890,7 +890,7 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
                               variant="ghost"
                               title="Edit account"
                               aria-label="Edit account"
-                              className="h-10 w-10 hover:bg-emerald-500/20"
+                              className="h-10 w-10 hover:bg-primary/20"
                               onClick={(e) => {
                                 e.stopPropagation()
                                 if (window.innerWidth < 768 && activeAccountId !== account.id) {
