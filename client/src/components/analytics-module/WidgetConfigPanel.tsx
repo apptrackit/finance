@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { X, TrendingUp, BarChart3, Sparkles, BrainCircuit, ArrowUpCircle, ArrowDownCircle, LineChart, PieChart, Receipt, Layers } from 'lucide-react'
+import { X, TrendingUp, BarChart3, Sparkles, BrainCircuit, ArrowUpCircle, ArrowDownCircle, LineChart, PieChart, Receipt, Layers, GitFork } from 'lucide-react'
 import { WIDGET_DEFS, type WidgetId } from './widgetConfig'
 
 const WIDGET_ICONS: Record<WidgetId, React.ReactNode> = {
@@ -11,6 +11,7 @@ const WIDGET_ICONS: Record<WidgetId, React.ReactNode> = {
   'account-trends':       <LineChart className="h-4 w-4" />,
   'income-breakdown':     <PieChart className="h-4 w-4" />,
   'spending-breakdown':   <PieChart className="h-4 w-4" />,
+  'money-map':            <GitFork className="h-4 w-4" />,
   'top-expenses':         <Receipt className="h-4 w-4" />,
   'ai-financial-forecast': <BrainCircuit className="h-4 w-4" />,
 }

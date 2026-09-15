@@ -7,6 +7,7 @@ export type WidgetId =
   | 'account-trends'
   | 'income-breakdown'
   | 'spending-breakdown'
+  | 'money-map'
   | 'top-expenses'
   | 'ai-financial-forecast'
 
@@ -66,6 +67,12 @@ export const WIDGET_DEFS: WidgetDef[] = [
     id: 'spending-breakdown',
     label: 'Spending Breakdown',
     description: 'Expense distribution across categories as a pie chart',
+    defaultVisible: true,
+  },
+  {
+    id: 'money-map',
+    label: 'Money Map',
+    description: 'Interactive flow of income through spending and surplus',
     defaultVisible: true,
   },
   {

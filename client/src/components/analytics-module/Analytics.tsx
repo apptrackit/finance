@@ -15,6 +15,7 @@ import { ExpensesChart } from './ExpensesChart'
 import { PerAccountTrendChart } from './PerAccountTrendChart'
 import { CategoryBreakdownChart } from './CategoryBreakdownChart'
 import { IncomeBreakdownChart } from './IncomeBreakdownChart'
+import { MoneyMapChart } from './MoneyMapChart'
 import { TopExpensesList } from './TopExpensesList'
 import { PredictionChart } from './PredictionChart'
 import type { Transaction, Category, Account, TimePeriod, FinancialOutlookSnapshot, ChartDataPoint, TrendDataPoint } from './types'
@@ -657,6 +658,7 @@ export function Analytics({
     'account-trends':         perAccountTrendData.length > 0,
     'income-breakdown':       incomeCategoryData.length > 0,
     'spending-breakdown':     categoryData.length > 0,
+    'money-map':              incomeCategoryData.length > 0 || categoryData.length > 0,
     'top-expenses':           filteredTransactions.filter(t => t.amount < 0).length > 0,
     'ai-financial-forecast':  Boolean(selectedOutlook),
   }
@@ -838,6 +840,16 @@ export function Analytics({
               />
             )}
           </div>
+
+          {show('money-map') && (
+            <MoneyMapChart
+              incomeData={incomeCategoryData}
+              expenseData={categoryData}
+              totalIncome={totalIncome}
+              totalExpenses={totalExpenses}
+              masterCurrency={masterCurrency}
+            />
+          )}
 
           {show('top-expenses') && (
             <TopExpensesList
