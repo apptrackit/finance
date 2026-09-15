@@ -4,6 +4,7 @@ export type WidgetId =
   | 'cash-balance-forecast'
   | 'income-chart'
   | 'expenses-chart'
+  | 'income-expenses-trend'
   | 'account-trends'
   | 'income-breakdown'
   | 'spending-breakdown'
@@ -49,6 +50,12 @@ export const WIDGET_DEFS: WidgetDef[] = [
     id: 'expenses-chart',
     label: 'Expenses Chart',
     description: 'Expenses over time by week or month, filterable by category',
+    defaultVisible: true,
+  },
+  {
+    id: 'income-expenses-trend',
+    label: 'Income vs Expenses Trend',
+    description: 'Income, expenses, and net income together over the selected period',
     defaultVisible: true,
   },
   {

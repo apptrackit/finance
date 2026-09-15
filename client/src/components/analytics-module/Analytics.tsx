@@ -4,7 +4,7 @@ import { Button } from '../common/button'
 import { BarChart3, Calendar, ChevronLeft, ChevronRight, SlidersHorizontal } from 'lucide-react'
 import { loadWidgetVisibility, saveWidgetVisibility, type WidgetId } from './widgetConfig'
 import { WidgetConfigPanel } from './WidgetConfigPanel'
-import { format, subMonths, addMonths, startOfMonth, endOfMonth, isWithinInterval, subYears, addYears, startOfYear, endOfYear, startOfWeek, endOfWeek, addWeeks } from 'date-fns'
+import { format, subMonths, addMonths, startOfMonth, endOfMonth, isWithinInterval, subYears, addYears, startOfYear, endOfYear, startOfWeek, endOfWeek, addWeeks, startOfQuarter, endOfQuarter, addQuarters } from 'date-fns'
 import { API_BASE_URL, apiFetch } from '../../config'
 import { convertToMasterCurrency as convertUtil } from './utils'
 import { SummaryCards } from './SummaryCards'
@@ -12,6 +12,7 @@ import { FinancialOutlook } from './FinancialOutlook'
 import { NetWorthTrendChart } from './NetWorthTrendChart'
 import { IncomeChart } from './IncomeChart'
 import { ExpensesChart } from './ExpensesChart'
+import { IncomeExpensesTrendChart, type IncomeExpensesTrendPoint } from './IncomeExpensesTrendChart'
 import { PerAccountTrendChart } from './PerAccountTrendChart'
 import { CategoryBreakdownChart } from './CategoryBreakdownChart'
 import { IncomeBreakdownChart } from './IncomeBreakdownChart'
@@ -625,6 +626,129 @@ export function Analytics({
     return data
   }, [transactionsForAnalytics, selectedExpenseCategory, period, customDateRange, accounts, exchangeRates, masterCurrency])
 
+  // This chart always uses every category, so it stays a complete comparison
+  // when either of the smaller charts above is narrowed to one category.
+  const incomeExpensesTrendData = useMemo((): IncomeExpensesTrendPoint[] => {
+    const accountById = new Map(accounts.map(account => [account.id, account]))
+    const eligibleTransactions = transactionsForAnalytics.filter(transaction =>
+      !transaction.linked_transaction_id && accountById.get(transaction.account_id)?.type !== 'investment'
+    )
+
+    if (eligibleTransactions.length === 0) return []
+
+    const transactionDates = eligibleTransactions.map(transaction => new Date(transaction.date))
+    let rangeStart: Date
+    let rangeEnd: Date
+
+    if (period === 'month' || period === 'year') {
+      rangeStart = new Date(customDateRange.startDate)
+      rangeEnd = new Date(customDateRange.endDate)
+    } else {
+      rangeStart = startOfMonth(new Date(Math.min(...transactionDates.map(date => date.getTime()))))
+      rangeEnd = endOfMonth(new Date(Math.max(new Date().getTime(), ...transactionDates.map(date => date.getTime()))))
+    }
+
+    type AllTimeGranularity = 'month' | 'quarter' | 'year' | 'multi-year'
+    let allTimeGranularity: AllTimeGranularity = 'month'
+    let multiYearSpan = 1
+
+    if (period === 'allTime') {
+      const monthCount = (rangeEnd.getFullYear() - rangeStart.getFullYear()) * 12
+        + rangeEnd.getMonth() - rangeStart.getMonth() + 1
+      const quarterCount = (rangeEnd.getFullYear() - rangeStart.getFullYear()) * 4
+        + Math.floor(rangeEnd.getMonth() / 3) - Math.floor(rangeStart.getMonth() / 3) + 1
+      const yearCount = rangeEnd.getFullYear() - rangeStart.getFullYear() + 1
+
+      if (monthCount <= 12) {
+        allTimeGranularity = 'month'
+      } else if (quarterCount <= 12) {
+        allTimeGranularity = 'quarter'
+      } else if (yearCount <= 12) {
+        allTimeGranularity = 'year'
+      } else {
+        allTimeGranularity = 'multi-year'
+        multiYearSpan = Math.ceil(yearCount / 12)
+      }
+    }
+
+    const buckets: Array<{ start: Date; end: Date; key: string; label: string; tooltipLabel?: string }> = []
+    if (period === 'month') {
+      let weekNumber = 1
+      for (let date = startOfWeek(rangeStart, { weekStartsOn: 1 }); date <= rangeEnd; date = addWeeks(date, 1)) {
+        buckets.push({
+          start: date,
+          end: endOfWeek(date, { weekStartsOn: 1 }),
+          key: format(date, 'yyyy-MM-dd'),
+          label: `Week ${weekNumber++}`,
+        })
+      }
+    } else if (allTimeGranularity === 'quarter') {
+      for (let date = startOfQuarter(rangeStart); date <= rangeEnd; date = addQuarters(date, 1)) {
+        buckets.push({
+          start: date,
+          end: endOfQuarter(date),
+          key: format(date, 'yyyy-QQ'),
+          label: `Q${Math.floor(date.getMonth() / 3) + 1} ${format(date, 'yyyy')}`,
+        })
+      }
+    } else if (allTimeGranularity === 'year') {
+      for (let date = startOfYear(rangeStart); date <= rangeEnd; date = addYears(date, 1)) {
+        buckets.push({
+          start: date,
+          end: endOfYear(date),
+          key: format(date, 'yyyy'),
+          label: format(date, 'yyyy'),
+        })
+      }
+    } else if (allTimeGranularity === 'multi-year') {
+      for (let date = startOfYear(rangeStart); date <= rangeEnd; date = addYears(date, multiYearSpan)) {
+        const bucketEnd = endOfYear(addYears(date, multiYearSpan - 1))
+        const startLabel = format(date, 'yyyy')
+        const endLabel = format(addYears(date, multiYearSpan - 1), 'yyyy')
+        buckets.push({
+          start: date,
+          end: bucketEnd,
+          key: `${startLabel}-${endLabel}`,
+          label: `${startLabel}–${endLabel}`,
+        })
+      }
+    } else {
+      for (let date = startOfMonth(rangeStart); date <= rangeEnd; date = addMonths(date, 1)) {
+        buckets.push({
+          start: date,
+          end: endOfMonth(date),
+          key: format(date, 'yyyy-MM'),
+          label: format(date, 'MMM'),
+          tooltipLabel: period === 'allTime' ? format(date, 'MMMM yyyy') : undefined,
+        })
+      }
+    }
+
+    return buckets.map((bucket): IncomeExpensesTrendPoint => {
+      const effectiveStart = bucket.start < rangeStart ? rangeStart : bucket.start
+      const effectiveEnd = bucket.end > rangeEnd ? rangeEnd : bucket.end
+
+      const { income, expenses } = eligibleTransactions.reduce((totals, transaction) => {
+        const transactionDate = new Date(transaction.date)
+        if (!isWithinInterval(transactionDate, { start: effectiveStart, end: effectiveEnd })) return totals
+
+        const amount = convertToMasterCurrency(transaction.amount, transaction.account_id)
+        if (amount > 0) totals.income += amount
+        if (amount < 0) totals.expenses += Math.abs(amount)
+        return totals
+      }, { income: 0, expenses: 0 })
+
+      return {
+        key: bucket.key,
+        label: bucket.label,
+        tooltipLabel: bucket.tooltipLabel,
+        income,
+        expenses,
+        netIncome: income - expenses,
+      }
+    })
+  }, [accounts, transactionsForAnalytics, period, customDateRange, convertToMasterCurrency])
+
   const periodLabels: Record<TimePeriod, string> = {
     allTime: 'All Time',
     month: 'Month',
@@ -655,6 +779,7 @@ export function Analytics({
     'cash-balance-forecast':  isCurrentMonthView,
     'income-chart':           incomeChartData.some(d => d.amount > 0),
     'expenses-chart':         expensesChartData.some(d => d.amount > 0),
+    'income-expenses-trend':  incomeExpensesTrendData.some(d => d.income > 0 || d.expenses > 0),
     'account-trends':         perAccountTrendData.length > 0,
     'income-breakdown':       incomeCategoryData.length > 0,
     'spending-breakdown':     categoryData.length > 0,
@@ -812,6 +937,13 @@ export function Analytics({
                 selectedCategory={selectedExpenseCategory}
                 onCategoryChange={setSelectedExpenseCategory}
                 categories={expenseCategories}
+                masterCurrency={masterCurrency}
+              />
+            )}
+
+            {show('income-expenses-trend') && (
+              <IncomeExpensesTrendChart
+                data={incomeExpensesTrendData}
                 masterCurrency={masterCurrency}
               />
             )}

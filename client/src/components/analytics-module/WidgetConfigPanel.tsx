@@ -8,6 +8,7 @@ const WIDGET_ICONS: Record<WidgetId, React.ReactNode> = {
   'cash-balance-forecast':<Sparkles className="h-4 w-4" />,
   'income-chart':         <ArrowUpCircle className="h-4 w-4" />,
   'expenses-chart':       <ArrowDownCircle className="h-4 w-4" />,
+  'income-expenses-trend':<BarChart3 className="h-4 w-4" />,
   'account-trends':       <LineChart className="h-4 w-4" />,
   'income-breakdown':     <PieChart className="h-4 w-4" />,
   'spending-breakdown':   <PieChart className="h-4 w-4" />,
