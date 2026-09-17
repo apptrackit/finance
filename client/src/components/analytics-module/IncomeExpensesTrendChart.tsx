@@ -12,9 +12,19 @@ export type IncomeExpensesTrendPoint = {
   netIncome: number
 }
 
+export type IncomeExpensesTrendResolution = 'default' | 'quarter' | 'year'
+
+export type IncomeExpensesTrendResolutionOption = {
+  value: IncomeExpensesTrendResolution
+  label: string
+}
+
 type IncomeExpensesTrendChartProps = {
   data: IncomeExpensesTrendPoint[]
   masterCurrency: string
+  resolution?: IncomeExpensesTrendResolution
+  resolutionOptions?: IncomeExpensesTrendResolutionOption[]
+  onResolutionChange?: (resolution: IncomeExpensesTrendResolution) => void
 }
 
 const formatCompactAmount = (value: number) => {
@@ -37,7 +47,13 @@ const LegendItem = ({ color, label, dashed = false }: { color: string; label: st
   </span>
 )
 
-export const IncomeExpensesTrendChart = memo(function IncomeExpensesTrendChart({ data, masterCurrency }: IncomeExpensesTrendChartProps) {
+export const IncomeExpensesTrendChart = memo(function IncomeExpensesTrendChart({
+  data,
+  masterCurrency,
+  resolution = 'default',
+  resolutionOptions = [],
+  onResolutionChange,
+}: IncomeExpensesTrendChartProps) {
   const { privacyMode } = usePrivacy()
 
   const yDomain = useMemo(() => {
@@ -58,12 +74,32 @@ export const IncomeExpensesTrendChart = memo(function IncomeExpensesTrendChart({
   return (
     <Card className="lg:col-span-2">
       <CardHeader className="px-4 pb-2 sm:px-6">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
           <CardTitle className="text-sm sm:text-base">Income vs Expenses · Over Time</CardTitle>
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5" aria-label="Chart legend">
-            <LegendItem color="hsl(var(--success))" label="Income" />
-            <LegendItem color="hsl(var(--destructive))" label="Expenses" />
-            <LegendItem color="hsl(var(--primary))" label="Net Income" dashed />
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+            {resolutionOptions.length > 0 && (
+              <div className="flex items-center gap-1 rounded-lg border border-border/70 bg-background/70 p-1" aria-label="Chart resolution">
+                {resolutionOptions.map(option => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={() => onResolutionChange?.(option.value)}
+                    className={`rounded-md px-2 py-1 text-[11px] font-medium transition-colors sm:px-2.5 ${
+                      resolution === option.value
+                        ? 'bg-primary text-primary-foreground shadow-sm'
+                        : 'text-muted-foreground hover:bg-secondary hover:text-foreground'
+                    }`}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            )}
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5" aria-label="Chart legend">
+              <LegendItem color="hsl(var(--success))" label="Income" />
+              <LegendItem color="hsl(var(--destructive))" label="Expenses" />
+              <LegendItem color="hsl(var(--primary))" label="Net Income" dashed />
+            </div>
           </div>
         </div>
       </CardHeader>

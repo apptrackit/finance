@@ -12,7 +12,12 @@ import { FinancialOutlook } from './FinancialOutlook'
 import { NetWorthTrendChart } from './NetWorthTrendChart'
 import { IncomeChart } from './IncomeChart'
 import { ExpensesChart } from './ExpensesChart'
-import { IncomeExpensesTrendChart, type IncomeExpensesTrendPoint } from './IncomeExpensesTrendChart'
+import {
+  IncomeExpensesTrendChart,
+  type IncomeExpensesTrendPoint,
+  type IncomeExpensesTrendResolution,
+  type IncomeExpensesTrendResolutionOption,
+} from './IncomeExpensesTrendChart'
 import { PerAccountTrendChart } from './PerAccountTrendChart'
 import { CategoryBreakdownChart } from './CategoryBreakdownChart'
 import { IncomeBreakdownChart } from './IncomeBreakdownChart'
@@ -80,6 +85,7 @@ export function Analytics({
   const [selectedExpenseCategory, setSelectedExpenseCategory] = useState<string>('all')
   const [selectedIncomeCategory, setSelectedIncomeCategory] = useState<string>('all')
   const [selectedDate, setSelectedDate] = useState(new Date())
+  const [incomeExpensesTrendResolution, setIncomeExpensesTrendResolution] = useState<IncomeExpensesTrendResolution>('default')
   const [isConfigOpen, setIsConfigOpen] = useState(false)
   const [widgetVisibility, setWidgetVisibility] = useState<Record<WidgetId, boolean>>(loadWidgetVisibility)
 
@@ -628,6 +634,72 @@ export function Analytics({
 
   // This chart always uses every category, so it stays a complete comparison
   // when either of the smaller charts above is narrowed to one category.
+  const allTimeIncomeExpensesResolution = useMemo(() => {
+    if (period !== 'allTime') return { monthCount: 0, defaultResolution: 'month' as const, defaultLabel: 'Months' }
+
+    const accountById = new Map(accounts.map(account => [account.id, account]))
+    const dates = transactionsForAnalytics
+      .filter(transaction => !transaction.linked_transaction_id && accountById.get(transaction.account_id)?.type !== 'investment')
+      .map(transaction => new Date(transaction.date))
+
+    if (dates.length === 0) return { monthCount: 0, defaultResolution: 'month' as const, defaultLabel: 'Months' }
+
+    const rangeStart = startOfMonth(new Date(Math.min(...dates.map(date => date.getTime()))))
+    const rangeEnd = endOfMonth(new Date(Math.max(new Date().getTime(), ...dates.map(date => date.getTime()))))
+    const monthCount = (rangeEnd.getFullYear() - rangeStart.getFullYear()) * 12
+      + rangeEnd.getMonth() - rangeStart.getMonth() + 1
+    const quarterCount = (rangeEnd.getFullYear() - rangeStart.getFullYear()) * 4
+      + Math.floor(rangeEnd.getMonth() / 3) - Math.floor(rangeStart.getMonth() / 3) + 1
+    const yearCount = rangeEnd.getFullYear() - rangeStart.getFullYear() + 1
+
+    if (monthCount <= 12) return { monthCount, defaultResolution: 'month' as const, defaultLabel: 'Months' }
+    if (quarterCount <= 12) return { monthCount, defaultResolution: 'quarter' as const, defaultLabel: 'Quarters' }
+    if (yearCount <= 12) return { monthCount, defaultResolution: 'year' as const, defaultLabel: 'Years' }
+    return {
+      monthCount,
+      defaultResolution: 'multi-year' as const,
+      defaultLabel: `${Math.ceil(yearCount / 12)}-year groups`,
+    }
+  }, [accounts, transactionsForAnalytics, period])
+
+  const incomeExpensesTrendResolutionOptions = useMemo((): IncomeExpensesTrendResolutionOption[] => {
+    if (period === 'year') {
+      return [
+        { value: 'default', label: 'Months' },
+        { value: 'quarter', label: 'Quarters' },
+      ]
+    }
+
+    if (period === 'allTime' && allTimeIncomeExpensesResolution.monthCount > 0) {
+      switch (allTimeIncomeExpensesResolution.defaultResolution) {
+        case 'month':
+          return [
+            { value: 'default', label: 'Months' },
+            { value: 'quarter', label: 'Quarters' },
+            { value: 'year', label: 'Years' },
+          ]
+        case 'quarter':
+          return [
+            { value: 'default', label: 'Quarters' },
+            { value: 'year', label: 'Years' },
+          ]
+        case 'year':
+          return [
+            { value: 'quarter', label: 'Quarters' },
+            { value: 'default', label: 'Years' },
+          ]
+        case 'multi-year':
+          return [
+            { value: 'quarter', label: 'Quarters' },
+            { value: 'year', label: 'Years' },
+            { value: 'default', label: allTimeIncomeExpensesResolution.defaultLabel },
+          ]
+      }
+    }
+
+    return []
+  }, [period, allTimeIncomeExpensesResolution])
+
   const incomeExpensesTrendData = useMemo((): IncomeExpensesTrendPoint[] => {
     const accountById = new Map(accounts.map(account => [account.id, account]))
     const eligibleTransactions = transactionsForAnalytics.filter(transaction =>
@@ -671,6 +743,16 @@ export function Analytics({
       }
     }
 
+    const trendGranularity = period === 'year'
+      ? (incomeExpensesTrendResolution === 'quarter' ? 'quarter' : 'month')
+      : period === 'allTime'
+        ? incomeExpensesTrendResolution === 'quarter'
+          ? 'quarter'
+          : incomeExpensesTrendResolution === 'year'
+            ? 'year'
+            : allTimeGranularity
+        : 'week'
+
     const buckets: Array<{ start: Date; end: Date; key: string; label: string; tooltipLabel?: string }> = []
     if (period === 'month') {
       let weekNumber = 1
@@ -682,7 +764,7 @@ export function Analytics({
           label: `Week ${weekNumber++}`,
         })
       }
-    } else if (allTimeGranularity === 'quarter') {
+    } else if (trendGranularity === 'quarter') {
       for (let date = startOfQuarter(rangeStart); date <= rangeEnd; date = addQuarters(date, 1)) {
         buckets.push({
           start: date,
@@ -691,7 +773,7 @@ export function Analytics({
           label: `Q${Math.floor(date.getMonth() / 3) + 1} ${format(date, 'yyyy')}`,
         })
       }
-    } else if (allTimeGranularity === 'year') {
+    } else if (trendGranularity === 'year') {
       for (let date = startOfYear(rangeStart); date <= rangeEnd; date = addYears(date, 1)) {
         buckets.push({
           start: date,
@@ -700,7 +782,7 @@ export function Analytics({
           label: format(date, 'yyyy'),
         })
       }
-    } else if (allTimeGranularity === 'multi-year') {
+    } else if (trendGranularity === 'multi-year') {
       for (let date = startOfYear(rangeStart); date <= rangeEnd; date = addYears(date, multiYearSpan)) {
         const bucketEnd = endOfYear(addYears(date, multiYearSpan - 1))
         const startLabel = format(date, 'yyyy')
@@ -747,7 +829,7 @@ export function Analytics({
         netIncome: income - expenses,
       }
     })
-  }, [accounts, transactionsForAnalytics, period, customDateRange, convertToMasterCurrency])
+  }, [accounts, transactionsForAnalytics, period, customDateRange, convertToMasterCurrency, incomeExpensesTrendResolution])
 
   const periodLabels: Record<TimePeriod, string> = {
     allTime: 'All Time',
@@ -820,7 +902,10 @@ export function Analytics({
             {(Object.keys(periodLabels) as TimePeriod[]).map((p) => (
               <button
                 key={p}
-                onClick={() => setPeriod(p)}
+                onClick={() => {
+                  setPeriod(p)
+                  setIncomeExpensesTrendResolution('default')
+                }}
                 className={`flex-1 sm:flex-none px-2.5 sm:px-3 py-1.5 text-xs font-medium rounded-lg transition-all whitespace-nowrap ${
                   period === p
                     ? 'bg-primary text-primary-foreground shadow-md'
@@ -945,6 +1030,9 @@ export function Analytics({
               <IncomeExpensesTrendChart
                 data={incomeExpensesTrendData}
                 masterCurrency={masterCurrency}
+                resolution={incomeExpensesTrendResolution}
+                resolutionOptions={incomeExpensesTrendResolutionOptions}
+                onResolutionChange={setIncomeExpensesTrendResolution}
               />
             )}
 
