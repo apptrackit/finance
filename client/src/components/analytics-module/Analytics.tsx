@@ -996,16 +996,6 @@ export function Analytics({
               />
             )}
 
-            {show('cash-balance-forecast') && isCurrentMonthView && (
-              <PredictionChart
-                transactions={transactionsForAnalytics}
-                accounts={accounts}
-                masterCurrency={masterCurrency}
-                exchangeRates={exchangeRates}
-                convertToMasterCurrency={convertToMasterCurrency}
-              />
-            )}
-
             {show('income-chart') && (
               <IncomeChart
                 data={incomeChartData}
@@ -1076,6 +1066,16 @@ export function Analytics({
               transactions={filteredTransactions}
               categories={categories}
               masterCurrency={masterCurrency}
+              convertToMasterCurrency={convertToMasterCurrency}
+            />
+          )}
+
+          {show('cash-balance-forecast') && isCurrentMonthView && (
+            <PredictionChart
+              transactions={transactionsForAnalytics}
+              accounts={accounts}
+              masterCurrency={masterCurrency}
+              exchangeRates={exchangeRates}
               convertToMasterCurrency={convertToMasterCurrency}
             />
           )}
