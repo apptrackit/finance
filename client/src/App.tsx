@@ -174,8 +174,10 @@ function App() {
 
   return (
     <div className="min-h-screen bg-canvas pb-16 lg:pb-0">
-      {/* Subtle gradient overlay */}
-      <div className="fixed inset-0 bg-gradient-to-br from-primary/5 via-transparent to-transparent pointer-events-none" />
+      {/* Keep Analytics visually neutral so its persistent control dock blends into the page. */}
+      {view !== 'analytics' && (
+        <div className="fixed inset-0 bg-gradient-to-br from-primary/5 via-transparent to-transparent pointer-events-none" />
+      )}
 
       <div className="relative">
         {/* Header */}

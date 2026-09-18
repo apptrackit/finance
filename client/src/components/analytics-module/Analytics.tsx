@@ -882,7 +882,7 @@ export function Analytics({
         widgetHasData={widgetHasData}
       />
 
-      {/* Period Selector */}
+      {/* Analytics header */}
       <div className="flex flex-col items-start gap-3">
         <div className="flex items-center justify-between w-full">
           <div className="flex items-center gap-2">
@@ -897,16 +897,26 @@ export function Analytics({
             Customize
           </button>
         </div>
-        <div className="flex flex-col sm:flex-row items-center gap-2 w-full sm:w-auto">
-          <div className="flex gap-1 p-1 rounded-xl bg-background/80 border border-border/70 shadow-inner w-full sm:w-auto">
+      </div>
+
+      {/*
+        Keep the filters with the active chart instead of making people return to
+        the top of the page. This must be a page-level sibling so it can remain
+        sticky for the full analytics feed. The offsets match the app header.
+      */}
+      <div className="sticky top-[44px] sm:top-[72px] z-40 -mx-3 sm:-mx-6 w-[calc(100%+1.5rem)] sm:w-[calc(100%+3rem)] border-b border-border/70 bg-canvas px-3 sm:px-6 py-2.5">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex gap-1 p-1 rounded-xl bg-background/80 border border-border/70 shadow-inner w-full min-[430px]:w-auto">
             {(Object.keys(periodLabels) as TimePeriod[]).map((p) => (
               <button
                 key={p}
+                type="button"
                 onClick={() => {
                   setPeriod(p)
                   setIncomeExpensesTrendResolution('default')
                 }}
-                className={`flex-1 sm:flex-none px-2.5 sm:px-3 py-1.5 text-xs font-medium rounded-lg transition-all whitespace-nowrap ${
+                aria-pressed={period === p}
+                className={`flex-1 min-[430px]:flex-none px-2.5 sm:px-3 py-1.5 text-xs font-medium rounded-lg transition-all whitespace-nowrap ${
                   period === p
                     ? 'bg-primary text-primary-foreground shadow-md'
                     : 'text-muted-foreground hover:text-foreground hover:bg-secondary/70'
@@ -917,12 +927,13 @@ export function Analytics({
             ))}
           </div>
           {period !== 'allTime' && (
-            <div className="flex items-center gap-1 rounded-xl border border-border/70 bg-background/70 px-1 py-1 shadow-sm">
+            <div className="flex items-center justify-between min-[430px]:justify-start gap-1 rounded-xl border border-border/70 bg-background/70 px-1 py-1 shadow-sm w-full min-[430px]:w-auto">
               <Button
                 onClick={navigateBack}
                 size="sm"
                 variant="ghost"
                 className="h-7 w-7 sm:h-8 sm:w-8 p-0 rounded-lg hover:bg-secondary"
+                aria-label={`Show previous ${period === 'month' ? 'month' : 'year'}`}
               >
                 <ChevronLeft className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
               </Button>
@@ -934,15 +945,18 @@ export function Analytics({
                 size="sm"
                 variant="ghost"
                 className="h-7 w-7 sm:h-8 sm:w-8 p-0 rounded-lg hover:bg-secondary"
+                aria-label={`Show next ${period === 'month' ? 'month' : 'year'}`}
               >
                 <ChevronRight className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
               </Button>
             </div>
           )}
-          <div className="flex gap-1 p-1 rounded-xl bg-background/80 border border-border/70 shadow-inner w-full sm:w-auto">
+          <div className="flex gap-1 p-1 rounded-xl bg-background/80 border border-border/70 shadow-inner w-full min-[430px]:w-auto">
             <button
+              type="button"
               onClick={() => setProjectionMode('actual')}
-              className={`flex-1 sm:flex-none px-2.5 sm:px-3 py-1.5 text-xs font-medium rounded-lg transition-all whitespace-nowrap ${
+              aria-pressed={projectionMode === 'actual'}
+              className={`flex-1 min-[430px]:flex-none px-2.5 sm:px-3 py-1.5 text-xs font-medium rounded-lg transition-all whitespace-nowrap ${
                 projectionMode === 'actual'
                   ? 'bg-primary text-primary-foreground shadow-md'
                   : 'text-muted-foreground hover:text-foreground hover:bg-secondary/70'
@@ -951,8 +965,10 @@ export function Analytics({
               Actual
             </button>
             <button
+              type="button"
               onClick={() => setProjectionMode('projected')}
-              className={`flex-1 sm:flex-none px-2.5 sm:px-3 py-1.5 text-xs font-medium rounded-lg transition-all whitespace-nowrap ${
+              aria-pressed={projectionMode === 'projected'}
+              className={`flex-1 min-[430px]:flex-none px-2.5 sm:px-3 py-1.5 text-xs font-medium rounded-lg transition-all whitespace-nowrap ${
                 projectionMode === 'projected'
                   ? 'bg-primary text-primary-foreground shadow-md'
                   : 'text-muted-foreground hover:text-foreground hover:bg-secondary/70'
