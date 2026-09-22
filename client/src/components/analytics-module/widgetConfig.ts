@@ -110,7 +110,9 @@ export function loadWidgetVisibility(): Record<WidgetId, boolean> {
       const parsed = JSON.parse(stored)
       return { ...defaults, ...parsed }
     }
-  } catch {}
+  } catch {
+    // Local storage can be unavailable (for example, in private browsing mode).
+  }
 
   return defaults
 }
@@ -118,5 +120,7 @@ export function loadWidgetVisibility(): Record<WidgetId, boolean> {
 export function saveWidgetVisibility(visibility: Record<WidgetId, boolean>): void {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(visibility))
-  } catch {}
+  } catch {
+    // Widget preferences are optional and should not block rendering.
+  }
 }

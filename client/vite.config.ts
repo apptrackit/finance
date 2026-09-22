@@ -6,7 +6,7 @@ import { VitePWA } from 'vite-plugin-pwa'
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
-  let apiDomain = env.VITE_API_DOMAIN || 'localhost:8787'
+  const apiDomain = env.VITE_API_DOMAIN || 'localhost:8787'
   
   // If apiDomain already includes protocol, use it as-is
   // Otherwise, add http:// for localhost or https:// for remote
@@ -89,7 +89,7 @@ export default defineConfig(({ mode }) => {
           target: apiTarget,
           changeOrigin: true, // Let the proxy handle origin properly
           rewrite: (path) => path.replace(/^\/api/, ''),
-          configure: (proxy, _options) => {
+          configure: (proxy) => {
             proxy.on('proxyReq', (proxyReq, req) => {
               // Forward the Origin header from the browser
               if (req.headers.origin) {
