@@ -1117,7 +1117,7 @@ export function TransactionList({
     if (!recentLabel) return null
 
     return (
-      <span className="flex-shrink-0 select-none text-[10px] font-medium lowercase leading-none text-primary/50 animate-pulse">
+      <span className="flex-shrink-0 select-none text-[10px] font-medium lowercase leading-none text-primary/90 animate-pulse-slow">
         {recentLabel}
       </span>
     )
