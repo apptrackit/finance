@@ -117,6 +117,7 @@ for (const target of ['api', 'mcp']) {
     await f.execute([target])
     assert.equal(f.mutations().length, 1)
     assert.equal(f.mutations()[0].config.name, `finance-${target}`)
+    assert.equal(f.mutations()[0].argv[f.mutations()[0].argv.indexOf('--tsconfig') + 1], join(f.root, target, 'tsconfig.json'))
     assert.ok(!f.calls.some(call => call.kind === 'npm' && call.argv.includes('client')))
     if (target === 'api') assert.deepEqual(f.mutations()[0].secrets, { API_SECRET: fixtureConfig.API_SECRET, ALLOWED_ORIGINS: fixtureConfig.ALLOWED_ORIGINS })
     else {

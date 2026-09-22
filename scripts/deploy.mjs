@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process'
 import { chmod, mkdtemp, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { dirname, join, relative, resolve } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 import { createInterface } from 'node:readline/promises'
 import { Writable } from 'node:stream'
 import { fileURLToPath, pathToFileURL } from 'node:url'
@@ -231,13 +231,13 @@ export async function deploy(options, { root = repositoryRoot, run = runCommand,
     const apiConfig = (plan.api || plan.mcp || plan.migrations) ? await writeJson('api.json', {
       name: config.API_WORKER_NAME || 'finance-api', main: join(root, 'api/src/index.ts'),
       compatibility_date: '2024-09-23', compatibility_flags: ['nodejs_compat'],
-      tsconfig: relative(temporary, join(root, 'api/tsconfig.json')), define: { __dirname: "'/'" }, workers_dev: true,
+      define: { __dirname: "'/'" }, workers_dev: true,
       d1_databases: [database], triggers: { crons: ['0 0 * * *'] },
     }) : undefined
     const mcpConfig = plan.mcp ? await writeJson('mcp.json', {
       name: config.MCP_WORKER_NAME, main: join(root, 'mcp/src/index.ts'),
       compatibility_date: '2026-07-01', workers_dev: false,
-      tsconfig: relative(temporary, join(root, 'mcp/tsconfig.json')), d1_databases: [database],
+      d1_databases: [database],
       vars: { CF_ACCESS_TEAM_DOMAIN: config.MCP_ACCESS_TEAM_DOMAIN, CF_ACCESS_AUD: config.MCP_ACCESS_AUD, ALLOWED_EMAIL: config.MCP_ALLOWED_EMAIL },
     }) : undefined
 
@@ -259,7 +259,7 @@ export async function deploy(options, { root = repositoryRoot, run = runCommand,
     if (plan.api) await command('API typecheck', process.execPath, [join(root, 'node_modules/typescript/bin/tsc'), '--noEmit', '-p', join(root, 'api/tsconfig.json')])
     if (plan.mcp) await npm('MCP typecheck', ['run', 'build:mcp'])
     for (const [name, file] of [['api', plan.api && apiConfig], ['mcp', mcpConfig]]) {
-      if (file) await wrangler(`${name.toUpperCase()} bundle check`, ['deploy', '--dry-run', '--minify', '--no-autoconfig', '--config', file, '--outdir', join(temporary, `${name}-bundle`)])
+      if (file) await wrangler(`${name.toUpperCase()} bundle check`, ['deploy', '--dry-run', '--minify', '--no-autoconfig', '--config', file, '--tsconfig', join(root, name, 'tsconfig.json'), '--outdir', join(temporary, `${name}-bundle`)])
     }
     const buildOrigin = config.API_URL || 'https://finance-api.invalid'
     if (plan.client) await buildClient(buildOrigin)
@@ -293,7 +293,7 @@ export async function deploy(options, { root = repositoryRoot, run = runCommand,
 
     if (plan.api) {
       const secrets = await writeJson('api-secrets.json', { API_SECRET: config.API_SECRET, ALLOWED_ORIGINS: config.ALLOWED_ORIGINS })
-      const result = await wrangler('Deploying API', ['deploy', '--minify', '--no-autoconfig', '--config', apiConfig, '--secrets-file', secrets])
+      const result = await wrangler('Deploying API', ['deploy', '--minify', '--no-autoconfig', '--config', apiConfig, '--tsconfig', join(root, 'api/tsconfig.json'), '--secrets-file', secrets])
       if (!config.API_URL) {
         const reported = result.match(/https:\/\/[a-z0-9.-]+\.workers\.dev\b/i)?.[0]
         if (reported) config.API_URL = apiOrigin(reported)
@@ -301,7 +301,7 @@ export async function deploy(options, { root = repositoryRoot, run = runCommand,
       }
       await saveConfig(configPath, config)
     }
-    if (plan.mcp) await wrangler('Deploying MCP', ['deploy', '--minify', '--no-autoconfig', '--config', mcpConfig])
+    if (plan.mcp) await wrangler('Deploying MCP', ['deploy', '--minify', '--no-autoconfig', '--config', mcpConfig, '--tsconfig', join(root, 'mcp/tsconfig.json')])
     if (plan.client) {
       // On the first full release, Wrangler supplies the URL after API creation.
       if (config.API_URL !== buildOrigin) await buildClient(config.API_URL)
