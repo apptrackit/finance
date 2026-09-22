@@ -2,9 +2,9 @@
 
 A self-hosted personal finance app for tracking accounts, transactions, investments, and cash flow. The React client runs on Cloudflare Pages, with a Workers API and D1 database. An optional MCP Worker connects your finance data to ChatGPT for analysis, reviewable transaction drafts, and saved financial forecasts.
 
-[Changelog](changelog.md) · [GitHub releases](https://github.com/apptrackit/finance/releases) · [MCP guide](mcp/README.md) · [Contributor and agent guide](AGENTS.md)
+[Changelog](CHANGELOG.md) · [GitHub releases](https://github.com/apptrackit/finance/releases) · [MCP guide](mcp/README.md) · [Contributor and agent guide](AGENTS.md)
 
-The latest published release is [v2.11](https://github.com/apptrackit/finance/releases/tag/v2.11). This README describes the current source tree, which also includes changes listed under [Unreleased](changelog.md#unreleased).
+The latest published release is [v2.11](https://github.com/apptrackit/finance/releases/tag/v2.11). This README describes the current source tree, which also includes changes listed under [Unreleased](CHANGELOG.md#unreleased).
 
 ## Contents
 
@@ -34,7 +34,7 @@ The latest published release is [v2.11](https://github.com/apptrackit/finance/re
 | Settings | Reporting currency, category management, navigation visibility, Original/Monochrome/Red Filter themes, startup privacy, cache controls, and CSV/JSON export. |
 | PWA | Installable app, responsive desktop/mobile layouts, cached assets, and service-worker updates. Financial writes require an API connection. |
 
-Budget management was retired after v2.11. See the [changelog](changelog.md#unreleased) and the [migration note](#database-migrations) before upgrading an older deployment.
+Budget management was retired after v2.11. See the [changelog](CHANGELOG.md#unreleased) and the [migration note](#database-migrations) before upgrading an older deployment.
 
 ## How financial data works
 
@@ -124,7 +124,7 @@ finance/
 ├── .github/workflows/ci.yml
 ├── .deploy-config.example
 ├── AGENTS.md               # Coding conventions and financial invariants
-├── changelog.md            # Published releases and unreleased changes
+├── CHANGELOG.md            # Published releases and unreleased changes
 ├── deploy.sh               # Migrations + API + client + optional MCP
 ├── deploy-client.sh        # Client-only deployment
 └── package.json            # npm workspace scripts and app version
@@ -338,4 +338,4 @@ curl --fail-with-body \
 - **Stale UI or data after deployment:** inspect service-worker caching; Settings includes cache management and force-reload controls. Cached assets do not provide offline transaction writes.
 - **Empty or stale AI forecast:** a connected MCP client must publish a report first. Later ledger changes can make it stale; the UI does not automatically request a replacement.
 
-For implementation conventions, financial invariants, and change-specific checks, see [AGENTS.md](AGENTS.md). For historical changes and upgrade context, see [changelog.md](changelog.md).
+For implementation conventions, financial invariants, and change-specific checks, see [AGENTS.md](AGENTS.md). For historical changes and upgrade context, see [CHANGELOG.md](CHANGELOG.md).

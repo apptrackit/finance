@@ -6,7 +6,7 @@ This guide applies to the entire repository. Finance Manager is a personal finan
 
 - This is an **npm workspace monorepo**: `api`, `client`, and `mcp`. Install from the root with `npm ci`; keep the root `package-lock.json` as the shared lockfile. Use `npm install <package> -w <workspace>` for dependency changes.
 - Use a Node version compatible with the locked tooling: Node 20.19+ on the 20.x line, 22.13+ on the 22.x line, or 24+. CI currently selects Node 20.
-- Read the relevant entry point and tests before editing. Package scripts, current source, and the complete migration sequence are the implementation reference. `README.md` covers current setup and features; `changelog.md` separates published releases from unreleased changes.
+- Read the relevant entry point and tests before editing. Package scripts, current source, and the complete migration sequence are the implementation reference. `README.md` covers current setup and features; `CHANGELOG.md` separates published releases from unreleased changes.
 - `api/` is a Hono/TypeScript Cloudflare Worker; `client/` is React 19, Vite, Tailwind CSS 4, and Recharts, deployed to Cloudflare Pages; `mcp/` is a separate TypeScript Cloudflare Worker.
 - **API and MCP bind directly to the same D1 database.** MCP does not call API services. Schema and financial-semantics changes often require updates in all three workspaces; there is no shared generated contract package.
 
