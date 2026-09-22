@@ -19,6 +19,7 @@ Intermediate package/UI version bumps are grouped under the next published GitHu
 
 ### Changed
 
+- Consolidated deployment into `scripts/deploy.mjs` with separate client, API, MCP, and migration commands. API/MCP-only deployments check pending migrations; applying them requires an explicit option. Removed root shell wrappers, preserved local config/env files, and added deployment tests to CI.
 - CI now checks all three workspaces, real Worker/D1 integration, client lint, and workflow syntax on a pinned Node LTS runtime, with pinned Actions, bounded runs, retained test reports, and an aggregate `CI passed` check.
 - Financial forecasts now require 91 daily points for days 0–90, retain actual cash history, and validate dated movements and unrealistic straight-line predictions. Forecast charts and date selection were refined.
 - Refreshed the default blue appearance, borders, icons, and account allocation display. The available themes are Original, Monochrome, and Red Filter.

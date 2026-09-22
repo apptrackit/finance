@@ -19,15 +19,17 @@ Example: `001-init.sql`, `002-add-user-table.sql`
 - This applies all migrations to the local SQLite database
 
 **Production Deployment:**
-- `deploy.sh` applies all pending migrations to the remote D1 database
+- `npm run deploy` or `npm run deploy:migrations` applies pending migrations through `scripts/deploy.mjs`
 - Migrations already applied are skipped automatically
+- API/MCP-only deployments check migration history and stop if any are pending. Add `-- --migrations` to explicitly apply them before deploying that Worker.
+- A history-query failure stops deployment. Each migration and its history insert are submitted together; do not substitute Wrangler's separate built-in migration ledger.
 
 ## For Developers
 
 1. **Never modify applied migrations** - Create a new migration instead
 2. **Keep migrations focused** - One logical change per file
-3. **Test locally first** - Run `npm run dev` to verify your migration works
-4. **Write idempotent migrations** - Use `IF NOT EXISTS` or `IF NOT EXISTS` clauses
+3. **Test locally first** - Run `npm run test:integration` for disposable D1 verification, and add a populated upgrade fixture. `npm run dev` deletes existing local API database state.
+4. **Write idempotent migrations where possible** - Use `IF EXISTS`/`IF NOT EXISTS` when supported. Do not replay one-time `ALTER TABLE` statements.
 
 ## Important
 

@@ -3,9 +3,10 @@
 Use the Node 22 LTS version in `.node-version` and install from the repository root with `npm ci`.
 
 ```bash
-npm test                       # all workspace suites and Worker/D1 integration
+npm test                       # workspace, deployment, and Worker/D1 tests
 npm test --workspaces           # fast unit/component suites only
 npm run test:integration        # compiled Workers and disposable shared D1
+npm run test:deploy             # deployment scope/failure cases and local bundles
 npm run typecheck              # API, client, MCP, and integration harness
 npm run lint -w client -- --max-warnings=0
 VITE_API_KEY=ci-placeholder VITE_API_DOMAIN=localhost:8787 npm run build
@@ -22,6 +23,7 @@ npm run test:integration -- -t 'rolls back'
 | API/MCP TypeScript checks and client production build | Contract/type errors, bundling, and PWA generation |
 | Client lint | Errors and warnings under the project's enabled rules |
 | Worker/D1 integration | Real entry points, HTTP/RPC routing, authentication, SQL, triggers, and cross-workspace behavior |
+| Deployment tests | Target isolation, npm argument forwarding, pending migrations, cleanup, failures, and generated Worker bundles |
 | Workflow validation | Invalid Actions syntax, expressions, and shell commands |
 | CI passed | One stable check that requires every preceding job to succeed |
 
@@ -35,7 +37,7 @@ Require **CI passed** in GitHub branch protection or a ruleset to make these che
 
 The MCP authentication bypass is **not enabled**: tests sign real RSA JWTs and intercept the public-key request. They exercise valid tokens, invalid claims and tampered signatures. FX responses are deterministic; any unexpected Worker network request fails the test, even if application code catches it.
 
-Migrations run in order using Wrangler's SQL parser so trigger bodies remain intact. The helper mirrors the repository's filename-based `migration_history` convention, including names without `.sql`. Tests cover both an empty database and populated legacy data upgraded through the preceding schema to the latest one. The deployment shell script itself is not executed.
+Migrations run in order using Wrangler's SQL parser so trigger bodies remain intact. The helper mirrors the repository's filename-based `migration_history` convention, including names without `.sql`. Tests cover both an empty database and populated legacy data upgraded through the preceding schema to the latest one. Deployment orchestration is tested separately in `scripts/deploy.test.mjs`: all remote commands use a fake runner, while Wrangler dry-run checks compile both generated Worker configurations. Those tests never deploy or query a real database.
 
 The financial scenarios assert both API responses and persisted balances/rows. They cover:
 

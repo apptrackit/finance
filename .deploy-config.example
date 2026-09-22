@@ -1,17 +1,25 @@
 # Private deployment configuration. Copy this to .deploy-config or let
-# ./deploy.sh create it interactively. Do not commit the real file.
+# npm run deploy create it interactively. Do not commit the real file.
+# Only settings required by the selected deployment target are requested.
 
+# Client (also used by a full release)
 PROJECT_NAME=finance
+API_URL=https://finance-api.example.workers.dev
+API_SECRET=your-browser-api-key
+
+# Shared D1 binding for API, MCP, and migrations
 DATABASE_NAME=finance-db
 DATABASE_ID=your-d1-database-id
-API_SECRET=your-browser-api-key
-ALLOWED_ORIGINS=https://finance.example.com
-# API_URL is written by deploy.sh after the API Worker deploys. Set it manually
-# only when Wrangler cannot report the worker URL.
-API_URL=https://finance-api.example.workers.dev
 
-# The root deploy asks once and remembers this choice. Use ./deploy.sh --mcp or
-# ./deploy.sh --no-mcp to change it later.
+# API (API_SECRET above is also required)
+API_WORKER_NAME=finance-api
+ALLOWED_ORIGINS=https://finance.example.com
+# A full release discovers API_URL after the first API deployment if unset.
+# An explicitly configured API_URL (including a custom domain) is preserved.
+
+# Full releases ask once and remember this choice. Change it with
+# npm run deploy -- --with-mcp or npm run deploy -- --no-mcp.
+# npm run deploy:mcp deploys MCP only and does not change this preference.
 DEPLOY_MCP=false
 MCP_WORKER_NAME=finance-mcp
 MCP_ACCESS_TEAM_DOMAIN=https://your-team.cloudflareaccess.com

@@ -19,10 +19,6 @@ Create missing local files from `api/wrangler.toml.example`, `api/.dev.vars.exam
 Commands below run from the repository root:
 
 ```bash
-# Workspace tests plus real Worker/D1 integration
-npm test
-npm run test:integration
-
 # Initialize/reset local API database and start API + client
 npm run dev
 
@@ -43,6 +39,11 @@ Local Wrangler state is workspace-specific by default. Separate API and MCP dev 
 ## Verification
 
 ```bash
+# Workspace, deployment, and real Worker/D1 tests
+npm test
+npm run test:integration
+npm run test:deploy
+
 # All workspace test suites, or a focused workspace
 npm test --workspaces
 npm test -w api
@@ -70,7 +71,7 @@ npm test -w api -- src/tests/upcoming-transactions.test.ts
 
 - Root `npm run build` builds only the client. Plain `tsc --noEmit` against the client's root tsconfig does not check its referenced projects; use the build above or `(cd client && npx tsc -b)`.
 - API unit tests live in `api/src/tests/`; client tests are colocated and in `client/src/test/` (Vitest, jsdom, Testing Library); MCP tests are colocated in `mcp/src/`. Cross-workspace tests live in `tests/integration/` and run compiled Workers against disposable shared D1 with signed test JWTs. Keep their runtime flags/dates aligned with the tracked Wrangler examples. See `tests/README.md` for test boundaries and fixtures.
-- `.github/workflows/ci.yml` runs workflow validation, all workspace suites, API/MCP types, client build/lint, and integration tests. `CI passed` fails if any prerequisite fails, is cancelled, or is skipped. Unit/report artifacts do not require production credentials.
+- `.github/workflows/ci.yml` runs workflow validation, all workspace suites, deployment tests, API/MCP types, client build/lint, and integration tests. `CI passed` fails if any prerequisite fails, is cancelled, or is skipped. Unit/report artifacts do not require production credentials.
 - Client lint has a clean baseline under its enabled rules; several legacy typing/React rules remain disabled in `client/eslint.config.js`. Do not introduce additional rule exclusions to pass CI. Generated `dist/` and `dev-dist/` are ignored.
 - For financial behavior changes, test balance deltas, posted/pending/cancelled transitions, locks on affected accounts, linked transfers, repeated confirmation, currency conversion, and MCP projection isolation as applicable. Use existing regression suites as starting points.
 - For UI changes, check desktop/mobile layouts, privacy modes, themes, empty/loading/error states, and failed saves. For SQL changes, also validate against a disposable local database; unit mocks are insufficient.
@@ -136,9 +137,12 @@ Read `mcp/README.md` for the complete tool/workflow contract. `src/index.ts` han
 - Keep `.deploy-config`, actual Wrangler configs, `.dev.vars`, `.env` credentials, local database state, and database backups out of commits and tool output. Use tracked example files for documentation. Never hardcode real account IDs, secrets, personal financial data, or deployment identifiers in tests.
 - Root deployment commands change remote resources; run them when deployment is part of the task, not as verification:
   - `npm run deploy`: remote migrations, API, client, and optional MCP according to saved `.deploy-config`.
-  - `npm run deploy:client` (or `./deploy.sh --client`): client only, using saved API URL/key.
-  - `npm run deploy:mcp`: the **full deployment including MCP**, not an MCP-only deploy.
+  - `npm run deploy:client`: client only, using saved API URL/key.
+  - `npm run deploy:api` / `npm run deploy:mcp`: only that Worker, with a read-only migration-history check. Pending migrations block deployment; apply them separately or add `-- --migrations`.
+  - `npm run deploy:migrations`: pending migrations only.
+  - `npm run deploy -- --with-mcp`: full release including MCP and saves that preference.
   - `npm run deploy -- --no-mcp`: full API/client deployment and saves the preference to skip MCP.
-- `./deploy.sh finance-client` is invalid; project name comes from `.deploy-config`. The scripts generate deployment configs and build-time client env files, and use macOS-style `sed -i ''`. Confirming deployment from a non-main branch targets the Pages **main** deployment, not a branch preview.
+- Deployment is centralized in `scripts/deploy.mjs`; root shell wrappers are removed. Workspace `deploy` scripts delegate to the same CLI. Use `npm run deploy:<target>` or `npm run deploy -- <target>`; npm consumes flags without the `--` separator. `--plan` is read-only and does not build, prompt, contact Cloudflare, or save configuration. Tests in `scripts/deploy.test.mjs` use synthetic config and a fake command runner, with real Wrangler dry-run bundle checks only; run them via `npm run test:deploy`.
+- The CLI preserves existing local Wrangler and `.env` files, creates temporary Worker/secret configs, and injects client build variables through the process environment. It completes selected local checks before remote mutations, fails on migration-history errors, and submits each migration with its history insert. Project name comes from `.deploy-config`; Pages always targets **main**, including confirmed non-main branch deploys. `--yes` bypasses only that branch confirmation.
 
 Keep this guide aligned when commands, entry points, schema ownership, or financial invariants change. Avoid copying transient version numbers, test totals, or exhaustive endpoint lists into it.

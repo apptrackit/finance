@@ -69,23 +69,26 @@ Transfers are excluded from income and expense aggregates. Investment accounts a
 
 ## Deploy
 
-1. Run the root deploy once. It asks whether to include MCP and stores that
-   choice, the D1 binding, and Access values in gitignored `.deploy-config`.
-   Existing values from `mcp/wrangler.toml` are migrated automatically. The
-   generated file is a deployment artifact, not a second source of
-   configuration.
-
-   ```bash
-   npm run deploy
-   ```
-
-   To include MCP without waiting for the prompt, use:
+1. Deploy just MCP from the repository root. The shared deployment CLI reads
+   the D1 binding and Access values from gitignored `.deploy-config`, importing
+   missing values from an existing `mcp/wrangler.toml` when available. It uses
+   temporary Worker configuration and preserves your local Wrangler file.
 
    ```bash
    npm run deploy:mcp
    ```
 
-   Use `npm run deploy -- --no-mcp` to save a future default of skipping it.
+   This checks database migration history but does not apply migrations. To
+   explicitly apply pending migrations before deploying MCP, use
+   `npm run deploy:mcp -- --migrations`. To deploy the full application with MCP:
+
+   ```bash
+   npm run deploy -- --with-mcp
+   ```
+
+   Full releases remember this preference; `npm run deploy -- --no-mcp` saves a
+   default of skipping MCP. Targeted MCP deployments do not change it. Use
+   `npm run deploy:mcp -- --plan` to inspect the scope without remote calls.
 2. The script keeps `workers.dev` disabled. Keep the existing custom-domain
    Worker route in the Cloudflare dashboard, then create an Access application
    for that hostname, restrict it to the intended email, and enable Managed OAuth
@@ -95,9 +98,9 @@ Transfers are excluded from income and expense aggregates. Investment accounts a
    version. Existing app registrations may keep the previously approved
    read-only tool snapshot until their actions are refreshed.
 
-For a standalone/manual deployment, copy `wrangler.toml.example` to the
-gitignored `wrangler.toml`, set its values, then run the MCP test, build, and
-deploy scripts from this workspace.
+Running `npm run deploy` from this workspace delegates to the same MCP-only
+CLI. For local development, copy `wrangler.toml.example` to the gitignored
+`wrangler.toml` and configure its local settings separately.
 
 `DISABLE_ACCESS_AUTH=true` is for local Wrangler tests only. Never configure it in production.
 

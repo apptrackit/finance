@@ -125,8 +125,9 @@ finance/
 ├── .deploy-config.example
 ├── AGENTS.md               # Coding conventions and financial invariants
 ├── CHANGELOG.md            # Published releases and unreleased changes
-├── deploy.sh               # Migrations + API + client + optional MCP
-├── deploy-client.sh        # Client-only deployment
+├── scripts/
+│   ├── deploy.mjs          # One deployment CLI for all targets
+│   └── deploy.test.mjs     # Scope, failure handling, and bundle checks
 └── package.json            # npm workspace scripts and app version
 ```
 
@@ -223,6 +224,9 @@ npm test --workspaces
 # Disposable local database, migration, authentication, and financial workflows
 npm run test:integration
 
+# Deployment orchestration and local Worker bundle checks; no remote writes
+npm run test:deploy
+
 # Individual suites
 npm test -w api
 npm test -w client
@@ -246,7 +250,7 @@ npm run lint -w client -- --max-warnings=0
 
 API/client watch mode is available with `npm run test:watch -w api` or `npm run test:watch -w client`. Root `build` builds only the client; MCP `build` is a typecheck. The client build uses `tsc -b` to check referenced TypeScript projects.
 
-CI checks workflow syntax, all three workspaces' tests, API/MCP types, the client production/PWA build, client lint, and compiled API/MCP integration against shared local D1. Integration tests cover fresh and populated database upgrades, signed Access authentication, financial state transitions, retries, rollback, transfers, and recurring execution. They use disposable state and fixed external-service responses; no Cloudflare credentials or local configuration are required. Failed runs retain JUnit reports and Worker diagnostics.
+CI checks workflow syntax, all three workspaces' tests, deployment orchestration, API/MCP types, the client production/PWA build, client lint, and compiled API/MCP integration against shared local D1. Integration tests cover fresh and populated database upgrades, signed Access authentication, financial state transitions, retries, rollback, transfers, and recurring execution. They use disposable state and fixed external-service responses; no Cloudflare credentials or local configuration are required. Failed runs retain JUnit reports and Worker diagnostics.
 
 See [the testing guide](tests/README.md) for the coverage boundaries, adding meaningful regressions, and the `CI passed` check to require in branch protection. Client lint excludes generated output and follows the rules enabled in `client/eslint.config.js`; some legacy typing/React rules remain disabled there.
 
@@ -258,7 +262,7 @@ The MCP staging smoke test (`npm run test:staging -w mcp`) creates a real review
 
 Provision a D1 database and a Pages project, then authenticate Wrangler with `npx wrangler login`. Configure Cloudflare Access for the frontend hostname if access should be restricted. Optional MCP requires a custom hostname and its own Access application with Managed OAuth; see the [MCP deployment guide](mcp/README.md#deploy).
 
-The checked-in deployment scripts use Bash and macOS-style `sed -i ''`. They currently target macOS; adapt that replacement step before running the scripts on Linux.
+All deployment commands use [scripts/deploy.mjs](scripts/deploy.mjs). The Node CLI works on macOS and Linux and reuses your existing gitignored `.deploy-config`. The former root `deploy.sh` and `deploy-client.sh` scripts have been removed.
 
 ### Deployment commands
 
@@ -266,12 +270,22 @@ The checked-in deployment scripts use Bash and macOS-style `sed -i ''`. They cur
 | --- | --- |
 | `npm run deploy` | Pending remote migrations, API, client, and MCP if enabled in saved configuration |
 | `npm run deploy:client` | Client only, using the saved project name, API URL, and key |
-| `npm run deploy:mcp` | Full API/client deployment with MCP included; also saves that preference |
+| `npm run deploy:api` | API Worker only; checks that database migrations are current |
+| `npm run deploy:mcp` | MCP Worker only; checks that database migrations are current |
+| `npm run deploy:migrations` | Pending remote migrations only |
+| `npm run deploy:api -- --migrations` | Pending migrations, then API only; also supported for `deploy:mcp` |
+| `npm run deploy -- --with-mcp` | Full release including MCP; also saves that preference |
 | `npm run deploy -- --no-mcp` | Full API/client deployment with MCP skipped; also saves that preference |
 
-On its first run, the root script prompts for project/database settings, API credentials, allowed origins, and whether to include MCP. It stores them in gitignored `.deploy-config`, generates Worker configuration, applies migrations, deploys the API, and builds/deploys the client with the correct API URL and CSP origin. Optional MCP deployment runs its tests and typecheck first.
+Use the named commands above, or forward a target with `npm run deploy -- client`. Flags require the extra separator: `npm run deploy -- --client` works; `npm run deploy --client` is parsed by npm and is rejected to avoid accidentally running a full release. **`deploy:mcp` now means MCP only**; use `--with-mcp` for the former full-release behavior.
 
-`PROJECT_NAME` is the Pages project name; it is not a positional argument to `deploy.sh`. Deploying from a non-main branch prompts for confirmation and then targets the Pages **main** deployment, not a preview deployment.
+Append `-- --plan` to any named command to see its scope without prompts, builds, remote calls, or file changes. For example, `npm run deploy:api -- --plan` shows an API-only deployment with read-only migration verification.
+
+Only settings required by the selected target are requested. Full releases remember whether MCP is included; targeted MCP deployments do not change that preference. Missing MCP settings can still be imported from an existing `mcp/wrangler.toml`. Before remote writes, the CLI runs the selected workspace tests, typechecks/builds, and local Worker bundle checks. API/MCP-only commands stop if migrations are pending; apply them separately or explicitly add `--migrations`.
+
+Worker configuration and API secret files are temporary and cleaned up on success, failure, or interruption. API secrets upload with the new Worker version. Existing Wrangler and client `.env` files are preserved; client settings are injected through the build process environment, and the built CSP origin is updated without platform-specific shell commands. A configured `API_URL`, including a custom domain, is preserved. A first full release without one discovers it after deploying the API and rebuilds the client with the discovered URL.
+
+`PROJECT_NAME` is the Pages project name in `.deploy-config`. All Pages deployments explicitly target **main** (production). Deploying from another branch prompts for confirmation; `--yes` explicitly accepts that production deployment. In non-interactive use, fill in `.deploy-config` first and provide `--with-mcp` or `--no-mcp` if a full release has no saved MCP preference.
 
 ### Database migrations
 

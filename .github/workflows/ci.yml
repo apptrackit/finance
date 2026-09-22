@@ -105,6 +105,30 @@ jobs:
           path: test-results/mcp.xml
           retention-days: 7
 
+  test-deploy:
+    name: Deployment tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .node-version
+          cache: npm
+      - run: npm ci
+      - name: Check deployment scope, failure handling, and Worker bundles
+        run: |
+          mkdir -p test-results
+          node --test --test-reporter=spec --test-reporter=junit --test-reporter-destination=stdout --test-reporter-destination=test-results/deploy.xml scripts/deploy.test.mjs
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: ${{ !cancelled() }}
+        with:
+          name: deploy-test-results
+          path: test-results/deploy.xml
+          retention-days: 7
+
   integration:
     name: Workers and D1 integration
     runs-on: ubuntu-latest
@@ -175,7 +199,7 @@ jobs:
   ci:
     name: CI passed
     if: ${{ always() }}
-    needs: [workflow, test-api, test-client, test-mcp, integration, build-client, typecheck-api, lint-client]
+    needs: [workflow, test-api, test-client, test-mcp, test-deploy, integration, build-client, typecheck-api, lint-client]
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:

@@ -3,7 +3,7 @@
   "scripts": {
     "setup-db": "bash setup-local-db.sh",
     "dev": "npm run setup-db && wrangler dev src/index.ts",
-    "deploy": "wrangler deploy --minify src/index.ts",
+    "deploy": "node ../scripts/deploy.mjs api",
     "test": "vitest run",
     "test:watch": "vitest"
   },

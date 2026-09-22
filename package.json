@@ -15,12 +15,15 @@
     "build": "npm run build -w client",
     "build:mcp": "npm run build -w mcp",
     "test:mcp": "npm run test -w mcp",
-    "test": "npm test --workspaces && npm run test:integration",
+    "test": "npm test --workspaces && npm run test:deploy && npm run test:integration",
+    "test:deploy": "node --test --test-reporter=spec scripts/deploy.test.mjs",
     "test:integration": "vitest run --config tests/integration/vitest.config.ts",
     "typecheck": "tsc --noEmit -p api/tsconfig.json && tsc -b client && npm run build:mcp && tsc -p tests/integration/tsconfig.json",
-    "deploy": "./deploy.sh",
-    "deploy:client": "./deploy-client.sh",
-    "deploy:mcp": "./deploy.sh --mcp"
+    "deploy": "node scripts/deploy.mjs",
+    "deploy:client": "node scripts/deploy.mjs client",
+    "deploy:api": "node scripts/deploy.mjs api",
+    "deploy:mcp": "node scripts/deploy.mjs mcp",
+    "deploy:migrations": "node scripts/deploy.mjs migrations"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20260922.1",
