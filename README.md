@@ -179,7 +179,7 @@ finance/
 │   ├── vite.config.ts       # Vite + Vitest + PWA configuration
 │   └── package.json
 │
-├── AGENT.md                  # Developer guide for Claude/AI sessions
+├── AGENTS.md                 # Repository guide for coding agents
 ├── deploy.sh                 # Automated deployment script
 └── package.json             # Workspace root
 ```
