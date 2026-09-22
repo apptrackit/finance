@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { renderHook, waitFor } from '@testing-library/react'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { act, renderHook, waitFor } from '@testing-library/react'
 import { useFinanceData } from '../hooks/useFinanceData'
 
 // Mock apiFetch and config
@@ -38,13 +38,14 @@ const dateRange = { startDate: '2026-04-01', endDate: '2026-04-30' }
 beforeEach(() => {
   vi.clearAllMocks()
   // Mock fetch (used for exchange rates)
-  global.fetch = vi.fn().mockResolvedValue({
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
     json: () => Promise.resolve({ rates: { USD: 0.0026, EUR: 0.0025 } }),
-  }) as any
+  }))
 })
+afterEach(() => vi.unstubAllGlobals())
 
 describe('useFinanceData', () => {
-  it('returns initial empty state', () => {
+  it('returns initial empty state until loading completes', async () => {
     mockApiFetch.mockResolvedValue({
       json: () => Promise.resolve([]),
     })
@@ -54,6 +55,7 @@ describe('useFinanceData', () => {
     expect(result.current.accounts).toEqual([])
     expect(result.current.transactions).toEqual([])
     expect(result.current.transactionsLoading).toBe(true)
+    await waitFor(() => expect(result.current.transactionsLoading).toBe(false))
   })
 
   it('fetches and sets accounts', async () => {
@@ -86,11 +88,18 @@ describe('useFinanceData', () => {
     expect(result.current.accounts[0].name).toBe('Test Account')
   })
 
-  it('exposes handleDataChange callback', () => {
+  it('refreshes dashboard transactions and full analytics history after a mutation', async () => {
     mockApiFetch.mockResolvedValue({ json: () => Promise.resolve([]) })
 
     const { result } = renderHook(() => useFinanceData(dateRange, 'HUF'))
 
-    expect(typeof result.current.handleDataChange).toBe('function')
+    await waitFor(() => expect(result.current.transactionsLoading).toBe(false))
+    mockApiFetch.mockClear()
+    act(() => result.current.handleDataChange())
+    await waitFor(() => expect(result.current.transactionsLoading).toBe(false))
+    const urls = mockApiFetch.mock.calls.map(([url]) => String(url))
+    expect(urls.some(url => url.includes('/transactions/date-range'))).toBe(true)
+    expect(urls).toContain('http://localhost:8787/transactions')
+    expect(urls).toContain('http://localhost:8787/accounts')
   })
 })

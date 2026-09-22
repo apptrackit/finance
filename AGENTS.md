@@ -5,7 +5,7 @@ This guide applies to the entire repository. Finance Manager is a personal finan
 ## Start here
 
 - This is an **npm workspace monorepo**: `api`, `client`, and `mcp`. Install from the root with `npm ci`; keep the root `package-lock.json` as the shared lockfile. Use `npm install <package> -w <workspace>` for dependency changes.
-- Use a Node version compatible with the locked tooling: Node 20.19+ on the 20.x line, 22.13+ on the 22.x line, or 24+. CI currently selects Node 20.
+- Use the Node 22 LTS version in `.node-version`, matching CI. The current Wrangler requires Node 22 or newer; use the pinned runtime for consistent integration tests (see `tests/README.md`).
 - Read the relevant entry point and tests before editing. Package scripts, current source, and the complete migration sequence are the implementation reference. `README.md` covers current setup and features; `CHANGELOG.md` separates published releases from unreleased changes.
 - `api/` is a Hono/TypeScript Cloudflare Worker; `client/` is React 19, Vite, Tailwind CSS 4, and Recharts, deployed to Cloudflare Pages; `mcp/` is a separate TypeScript Cloudflare Worker.
 - **API and MCP bind directly to the same D1 database.** MCP does not call API services. Schema and financial-semantics changes often require updates in all three workspaces; there is no shared generated contract package.
@@ -19,6 +19,10 @@ Create missing local files from `api/wrangler.toml.example`, `api/.dev.vars.exam
 Commands below run from the repository root:
 
 ```bash
+# Workspace tests plus real Worker/D1 integration
+npm test
+npm run test:integration
+
 # Initialize/reset local API database and start API + client
 npm run dev
 
@@ -48,6 +52,9 @@ npm run test:mcp
 # API typecheck (there is no API build script)
 npx tsc --noEmit -p api/tsconfig.json
 
+# Typecheck all workspaces and integration tests
+npm run typecheck
+
 # Client typecheck + production build; placeholders avoid needing real credentials
 VITE_API_KEY=ci-placeholder VITE_API_DOMAIN=localhost:8787 npm run build
 
@@ -55,16 +62,16 @@ VITE_API_KEY=ci-placeholder VITE_API_DOMAIN=localhost:8787 npm run build
 npm run build:mcp
 
 # Client lint
-npm run lint -w client
+npm run lint -w client -- --max-warnings=0
 
 # Example targeted regression suite
 npm test -w api -- src/tests/upcoming-transactions.test.ts
 ```
 
 - Root `npm run build` builds only the client. Plain `tsc --noEmit` against the client's root tsconfig does not check its referenced projects; use the build above or `(cd client && npx tsc -b)`.
-- API tests live in `api/src/tests/`; client tests are colocated and in `client/src/test/` (Vitest, jsdom, Testing Library); MCP tests are colocated in `mcp/src/`. Most backend tests mock repositories or D1, so passing unit tests does not verify real migration execution or deployed authentication.
-- `.github/workflows/ci.yml` currently runs API/client tests, API typecheck, and the client build. It does not run MCP checks or client lint; run applicable checks locally.
-- Client lint has existing findings, including generated `client/dev-dist` files and application code. Compare failures with the pre-change baseline; do not hide new findings or expand an unrelated task into a repository-wide cleanup.
+- API unit tests live in `api/src/tests/`; client tests are colocated and in `client/src/test/` (Vitest, jsdom, Testing Library); MCP tests are colocated in `mcp/src/`. Cross-workspace tests live in `tests/integration/` and run compiled Workers against disposable shared D1 with signed test JWTs. Keep their runtime flags/dates aligned with the tracked Wrangler examples. See `tests/README.md` for test boundaries and fixtures.
+- `.github/workflows/ci.yml` runs workflow validation, all workspace suites, API/MCP types, client build/lint, and integration tests. `CI passed` fails if any prerequisite fails, is cancelled, or is skipped. Unit/report artifacts do not require production credentials.
+- Client lint has a clean baseline under its enabled rules; several legacy typing/React rules remain disabled in `client/eslint.config.js`. Do not introduce additional rule exclusions to pass CI. Generated `dist/` and `dev-dist/` are ignored.
 - For financial behavior changes, test balance deltas, posted/pending/cancelled transitions, locks on affected accounts, linked transfers, repeated confirmation, currency conversion, and MCP projection isolation as applicable. Use existing regression suites as starting points.
 - For UI changes, check desktop/mobile layouts, privacy modes, themes, empty/loading/error states, and failed saves. For SQL changes, also validate against a disposable local database; unit mocks are insufficient.
 
@@ -96,7 +103,7 @@ The API requires an allowed `Origin` header and `X-API-Key` on all non-preflight
 - **Investments:** `investment_transactions` is active buy/sell history; do not remove or consolidate it based on the misleading comment in migration 001. Market-priced investment balances represent share/coin quantities, while manual asset values follow their own valuation path. Distinguish holding-unit `currency`, fiat `quote_currency`, unit price, and converted cash value. API, client, and MCP have differing legacy paths; trace the actual path instead of assuming their valuation behavior is identical.
 - **Locks:** persisted `accounts.is_locked` and API lock/unlock endpoints are authoritative. Preserve source and destination lock checks before mutations and the scheduler's skip behavior. Existing coverage varies by endpoint; test the path being changed rather than assume a database-wide guarantee.
 - **Exclusions and currencies:** cash-balance, net-worth, and spending-estimate exclusions have different meanings. Do not apply one filter indiscriminately across all analytics views. Preserve per-account native-currency charts. In MCP reporting, missing FX rates must produce warnings and exclude affected amounts from converted totals; account summaries use `null` for unavailable converted balances. Never silently mix currencies.
-- **Recurring execution:** the real cron calls `RecurringScheduleService.processRecurringSchedules`. Preserve creation/last-processed dates, frequency, month-end clamping, remaining occurrences, end dates, and locked-account behavior. `/test-scheduled-task` invokes real processing and changes ledger rows and balances; it is not a harmless health check. MCP recurrence uses its own UTC date helpers and must be reviewed alongside scheduling changes.
+- **Recurring execution:** the real cron calls `RecurringScheduleService.processRecurringSchedules`. Preserve creation/last-processed dates, frequency, month-end clamping, remaining occurrences, end dates, and locked-account behavior. Skipped execution must not advance the last-processed date or consume an occurrence. `/test-scheduled-task` invokes real processing and changes ledger rows and balances; it is not a harmless health check. MCP recurrence uses its own UTC date helpers and must be reviewed alongside scheduling changes.
 
 ## Client implementation
 

@@ -434,6 +434,18 @@ export class TransactionService {
           if (linkedAccount) {
             this.assertAccountUnlocked(linkedAccount)
           }
+        } else {
+          const investmentTx = await this.investmentTransactionRepo.findById(tx.linked_transaction_id)
+          if (investmentTx) {
+            const investmentAccount = await this.accountRepo.findById(investmentTx.account_id)
+            if (investmentAccount) this.assertAccountUnlocked(investmentAccount)
+            await this.transactionRepo.deleteInvestmentTransferAndRevertBalances(tx.id, investmentTx.id, Date.now())
+            return
+          }
+          // Another deletion may have removed the pair after our initial read.
+          // Never refund a stale row or treat an orphaned transfer as cash-only.
+          if (!await this.transactionRepo.findById(id)) return
+          throw new Error('Linked transaction not found')
         }
       }
 

@@ -5,75 +5,181 @@ on:
     branches: [main]
   push:
     branches: [main]
+  merge_group:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CI: true
+  VITE_API_KEY: ci-placeholder
+  VITE_API_DOMAIN: localhost:8787
+  WRANGLER_SEND_METRICS: 'false'
+  # Exercise local-calendar dates across the UTC boundary.
+  TZ: Europe/Budapest
 
 jobs:
+  workflow:
+    name: Workflow validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Validate GitHub Actions syntax and expressions
+        run: |
+          curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
+            https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz \
+            -o "$RUNNER_TEMP/actionlint.tar.gz"
+          echo "8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8  $RUNNER_TEMP/actionlint.tar.gz" | sha256sum --check
+          tar -xzf "$RUNNER_TEMP/actionlint.tar.gz" -C "$RUNNER_TEMP" actionlint
+          "$RUNNER_TEMP/actionlint" -color
+
   test-api:
     name: API tests
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: api
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          node-version: 20
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .node-version
           cache: npm
-          cache-dependency-path: package-lock.json
       - run: npm ci
-        working-directory: .
-      - run: npm test
+      - run: npm test -w api -- --reporter=default --reporter=junit --outputFile.junit=../test-results/api.xml
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: ${{ !cancelled() }}
+        with:
+          name: api-test-results
+          path: test-results/api.xml
+          retention-days: 7
 
   test-client:
     name: Client tests
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: client
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          node-version: 20
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .node-version
           cache: npm
-          cache-dependency-path: package-lock.json
       - run: npm ci
-        working-directory: .
-      - run: npm test
+      - run: npm test -w client -- --reporter=default --reporter=junit --outputFile.junit=../test-results/client.xml
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: ${{ !cancelled() }}
+        with:
+          name: client-test-results
+          path: test-results/client.xml
+          retention-days: 7
+
+  test-mcp:
+    name: MCP tests and typecheck
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .node-version
+          cache: npm
+      - run: npm ci
+      - run: npm test -w mcp -- --reporter=default --reporter=junit --outputFile.junit=../test-results/mcp.xml
+      - run: npm run build:mcp
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: ${{ !cancelled() }}
+        with:
+          name: mcp-test-results
+          path: test-results/mcp.xml
+          retention-days: 7
+
+  integration:
+    name: Workers and D1 integration
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .node-version
+          cache: npm
+      - run: npm ci
+      - run: npx tsc -p tests/integration/tsconfig.json
+      - run: npm run test:integration -- --reporter=default --reporter=junit --outputFile.junit=test-results/integration.xml
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: ${{ !cancelled() }}
+        with:
+          name: integration-test-results
+          path: test-results/integration.xml
+          retention-days: 7
 
   build-client:
     name: Client build
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: client
-    env:
-      VITE_API_KEY: ci-placeholder
-      VITE_API_DOMAIN: localhost:8787
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          node-version: 20
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .node-version
           cache: npm
-          cache-dependency-path: package-lock.json
       - run: npm ci
-        working-directory: .
       - run: npm run build
 
   typecheck-api:
     name: API typecheck
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: api
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          node-version: 20
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .node-version
           cache: npm
-          cache-dependency-path: package-lock.json
       - run: npm ci
-        working-directory: .
-      - run: npx tsc --noEmit
+      - run: npx tsc --noEmit -p api/tsconfig.json
+
+  lint-client:
+    name: Client lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .node-version
+          cache: npm
+      - run: npm ci
+      - run: npm run lint -w client -- --max-warnings=0
+
+  ci:
+    name: CI passed
+    if: ${{ always() }}
+    needs: [workflow, test-api, test-client, test-mcp, integration, build-client, typecheck-api, lint-client]
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Require every check to succeed
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: node -e 'if (!Object.values(JSON.parse(process.env.RESULTS)).every(job => job.result === "success")) process.exit(1)'

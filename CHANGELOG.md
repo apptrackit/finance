@@ -10,6 +10,7 @@ Intermediate package/UI version bumps are grouped under the next published GitHu
 
 ### Added
 
+- Compiled API/MCP integration tests against disposable shared D1, covering migration upgrades, authentication, retries, rollback, transfers, recurring execution, and draft isolation; client request/error regression tests.
 - Money Map analytics widget showing how income flows into spending and surplus.
 - Income vs Expenses Trend widget with selectable time resolution and net-income data.
 - MCP review balance previews that show the effect of accepting drafts without changing actual balances.
@@ -18,6 +19,7 @@ Intermediate package/UI version bumps are grouped under the next published GitHu
 
 ### Changed
 
+- CI now checks all three workspaces, real Worker/D1 integration, client lint, and workflow syntax on a pinned Node LTS runtime, with pinned Actions, bounded runs, retained test reports, and an aggregate `CI passed` check.
 - Financial forecasts now require 91 daily points for days 0–90, retain actual cash history, and validate dated movements and unrealistic straight-line predictions. Forecast charts and date selection were refined.
 - Refreshed the default blue appearance, borders, icons, and account allocation display. The available themes are Original, Monochrome, and Red Filter.
 - Simplified startup privacy settings to show values, hide all values, or hide net worth.
@@ -26,6 +28,8 @@ Intermediate package/UI version bumps are grouped under the next published GitHu
 
 ### Fixed
 
+- Recurring schedules no longer consume occurrences or deactivate when execution is skipped because an account is locked.
+- Deleting the cash side of an investment transfer now atomically reverses cash and holding quantities and removes both records, while respecting account locks and duplicate requests.
 - Stabilized calendar transaction linking to prevent duplicate entries.
 - Refined chart animations and forecast rendering order.
 

@@ -134,7 +134,7 @@ finance/
 
 ### Prerequisites
 
-- Node.js compatible with the locked toolchain: **20.19+ on Node 20**, **22.13+ on Node 22**, or **24+**, and npm.
+- **Node.js 22.23.2** (the tested CI version, recorded in `.node-version`) and npm. The package engine range also permits newer supported Node releases; use the pinned version for consistent local integration tests.
 - Git. Wrangler is installed with the workspace dependencies.
 - A Cloudflare account to provision the D1 database and deploy Workers/Pages. Local API development uses Wrangler's local D1 state.
 
@@ -214,8 +214,14 @@ Use [.deploy-config.example](.deploy-config.example) for the full deployment tem
 ## Testing and builds
 
 ```bash
+# All workspace tests plus compiled Worker/D1 integration tests
+npm test
+
 # Unit/regression tests for every workspace
 npm test --workspaces
+
+# Disposable local database, migration, authentication, and financial workflows
+npm run test:integration
 
 # Individual suites
 npm test -w api
@@ -225,6 +231,9 @@ npm run test:mcp
 # API TypeScript check
 npx tsc --noEmit -p api/tsconfig.json
 
+# Typecheck all workspaces and the integration harness
+npm run typecheck
+
 # Client TypeScript check and production/PWA build
 VITE_API_KEY=ci-placeholder VITE_API_DOMAIN=localhost:8787 npm run build
 
@@ -232,12 +241,14 @@ VITE_API_KEY=ci-placeholder VITE_API_DOMAIN=localhost:8787 npm run build
 npm run build:mcp
 
 # Client lint
-npm run lint -w client
+npm run lint -w client -- --max-warnings=0
 ```
 
 API/client watch mode is available with `npm run test:watch -w api` or `npm run test:watch -w client`. Root `build` builds only the client; MCP `build` is a typecheck. The client build uses `tsc -b` to check referenced TypeScript projects.
 
-CI runs API/client tests, API typechecking, and the client build. Run MCP checks separately when changing MCP or shared financial semantics. Client lint currently has existing findings in both application code and tracked generated development files; compare changes against the baseline. Most backend tests use mocks, so schema changes also need disposable local database verification.
+CI checks workflow syntax, all three workspaces' tests, API/MCP types, the client production/PWA build, client lint, and compiled API/MCP integration against shared local D1. Integration tests cover fresh and populated database upgrades, signed Access authentication, financial state transitions, retries, rollback, transfers, and recurring execution. They use disposable state and fixed external-service responses; no Cloudflare credentials or local configuration are required. Failed runs retain JUnit reports and Worker diagnostics.
+
+See [the testing guide](tests/README.md) for the coverage boundaries, adding meaningful regressions, and the `CI passed` check to require in branch protection. Client lint excludes generated output and follows the rules enabled in `client/eslint.config.js`; some legacy typing/React rules remain disabled there.
 
 The MCP staging smoke test (`npm run test:staging -w mcp`) creates a real review draft in the configured staging database. See the [MCP verification instructions](mcp/README.md#verification) before using it.
 

@@ -151,6 +151,29 @@ export class TransactionRepository {
     await this.db.prepare('DELETE FROM transactions WHERE id = ?').bind(id).run()
   }
 
+  async deleteInvestmentTransferAndRevertBalances(id: string, investmentId: string, now: number): Promise<void> {
+    // Read deltas from rows still present inside the batch. Concurrent/repeated
+    // deletion cannot apply a stale balance delta, and a failed statement rolls
+    // back both balances and both ledger records.
+    await this.db.batch([
+      this.db.prepare(`UPDATE accounts SET
+        balance = balance - (SELECT amount FROM transactions WHERE id = ?), updated_at = ?
+        WHERE id = (SELECT account_id FROM transactions WHERE id = ? AND linked_transaction_id = ? AND status = 'posted')`
+      ).bind(id, now, id, investmentId),
+      this.db.prepare(`UPDATE accounts SET balance = balance - (
+          SELECT CASE WHEN type = 'buy' THEN quantity ELSE -quantity END
+          FROM investment_transactions WHERE id = ?
+        ), updated_at = ?
+        WHERE id = (SELECT account_id FROM investment_transactions WHERE id = ?)
+        AND EXISTS (SELECT 1 FROM transactions WHERE id = ? AND linked_transaction_id = ?)`
+      ).bind(investmentId, now, investmentId, id, investmentId),
+      this.db.prepare(`DELETE FROM investment_transactions WHERE id = ?
+        AND EXISTS (SELECT 1 FROM transactions WHERE id = ? AND linked_transaction_id = ?)`
+      ).bind(investmentId, id, investmentId),
+      this.db.prepare('DELETE FROM transactions WHERE id = ? AND linked_transaction_id = ?').bind(id, investmentId),
+    ])
+  }
+
   async deleteByAccountId(accountId: string): Promise<void> {
     await this.db.prepare('DELETE FROM transactions WHERE account_id = ?').bind(accountId).run()
   }
