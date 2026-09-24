@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { test } from 'node:test'
 import { fileURLToPath } from 'node:url'
-import { apiOrigin, d1Rows, deploy, deploymentPlan, parseArgs, parseConfig, runCommand } from './deploy.mjs'
+import { apiOrigin, createDeploymentReporter, d1Rows, deploy, deploymentPlan, parseArgs, parseConfig, runCommand } from './deploy.mjs'
 
 const script = fileURLToPath(new URL('./deploy.mjs', import.meta.url))
 const fixtureConfig = {
@@ -97,6 +97,25 @@ test('config parsing preserves literal secrets; URLs and D1 output fail closed',
   for (const output of ['bad JSON', '[]', '[{"success":false,"results":[]}]', '[{"success":true}]']) assert.throws(() => d1Rows(output))
 })
 
+test('deployment output has readable sections and limits ANSI colors to color mode', () => {
+  const plain = []
+  const report = createDeploymentReporter(message => plain.push(message), { color: false })
+  report.title()
+  report.detail('Scope', 'API · Client')
+  report.section('Local checks')
+  report.start('API tests')
+  report.success('API tests', 1200)
+  report.section('Deployment')
+  report.finish()
+  assert.match(plain.join('\n'), /Finance deployment\n─+\n  Scope\s+API · Client\n\nLocal checks\n─+/)
+  assert.match(plain.join('\n'), /→ API tests…\n  ✓ API tests \(1\.2s\)\n\nDeployment/)
+  assert.ok(!plain.join('\n').includes('\u001b['))
+
+  const colored = []
+  createDeploymentReporter(message => colored.push(message), { color: true }).failure('API tests')
+  assert.match(colored.join('\n'), /\u001b\[31m✗\u001b\[0m API tests failed/)
+})
+
 test('client-only needs no database/MCP config and deploys only the client to main', async t => {
   const f = await fixture(t, { config: { PROJECT_NAME: 'test-client', API_URL: 'https://api.finance.test', API_SECRET: fixtureConfig.API_SECRET } })
   await f.execute(['client'])
@@ -107,6 +126,8 @@ test('client-only needs no database/MCP config and deploys only the client to ma
   const build = f.calls.find(call => call.kind === 'npm' && call.argv.includes('build'))
   assert.deepEqual(build.options.env, { VITE_API_DOMAIN: 'api.finance.test', VITE_API_KEY: fixtureConfig.API_SECRET })
   assert.ok((await readFile(join(f.root, 'client/dist/_headers'), 'utf8')).includes('https://api.finance.test'))
+  assert.ok(f.logs.includes('Cloudflare checks'))
+  assert.ok(!f.logs.includes('Cloudflare and database'))
   await f.assertClean()
 })
 
@@ -163,6 +184,11 @@ test('full release preserves MCP preference and completes checks before any remo
   const firstWrite = f.calls.indexOf(remote[0])
   assert.ok(f.calls.slice(firstWrite).every(call => call.kind === 'wrangler'))
   assert.equal(parseConfig(await readFile(join(f.root, '.deploy-config'), 'utf8')).API_URL, fixtureConfig.API_URL)
+  const output = f.logs.join('\n')
+  assert.ok(output.indexOf('Local checks') < output.indexOf('Cloudflare and database'))
+  assert.ok(output.indexOf('Cloudflare and database') < output.indexOf('Deployment\n'))
+  assert.match(output, /✓ Migrations up to date|✓ Applying 002-change/)
+  assert.match(output, /✓ Deployment complete/)
   await f.assertClean()
 })
 
@@ -220,13 +246,13 @@ test('npm target aliases and argument forwarding cannot silently expand to a ful
   ]) {
     const result = spawnSync('npm', args, { cwd: root, encoding: 'utf8' })
     assert.equal(result.status, 0, result.stderr)
-    const scope = result.stdout.split('\n').find(line => line.startsWith('Deployment scope:'))
-    assert.ok(scope && !scope.includes(','), result.stdout)
+    const scope = result.stdout.split('\n').find(line => /^\s*Scope\s+/.test(line))
+    assert.ok(scope && !scope.includes('·'), result.stdout)
   }
   // Even if npm accepts the malformed invocation, our CLI must reject it.
   const consumed = spawnSync('npm', ['run', 'deploy', '--client', '--', '--plan'], { cwd: root, encoding: 'utf8' })
   assert.notEqual(consumed.status, 0)
-  assert.ok(!consumed.stdout.includes('Deployment scope:'))
+  assert.ok(!consumed.stdout.includes('Finance deployment'))
 })
 
 test('generated Worker configs bundle the real API and MCP with Wrangler dry-run', async t => {
