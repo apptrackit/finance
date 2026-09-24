@@ -1,30 +1,31 @@
 # Changelog
 
-This file covers every published [GitHub release](https://github.com/apptrackit/finance/releases) through **v2.11**, newest first. Release dates are GitHub publication dates in UTC. Entries summarize the release notes, linked pull requests, and changes between tags.
+This file covers every published [GitHub release](https://github.com/apptrackit/finance/releases) through **v2.11**, plus the pending v3.0 release, newest first. Release dates are GitHub publication dates in UTC. Entries summarize the release notes, linked pull requests, and changes between tags.
 
-Intermediate package/UI version bumps are grouped under the next published GitHub release, rather than presented as separately published releases. The former README's **v1.6.3** notes are retained under v1.7, the release that included them. Changes after the v2.11 tag appear under Unreleased, even while the root package version remains `2.11`.
+Intermediate package/UI version bumps are grouped under the next published GitHub release, rather than presented as separately published releases. The former README's **v1.6.3** notes are retained under v1.7, the release that included them. The v3.0 entry describes [PR #50](https://github.com/apptrackit/finance/pull/50) before it is merged or published; its release date and tag link will be added at publication.
 
-## Unreleased
+## v3.0 — pending release
 
-[Changes since v2.11](https://github.com/apptrackit/finance/compare/v2.11...main)
+[PR #50](https://github.com/apptrackit/finance/pull/50) · [Compare v2.11…Finance-v3](https://github.com/apptrackit/finance/compare/v2.11...Finance-v3)
 
 ### Added
 
-- Compiled API/MCP integration tests against disposable shared D1, covering migration upgrades, authentication, retries, rollback, transfers, recurring execution, and draft isolation; client request/error regression tests.
+- A list/calendar switch for transactions. The monthly calendar shows daily income, expenses, transfers, a balance trend, and a selected day's transactions, with compact and detailed views.
 - Money Map analytics widget showing how income flows into spending and surplus.
 - Income vs Expenses Trend widget with selectable time resolution and net-income data.
 - MCP review balance previews that show the effect of accepting drafts without changing actual balances.
 - A client-only deployment command using the saved project/API configuration.
+- Compiled API/MCP integration tests against disposable shared D1, covering migration upgrades, authentication, retries, rollback, transfers, recurring execution, and draft isolation; client request/error regression tests.
 - A repository-wide `AGENTS.md` guide, replacing `CLAUDE.md`.
 
 ### Changed
 
-- Consolidated deployment into `scripts/deploy.mjs` with separate client, API, MCP, and migration commands. API/MCP-only deployments check pending migrations; applying them requires an explicit option. Removed root shell wrappers, preserved local config/env files, and added deployment tests to CI.
-- CI now checks all three workspaces, real Worker/D1 integration, client lint, and workflow syntax on a pinned Node LTS runtime, with pinned Actions, bounded runs, retained test reports, and an aggregate `CI passed` check.
-- Financial forecasts now require 91 daily points for days 0–90, retain actual cash history, and validate dated movements and unrealistic straight-line predictions. Forecast charts and date selection were refined.
+- Consolidated deployment into `scripts/deploy.mjs` with separate client, API, MCP, and migration commands. API/MCP-only deployments check pending migrations; applying them requires an explicit option. Removed root shell wrappers, preserved local config/env files, and added deployment tests to CI. `npm run deploy:mcp` now deploys only MCP; use `npm run deploy -- --with-mcp` for a full release including MCP.
+- CI now checks all three workspaces, real Worker/D1 integration, client lint, and workflow syntax on pinned Node 22, with pinned Actions, bounded runs, retained test reports, and an aggregate `CI passed` check. Use the pinned Node 22 LTS runtime for local release checks.
+- Financial forecasts now require 91 daily points for days 0–90, retain 90 days of actual cash history, and validate dated movements and unrealistic straight-line predictions. The chart joins actual history to the projection; report selection and date controls were refined.
 - Refreshed the default blue appearance, borders, icons, and account allocation display. The available themes are Original, Monochrome, and Red Filter.
 - Simplified startup privacy settings to show values, hide all values, or hide net worth.
-- Improved transaction/calendar presentation, date-picker accessibility, chart focus styling, sticky analytics filters, and recent-transaction badges.
+- Improved transaction presentation, date-picker accessibility, chart focus styling, sticky analytics filters, and recent-transaction badges.
 - Rewrote the README around current setup, deployment, API routes, and financial behavior; moved release history here.
 
 ### Fixed
@@ -36,7 +37,12 @@ Intermediate package/UI version bumps are grouped under the next published GitHu
 
 ### Removed
 
-- Retired budget management across the API, client, and MCP. **Migration `012-remove-budgets.sql` permanently drops budget tables and removes the saved budget navigation preference. Back up any needed budget data before upgrading.**
+- Retired budget management across the API, client, and MCP, including its navigation entry and MCP budget reporting.
+
+### Migration and upgrade notes
+
+- **Back up any budget data you need before upgrading.** Migration `012-remove-budgets.sql` permanently drops the budget tables and removes the saved budget navigation preference.
+- Update MCP forecast publishers for the 91-point daily path and dated movement validation. Use the pinned Node 22 LTS runtime for local builds, tests, and deployment.
 
 ## v2.11 — 2026-09-10
 
