@@ -1,4 +1,4 @@
-import { MCP_WORKER_VERSION, type AccountRow, type BudgetRow, type CanonicalReviewDraft, type CategoryRow, type Env, type InvestmentTransactionRow, type RecurringScheduleRow, type ReviewDraftInput, type StoredReviewDraftProposal, type TransactionRow } from './types'
+import { MCP_WORKER_VERSION, type AccountRow, type CanonicalReviewDraft, type CategoryRow, type Env, type InvestmentTransactionRow, type RecurringScheduleRow, type ReviewDraftInput, type StoredReviewDraftProposal, type TransactionRow } from './types'
 import { addUtcDays, daysBetween, periodEndDates, recurringDates } from './date-series'
 import { assertDate, assertDateRange, clampLimit, decodeCursor, defaultMonthRange, encodeCursor, enumValue, optionalDate, previousRange, stringArray } from './validation'
 import { FinancialOutlookSnapshotRow, parseFinancialOutlookInput, parseSnapshot, sha256 } from './financial-outlook'
@@ -71,13 +71,6 @@ function bool(value: number | boolean | undefined) {
 
 function round(value: number) {
   return Math.round((value + Number.EPSILON) * 100) / 100
-}
-
-function inScope(account: AccountRow, budget: any) {
-  if (budget.account_scope === 'all' && account.type === 'investment') return false
-  if (budget.account_scope === 'cash' && account.type !== 'cash') return false
-  if (budget.account_scope === 'selected' && !budget.account_ids.includes(account.id)) return false
-  return true
 }
 
 export class FinanceService {
@@ -222,7 +215,7 @@ export class FinanceService {
       !hasInvestment ? 'No market-priced investments require valuation' : portfolio.valuation_status === 'complete' ? 'Investment valuation coverage is complete' : 'Investment valuation coverage is incomplete',
     ]
     return {
-      sources: ['accounts', 'posted_transactions', 'recurring_schedules', 'upcoming_transactions', 'budgets', 'portfolio'],
+      sources: ['accounts', 'posted_transactions', 'recurring_schedules', 'upcoming_transactions', 'portfolio'],
       history: { start_date: start, end_date: end, days: historyDays },
       latest_posted_transaction_date: end,
       conversion_status: summary.conversion_status === 'complete' ? 'complete' : 'partial',
@@ -628,14 +621,16 @@ export class FinanceService {
     const today = new Date().toISOString().slice(0, 10)
     const historyStart = addUtcDays(today, -89)
     const futureEnd = addUtcDays(today, 90)
-    const [revision, latestRow, dimensions, accounts, overview, cashflow, budgets, recurring, portfolio] = await Promise.all([
+    const [revision, latestRow, dimensions, accounts, overview, balanceHistory, cashflow, spendingByCategory, incomeByCategory, recurring, portfolio] = await Promise.all([
       this.financialDataRevision(),
       this.latestOutlookRow(),
       this.listDimensions(),
       this.accountsSummary({ currency: 'HUF' }),
       this.overview({ currency: 'HUF', start_date: historyStart, end_date: today }),
-      this.cashflowTrend({ currency: 'HUF', start_date: historyStart, end_date: today, interval: 'month', include_projected: false }),
-      this.budgetStatus({ currency: 'HUF' }),
+      this.balanceTrend({ currency: 'HUF', start_date: historyStart, end_date: today, interval: 'day' }),
+      this.cashflowTrend({ currency: 'HUF', start_date: historyStart, end_date: today, interval: 'day', include_projected: false }),
+      this.flowBreakdown({ currency: 'HUF', start_date: historyStart, end_date: today, flow_type: 'expense', group_by: 'category' }),
+      this.flowBreakdown({ currency: 'HUF', start_date: historyStart, end_date: today, flow_type: 'income', group_by: 'category' }),
       this.recurringForecast({ currency: 'HUF', start_date: today, end_date: futureEnd }),
       this.portfolio({ currency: 'HUF' }),
     ])
@@ -655,8 +650,10 @@ export class FinanceService {
       core_data: {
         accounts,
         overview,
-        cashflow_trend: cashflow,
-        budgets,
+        historical_cash_balance: balanceHistory,
+        historical_cash_flow: cashflow,
+        spending_by_category: spendingByCategory,
+        income_by_category: incomeByCategory,
         known_future: recurring,
         portfolio,
       },
@@ -665,10 +662,60 @@ export class FinanceService {
 
   async createFinancialOutlookSnapshot(args: Record<string, unknown>) {
     const input = parseFinancialOutlookInput(args)
+    const generationDate = new Date().toISOString().slice(0, 10)
+    if (input.source_queried_at.slice(0, 10) !== generationDate) {
+      throw new Error('source_queried_at must be from today\'s financial outlook context')
+    }
+    const historyStart = addUtcDays(generationDate, -89)
+    const futureEnd = addUtcDays(generationDate, 90)
+    const [coverage, historicalBalances, knownFuture] = await Promise.all([
+      this.outlookCoverage(),
+      this.balanceTrend({ currency: 'HUF', start_date: historyStart, end_date: generationDate, interval: 'day' }),
+      this.recurringForecast({ currency: 'HUF', start_date: generationDate, end_date: futureEnd }),
+    ])
+    const currentCash = historicalBalances.series.at(-1)?.cash_balance
+    const dayZero = input.cash_balance_path[0]
+    if (currentCash === undefined || dayZero.low !== currentCash || dayZero.expected !== currentCash || dayZero.high !== currentCash) {
+      throw new Error('cash_balance_path day 0 must equal the current liquid cash balance from the outlook context')
+    }
+    const expectedDeltas = input.cash_balance_path.slice(1).map((point, index) => point.expected - input.cash_balance_path[index].expected)
+    const historicalMovement = historicalBalances.series.some((point, index) => index > 0 && point.cash_balance !== historicalBalances.series[index - 1].cash_balance)
+    if (historicalMovement) {
+      let uniformDays = 1
+      for (let index = 1; index < expectedDeltas.length; index++) {
+        const tolerance = Math.max(10, Math.abs(expectedDeltas[index - 1]) * 0.001)
+        uniformDays = Math.abs(expectedDeltas[index] - expectedDeltas[index - 1]) <= tolerance ? uniformDays + 1 : 1
+        if (uniformDays > 7) {
+          throw new Error('cash_balance_path may not spread spending or income as a straight-line run longer than 7 days; use the daily cash-flow pattern and dated known movements from the outlook context')
+        }
+      }
+    }
+    const materialAmount = Math.max(10_000, Math.abs(currentCash) * 0.015)
+    const knownMovementByDay = new Map<number, number>()
+    const addKnownMovement = (item: Record<string, unknown>) => {
+      const date = typeof item.date === 'string' ? item.date : null
+      const amount = typeof item.amount === 'number' && Number.isFinite(item.amount) ? item.amount : null
+      if (!date || amount === null || Math.abs(amount) < materialAmount) return
+      const day = daysBetween(generationDate, date) - 1
+      if (day < 1 || day > 90) return
+      knownMovementByDay.set(day, (knownMovementByDay.get(day) || 0) + amount)
+    }
+    for (const occurrence of knownFuture.occurrences as Array<Record<string, unknown>>) {
+      if (occurrence.schedule_type === 'transaction') addKnownMovement(occurrence)
+    }
+    for (const pending of knownFuture.pending_one_time_transactions as Array<Record<string, unknown>>) addKnownMovement(pending)
+    for (const [day, movement] of knownMovementByDay) {
+      if (Math.abs(movement) < materialAmount) continue
+      const dailyDelta = expectedDeltas[day - 1]
+      if (Math.sign(dailyDelta) !== Math.sign(movement) || Math.abs(dailyDelta) < Math.abs(movement) * 0.2) {
+        throw new Error(`cash_balance_path day ${day} does not visibly reflect a material known movement on that date; do not distribute dated salary, bills, or planned transactions across other days`)
+      }
+    }
     const payload = {
       headline: input.headline,
       horizons: input.horizons,
       cash_balance_path: input.cash_balance_path,
+      cash_balance_history: historicalBalances.series.map(point => ({ date: point.date, balance: point.cash_balance })),
       drivers: input.drivers,
       risks: input.risks,
       assumptions: input.assumptions,
@@ -686,14 +733,13 @@ export class FinanceService {
     if (revision.revision !== input.source_revision) {
       throw new Error('Financial data changed after the outlook context was read; refresh the context before publishing')
     }
-    const coverage = await this.outlookCoverage()
     const id = crypto.randomUUID()
     const createdAt = Date.now()
     const row: FinancialOutlookSnapshotRow = {
       id,
       idempotency_key: input.idempotency_key,
       payload_hash: payloadHash,
-      schema_version: 2,
+      schema_version: 3,
       currency: 'HUF',
       source_revision: input.source_revision,
       source_queried_at: input.source_queried_at,
@@ -889,73 +935,6 @@ export class FinanceService {
     }
   }
 
-  async budgetStatus(args: Record<string, unknown>) {
-    const asOf = optionalDate(args.as_of, 'as_of') || new Date().toISOString().slice(0, 10)
-    const currency = typeof args.currency === 'string' ? args.currency.toUpperCase() : 'HUF'
-    const includeInactive = args.include_inactive === true
-    const [accounts, categories, budgetRows, rates] = await Promise.all([
-      this.accounts(), this.categories(), this.env.DB.prepare('SELECT * FROM budgets ORDER BY start_date DESC').all<BudgetRow>(), this.rates(currency),
-    ])
-    const accountMap = new Map(accounts.map(account => [account.id, account]))
-    const categoryMap = new Map(categories.map(category => [category.id, category]))
-    const rateCache = new Map<string, Rates>([[currency, rates]])
-    const budgets = []
-    for (const budget of budgetRows.results) {
-      if (!includeInactive && (asOf < budget.start_date || asOf > budget.end_date)) continue
-      const budgetCurrency = String(budget.currency || currency).toUpperCase()
-      let budgetRates = rateCache.get(budgetCurrency)
-      if (!budgetRates) {
-        budgetRates = await this.rates(budgetCurrency)
-        rateCache.set(budgetCurrency, budgetRates)
-      }
-      const spendEndDate = asOf < budget.start_date ? null : (asOf < budget.end_date ? asOf : budget.end_date)
-      const pendingStartDate = asOf > budget.start_date ? asOf : budget.start_date
-      const [accountIds, categoryIds, transactions, pending] = await Promise.all([
-        this.env.DB.prepare('SELECT account_id FROM budget_accounts WHERE budget_id = ?').bind(budget.id).all<{ account_id: string }>(),
-        this.env.DB.prepare('SELECT category_id FROM budget_categories WHERE budget_id = ?').bind(budget.id).all<{ category_id: string }>(),
-        spendEndDate ? this.postedBetween(budget.start_date, spendEndDate) : Promise.resolve([] as TransactionRow[]),
-        this.env.DB.prepare("SELECT * FROM transactions WHERE status = 'pending' AND pending_kind = 'upcoming' AND date >= ? AND date <= ? ORDER BY date").bind(pendingStartDate, budget.end_date).all<TransactionRow>(),
-      ])
-      const scopedBudget = { ...budget, account_ids: accountIds.results.map(row => row.account_id), category_ids: categoryIds.results.map(row => row.category_id) }
-      let spent = 0
-      for (const transaction of transactions) {
-        const account = accountMap.get(transaction.account_id)
-        if (!account || transaction.amount >= 0 || transaction.linked_transaction_id || !inScope(account, scopedBudget)) continue
-        if (budget.category_scope === 'selected' && !scopedBudget.category_ids.includes(transaction.category_id || '')) continue
-        spent += Math.abs(this.convert(transaction.amount, account.currency, budgetCurrency, budgetRates))
-      }
-      let pendingSpend = 0
-      for (const transaction of pending.results) {
-        const account = accountMap.get(transaction.account_id)
-        if (!account || transaction.amount >= 0 || transaction.linked_transaction_id || !inScope(account, scopedBudget)) continue
-        if (budget.category_scope === 'selected' && !scopedBudget.category_ids.includes(transaction.category_id || '')) continue
-        pendingSpend += Math.abs(this.convert(transaction.amount, account.currency, budgetCurrency, budgetRates))
-      }
-      const totalDays = daysBetween(budget.start_date, budget.end_date)
-      const elapsedDays = asOf < budget.start_date ? 0 : Math.min(totalDays, daysBetween(budget.start_date, asOf > budget.end_date ? budget.end_date : asOf))
-      const paceForecast = elapsedDays ? spent / elapsedDays * totalDays : 0
-      const forecastSpend = Math.max(spent + pendingSpend, paceForecast)
-      const riskStatus = spent > budget.amount ? 'exceeded' : forecastSpend > budget.amount ? 'at_risk' : asOf < budget.start_date ? 'upcoming' : asOf > budget.end_date ? 'ended' : 'on_track'
-      const scopedAccounts = accounts.filter(account => inScope(account, scopedBudget))
-      const budgetWarnings = this.conversionWarnings(scopedAccounts, budgetCurrency, budgetRates)
-      budgets.push({
-        id: budget.id, name: budget.name || null, period: budget.period, start_date: budget.start_date, end_date: budget.end_date,
-        currency: budgetCurrency, amount: budget.amount, spent: round(spent), pending_spend: round(pendingSpend), forecast_spend: round(forecastSpend),
-        remaining: round(budget.amount - spent), utilization_percent: budget.amount ? round(spent / budget.amount * 100) : 0,
-        forecast_utilization_percent: budget.amount ? round(forecastSpend / budget.amount * 100) : 0, risk_status: riskStatus,
-        days_elapsed: elapsedDays, days_total: totalDays,
-        account_scope: budget.account_scope, account_ids: scopedBudget.account_ids,
-        account_names: scopedAccounts.map(account => account.name), category_scope: budget.category_scope, category_ids: scopedBudget.category_ids,
-        category_names: scopedBudget.category_ids.map(id => categoryMap.get(id)?.name).filter(Boolean),
-        conversion_status: budgetWarnings.length ? 'partial' : 'complete', warnings: budgetWarnings,
-      })
-    }
-    return {
-      as_of: new Date().toISOString(), evaluated_on: asOf, default_currency_for_legacy_budgets: currency,
-      budgets, include_inactive: includeInactive,
-    }
-  }
-
   async recurringForecast(args: Record<string, unknown>) {
     const today = new Date().toISOString().slice(0, 10)
     const startDate = optionalDate(args.start_date, 'start_date') || today
@@ -1025,11 +1004,6 @@ export class FinanceService {
       pending_one_time_transactions: upcoming, pending_truncated: pending.results.length > 100,
       conversion_status: warnings.length ? 'partial' : 'complete', warnings,
     }
-  }
-
-  async budgetsAndRecurring(args: Record<string, unknown>) {
-    const [budgets, recurring] = await Promise.all([this.budgetStatus(args), this.recurringForecast(args)])
-    return { as_of: new Date().toISOString(), budgets, recurring, deprecated: 'Use get_budget_status and get_recurring_forecast for focused results.' }
   }
 
   async portfolio(args: Record<string, unknown>) {

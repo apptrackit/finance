@@ -16,6 +16,7 @@ import { AmountInput } from '../common/amount-input'
 import { formatAmount, formatCalculatedAmount, parseAmount } from '../../lib/amount'
 import type { PendingKind } from '../../lib/transaction-review'
 import { getMcpReviewBalanceDeltas, hasPossibleDuplicateFlag, isMcpReviewTransaction } from '../../lib/transaction-review'
+import { TransactionCalendar } from './TransactionCalendar'
 
 type Transaction = {
   id: string
@@ -106,7 +107,10 @@ export function TransactionList({
   dateRange,
   onDateRangeChange,
   currentMonth,
-  onMonthChange
+  onMonthChange,
+  convertToMasterCurrency,
+  masterCurrency,
+  onCalendarViewChange,
 }: { 
   transactions: Transaction[], 
   upcomingTransactions: Transaction[],
@@ -116,7 +120,10 @@ export function TransactionList({
   dateRange: { startDate: string; endDate: string },
   onDateRangeChange: (range: { startDate: string; endDate: string }) => void,
   currentMonth: Date,
-  onMonthChange: (month: Date) => void
+  onMonthChange: (month: Date) => void,
+  convertToMasterCurrency?: (amount: number, accountId: string) => number,
+  masterCurrency: string,
+  onCalendarViewChange?: (isCalendar: boolean) => void,
 }) {
   const [isAdding, setIsAdding] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -151,6 +158,7 @@ export function TransactionList({
   const [categoryFilter, setCategoryFilter] = useState<string>('all')
   const [sortOrder, setSortOrder] = useState<'date' | 'amount-high' | 'amount-low'>('date')
   const [showAllTransactions, setShowAllTransactions] = useState(false)
+  const [transactionView, setTransactionView] = useState<'list' | 'calendar'>('list')
   const [searchQuery, setSearchQuery] = useState<string>('')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [deletingId, setDeletingId] = useState<string | null>(null)
@@ -171,6 +179,10 @@ export function TransactionList({
   useEffect(() => {
     setShowAllTransactions(false)
   }, [categoryFilter, sortOrder, searchQuery, dateRange])
+
+  useEffect(() => {
+    onCalendarViewChange?.(transactionView === 'calendar')
+  }, [onCalendarViewChange, transactionView])
 
   useEffect(() => {
     const interval = window.setInterval(() => setBadgeNow(Date.now()), 30000)
@@ -1105,7 +1117,7 @@ export function TransactionList({
     if (!recentLabel) return null
 
     return (
-      <span className="flex-shrink-0 select-none text-[10px] font-medium lowercase leading-none text-primary/50 animate-pulse">
+      <span className="flex-shrink-0 select-none text-[10px] font-medium lowercase leading-none text-primary/90 animate-pulse-slow">
         {recentLabel}
       </span>
     )
@@ -1268,7 +1280,7 @@ export function TransactionList({
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2 sm:gap-3">
               <div className="h-7 w-7 sm:h-8 sm:w-8 rounded-lg bg-secondary flex items-center justify-center">
-                <Receipt className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-muted-foreground" />
+                <Layers className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-muted-foreground" />
               </div>
               <div>
                 <CardTitle className="text-sm sm:text-base">Transactions</CardTitle>
@@ -1281,6 +1293,25 @@ export function TransactionList({
             </div>
             
             <div className="flex items-center gap-1.5">
+              <div className="hidden sm:inline-flex h-8 rounded-lg border border-border/60 bg-background/50 p-0.5" role="group" aria-label="Transaction view">
+                <button
+                  onClick={() => setTransactionView('list')}
+                  className={`h-7 rounded-md px-3 text-xs font-medium transition-colors ${transactionView === 'list' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
+                  aria-pressed={transactionView === 'list'}
+                >
+                  List
+                </button>
+                <button
+                  onClick={() => {
+                    setTransactionView('calendar')
+                    onMonthChange(currentMonth)
+                  }}
+                  className={`h-7 rounded-md px-3 text-xs font-medium transition-colors ${transactionView === 'calendar' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
+                  aria-pressed={transactionView === 'calendar'}
+                >
+                  Calendar
+                </button>
+              </div>
               <Button 
                 onClick={() => setShowBulkModal(true)} 
                 size="sm" 
@@ -1321,6 +1352,26 @@ export function TransactionList({
                 <X className="h-3.5 w-3.5" />
               </button>
             )}
+          </div>
+
+          <div className="flex sm:hidden rounded-lg border border-border/60 bg-background/50 p-0.5" role="group" aria-label="Transaction view">
+            <button
+              onClick={() => setTransactionView('list')}
+              className={`flex-1 rounded-md px-2 py-1.5 text-[10px] font-medium transition-colors ${transactionView === 'list' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
+              aria-pressed={transactionView === 'list'}
+            >
+              List view
+            </button>
+            <button
+              onClick={() => {
+                setTransactionView('calendar')
+                onMonthChange(currentMonth)
+              }}
+              className={`flex-1 rounded-md px-2 py-1.5 text-[10px] font-medium transition-colors ${transactionView === 'calendar' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
+              aria-pressed={transactionView === 'calendar'}
+            >
+              Calendar view
+            </button>
           </div>
 
           <div className="flex items-center justify-center gap-2 sm:gap-3 flex-wrap">
@@ -1397,6 +1448,7 @@ export function TransactionList({
               <DateRangePicker
                 startDate={customRange.startDate}
                 endDate={customRange.endDate}
+                monthOnly={transactionView === 'calendar'}
                 onApply={(range) => {
                   if (range.startDate === '1900-01-01' && range.endDate === '2100-12-31') {
                     onDateRangeChange(range)
@@ -1831,6 +1883,21 @@ export function TransactionList({
       </Modal>
 
       <CardContent className="space-y-3 sm:space-y-4">
+        {transactionView === 'calendar' ? (
+          <TransactionCalendar
+            transactions={transactions.filter(applyFilters)}
+            accounts={accounts}
+            currentMonth={currentMonth}
+            privacyMode={privacyMode}
+            getCategoryName={getCategoryName}
+            getCategoryIcon={getCategoryIcon}
+            getAccountName={getAccountName}
+            getAccountCurrency={getAccountCurrency}
+            convertToMasterCurrency={convertToMasterCurrency}
+            masterCurrency={masterCurrency}
+            sortOrder={sortOrder}
+          />
+        ) : (
         <div className="space-y-3 sm:space-y-4">
           {mcpReviewTransactions.length > 0 && (
             <section className="space-y-1.5 rounded-xl border border-violet-500/20 bg-violet-500/[0.03] p-2 sm:p-3" aria-labelledby="mcp-review-heading">
@@ -2290,6 +2357,7 @@ export function TransactionList({
             </div>
           )}
         </div>
+        )}
       </CardContent>
 
       {/* Bulk Transaction Modal */}

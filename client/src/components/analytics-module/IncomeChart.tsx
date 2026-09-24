@@ -1,3 +1,4 @@
+import { memo } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '../common/card'
 import { TrendingUp } from 'lucide-react'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
@@ -13,7 +14,7 @@ type IncomeChartProps = {
   masterCurrency: string
 }
 
-export function IncomeChart({ data, selectedCategory, onCategoryChange, categories, masterCurrency }: IncomeChartProps) {
+export const IncomeChart = memo(function IncomeChart({ data, selectedCategory, onCategoryChange, categories, masterCurrency }: IncomeChartProps) {
   const { privacyMode } = usePrivacy()
   
   // Calculate total sum
@@ -114,4 +115,4 @@ export function IncomeChart({ data, selectedCategory, onCategoryChange, categori
       </CardContent>
     </Card>
   )
-}
+})

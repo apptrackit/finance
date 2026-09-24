@@ -87,6 +87,8 @@ type MarketQuote = {
   regularMarketChangePercent?: number
 }
 
+const asArray = <T>(value: unknown): T[] => Array.isArray(value) ? value : []
+
 export function useFinanceData(
   dateRange: { startDate: string; endDate: string },
   masterCurrency: string
@@ -100,8 +102,10 @@ export function useFinanceData(
   const [allTransactions, setAllTransactions] = useState<Transaction[]>([])
   const [upcomingTransactions, setUpcomingTransactions] = useState<Transaction[]>([])
   const [transactionsLoading, setTransactionsLoading] = useState<boolean>(true)
+  const [allTransactionsLoading, setAllTransactionsLoading] = useState<boolean>(true)
   const [categories, setCategories] = useState<Category[]>([])
   const [exchangeRates, setExchangeRates] = useState<Record<string, number>>({})
+  const [exchangeRatesLoading, setExchangeRatesLoading] = useState<boolean>(true)
   const [investmentRefreshKey, setInvestmentRefreshKey] = useState(0)
 
   const fetchData = useCallback(async () => {
@@ -114,54 +118,80 @@ export function useFinanceData(
       .then(data => setNetWorth(data.net_worth))
       .catch(err => console.error(err))
 
-    const accountsRes = await apiFetch(`${API_BASE_URL}/accounts`)
-    const accountsData: Account[] = await accountsRes.json()
-    setAccounts(accountsData)
+    try {
+      const accountsRes = await apiFetch(`${API_BASE_URL}/accounts`, { throwOnError: true })
+      const accountsData: unknown = await accountsRes.json()
+      if (!Array.isArray(accountsData)) {
+        throw new Error('Accounts response was not an array')
+      }
+      setAccounts(accountsData)
 
-    const regularTxPromise = apiFetch(
-      `${API_BASE_URL}/transactions/date-range?startDate=${dateRange.startDate}&endDate=${dateRange.endDate}`
-    )
-      .then(res => res.json())
-      .catch(() => [])
-
-    const upcomingTxPromise = apiFetch(`${API_BASE_URL}/transactions/upcoming`)
-      .then(res => res.json())
-      .catch(() => [])
-
-    const investmentAccounts = accountsData.filter(acc => acc.type === 'investment')
-
-    const investmentTxPromises = investmentAccounts.map(acc =>
-      apiFetch(`${API_BASE_URL}/investment-transactions?account_id=${acc.id}`)
+      const regularTxPromise = apiFetch(
+        `${API_BASE_URL}/transactions/date-range?startDate=${dateRange.startDate}&endDate=${dateRange.endDate}`
+      )
         .then(res => res.json())
-        .then((txs: any[]) =>
-          txs
-            .filter(itx => itx.date >= dateRange.startDate && itx.date <= dateRange.endDate)
-          .map(mapInvestmentTransaction))
+        .then(asArray<Transaction>)
         .catch(() => [])
-    )
 
-    const [regularTxs, upcomingTxs, ...investmentTxArrays] = await Promise.all([regularTxPromise, upcomingTxPromise, ...investmentTxPromises])
-    const allTxs = [...regularTxs, ...investmentTxArrays.flat()].sort(
-      (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
-    )
-    setTransactions(allTxs)
-    setUpcomingTransactions(upcomingTxs)
+      const upcomingTxPromise = apiFetch(`${API_BASE_URL}/transactions/upcoming`)
+        .then(res => res.json())
+        .then(asArray<Transaction>)
+        .catch(() => [])
 
-    apiFetch(`${API_BASE_URL}/categories`)
-      .then(res => res.json())
-      .then(data => setCategories(data))
-      .catch(err => console.error(err))
-      .finally(() => setTransactionsLoading(false))
+      const categoriesPromise = apiFetch(`${API_BASE_URL}/categories`)
+        .then(res => res.json())
+        .then(asArray<Category>)
+        .catch(error => {
+          console.error(error)
+          return []
+        })
+
+      const investmentAccounts = accountsData.filter((acc): acc is Account =>
+        typeof acc === 'object' && acc !== null && 'type' in acc && acc.type === 'investment'
+      )
+
+      const investmentTxPromises = investmentAccounts.map(acc =>
+        apiFetch(`${API_BASE_URL}/investment-transactions?account_id=${acc.id}`)
+          .then(res => res.json())
+          .then((txs: any[]) =>
+            txs
+              .filter(itx => itx.date >= dateRange.startDate && itx.date <= dateRange.endDate)
+              .map(mapInvestmentTransaction))
+          .catch(() => [])
+      )
+
+      const [regularTxs, upcomingTxs, ...investmentTxArrays] = await Promise.all([regularTxPromise, upcomingTxPromise, ...investmentTxPromises])
+      const allTxs = [...regularTxs, ...investmentTxArrays.flat()].sort(
+        (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
+      )
+      setTransactions(allTxs)
+      setUpcomingTransactions(upcomingTxs)
+      setCategories(await categoriesPromise)
+    } catch (error) {
+      console.error('Failed to fetch finance data:', error)
+      setAccounts([])
+      setTransactions([])
+      setUpcomingTransactions([])
+      setCategories([])
+    } finally {
+      setTransactionsLoading(false)
+    }
   }, [dateRange.startDate, dateRange.endDate])
 
   const fetchAllTransactions = useCallback(async () => {
+    setAllTransactionsLoading(true)
     try {
       const accountsData = accounts.length > 0
         ? accounts
-        : await apiFetch(`${API_BASE_URL}/accounts`).then(res => res.json())
+        : await apiFetch(`${API_BASE_URL}/accounts`, { throwOnError: true }).then(res => res.json())
+
+      if (!Array.isArray(accountsData)) {
+        throw new Error('Accounts response was not an array')
+      }
 
       const regularTxPromise = apiFetch(`${API_BASE_URL}/transactions`)
         .then(res => res.json())
+        .then(asArray<Transaction>)
         .catch(() => [])
 
       const investmentAccounts = accountsData.filter((acc: Account) => acc.type === 'investment')
@@ -180,6 +210,8 @@ export function useFinanceData(
       setAllTransactions(allTxs)
     } catch (error) {
       console.error('Failed to fetch all transactions:', error)
+    } finally {
+      setAllTransactionsLoading(false)
     }
   }, [accounts])
 
@@ -285,12 +317,15 @@ export function useFinanceData(
   // Fetch exchange rates for display
   useEffect(() => {
     const fetchRates = async () => {
+      setExchangeRatesLoading(true)
       try {
         const response = await fetch(`https://open.er-api.com/v6/latest/${masterCurrency}`)
         const data = await response.json()
         if (data.rates) setExchangeRates(data.rates)
       } catch {
         console.error('Failed to fetch exchange rates')
+      } finally {
+        setExchangeRatesLoading(false)
       }
     }
     fetchRates()
@@ -311,8 +346,10 @@ export function useFinanceData(
     allTransactions,
     upcomingTransactions,
     transactionsLoading,
+    allTransactionsLoading,
     categories,
     exchangeRates,
+    exchangeRatesLoading,
     investmentRefreshKey,
     handleDataChange,
     fetchInvestmentValue,

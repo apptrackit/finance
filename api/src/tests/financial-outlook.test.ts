@@ -13,7 +13,7 @@ function row(overrides: Partial<FinancialOutlookSnapshotRow> = {}): FinancialOut
     headline: 'Expected balances remain stable.',
     data_quality_score: 82,
     data_quality_label: 'high',
-    payload: JSON.stringify({ horizons: [], drivers: ['Salary'], risks: [], assumptions: [], suggestions: [] }),
+    payload: JSON.stringify({ horizons: [], cash_balance_history: [], drivers: ['Salary'], risks: [], assumptions: [], suggestions: [] }),
     source_coverage: JSON.stringify({ data_quality_reasons: ['Recent ledger activity'], sources: ['accounts', 'posted_transactions'] }),
     ...overrides,
   }

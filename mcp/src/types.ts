@@ -6,7 +6,7 @@ export type Env = {
   DISABLE_ACCESS_AUTH?: string
 }
 
-export const MCP_WORKER_VERSION = '1.3.0'
+export const MCP_WORKER_VERSION = '1.4.0'
 
 export type AccountRow = {
   id: string
@@ -73,20 +73,6 @@ export type StoredReviewDraftProposal = {
   created_at: number
   expires_at: number
   consumed_at: number | null
-}
-
-export type BudgetRow = {
-  id: string
-  name?: string | null
-  amount: number
-  period: 'monthly' | 'yearly'
-  start_date: string
-  end_date: string
-  account_scope: 'all' | 'cash' | 'selected'
-  category_scope: 'all' | 'selected'
-  currency?: string | null
-  created_at: number
-  updated_at: number
 }
 
 export type RecurringScheduleRow = {

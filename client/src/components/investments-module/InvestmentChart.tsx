@@ -243,8 +243,8 @@ export function InvestmentChart({ symbol, transactions = [] }: InvestmentChartPr
             >
               <defs>
                 <linearGradient id="colorPrice" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor={isPositive ? '#22c55e' : '#ef4444'} stopOpacity={0.3}/>
-                  <stop offset="95%" stopColor={isPositive ? '#22c55e' : '#ef4444'} stopOpacity={0}/>
+                  <stop offset="5%" stopColor={isPositive ? 'hsl(var(--primary))' : '#ef4444'} stopOpacity={0.3}/>
+                  <stop offset="95%" stopColor={isPositive ? 'hsl(var(--primary))' : '#ef4444'} stopOpacity={0}/>
                 </linearGradient>
               </defs>
               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" opacity={0.4} />
@@ -272,7 +272,7 @@ export function InvestmentChart({ symbol, transactions = [] }: InvestmentChartPr
               <Area
                 type="monotone"
                 dataKey="close"
-                stroke={isPositive ? '#22c55e' : '#ef4444'}
+                stroke={isPositive ? 'hsl(var(--primary))' : '#ef4444'}
                 strokeWidth={2}
                 fillOpacity={1}
                 fill="url(#colorPrice)"
@@ -280,7 +280,7 @@ export function InvestmentChart({ symbol, transactions = [] }: InvestmentChartPr
               
               <Scatter
                 dataKey="buyPoint"
-                fill="#22c55e"
+                fill="hsl(var(--primary))"
                 shape="circle"
               />
               

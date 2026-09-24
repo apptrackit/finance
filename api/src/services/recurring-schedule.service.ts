@@ -179,11 +179,15 @@ export class RecurringScheduleService {
 
       try {
         // Process based on type
+        let processed = false
         if (schedule.type === 'transaction') {
-          await this.processRecurringTransaction(schedule, todayStr)
+          processed = await this.processRecurringTransaction(schedule, todayStr)
         } else if (schedule.type === 'transfer') {
-          await this.processRecurringTransfer(schedule, todayStr)
+          processed = await this.processRecurringTransfer(schedule, todayStr)
         }
+
+        // A locked or missing account skips execution, not an occurrence.
+        if (!processed) continue
 
         // Update last processed date and decrement remaining_occurrences
         const updates: Partial<RecurringSchedule> = { last_processed_date: todayStr }
@@ -243,16 +247,16 @@ export class RecurringScheduleService {
     }
   }
 
-  private async processRecurringTransaction(schedule: RecurringSchedule, date: string): Promise<void> {
+  private async processRecurringTransaction(schedule: RecurringSchedule, date: string): Promise<boolean> {
     const account = await this.accountRepo.findById(schedule.account_id)
     if (!account) {
       console.error(`Account ${schedule.account_id} not found for recurring schedule ${schedule.id}`)
-      return
+      return false
     }
 
     if (account.is_locked) {
       console.warn(`Skipping recurring schedule ${schedule.id}: account ${schedule.account_id} is locked`)
-      return
+      return false
     }
 
     const transaction: Transaction = {
@@ -273,12 +277,13 @@ export class RecurringScheduleService {
       account.balance + schedule.amount,
       Date.now()
     )
+    return true
   }
 
-  private async processRecurringTransfer(schedule: RecurringSchedule, date: string): Promise<void> {
+  private async processRecurringTransfer(schedule: RecurringSchedule, date: string): Promise<boolean> {
     if (!schedule.to_account_id) {
       console.error(`to_account_id missing for transfer schedule ${schedule.id}`)
-      return
+      return false
     }
 
     const fromAccount = await this.accountRepo.findById(schedule.account_id)
@@ -286,12 +291,12 @@ export class RecurringScheduleService {
 
     if (!fromAccount || !toAccount) {
       console.error(`Account(s) not found for recurring transfer ${schedule.id}`)
-      return
+      return false
     }
 
     if (fromAccount.is_locked || toAccount.is_locked) {
       console.warn(`Skipping recurring transfer ${schedule.id}: one or more accounts are locked`)
-      return
+      return false
     }
 
     const outgoingId = crypto.randomUUID()
@@ -349,6 +354,7 @@ export class RecurringScheduleService {
       toAccount.balance + Math.abs(amountTo),
       Date.now()
     )
+    return true
   }
 
   private toDto(schedule: RecurringSchedule): RecurringScheduleResponseDto {

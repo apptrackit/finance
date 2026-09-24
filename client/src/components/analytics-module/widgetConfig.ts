@@ -4,9 +4,11 @@ export type WidgetId =
   | 'cash-balance-forecast'
   | 'income-chart'
   | 'expenses-chart'
+  | 'income-expenses-trend'
   | 'account-trends'
   | 'income-breakdown'
   | 'spending-breakdown'
+  | 'money-map'
   | 'top-expenses'
   | 'ai-financial-forecast'
 
@@ -51,6 +53,12 @@ export const WIDGET_DEFS: WidgetDef[] = [
     defaultVisible: true,
   },
   {
+    id: 'income-expenses-trend',
+    label: 'Income vs Expenses Trend',
+    description: 'Income, expenses, and net income together over the selected period',
+    defaultVisible: true,
+  },
+  {
     id: 'account-trends',
     label: 'Account Trends',
     description: 'Individual balance history chart for each of your accounts',
@@ -66,6 +74,12 @@ export const WIDGET_DEFS: WidgetDef[] = [
     id: 'spending-breakdown',
     label: 'Spending Breakdown',
     description: 'Expense distribution across categories as a pie chart',
+    defaultVisible: true,
+  },
+  {
+    id: 'money-map',
+    label: 'Money Map',
+    description: 'Interactive flow of income through spending and surplus',
     defaultVisible: true,
   },
   {
@@ -96,7 +110,9 @@ export function loadWidgetVisibility(): Record<WidgetId, boolean> {
       const parsed = JSON.parse(stored)
       return { ...defaults, ...parsed }
     }
-  } catch {}
+  } catch {
+    // Local storage can be unavailable (for example, in private browsing mode).
+  }
 
   return defaults
 }
@@ -104,5 +120,7 @@ export function loadWidgetVisibility(): Record<WidgetId, boolean> {
 export function saveWidgetVisibility(visibility: Record<WidgetId, boolean>): void {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(visibility))
-  } catch {}
+  } catch {
+    // Widget preferences are optional and should not block rendering.
+  }
 }

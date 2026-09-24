@@ -9,7 +9,7 @@ export const COLORS = [
   '#14b8a6', // teal
   '#f97316', // orange
   '#a855f7', // purple
-  '#22c55e', // green
+  '#5189D8', // primary blue
   '#eab308', // yellow
   '#0ea5e9', // sky
   '#d946ef', // fuchsia

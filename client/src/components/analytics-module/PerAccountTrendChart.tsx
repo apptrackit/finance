@@ -1,3 +1,4 @@
+import { memo } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '../common/card'
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 import { usePrivacy } from '../../context/PrivacyContext'
@@ -12,7 +13,7 @@ type PerAccountTrendChartProps = {
   className?: string
 }
 
-export function PerAccountTrendChart({ account, data, index, className }: PerAccountTrendChartProps) {
+export const PerAccountTrendChart = memo(function PerAccountTrendChart({ account, data, index, className }: PerAccountTrendChartProps) {
   const { privacyMode } = usePrivacy()
 
   return (
@@ -109,4 +110,4 @@ export function PerAccountTrendChart({ account, data, index, className }: PerAcc
       </CardContent>
     </Card>
   )
-}
+})

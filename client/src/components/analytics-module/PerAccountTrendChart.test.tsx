@@ -8,7 +8,7 @@ vi.mock('../../context/PrivacyContext', () => ({
 
 vi.mock('recharts', () => ({
   ResponsiveContainer: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-  AreaChart: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  AreaChart: ({ children }: { children: React.ReactNode }) => <svg>{children}</svg>,
   Area: () => null,
   XAxis: () => null,
   YAxis: () => null,

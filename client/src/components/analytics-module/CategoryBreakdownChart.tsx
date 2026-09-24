@@ -1,3 +1,4 @@
+import { memo } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '../common/card'
 import { PieChart as PieChartIcon } from 'lucide-react'
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts'
@@ -16,7 +17,7 @@ type CategoryBreakdownChartProps = {
   masterCurrency: string
 }
 
-export function CategoryBreakdownChart({ data, masterCurrency }: CategoryBreakdownChartProps) {
+export const CategoryBreakdownChart = memo(function CategoryBreakdownChart({ data, masterCurrency }: CategoryBreakdownChartProps) {
   const { privacyMode } = usePrivacy()
 
   return (
@@ -94,4 +95,4 @@ export function CategoryBreakdownChart({ data, masterCurrency }: CategoryBreakdo
       </CardContent>
     </Card>
   )
-}
+})

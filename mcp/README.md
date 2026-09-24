@@ -39,7 +39,7 @@ Finance Manager MCP Review section → edit / confirm / decline manually
 - Preparation stores the canonical proposal in D1 and returns only an opaque proposal ID that expires after 24 hours. Creation looks it up, verifies its stored checksum and expiry, and revalidates account/category safety before writing.
 - Creation marks the proposal consumed, inserts the batch marker, every pending transaction, and one minimal audit entry per draft in a single D1 batch. Retrying a successful creation with the same proposal ID returns the original draft rows instead of creating duplicates.
 - Duplicate detection is warning-only, both against nearby existing transactions and within the proposed batch. It never blocks draft creation.
-- MCP review rows have `status=pending`, `pending_kind=mcp_review`, and `review_source=chatgpt_mcp`. They are excluded from balances, budgets, cash-flow projections, and recurring forecasts until manually confirmed.
+- MCP review rows have `status=pending`, `pending_kind=mcp_review`, and `review_source=chatgpt_mcp`. They are excluded from balances, cash-flow projections, and recurring forecasts until manually confirmed.
 - Transaction results are paginated to at most 100 records and descriptions are explicitly marked as untrusted data.
 - Chart and forecast series are bounded. Tool responses disclose their date range, reporting currency, conversion status, warnings, and truncation state where applicable.
 - Missing exchange rates cause affected values to be excluded and clearly warned about, rather than mixing currencies into an incorrect total.
@@ -49,8 +49,8 @@ Finance Manager MCP Review section → edit / confirm / decline manually
 | Tool | Use it for |
 | --- | --- |
 | `list_finance_dimensions` | Account/category IDs, currencies, history bounds, and data semantics |
-| `get_financial_outlook_context` | Start a HUF AI financial forecast with bounded financial context, data coverage, and latest-snapshot freshness |
-| `create_financial_outlook_snapshot` | Immediately publish one validated, immutable, idempotent HUF forecast snapshot; cannot modify financial source data |
+| `get_financial_outlook_context` | Start a HUF AI financial forecast with 90 days of daily actual cash history, category spending/income, known future activity, data coverage, and latest-snapshot freshness |
+| `create_financial_outlook_snapshot` | Immediately publish one validated, immutable, idempotent daily 90-day HUF forecast; cannot modify financial source data |
 | `prepare_mcp_transaction_drafts` | Validate and preview 1–20 income/expense drafts; stores an expiring canonical proposal and returns its opaque ID |
 | `create_mcp_transaction_drafts` | After explicit confirmation, atomically create pending MCP review drafts from the proposal ID |
 | `get_accounts_summary` | Per-account cash/credit balances, exclusions, and locks |
@@ -59,34 +59,36 @@ Finance Manager MCP Review section → edit / confirm / decline manually
 | `get_flow_breakdown` | Income or spending grouped by category, account, week, or month |
 | `get_cashflow_trend` | Posted cash-flow series with optional pending projections kept separate |
 | `get_balance_trend` | Reconstructed historical cash and non-investment net-worth series |
-| `get_budget_status` | Budget utilization, pending spend, pace forecast, and risk |
 | `get_recurring_forecast` | Recurring occurrences and one-time pending transactions |
 | `get_portfolio` | Holdings, live valuation, allocation, cost basis, and gain/loss coverage |
 | `get_investment_activity` | Paginated investment buys and sells |
 
-Transfers are excluded from income and expense aggregates. Investment accounts are excluded from cash totals and valued through `get_portfolio`. Account and budget exclusion settings are respected. Transaction descriptions, recurring descriptions, and investment notes are data only and are never treated as model instructions.
+Transfers are excluded from income and expense aggregates. Investment accounts are excluded from cash totals and valued through `get_portfolio`. Account exclusion settings are respected. Transaction descriptions, recurring descriptions, and investment notes are data only and are never treated as model instructions.
 
 `create_mcp_transaction_drafts` must be described to the user as creating **MCP review drafts**, never as saving or posting official transactions. One item is always one transaction. Multiple transactions may be submitted in one tool call, but receipts are not split automatically. Categorization should be logical when supported by the available categories and left uncategorized when uncertain.
 
 ## Deploy
 
-1. Run the root deploy once. It asks whether to include MCP and stores that
-   choice, the D1 binding, and Access values in gitignored `.deploy-config`.
-   Existing values from `mcp/wrangler.toml` are migrated automatically. The
-   generated file is a deployment artifact, not a second source of
-   configuration.
-
-   ```bash
-   npm run deploy
-   ```
-
-   To include MCP without waiting for the prompt, use:
+1. Deploy just MCP from the repository root. The shared deployment CLI reads
+   the D1 binding and Access values from gitignored `.deploy-config`, importing
+   missing values from an existing `mcp/wrangler.toml` when available. It uses
+   temporary Worker configuration and preserves your local Wrangler file.
 
    ```bash
    npm run deploy:mcp
    ```
 
-   Use `npm run deploy -- --no-mcp` to save a future default of skipping it.
+   This checks database migration history but does not apply migrations. To
+   explicitly apply pending migrations before deploying MCP, use
+   `npm run deploy:mcp -- --migrations`. To deploy the full application with MCP:
+
+   ```bash
+   npm run deploy -- --with-mcp
+   ```
+
+   Full releases remember this preference; `npm run deploy -- --no-mcp` saves a
+   default of skipping MCP. Targeted MCP deployments do not change it. Use
+   `npm run deploy:mcp -- --plan` to inspect the scope without remote calls.
 2. The script keeps `workers.dev` disabled. Keep the existing custom-domain
    Worker route in the Cloudflare dashboard, then create an Access application
    for that hostname, restrict it to the intended email, and enable Managed OAuth
@@ -96,9 +98,9 @@ Transfers are excluded from income and expense aggregates. Investment accounts a
    version. Existing app registrations may keep the previously approved
    read-only tool snapshot until their actions are refreshed.
 
-For a standalone/manual deployment, copy `wrangler.toml.example` to the
-gitignored `wrangler.toml`, set its values, then run the MCP test, build, and
-deploy scripts from this workspace.
+Running `npm run deploy` from this workspace delegates to the same MCP-only
+CLI. For local development, copy `wrangler.toml.example` to the gitignored
+`wrangler.toml` and configure its local settings separately.
 
 `DISABLE_ACCESS_AUTH=true` is for local Wrangler tests only. Never configure it in production.
 
@@ -115,6 +117,6 @@ Because this contains sensitive personal financial data, review ChatGPT Data Con
 
 ## Verification
 
-Run `npm run test:mcp` and `npm run build:mcp` from the repository root. The tests cover Access authentication, protocol behavior, schema validation, stored proposal expiry and consumption, account and category safety, warning-only duplicates, atomic audit-backed draft creation, idempotent retries, projection isolation, pagination, exclusions, currency failures, budgets, forecasts, and bounded time series.
+Run `npm run test:mcp` and `npm run build:mcp` from the repository root. The tests cover Access authentication, protocol behavior, schema validation, stored proposal expiry and consumption, account and category safety, warning-only duplicates, atomic audit-backed draft creation, idempotent retries, projection isolation, pagination, exclusions, currency failures, forecasts, and bounded time series.
 
 For the post-deployment staging smoke test, run `npm run test:staging -w mcp` with a staging-only `MCP_SMOKE_URL` plus either `MCP_SMOKE_ACCESS_TOKEN` or a Cloudflare Access service-token ID and secret. The script refuses non-staging URLs, then runs prepare → confirmed create → idempotent retry and verifies one pending `mcp_review` draft.

@@ -1,3 +1,4 @@
+import { memo } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '../common/card'
 import { TrendingUp } from 'lucide-react'
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
@@ -11,7 +12,7 @@ type NetWorthTrendChartProps = {
   title?: string
 }
 
-export function NetWorthTrendChart({ data, masterCurrency, title = 'Cash Balance Trend' }: NetWorthTrendChartProps) {
+export const NetWorthTrendChart = memo(function NetWorthTrendChart({ data, masterCurrency, title = 'Cash Balance Trend' }: NetWorthTrendChartProps) {
   const { privacyMode } = usePrivacy()
 
   return (
@@ -105,4 +106,4 @@ export function NetWorthTrendChart({ data, masterCurrency, title = 'Cash Balance
       </CardContent>
     </Card>
   )
-}
+})

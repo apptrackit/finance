@@ -1,7 +1,7 @@
 import { BrainCircuit, CalendarClock, Check, RefreshCw, Sparkles } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '../common/card'
 import { usePrivacy } from '../../context/PrivacyContext'
-import type { FinancialOutlookRange, FinancialOutlookSnapshot } from './types'
+import type { Account, FinancialOutlookRange, FinancialOutlookSnapshot, Transaction } from './types'
 import { AICashOutlookChart } from './AICashOutlookChart'
 
 type FinancialOutlookProps = {
@@ -12,6 +12,9 @@ type FinancialOutlookProps = {
   onSelect: (id: string) => void
   onLoadMore: () => void
   hasMore: boolean
+  transactions: Transaction[]
+  accounts: Account[]
+  convertToMasterCurrency: (amount: number, accountId: string) => number
 }
 
 const STATUS_COPY = {
@@ -47,7 +50,7 @@ function CashProjection({ days, range, currency, hidden, expired, checkedAt }: {
   )
 }
 
-export function FinancialOutlook({ snapshot, history, selectedId, loading = false, onSelect, onLoadMore, hasMore }: FinancialOutlookProps) {
+export function FinancialOutlook({ snapshot, history, selectedId, loading = false, onSelect, onLoadMore, hasMore, transactions, accounts, convertToMasterCurrency }: FinancialOutlookProps) {
   const { privacyMode } = usePrivacy()
   const hidden = privacyMode === 'hidden'
 
@@ -110,7 +113,7 @@ export function FinancialOutlook({ snapshot, history, selectedId, loading = fals
         </div>
 
         {hasMore && <button onClick={onLoadMore} className="text-xs font-medium text-primary hover:underline">Load older forecasts</button>}
-        <AICashOutlookChart snapshot={snapshot} />
+        <AICashOutlookChart snapshot={snapshot} transactions={transactions} accounts={accounts} convertToMasterCurrency={convertToMasterCurrency} />
         {(snapshot.drivers.length > 0 || snapshot.risks.length > 0 || snapshot.assumptions.length > 0 || snapshot.suggestions.length > 0) && (
           <details className="border-t border-border/60 pt-3">
             <summary className="cursor-pointer text-sm font-medium text-muted-foreground hover:text-foreground">Forecast details</summary>

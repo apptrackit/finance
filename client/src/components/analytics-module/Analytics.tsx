@@ -1,10 +1,10 @@
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo, useEffect, useCallback } from 'react'
 import { Card, CardContent } from '../common/card'
 import { Button } from '../common/button'
 import { BarChart3, Calendar, ChevronLeft, ChevronRight, SlidersHorizontal } from 'lucide-react'
 import { loadWidgetVisibility, saveWidgetVisibility, type WidgetId } from './widgetConfig'
 import { WidgetConfigPanel } from './WidgetConfigPanel'
-import { format, subMonths, addMonths, startOfMonth, endOfMonth, isWithinInterval, subYears, addYears, startOfYear, endOfYear, startOfWeek, endOfWeek, addWeeks } from 'date-fns'
+import { format, subMonths, addMonths, startOfMonth, endOfMonth, isWithinInterval, subYears, addYears, startOfYear, endOfYear, startOfWeek, endOfWeek, addWeeks, startOfQuarter, endOfQuarter, addQuarters } from 'date-fns'
 import { API_BASE_URL, apiFetch } from '../../config'
 import { convertToMasterCurrency as convertUtil } from './utils'
 import { SummaryCards } from './SummaryCards'
@@ -12,9 +12,16 @@ import { FinancialOutlook } from './FinancialOutlook'
 import { NetWorthTrendChart } from './NetWorthTrendChart'
 import { IncomeChart } from './IncomeChart'
 import { ExpensesChart } from './ExpensesChart'
+import {
+  IncomeExpensesTrendChart,
+  type IncomeExpensesTrendPoint,
+  type IncomeExpensesTrendResolution,
+  type IncomeExpensesTrendResolutionOption,
+} from './IncomeExpensesTrendChart'
 import { PerAccountTrendChart } from './PerAccountTrendChart'
 import { CategoryBreakdownChart } from './CategoryBreakdownChart'
 import { IncomeBreakdownChart } from './IncomeBreakdownChart'
+import { MoneyMapChart } from './MoneyMapChart'
 import { TopExpensesList } from './TopExpensesList'
 import { PredictionChart } from './PredictionChart'
 import type { Transaction, Category, Account, TimePeriod, FinancialOutlookSnapshot, ChartDataPoint, TrendDataPoint } from './types'
@@ -26,6 +33,7 @@ type AnalyticsProps = {
   categories: Category[]
   accounts: Account[]
   masterCurrency?: string
+  exchangeRates?: Record<string, number>
   loading?: boolean
 }
 
@@ -69,14 +77,15 @@ export function Analytics({
   categories,
   accounts,
   masterCurrency = 'HUF',
+  exchangeRates = {},
   loading = false
 }: AnalyticsProps) {
   const [period, setPeriod] = useState<TimePeriod>('month')
   const [projectionMode, setProjectionMode] = useState<'actual' | 'projected'>('actual')
   const [selectedExpenseCategory, setSelectedExpenseCategory] = useState<string>('all')
   const [selectedIncomeCategory, setSelectedIncomeCategory] = useState<string>('all')
-  const [exchangeRates, setExchangeRates] = useState<Record<string, number>>({})
   const [selectedDate, setSelectedDate] = useState(new Date())
+  const [incomeExpensesTrendResolution, setIncomeExpensesTrendResolution] = useState<IncomeExpensesTrendResolution>('default')
   const [isConfigOpen, setIsConfigOpen] = useState(false)
   const [widgetVisibility, setWidgetVisibility] = useState<Record<WidgetId, boolean>>(loadWidgetVisibility)
 
@@ -129,22 +138,6 @@ export function Analytics({
     return selectedDate.getMonth() === now.getMonth() && selectedDate.getFullYear() === now.getFullYear()
   }, [period, selectedDate])
 
-  // Fetch exchange rates
-  useEffect(() => {
-    const fetchRates = async () => {
-      try {
-        const response = await fetch(`https://open.er-api.com/v6/latest/${masterCurrency}`)
-        const data = await response.json()
-        if (data.rates) {
-          setExchangeRates(data.rates)
-        }
-      } catch (error) {
-        console.error('Failed to fetch exchange rates:', error)
-      }
-    }
-    fetchRates()
-  }, [masterCurrency])
-
   // Fetch the latest persisted AI forecast plus the first page of immutable history.
   useEffect(() => {
     const fetchOutlooks = async () => {
@@ -189,9 +182,11 @@ export function Analytics({
   const selectedOutlook = outlookHistory.find(item => item.id === selectedOutlookId) || outlookHistory[0] || null
 
   // Wrapper for convertToMasterCurrency utility
-  const convertToMasterCurrency = (amount: number, accountId: string): number => {
-    return convertUtil(amount, accountId, accounts, exchangeRates, masterCurrency)
-  }
+  const convertToMasterCurrency = useCallback(
+    (amount: number, accountId: string): number =>
+      convertUtil(amount, accountId, accounts, exchangeRates, masterCurrency),
+    [accounts, exchangeRates, masterCurrency]
+  )
 
   // Filter transactions by period (exclude investment accounts only)
   const filteredTransactions = useMemo(() => {
@@ -637,6 +632,205 @@ export function Analytics({
     return data
   }, [transactionsForAnalytics, selectedExpenseCategory, period, customDateRange, accounts, exchangeRates, masterCurrency])
 
+  // This chart always uses every category, so it stays a complete comparison
+  // when either of the smaller charts above is narrowed to one category.
+  const allTimeIncomeExpensesResolution = useMemo(() => {
+    if (period !== 'allTime') return { monthCount: 0, defaultResolution: 'month' as const, defaultLabel: 'Months' }
+
+    const accountById = new Map(accounts.map(account => [account.id, account]))
+    const dates = transactionsForAnalytics
+      .filter(transaction => !transaction.linked_transaction_id && accountById.get(transaction.account_id)?.type !== 'investment')
+      .map(transaction => new Date(transaction.date))
+
+    if (dates.length === 0) return { monthCount: 0, defaultResolution: 'month' as const, defaultLabel: 'Months' }
+
+    const rangeStart = startOfMonth(new Date(Math.min(...dates.map(date => date.getTime()))))
+    const rangeEnd = endOfMonth(new Date(Math.max(new Date().getTime(), ...dates.map(date => date.getTime()))))
+    const monthCount = (rangeEnd.getFullYear() - rangeStart.getFullYear()) * 12
+      + rangeEnd.getMonth() - rangeStart.getMonth() + 1
+    const quarterCount = (rangeEnd.getFullYear() - rangeStart.getFullYear()) * 4
+      + Math.floor(rangeEnd.getMonth() / 3) - Math.floor(rangeStart.getMonth() / 3) + 1
+    const yearCount = rangeEnd.getFullYear() - rangeStart.getFullYear() + 1
+
+    if (monthCount <= 12) return { monthCount, defaultResolution: 'month' as const, defaultLabel: 'Months' }
+    if (quarterCount <= 12) return { monthCount, defaultResolution: 'quarter' as const, defaultLabel: 'Quarters' }
+    if (yearCount <= 12) return { monthCount, defaultResolution: 'year' as const, defaultLabel: 'Years' }
+    return {
+      monthCount,
+      defaultResolution: 'multi-year' as const,
+      defaultLabel: `${Math.ceil(yearCount / 12)}-year groups`,
+    }
+  }, [accounts, transactionsForAnalytics, period])
+
+  const incomeExpensesTrendResolutionOptions = useMemo((): IncomeExpensesTrendResolutionOption[] => {
+    if (period === 'year') {
+      return [
+        { value: 'default', label: 'Months' },
+        { value: 'quarter', label: 'Quarters' },
+      ]
+    }
+
+    if (period === 'allTime' && allTimeIncomeExpensesResolution.monthCount > 0) {
+      switch (allTimeIncomeExpensesResolution.defaultResolution) {
+        case 'month':
+          return [
+            { value: 'default', label: 'Months' },
+            { value: 'quarter', label: 'Quarters' },
+            { value: 'year', label: 'Years' },
+          ]
+        case 'quarter':
+          return [
+            { value: 'default', label: 'Quarters' },
+            { value: 'year', label: 'Years' },
+          ]
+        case 'year':
+          return [
+            { value: 'quarter', label: 'Quarters' },
+            { value: 'default', label: 'Years' },
+          ]
+        case 'multi-year':
+          return [
+            { value: 'quarter', label: 'Quarters' },
+            { value: 'year', label: 'Years' },
+            { value: 'default', label: allTimeIncomeExpensesResolution.defaultLabel },
+          ]
+      }
+    }
+
+    return []
+  }, [period, allTimeIncomeExpensesResolution])
+
+  const incomeExpensesTrendData = useMemo((): IncomeExpensesTrendPoint[] => {
+    const accountById = new Map(accounts.map(account => [account.id, account]))
+    const eligibleTransactions = transactionsForAnalytics.filter(transaction =>
+      !transaction.linked_transaction_id && accountById.get(transaction.account_id)?.type !== 'investment'
+    )
+
+    if (eligibleTransactions.length === 0) return []
+
+    const transactionDates = eligibleTransactions.map(transaction => new Date(transaction.date))
+    let rangeStart: Date
+    let rangeEnd: Date
+
+    if (period === 'month' || period === 'year') {
+      rangeStart = new Date(customDateRange.startDate)
+      rangeEnd = new Date(customDateRange.endDate)
+    } else {
+      rangeStart = startOfMonth(new Date(Math.min(...transactionDates.map(date => date.getTime()))))
+      rangeEnd = endOfMonth(new Date(Math.max(new Date().getTime(), ...transactionDates.map(date => date.getTime()))))
+    }
+
+    type AllTimeGranularity = 'month' | 'quarter' | 'year' | 'multi-year'
+    let allTimeGranularity: AllTimeGranularity = 'month'
+    let multiYearSpan = 1
+
+    if (period === 'allTime') {
+      const monthCount = (rangeEnd.getFullYear() - rangeStart.getFullYear()) * 12
+        + rangeEnd.getMonth() - rangeStart.getMonth() + 1
+      const quarterCount = (rangeEnd.getFullYear() - rangeStart.getFullYear()) * 4
+        + Math.floor(rangeEnd.getMonth() / 3) - Math.floor(rangeStart.getMonth() / 3) + 1
+      const yearCount = rangeEnd.getFullYear() - rangeStart.getFullYear() + 1
+
+      if (monthCount <= 12) {
+        allTimeGranularity = 'month'
+      } else if (quarterCount <= 12) {
+        allTimeGranularity = 'quarter'
+      } else if (yearCount <= 12) {
+        allTimeGranularity = 'year'
+      } else {
+        allTimeGranularity = 'multi-year'
+        multiYearSpan = Math.ceil(yearCount / 12)
+      }
+    }
+
+    const trendGranularity = period === 'year'
+      ? (incomeExpensesTrendResolution === 'quarter' ? 'quarter' : 'month')
+      : period === 'allTime'
+        ? incomeExpensesTrendResolution === 'quarter'
+          ? 'quarter'
+          : incomeExpensesTrendResolution === 'year'
+            ? 'year'
+            : allTimeGranularity
+        : 'week'
+
+    const buckets: Array<{ start: Date; end: Date; key: string; label: string; tooltipLabel?: string }> = []
+    if (period === 'month') {
+      let weekNumber = 1
+      for (let date = startOfWeek(rangeStart, { weekStartsOn: 1 }); date <= rangeEnd; date = addWeeks(date, 1)) {
+        buckets.push({
+          start: date,
+          end: endOfWeek(date, { weekStartsOn: 1 }),
+          key: format(date, 'yyyy-MM-dd'),
+          label: `Week ${weekNumber++}`,
+        })
+      }
+    } else if (trendGranularity === 'quarter') {
+      for (let date = startOfQuarter(rangeStart); date <= rangeEnd; date = addQuarters(date, 1)) {
+        buckets.push({
+          start: date,
+          end: endOfQuarter(date),
+          key: format(date, 'yyyy-QQ'),
+          label: `Q${Math.floor(date.getMonth() / 3) + 1} ${format(date, 'yyyy')}`,
+        })
+      }
+    } else if (trendGranularity === 'year') {
+      for (let date = startOfYear(rangeStart); date <= rangeEnd; date = addYears(date, 1)) {
+        buckets.push({
+          start: date,
+          end: endOfYear(date),
+          key: format(date, 'yyyy'),
+          label: format(date, 'yyyy'),
+        })
+      }
+    } else if (trendGranularity === 'multi-year') {
+      for (let date = startOfYear(rangeStart); date <= rangeEnd; date = addYears(date, multiYearSpan)) {
+        const bucketEnd = endOfYear(addYears(date, multiYearSpan - 1))
+        const startLabel = format(date, 'yyyy')
+        const endLabel = format(addYears(date, multiYearSpan - 1), 'yyyy')
+        buckets.push({
+          start: date,
+          end: bucketEnd,
+          key: `${startLabel}-${endLabel}`,
+          label: `${startLabel}–${endLabel}`,
+        })
+      }
+    } else {
+      for (let date = startOfMonth(rangeStart); date <= rangeEnd; date = addMonths(date, 1)) {
+        buckets.push({
+          start: date,
+          end: endOfMonth(date),
+          key: format(date, 'yyyy-MM'),
+          label: format(date, 'MMM'),
+          tooltipLabel: period === 'allTime' ? format(date, 'MMMM yyyy') : undefined,
+        })
+      }
+    }
+
+    return buckets.map((bucket): IncomeExpensesTrendPoint => {
+      const effectiveStart = bucket.start < rangeStart ? rangeStart : bucket.start
+      const effectiveEnd = bucket.end > rangeEnd ? rangeEnd : bucket.end
+
+      const { income, expenses } = eligibleTransactions.reduce((totals, transaction) => {
+        const transactionDate = new Date(transaction.date)
+        if (!isWithinInterval(transactionDate, { start: effectiveStart, end: effectiveEnd })) return totals
+
+        const amount = convertToMasterCurrency(transaction.amount, transaction.account_id)
+        if (amount > 0) totals.income += amount
+        if (amount < 0) totals.expenses += Math.abs(amount)
+        return totals
+      }, { income: 0, expenses: 0 })
+
+      return {
+        key: bucket.key,
+        label: bucket.label,
+        tooltipLabel: bucket.tooltipLabel,
+        income,
+        expenses,
+        netIncome: income - expenses,
+      }
+    })
+  }, [accounts, transactionsForAnalytics, period, customDateRange, convertToMasterCurrency, incomeExpensesTrendResolution])
+
   const periodLabels: Record<TimePeriod, string> = {
     allTime: 'All Time',
     month: 'Month',
@@ -667,9 +861,11 @@ export function Analytics({
     'cash-balance-forecast':  isCurrentMonthView,
     'income-chart':           incomeChartData.some(d => d.amount > 0),
     'expenses-chart':         expensesChartData.some(d => d.amount > 0),
+    'income-expenses-trend':  incomeExpensesTrendData.some(d => d.income > 0 || d.expenses > 0),
     'account-trends':         perAccountTrendData.length > 0,
     'income-breakdown':       incomeCategoryData.length > 0,
     'spending-breakdown':     categoryData.length > 0,
+    'money-map':              incomeCategoryData.length > 0 || categoryData.length > 0,
     'top-expenses':           filteredTransactions.filter(t => t.amount < 0).length > 0,
     'ai-financial-forecast':  Boolean(selectedOutlook),
   }
@@ -686,7 +882,7 @@ export function Analytics({
         widgetHasData={widgetHasData}
       />
 
-      {/* Period Selector */}
+      {/* Analytics header */}
       <div className="flex flex-col items-start gap-3">
         <div className="flex items-center justify-between w-full">
           <div className="flex items-center gap-2">
@@ -701,13 +897,26 @@ export function Analytics({
             Customize
           </button>
         </div>
-        <div className="flex flex-col sm:flex-row items-center gap-2 w-full sm:w-auto">
-          <div className="flex gap-1 p-1 rounded-xl bg-background/80 border border-border/70 shadow-inner w-full sm:w-auto">
+      </div>
+
+      {/*
+        Keep the filters with the active chart instead of making people return to
+        the top of the page. This must be a page-level sibling so it can remain
+        sticky for the full analytics feed. The offsets match the app header.
+      */}
+      <div className="sticky top-[44px] sm:top-[72px] z-40 -mx-3 sm:-mx-6 w-[calc(100%+1.5rem)] sm:w-[calc(100%+3rem)] border-b border-border/70 bg-canvas px-3 sm:px-6 py-2.5">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex gap-1 p-1 rounded-xl bg-background/80 border border-border/70 shadow-inner w-full min-[430px]:w-auto">
             {(Object.keys(periodLabels) as TimePeriod[]).map((p) => (
               <button
                 key={p}
-                onClick={() => setPeriod(p)}
-                className={`flex-1 sm:flex-none px-2.5 sm:px-3 py-1.5 text-xs font-medium rounded-lg transition-all whitespace-nowrap ${
+                type="button"
+                onClick={() => {
+                  setPeriod(p)
+                  setIncomeExpensesTrendResolution('default')
+                }}
+                aria-pressed={period === p}
+                className={`flex-1 min-[430px]:flex-none px-2.5 sm:px-3 py-1.5 text-xs font-medium rounded-lg transition-all whitespace-nowrap ${
                   period === p
                     ? 'bg-primary text-primary-foreground shadow-md'
                     : 'text-muted-foreground hover:text-foreground hover:bg-secondary/70'
@@ -718,12 +927,13 @@ export function Analytics({
             ))}
           </div>
           {period !== 'allTime' && (
-            <div className="flex items-center gap-1 rounded-xl border border-border/70 bg-background/70 px-1 py-1 shadow-sm">
+            <div className="flex items-center justify-between min-[430px]:justify-start gap-1 rounded-xl border border-border/70 bg-background/70 px-1 py-1 shadow-sm w-full min-[430px]:w-auto">
               <Button
                 onClick={navigateBack}
                 size="sm"
                 variant="ghost"
                 className="h-7 w-7 sm:h-8 sm:w-8 p-0 rounded-lg hover:bg-secondary"
+                aria-label={`Show previous ${period === 'month' ? 'month' : 'year'}`}
               >
                 <ChevronLeft className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
               </Button>
@@ -735,15 +945,18 @@ export function Analytics({
                 size="sm"
                 variant="ghost"
                 className="h-7 w-7 sm:h-8 sm:w-8 p-0 rounded-lg hover:bg-secondary"
+                aria-label={`Show next ${period === 'month' ? 'month' : 'year'}`}
               >
                 <ChevronRight className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
               </Button>
             </div>
           )}
-          <div className="flex gap-1 p-1 rounded-xl bg-background/80 border border-border/70 shadow-inner w-full sm:w-auto">
+          <div className="flex gap-1 p-1 rounded-xl bg-background/80 border border-border/70 shadow-inner w-full min-[430px]:w-auto">
             <button
+              type="button"
               onClick={() => setProjectionMode('actual')}
-              className={`flex-1 sm:flex-none px-2.5 sm:px-3 py-1.5 text-xs font-medium rounded-lg transition-all whitespace-nowrap ${
+              aria-pressed={projectionMode === 'actual'}
+              className={`flex-1 min-[430px]:flex-none px-2.5 sm:px-3 py-1.5 text-xs font-medium rounded-lg transition-all whitespace-nowrap ${
                 projectionMode === 'actual'
                   ? 'bg-primary text-primary-foreground shadow-md'
                   : 'text-muted-foreground hover:text-foreground hover:bg-secondary/70'
@@ -752,8 +965,10 @@ export function Analytics({
               Actual
             </button>
             <button
+              type="button"
               onClick={() => setProjectionMode('projected')}
-              className={`flex-1 sm:flex-none px-2.5 sm:px-3 py-1.5 text-xs font-medium rounded-lg transition-all whitespace-nowrap ${
+              aria-pressed={projectionMode === 'projected'}
+              className={`flex-1 min-[430px]:flex-none px-2.5 sm:px-3 py-1.5 text-xs font-medium rounded-lg transition-all whitespace-nowrap ${
                 projectionMode === 'projected'
                   ? 'bg-primary text-primary-foreground shadow-md'
                   : 'text-muted-foreground hover:text-foreground hover:bg-secondary/70'
@@ -797,16 +1012,6 @@ export function Analytics({
               />
             )}
 
-            {show('cash-balance-forecast') && isCurrentMonthView && (
-              <PredictionChart
-                transactions={transactionsForAnalytics}
-                accounts={accounts}
-                masterCurrency={masterCurrency}
-                exchangeRates={exchangeRates}
-                convertToMasterCurrency={convertToMasterCurrency}
-              />
-            )}
-
             {show('income-chart') && (
               <IncomeChart
                 data={incomeChartData}
@@ -824,6 +1029,16 @@ export function Analytics({
                 onCategoryChange={setSelectedExpenseCategory}
                 categories={expenseCategories}
                 masterCurrency={masterCurrency}
+              />
+            )}
+
+            {show('income-expenses-trend') && (
+              <IncomeExpensesTrendChart
+                data={incomeExpensesTrendData}
+                masterCurrency={masterCurrency}
+                resolution={incomeExpensesTrendResolution}
+                resolutionOptions={incomeExpensesTrendResolutionOptions}
+                onResolutionChange={setIncomeExpensesTrendResolution}
               />
             )}
 
@@ -852,11 +1067,31 @@ export function Analytics({
             )}
           </div>
 
+          {show('money-map') && (
+            <MoneyMapChart
+              incomeData={incomeCategoryData}
+              expenseData={categoryData}
+              totalIncome={totalIncome}
+              totalExpenses={totalExpenses}
+              masterCurrency={masterCurrency}
+            />
+          )}
+
           {show('top-expenses') && (
             <TopExpensesList
               transactions={filteredTransactions}
               categories={categories}
               masterCurrency={masterCurrency}
+              convertToMasterCurrency={convertToMasterCurrency}
+            />
+          )}
+
+          {show('cash-balance-forecast') && isCurrentMonthView && (
+            <PredictionChart
+              transactions={transactionsForAnalytics}
+              accounts={accounts}
+              masterCurrency={masterCurrency}
+              exchangeRates={exchangeRates}
               convertToMasterCurrency={convertToMasterCurrency}
             />
           )}
@@ -872,6 +1107,9 @@ export function Analytics({
           onSelect={setSelectedOutlookId}
           onLoadMore={loadMoreOutlooks}
           hasMore={Boolean(outlookNextCursor)}
+          transactions={transactions}
+          accounts={accounts}
+          convertToMasterCurrency={convertToMasterCurrency}
         />
       )}
     </div>

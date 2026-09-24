@@ -4,22 +4,21 @@ import { TransactionList } from './components/dashboard-module/TransactionList'
 import { Analytics } from './components/analytics-module/Analytics'
 import { Investments } from './components/investments-module/Investments'
 import { RecurringTransactions } from './components/dashboard-module/RecurringTransactions'
-import { Wallet, TrendingUp, TrendingDown, Activity, BarChart3, List, Settings as SettingsIcon, LineChart, Eye, EyeOff, RefreshCw, PiggyBank } from 'lucide-react'
+import { Wallet, TrendingUp, TrendingDown, Activity, BarChart3, Send, Settings as SettingsIcon, LineChart, Eye, EyeOff, RefreshCw } from 'lucide-react'
 import Settings from './components/settings-module/Settings'
 import { getMasterCurrency, getStoredMenuVisibility, loadNavigationSettings } from './components/settings-module/settings.storage'
 import { MENU_VISIBILITY_EVENT, type MenuKey } from './components/settings-module/constants'
 import { usePrivacy } from './context/PrivacyContext'
 import { startOfMonth, endOfMonth, format } from 'date-fns'
-import { Budget } from './components/budget-module/Budget'
 import { useFinanceData } from './hooks/useFinanceData'
 import { isUpcomingProjectionTransaction } from './lib/transaction-review'
 
-type View = 'dashboard' | 'analytics' | 'settings' | 'investments' | 'recurring' | 'budget'
+type View = 'dashboard' | 'analytics' | 'settings' | 'investments' | 'recurring'
 
 function App() {
   const [view, setView] = useState<View>(() => {
     const saved = localStorage.getItem('finance_last_view') as View | null
-    const validViews: View[] = ['dashboard', 'analytics', 'settings', 'investments', 'recurring', 'budget']
+    const validViews: View[] = ['dashboard', 'analytics', 'settings', 'investments', 'recurring']
     return (saved && validViews.includes(saved)) ? saved : 'dashboard'
   })
 
@@ -30,9 +29,10 @@ function App() {
   const [masterCurrency, setMasterCurrency] = useState('HUF')
   const [showNetWorth, setShowNetWorth] = useState(false)
   const [visibleMenus, setVisibleMenus] = useState<Record<MenuKey, boolean>>(getStoredMenuVisibility)
-  const { privacyMode, togglePrivacyMode, shouldHideInvestment } = usePrivacy()
+  const { privacyMode, togglePrivacyMode, shouldHideNetWorth } = usePrivacy()
 
   const [currentMonth, setCurrentMonth] = useState(new Date())
+  const [isTransactionCalendarOpen, setIsTransactionCalendarOpen] = useState(false)
   const [dateRange, setDateRange] = useState({
     startDate: format(startOfMonth(new Date()), 'yyyy-MM-dd'),
     endDate: format(endOfMonth(new Date()), 'yyyy-MM-dd'),
@@ -48,8 +48,10 @@ function App() {
     allTransactions,
     upcomingTransactions,
     transactionsLoading,
+    allTransactionsLoading,
     categories,
     exchangeRates,
+    exchangeRatesLoading,
     investmentRefreshKey,
     handleDataChange,
   } = useFinanceData(dateRange, masterCurrency)
@@ -83,7 +85,7 @@ function App() {
   }, [])
 
   useEffect(() => {
-    const menuOrder: MenuKey[] = ['dashboard', 'analytics', 'investments', 'recurring', 'budget']
+    const menuOrder: MenuKey[] = ['dashboard', 'analytics', 'investments', 'recurring']
     if (view !== 'settings' && !visibleMenus[view]) {
       const next = menuOrder.find(key => visibleMenus[key]) || 'dashboard'
       navigateTo(next)
@@ -164,17 +166,18 @@ function App() {
   const showSeparateCashCard = hasInvestmentAccounts
 
   const navItems: { key: MenuKey; icon: React.ReactNode; label: string }[] = [
-    { key: 'dashboard', icon: <List className="h-4 w-4 lg:h-3.5 lg:w-3.5" />, label: 'Dashboard' },
+    { key: 'dashboard', icon: <Send className="h-4 w-4 lg:h-3.5 lg:w-3.5" />, label: 'Dashboard' },
     { key: 'analytics', icon: <BarChart3 className="h-4 w-4 lg:h-3.5 lg:w-3.5" />, label: 'Analytics' },
     { key: 'investments', icon: <LineChart className="h-4 w-4 lg:h-3.5 lg:w-3.5" />, label: 'Investments' },
     { key: 'recurring', icon: <RefreshCw className="h-4 w-4 lg:h-3.5 lg:w-3.5" />, label: 'Recurring' },
-    { key: 'budget', icon: <PiggyBank className="h-4 w-4 lg:h-3.5 lg:w-3.5" />, label: 'Budget' },
   ]
 
   return (
-    <div className="min-h-screen bg-background pb-16 lg:pb-0">
-      {/* Subtle gradient overlay */}
-      <div className="fixed inset-0 bg-gradient-to-br from-primary/5 via-transparent to-transparent pointer-events-none" />
+    <div className="min-h-screen bg-canvas pb-16 lg:pb-0">
+      {/* Keep Analytics visually neutral so its persistent control dock blends into the page. */}
+      {view !== 'analytics' && (
+        <div className="fixed inset-0 bg-gradient-to-br from-primary/5 via-transparent to-transparent pointer-events-none" />
+      )}
 
       <div className="relative">
         {/* Header */}
@@ -278,8 +281,8 @@ function App() {
                         <span className="text-xs sm:text-lg text-destructive">Error loading data</span>
                       ) : totalNetWorth !== null ? (
                         <>
-                          <span className={privacyMode === 'hidden' || shouldHideInvestment() ? 'select-none' : ''}>
-                            {(privacyMode === 'hidden' || shouldHideInvestment()) && !showNetWorth
+                          <span className={shouldHideNetWorth() ? 'select-none' : ''}>
+                            {shouldHideNetWorth() && !showNetWorth
                               ? '••••••'
                               : totalNetWorth.toLocaleString('hu-HU', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
                           </span>
@@ -289,7 +292,7 @@ function App() {
                         <div className="h-6 sm:h-10 w-20 sm:w-32 bg-muted animate-pulse rounded" />
                       )}
                     </div>
-                    {(privacyMode === 'hidden' || shouldHideInvestment()) && totalNetWorth !== null && !investmentError && (
+                    {shouldHideNetWorth() && totalNetWorth !== null && !investmentError && (
                       <button
                         onClick={() => setShowNetWorth(!showNetWorth)}
                         className="ml-1 sm:ml-2 p-1 sm:p-1.5 rounded-lg hover:bg-primary/10 transition-colors"
@@ -307,8 +310,8 @@ function App() {
                     {investmentError ? investmentError : projectedNetWorth !== null && pendingNetWorthDelta !== 0 ? (
                       <>
                         After all upcoming{' '}
-                        <span className={privacyMode === 'hidden' || shouldHideInvestment() ? 'select-none' : ''}>
-                          {(privacyMode === 'hidden' || shouldHideInvestment()) && !showNetWorth
+                        <span className={shouldHideNetWorth() ? 'select-none' : ''}>
+                          {shouldHideNetWorth() && !showNetWorth
                             ? '••••••'
                             : projectedNetWorth.toLocaleString('hu-HU', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
                         </span>{' '}
@@ -321,11 +324,11 @@ function App() {
 
               {/* Cash Balance Card */}
               {showSeparateCashCard && (
-                <div className="group relative overflow-hidden rounded-xl sm:rounded-2xl border border-border/50 bg-card p-3 sm:p-6 shadow-xl hover:border-emerald-500/30 transition-colors">
+                <div className="group relative overflow-hidden rounded-xl sm:rounded-2xl border border-border/50 bg-card p-3 sm:p-6 shadow-xl hover:border-primary/30 transition-colors">
                   <div className="flex items-center justify-between mb-1.5 sm:mb-4">
                     <span className="text-[10px] sm:text-sm font-medium text-muted-foreground">Cash</span>
-                    <div className="h-6 w-6 sm:h-8 sm:w-8 rounded-lg bg-emerald-500/10 flex items-center justify-center">
-                      <Wallet className="h-3 w-3 sm:h-4 sm:w-4 text-emerald-500" />
+                    <div className="h-6 w-6 sm:h-8 sm:w-8 rounded-lg bg-primary/10 flex items-center justify-center">
+                      <Wallet className="h-3 w-3 sm:h-4 sm:w-4 text-primary" />
                     </div>
                   </div>
                   <div className="text-lg sm:text-4xl font-bold tracking-tight text-foreground leading-tight">
@@ -425,10 +428,12 @@ function App() {
 
           {view === 'dashboard' ? (
             <div className="grid gap-3 sm:gap-6 grid-cols-1 lg:grid-cols-12">
-              <div className="lg:col-span-4">
-                <AccountList accounts={accounts} onAccountAdded={handleDataChange} loading={transactionsLoading} />
-              </div>
-              <div className="lg:col-span-8">
+              {!isTransactionCalendarOpen && (
+                <div className="lg:col-span-4">
+                  <AccountList accounts={accounts} onAccountAdded={handleDataChange} loading={transactionsLoading} />
+                </div>
+              )}
+              <div className={isTransactionCalendarOpen ? 'lg:col-span-12' : 'lg:col-span-8'}>
                 <TransactionList
                   transactions={transactions}
                   upcomingTransactions={upcomingTransactions}
@@ -445,17 +450,26 @@ function App() {
                       endDate: format(endOfMonth(newMonth), 'yyyy-MM-dd'),
                     })
                   }}
+                  convertToMasterCurrency={convertToMasterCurrency}
+                  masterCurrency={masterCurrency}
+                  onCalendarViewChange={setIsTransactionCalendarOpen}
                 />
               </div>
             </div>
           ) : view === 'analytics' ? (
-            <Analytics transactions={allTransactions} upcomingTransactions={upcomingTransactions} categories={categories} accounts={accounts} masterCurrency={masterCurrency} loading={transactionsLoading} />
+            <Analytics
+              transactions={allTransactions}
+              upcomingTransactions={upcomingTransactions}
+              categories={categories}
+              accounts={accounts}
+              masterCurrency={masterCurrency}
+              exchangeRates={exchangeRates}
+              loading={transactionsLoading || allTransactionsLoading || exchangeRatesLoading}
+            />
           ) : view === 'investments' ? (
             <Investments key={investmentRefreshKey} />
           ) : view === 'recurring' ? (
             <RecurringTransactions accounts={accounts} categories={categories} dataLoading={transactionsLoading} />
-          ) : view === 'budget' ? (
-            <Budget accounts={accounts} categories={categories} transactions={allTransactions} masterCurrency={masterCurrency} />
           ) : (
             <Settings />
           )}

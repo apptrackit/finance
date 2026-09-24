@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { memo, useMemo } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '../common/card'
 import { TrendingUp } from 'lucide-react'
 import {
@@ -200,7 +200,7 @@ function predictFutureBalance(
   return predictions
 }
 
-export function PredictionChart({
+export const PredictionChart = memo(function PredictionChart({
   transactions,
   accounts,
   masterCurrency,
@@ -406,4 +406,4 @@ export function PredictionChart({
       </CardContent>
     </Card>
   )
-}
+})

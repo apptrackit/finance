@@ -5,6 +5,7 @@
   --color-input: hsl(var(--input));
   --color-ring: hsl(var(--ring));
   --color-background: hsl(var(--background));
+  --color-canvas: hsl(var(--canvas));
   --color-foreground: hsl(var(--foreground));
 
   --color-primary: hsl(var(--primary));
@@ -60,25 +61,27 @@
 
 /* Dark theme - Premium Finance Aesthetic */
 :root {
-  --background: 222 47% 6%;
+  /* Canvas: #000610. All application surfaces use #010E21. */
+  --canvas: 217.5 100% 3.137%;
+  --background: 215.625 94.118% 6.667%;
   --foreground: 210 40% 98%;
   
-  --card: 222 47% 8%;
+  --card: 215.625 94.118% 6.667%;
   --card-foreground: 210 40% 98%;
   
-  --popover: 222 47% 8%;
+  --popover: 215.625 94.118% 6.667%;
   --popover-foreground: 210 40% 98%;
   
-  --primary: 142 76% 46%;
+  --primary: 215.111 63.38% 58.235%;
   --primary-foreground: 144 80% 10%;
   
-  --secondary: 217 33% 17%;
+  --secondary: 215.625 94.118% 6.667%;
   --secondary-foreground: 210 40% 98%;
   
-  --muted: 217 33% 17%;
+  --muted: 215.625 94.118% 6.667%;
   --muted-foreground: 215 20% 55%;
   
-  --accent: 217 33% 20%;
+  --accent: 215.625 94.118% 6.667%;
   --accent-foreground: 210 40% 98%;
   
   --destructive: 0 72% 51%;
@@ -87,126 +90,68 @@
   --success: 142 76% 46%;
   --success-foreground: 144 80% 10%;
   
-  --border: 217 33% 17%;
-  --input: 217 33% 17%;
+  --border: 213.75 80% 11.765%;
+  --input: 215.625 94.118% 6.667%;
   --ring: 142 76% 46%;
   
   --radius: 0.75rem;
-}
-
-/* Ocean theme — deep navy with cyan */
-.theme-ocean {
-  --background: 220 50% 5%;
-  --foreground: 200 40% 98%;
-
-  --card: 220 50% 7%;
-  --card-foreground: 200 40% 98%;
-
-  --popover: 220 50% 7%;
-  --popover-foreground: 200 40% 98%;
-
-  --primary: 189 94% 43%;
-  --primary-foreground: 189 80% 10%;
-
-  --secondary: 215 40% 14%;
-  --secondary-foreground: 200 40% 98%;
-
-  --muted: 215 40% 14%;
-  --muted-foreground: 215 25% 52%;
-
-  --accent: 215 40% 17%;
-  --accent-foreground: 200 40% 98%;
-
-  --destructive: 0 72% 51%;
-  --destructive-foreground: 200 40% 98%;
-
-  --success: 160 60% 45%;
-  --success-foreground: 160 80% 10%;
-
-  --border: 215 40% 14%;
-  --input: 215 40% 14%;
-  --ring: 189 94% 43%;
-}
-
-/* Sunset theme — warm dark with amber */
-.theme-sunset {
-  --background: 20 35% 5%;
-  --foreground: 35 40% 97%;
-
-  --card: 20 35% 7%;
-  --card-foreground: 35 40% 97%;
-
-  --popover: 20 35% 7%;
-  --popover-foreground: 35 40% 97%;
-
-  --primary: 25 95% 53%;
-  --primary-foreground: 25 80% 10%;
-
-  --secondary: 20 28% 15%;
-  --secondary-foreground: 35 40% 97%;
-
-  --muted: 20 28% 15%;
-  --muted-foreground: 20 15% 52%;
-
-  --accent: 20 28% 18%;
-  --accent-foreground: 35 40% 97%;
-
-  --destructive: 0 72% 51%;
-  --destructive-foreground: 35 40% 97%;
-
-  --success: 142 60% 45%;
-  --success-foreground: 144 80% 10%;
-
-  --border: 20 28% 15%;
-  --input: 20 28% 15%;
-  --ring: 25 95% 53%;
-}
-
-/* Violet theme — dark purple atmosphere */
-.theme-violet {
-  --background: 260 35% 5%;
-  --foreground: 270 40% 98%;
-
-  --card: 260 35% 7%;
-  --card-foreground: 270 40% 98%;
-
-  --popover: 260 35% 7%;
-  --popover-foreground: 270 40% 98%;
-
-  --primary: 258 90% 66%;
-  --primary-foreground: 260 80% 10%;
-
-  --secondary: 255 28% 15%;
-  --secondary-foreground: 270 40% 98%;
-
-  --muted: 255 28% 15%;
-  --muted-foreground: 255 15% 52%;
-
-  --accent: 255 28% 18%;
-  --accent-foreground: 270 40% 98%;
-
-  --destructive: 0 72% 51%;
-  --destructive-foreground: 270 40% 98%;
-
-  --success: 142 60% 45%;
-  --success-foreground: 144 80% 10%;
-
-  --border: 255 28% 15%;
-  --input: 255 28% 15%;
-  --ring: 258 90% 66%;
 }
 
 @layer base {
   * {
     @apply border-border;
   }
+
+  /* Recharts makes each SVG focusable for keyboard navigation. The browser's
+     default SVG focus ring appears as a distracting white/blue rectangle after
+     a chart is clicked, so chart interaction keeps its tooltip/cursor instead. */
+  .recharts-wrapper:focus,
+  .recharts-wrapper:focus-visible,
+  .recharts-surface:focus,
+  .recharts-surface:focus-visible {
+    outline: none !important;
+  }
+
+  /* Recharts moves its accessible tooltip layer into a focusable SVG group.
+     That group receives the native blue/white focus rectangle after a click. */
+  .recharts-surface [id^='recharts-zindex-']:focus,
+  .recharts-surface [id^='recharts-zindex-']:focus-visible {
+    outline: none !important;
+  }
+
   body {
-    @apply bg-background text-foreground antialiased;
+    @apply bg-canvas text-foreground antialiased;
     font-feature-settings: "rlig" 1, "calt" 1;
   }
 }
 
 @layer utilities {
+  /* Shared 1px outline for every boxed interface surface. */
+  :where(.border, .border-2, .border-\[0\.5px\]) {
+    border-width: 1px !important;
+    border-color: #061B36 !important;
+  }
+
+  :where(.border-t, .border-y) {
+    border-top-width: 1px !important;
+    border-top-color: #061B36 !important;
+  }
+
+  :where(.border-r, .border-x) {
+    border-right-width: 1px !important;
+    border-right-color: #061B36 !important;
+  }
+
+  :where(.border-b, .border-y) {
+    border-bottom-width: 1px !important;
+    border-bottom-color: #061B36 !important;
+  }
+
+  :where(.border-l, .border-x) {
+    border-left-width: 1px !important;
+    border-left-color: #061B36 !important;
+  }
+
   .glass {
     background: linear-gradient(
       135deg,
@@ -214,7 +159,7 @@
       hsl(var(--card) / 0.4) 100%
     );
     backdrop-filter: blur(20px);
-    border: 1px solid hsl(var(--border) / 0.5);
+    border: 1px solid #061B36;
   }
   
   .gradient-border {

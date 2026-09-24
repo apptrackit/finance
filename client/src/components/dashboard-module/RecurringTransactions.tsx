@@ -410,7 +410,7 @@ export function RecurringTransactions({
     const accountImpact: Record<string, { debits: number; credits: number; currency: string }> = {}
     let totalExpenses = 0
     let totalIncome = 0
-    let nextTransactions: Array<{ date: Date; description: string; amount: number; account: string }> = []
+    const nextTransactions: Array<{ date: Date; description: string; amount: number; account: string }> = []
 
     // Initialize account impact
     cashAccounts.forEach(account => {
@@ -430,7 +430,7 @@ export function RecurringTransactions({
       })
       
       const dates: Date[] = []
-      let currentDate = new Date(today)
+      const currentDate = new Date(today)
       let occurrenceCount = 0
 
       while (currentDate <= next30Days) {
@@ -615,7 +615,7 @@ export function RecurringTransactions({
       }
       
       // Add all days in the 30-day range
-      let currentDate = new Date(startDate)
+      const currentDate = new Date(startDate)
       let lastMonth = -1
       
       while (currentDate <= endDate) {

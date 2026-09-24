@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { FinanceService } from './finance-service'
-import type { AccountRow, BudgetRow, CategoryRow, Env, InvestmentTransactionRow, RecurringScheduleRow, TransactionRow } from './types'
+import type { AccountRow, CategoryRow, Env, InvestmentTransactionRow, RecurringScheduleRow, TransactionRow } from './types'
 
 const accounts: AccountRow[] = [
   { id: 'cash', name: 'Cash', type: 'cash', balance: 1000, currency: 'HUF' },
@@ -22,7 +22,6 @@ const transactions: TransactionRow[] = [
   { id: 'pending', account_id: 'cash', category_id: 'food', amount: -75, date: '2026-07-20', status: 'pending', pending_kind: 'upcoming' },
 ]
 
-const budgets: BudgetRow[] = [{ id: 'monthly', name: 'Monthly', amount: 300, period: 'monthly', start_date: '2026-07-01', end_date: '2026-07-31', account_scope: 'all', category_scope: 'all', currency: 'HUF', created_at: 0, updated_at: 0 }]
 const schedules: RecurringScheduleRow[] = [{ id: 'subscription', type: 'transaction', frequency: 'monthly', day_of_month: 20, account_id: 'cash', category_id: 'food', amount: -50, description: 'Streaming plan', is_active: 1, created_at: Date.UTC(2026, 5, 1) }]
 const investmentTransactions: InvestmentTransactionRow[] = []
 
@@ -36,9 +35,6 @@ function fakeDb() {
         async all<T>() {
           if (sql.includes('FROM accounts')) return { results: accounts as T[] }
           if (sql.includes('FROM categories')) return { results: categories as T[] }
-          if (sql.includes('FROM budgets')) return { results: budgets as T[] }
-          if (sql.includes('FROM budget_accounts')) return { results: [] as T[] }
-          if (sql.includes('FROM budget_categories')) return { results: [] as T[] }
           if (sql.includes('FROM recurring_schedules')) return { results: schedules as T[] }
           if (sql.includes('FROM investment_transactions it')) {
             const limit = Number(bindings.at(-2)); const offset = Number(bindings.at(-1))
@@ -150,13 +146,11 @@ describe('FinanceService read-only calculations', () => {
   it('excludes MCP review drafts from every projection while retaining normal upcoming transactions', async () => {
     transactions.push({ id: 'mcp-review', account_id: 'cash', category_id: 'food', amount: -900, date: '2026-07-20', status: 'pending', pending_kind: 'mcp_review', review_source: 'chatgpt_mcp' })
     try {
-      const [cashflow, budget, recurring] = await Promise.all([
+      const [cashflow, recurring] = await Promise.all([
         service.cashflowTrend({ start_date: '2026-07-01', end_date: '2026-07-31', interval: 'month', include_projected: true, currency: 'HUF' }),
-        service.budgetStatus({ as_of: '2026-07-15', currency: 'HUF' }),
         service.recurringForecast({ start_date: '2026-07-01', end_date: '2026-08-31', currency: 'HUF' }),
       ])
       expect(cashflow.series[0].projected_expenses).toBe(75)
-      expect(budget.budgets[0].pending_spend).toBe(75)
       expect(recurring.summary.pending_expenses).toBe(75)
     } finally {
       transactions.pop()
@@ -176,11 +170,6 @@ describe('FinanceService read-only calculations', () => {
       ['2026-07-06', 1100],
       ['2026-07-07', 1000],
     ])
-  })
-
-  it('computes budget risk from posted, pending, and pace data', async () => {
-    const result = await service.budgetStatus({ as_of: '2026-07-15', currency: 'HUF' })
-    expect(result.budgets).toEqual([expect.objectContaining({ spent: 200, pending_spend: 75, risk_status: 'at_risk' })])
   })
 
   it('expands recurring schedules into a bounded forecast calendar', async () => {

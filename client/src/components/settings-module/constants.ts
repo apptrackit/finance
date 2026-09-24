@@ -29,12 +29,11 @@ export const STORAGE_KEY = 'finance_master_currency'
 export const MENU_STORAGE_KEY = 'finance_visible_menus'
 export const MENU_VISIBILITY_EVENT = 'finance:menu-visibility'
 
-export type MenuKey = 'dashboard' | 'analytics' | 'investments' | 'recurring' | 'budget'
+export type MenuKey = 'dashboard' | 'analytics' | 'investments' | 'recurring'
 
 export const DEFAULT_MENU_VISIBILITY: Record<MenuKey, boolean> = {
   dashboard: true,
   analytics: true,
   investments: true,
-  recurring: true,
-  budget: true
+  recurring: true
 }

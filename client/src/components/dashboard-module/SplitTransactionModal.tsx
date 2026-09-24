@@ -99,7 +99,7 @@ export function SplitTransactionModal({
   }
 
   const updateSplitAmount = (id: string, value: number) => {
-    // Ensure the amount doesn't exceed remaining budget
+    // Ensure the amount doesn't exceed the remaining transaction total.
     const otherSplitsTotal = splits
       .filter(s => s.id !== id)
       .reduce((sum, s) => sum + (parseAmount(s.amount) || 0), 0)

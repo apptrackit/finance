@@ -1,5 +1,5 @@
 export type AuditAction = 'CREATE' | 'UPDATE' | 'DELETE'
-export type AuditEntity = 'account' | 'transaction' | 'category' | 'budget' | 'recurring_schedule' | 'investment_transaction' | 'financial_outlook_snapshot'
+export type AuditEntity = 'account' | 'transaction' | 'category' | 'recurring_schedule' | 'investment_transaction' | 'financial_outlook_snapshot'
 
 export interface AuditLog {
   id: string

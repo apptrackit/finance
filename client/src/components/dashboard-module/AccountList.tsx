@@ -5,7 +5,7 @@ import { Label } from '../common/label'
 import { Select } from '../common/select'
 import { Card, CardContent, CardHeader, CardTitle } from '../common/card'
 import { Modal } from '../common/modal'
-import { Plus, X, Wallet, Building, Pencil, Trash2, Check, Search, Lock, LockOpen, CircleCheck, CircleX, ChevronDown, Loader2 } from 'lucide-react'
+import { Plus, X, Wallet, CreditCard, Pencil, Trash2, Check, Search, Lock, LockOpen, CircleCheck, CircleX, ChevronDown, Loader2 } from 'lucide-react'
 import { API_BASE_URL, apiFetch } from '../../config'
 import { usePrivacy } from '../../context/PrivacyContext'
 import { useAlert } from '../../context/AlertContext'
@@ -216,7 +216,15 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
     return { cashPercentages, investmentPercentages, totalCashUSD, totalInvestmentUSD }
   }
 
-  const { cashPercentages, investmentPercentages } = calculatePercentages()
+  const { cashPercentages, investmentPercentages, totalCashUSD, totalInvestmentUSD } = calculatePercentages()
+  const totalPortfolioUSD = totalCashUSD + totalInvestmentUSD
+  const cashAllocation = totalPortfolioUSD > 0 ? (totalCashUSD / totalPortfolioUSD) * 100 : 0
+  const investmentAllocation = totalPortfolioUSD > 0 ? (totalInvestmentUSD / totalPortfolioUSD) * 100 : 0
+  const formatHufTotal = (usdValue: number) => {
+    const hufRate = exchangeRates.HUF
+    if (!hufRate) return null
+    return `${Math.round(usdValue * hufRate).toLocaleString('hu-HU')} HUF`
+  }
 
   const resetForm = () => {
     setFormData({ name: '', type: 'cash', balance: '', currency: 'HUF', quote_currency: 'USD', symbol: '', asset_type: 'stock', adjustWithTransaction: false, exclude_from_net_worth: false, exclude_from_cash_balance: false })
@@ -588,7 +596,7 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
           onClick={() => setIsCollapsed(c => !c)}
         >
           <div className="h-7 w-7 sm:h-8 sm:w-8 rounded-lg bg-secondary flex items-center justify-center">
-            <Building className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-muted-foreground" />
+            <CreditCard className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-muted-foreground" />
           </div>
           <CardTitle className="text-sm sm:text-base">Accounts</CardTitle>
           <ChevronDown className={`lg:hidden h-4 w-4 text-muted-foreground transition-transform duration-300 ${isCollapsed ? '' : 'rotate-180'}`} />
@@ -767,7 +775,13 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
         {/* Cash Accounts Section */}
         {accounts.filter(a => a.type === 'cash').length > 0 && (
           <div className="space-y-2 sm:space-y-3 mb-4 sm:mb-6">
-            <h4 className="text-[10px] sm:text-xs font-semibold text-muted-foreground uppercase tracking-wider px-1">Cash Accounts</h4>
+            <div className="flex items-center justify-between px-1">
+              <h4 className="text-[10px] sm:text-xs font-semibold text-muted-foreground uppercase tracking-wider">Cash Accounts</h4>
+              <div className="flex items-center gap-1.5">
+                {privacyMode === 'hidden' ? <span className="text-[9px] font-medium text-muted-foreground sm:text-[10px]">••••••</span> : formatHufTotal(totalCashUSD) && <span className="whitespace-nowrap text-[9px] font-medium tabular-nums text-muted-foreground sm:text-[10px]">{formatHufTotal(totalCashUSD)}</span>}
+                <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[9px] font-semibold normal-case tracking-normal text-primary sm:text-[10px]">{cashAllocation.toFixed(0)}% total</span>
+              </div>
+            </div>
             <div className="space-y-1.5 sm:space-y-2">
               {accounts.filter(a => a.type === 'cash').sort((a, b) => {
                 // Convert balances to USD for comparison
@@ -786,7 +800,7 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
                     className={`group relative overflow-hidden rounded-lg sm:rounded-xl transition-all duration-300 cursor-pointer ${
                       isExcluded
                         ? 'bg-gradient-to-br from-gray-500/30 to-gray-600/20 border border-gray-500/40 hover:border-gray-500/60 opacity-80'
-                        : 'bg-gradient-to-br from-emerald-500/10 to-emerald-500/5 border border-emerald-500/20 hover:border-emerald-500/40'
+                        : 'bg-gradient-to-br from-primary/10 to-primary/5 border border-primary/20 hover:border-primary/40'
                     }`}
                     onClick={() => {
                       // On mobile, first click shows options, hover works on desktop
@@ -798,7 +812,7 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
                     {/* Percentage bar background (hide if excluded) */}
                     {!isExcluded && (
                       <div 
-                        className="absolute inset-y-0 left-0 bg-gradient-to-r from-emerald-500/20 to-emerald-500/10 transition-all duration-500"
+                        className="absolute inset-y-0 left-0 bg-gradient-to-r from-primary/20 to-primary/10 transition-all duration-500"
                         style={{ width: `${percentage}%` }}
                       />
                     )}
@@ -808,7 +822,7 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
                         <div className={`h-9 w-9 sm:h-12 sm:w-12 rounded-lg sm:rounded-xl flex items-center justify-center shadow-lg ${
                           isExcluded
                             ? 'bg-gradient-to-br from-gray-600 to-gray-700 shadow-gray-600/30'
-                            : 'bg-gradient-to-br from-emerald-500 to-emerald-600 shadow-emerald-500/25'
+                            : 'bg-gradient-to-br from-primary to-primary/80 shadow-primary/25'
                         }`}>
                           <Wallet className="h-4 w-4 sm:h-6 sm:w-6 text-white" />
                         </div>
@@ -816,7 +830,7 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
                           <div className="flex items-center gap-1.5 sm:gap-2 mb-0.5 sm:mb-1">
                             <p className="font-semibold text-sm sm:text-base truncate">{account.name}</p>
                             {!isExcluded && (
-                              <span className="inline-flex items-center justify-center h-4 sm:h-5 px-1.5 sm:px-2 rounded-full bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-[10px] sm:text-xs font-medium">
+                              <span className="inline-flex items-center justify-center h-4 sm:h-5 px-1.5 sm:px-2 rounded-full bg-primary/20 text-primary text-[10px] sm:text-xs font-medium">
                                 {percentage.toFixed(1)}%
                               </span>
                             )}
@@ -840,7 +854,7 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
                           variant="ghost"
                           className={`h-10 w-10 ${
                             account.exclude_from_cash_balance && account.exclude_from_net_worth
-                              ? 'text-emerald-500 hover:bg-emerald-500/20'
+                              ? 'text-primary hover:bg-primary/20'
                               : 'text-red-500 hover:bg-red-500/20'
                           } ${
                             isLocked(account.id) ? 'opacity-50 cursor-not-allowed' : ''
@@ -871,7 +885,7 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
                           size="icon"
                           variant="ghost"
                           disabled={lockingId === account.id}
-                          className={`h-10 w-10 ${isLocked(account.id) ? 'text-amber-500 hover:bg-amber-500/20' : 'hover:bg-emerald-500/20'}`}
+                          className={`h-10 w-10 ${isLocked(account.id) ? 'text-amber-500 hover:bg-amber-500/20' : 'hover:bg-primary/20'}`}
                           onClick={(e) => {
                             e.stopPropagation()
                             if (window.innerWidth < 768 && activeAccountId !== account.id) {
@@ -890,7 +904,7 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
                               variant="ghost"
                               title="Edit account"
                               aria-label="Edit account"
-                              className="h-10 w-10 hover:bg-emerald-500/20"
+                              className="h-10 w-10 hover:bg-primary/20"
                               onClick={(e) => {
                                 e.stopPropagation()
                                 if (window.innerWidth < 768 && activeAccountId !== account.id) {
@@ -929,7 +943,13 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
         {/* Investment Accounts Section */}
         {accounts.filter(a => a.type === 'investment').length > 0 && (
           <div className="space-y-2 sm:space-y-3">
-            <h4 className="text-[10px] sm:text-xs font-semibold text-muted-foreground uppercase tracking-wider px-1">Investment Accounts</h4>
+            <div className="flex items-center justify-between px-1">
+              <h4 className="text-[10px] sm:text-xs font-semibold text-muted-foreground uppercase tracking-wider">Investment Accounts</h4>
+              <div className="flex items-center gap-1.5">
+                {privacyMode === 'hidden' ? <span className="text-[9px] font-medium text-muted-foreground sm:text-[10px]">••••••</span> : formatHufTotal(totalInvestmentUSD) && <span className="whitespace-nowrap text-[9px] font-medium tabular-nums text-muted-foreground sm:text-[10px]">{formatHufTotal(totalInvestmentUSD)}</span>}
+                <span className="rounded-full bg-violet-500/10 px-1.5 py-0.5 text-[9px] font-semibold normal-case tracking-normal text-violet-400 sm:text-[10px]">{investmentAllocation.toFixed(0)}% total</span>
+              </div>
+            </div>
             <div className="space-y-1.5 sm:space-y-2">
               {accounts.filter(a => a.type === 'investment').sort((a, b) => {
                 // Calculate USD value for each investment account

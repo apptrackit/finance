@@ -8,7 +8,6 @@ import { InvestmentTransactionController } from '../controllers/investment-trans
 import { TransferController } from '../controllers/transfer.controller'
 import { DashboardController } from '../controllers/dashboard.controller'
 import { MarketDataController } from '../controllers/market-data.controller'
-import { BudgetController } from '../controllers/budget.controller'
 import { FinancialOutlookController } from '../controllers/financial-outlook.controller'
 
 export function setupRoutes(
@@ -21,7 +20,6 @@ export function setupRoutes(
     transferController: TransferController
     dashboardController: DashboardController
     marketDataController: MarketDataController
-    budgetController: BudgetController
     financialOutlookController: FinancialOutlookController
   }
 ) {
@@ -33,7 +31,6 @@ export function setupRoutes(
     transferController,
     dashboardController,
     marketDataController,
-    budgetController,
     financialOutlookController
   } = controllers
 
@@ -89,10 +86,4 @@ export function setupRoutes(
   app.get('/market/quote', (c) => marketDataController.quote(c))
   app.get('/market/chart', (c) => marketDataController.chart(c))
 
-  // Budgets
-  app.get('/budgets', (c) => budgetController.getAll(c))
-  app.get('/budgets/:id', (c) => budgetController.getById(c))
-  app.post('/budgets', (c) => budgetController.create(c))
-  app.put('/budgets/:id', (c) => budgetController.update(c))
-  app.delete('/budgets/:id', (c) => budgetController.delete(c))
 }
