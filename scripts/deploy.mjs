@@ -153,16 +153,56 @@ export function runCommand(command, args, { cwd, env, signal } = {}) {
   })
 }
 
+export function createDeploymentReporter(log, { color = false } = {}) {
+  const paint = (code, value) => color ? `\u001b[${code}m${value}\u001b[0m` : value
+  const rule = paint('2', '─'.repeat(46))
+  return {
+    title() {
+      log('')
+      log(paint('1;36', 'Finance deployment'))
+      log(rule)
+    },
+    detail(label, value) { log(`  ${label.padEnd(12)} ${value}`) },
+    section(name) {
+      log('')
+      log(paint('1;36', name))
+      log(rule)
+    },
+    start(label) { log(`  ${paint('36', '→')} ${label}…`) },
+    success(label, elapsed) {
+      const duration = elapsed === undefined ? '' : paint('2', ` (${(elapsed / 1000).toFixed(1)}s)`)
+      log(`  ${paint('32', '✓')} ${label}${duration}`)
+    },
+    failure(label) { log(`  ${paint('31', '✗')} ${label} failed`) },
+    note(message) { log(`  ${message}`) },
+    finish() {
+      log('')
+      log(rule)
+      log(paint('1;32', '✓ Deployment complete'))
+    },
+  }
+}
+
 // All subprocesses go through run, so scope/failure tests never invoke Cloudflare.
 export async function deploy(options, { root = repositoryRoot, run = runCommand, ask = prompt, log = console.log, signal } = {}) {
   const configPath = join(root, '.deploy-config')
   const config = parseConfig(await optionalFile(configPath))
+  const report = createDeploymentReporter(log, {
+    color: log === console.log && Boolean(process.stdout.isTTY && process.env.NO_COLOR === undefined && process.env.TERM !== 'dumb'),
+  })
   let temporary
   const redact = text => config.API_SECRET ? String(text).replaceAll(config.API_SECRET, '[redacted]') : String(text)
   const command = async (label, executable, args, extra = {}) => {
-    log(label)
-    try { return await run(executable, args, { cwd: root, signal, ...extra }) }
-    catch (error) { throw new Error(`${label} failed.\n${redact(error.message)}`) }
+    report.start(label)
+    const started = Date.now()
+    try {
+      const result = await run(executable, args, { cwd: root, signal, ...extra })
+      report.success(label, Date.now() - started)
+      return result
+    } catch (error) {
+      report.failure(label)
+      throw new Error(`${label} failed.\n${redact(error.message)}`)
+    }
   }
   const wrangler = (label, args) => command(label, process.execPath, [join(root, 'node_modules/wrangler/bin/wrangler.js'), ...args])
   const npm = (label, args, extra) => process.env.npm_execpath
@@ -181,14 +221,19 @@ export async function deploy(options, { root = repositoryRoot, run = runCommand,
       deployMcp = /^y(es)?$/i.test(await ask('Include MCP in full deployments? (y/N)', { signal }))
     }
     const plan = deploymentPlan(options, deployMcp)
-    log(`Deployment scope: ${Object.entries(plan).filter(([, enabled]) => enabled).map(([name]) => name).join(', ')}`)
-    if ((plan.api || plan.mcp) && !plan.migrations) log('Database: verify migration history only; no migrations will be applied.')
-    if (plan.client) log('Pages destination: main (production).')
+    const selectedTargets = [['migrations', 'Migrations'], ['api', 'API'], ['mcp', 'MCP'], ['client', 'Client']]
+      .filter(([name]) => plan[name]).map(([, label]) => label).join(' · ')
+    report.title()
+    report.detail('Scope', selectedTargets)
+    if (plan.api || plan.mcp || plan.migrations) report.detail('Database', plan.migrations ? 'Apply pending migrations' : 'Verify migration history only')
+    if (plan.client) report.detail('Pages', 'main (production)')
     if (options.plan) {
-      if (options.target === 'all' && deployMcp === undefined) log('MCP preference is unset; the first full deploy will ask whether to include it.')
+      if (options.target === 'all' && deployMcp === undefined) report.note('MCP preference is unset; the first full deploy will ask whether to include it.')
+      report.note('Plan only: no checks or deployments run.')
       return plan
     }
 
+    report.section('Local checks')
     const branch = (await command('Checking branch', 'git', ['rev-parse', '--abbrev-ref', 'HEAD'])).trim()
     if (branch !== 'main' && !options.yes && !/^y(es)?$/i.test(await ask(`Deploy branch ${branch} to production? (y/N)`, { signal }))) {
       throw new Error('Deployment cancelled.')
@@ -263,6 +308,7 @@ export async function deploy(options, { root = repositoryRoot, run = runCommand,
     }
     const buildOrigin = config.API_URL || 'https://finance-api.invalid'
     if (plan.client) await buildClient(buildOrigin)
+    report.section(plan.api || plan.mcp || plan.migrations ? 'Cloudflare and database' : 'Cloudflare checks')
     await wrangler('Checking Cloudflare authentication', ['whoami', '--json'])
 
     if (plan.api || plan.mcp || plan.migrations) {
@@ -288,9 +334,10 @@ export async function deploy(options, { root = repositoryRoot, run = runCommand,
           await writeFile(migrationFile, `${sql}\n;\nINSERT INTO migration_history (id, migration_name) VALUES ('${name}', '${name}');\n`, { mode: 0o600 })
           await d1(`Applying ${name}`, ['--file', migrationFile])
         }
-      } else log('Migrations: up to date.')
+      } else report.success('Migrations up to date')
     }
 
+    if (plan.api || plan.mcp || plan.client) report.section('Deployment')
     if (plan.api) {
       const secrets = await writeJson('api-secrets.json', { API_SECRET: config.API_SECRET, ALLOWED_ORIGINS: config.ALLOWED_ORIGINS })
       const result = await wrangler('Deploying API', ['deploy', '--minify', '--no-autoconfig', '--config', apiConfig, '--tsconfig', join(root, 'api/tsconfig.json'), '--secrets-file', secrets])
@@ -307,7 +354,7 @@ export async function deploy(options, { root = repositoryRoot, run = runCommand,
       if (config.API_URL !== buildOrigin) await buildClient(config.API_URL)
       await wrangler('Deploying client', ['pages', 'deploy', join(root, 'client/dist'), '--project-name', config.PROJECT_NAME, '--branch', 'main'])
     }
-    log('Deployment complete.')
+    report.finish()
     return plan
   } catch (error) {
     throw new Error(redact(error.message))
