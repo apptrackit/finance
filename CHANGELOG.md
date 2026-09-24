@@ -1,12 +1,12 @@
 # Changelog
 
-This file covers every published [GitHub release](https://github.com/apptrackit/finance/releases) through **v2.11**, plus the pending v3.0 release, newest first. Release dates are GitHub publication dates in UTC. Entries summarize the release notes, linked pull requests, and changes between tags.
+This file covers every published [GitHub release](https://github.com/apptrackit/finance/releases) through **v3.0**, newest first. Release dates are GitHub publication dates in UTC. Entries summarize the release notes, linked pull requests, and changes between tags.
 
-Intermediate package/UI version bumps are grouped under the next published GitHub release, rather than presented as separately published releases. The former README's **v1.6.3** notes are retained under v1.7, the release that included them. The v3.0 entry describes [PR #50](https://github.com/apptrackit/finance/pull/50) before it is merged or published; its release date and tag link will be added at publication.
+Intermediate package/UI version bumps are grouped under the next published GitHub release, rather than presented as separately published releases. The former README's **v1.6.3** notes are retained under v1.7, the release that included them.
 
-## v3.0 — pending release
+## v3.0 — 2026-09-24
 
-[PR #50](https://github.com/apptrackit/finance/pull/50) · [Compare v2.11…Finance-v3](https://github.com/apptrackit/finance/compare/v2.11...Finance-v3)
+[GitHub release](https://github.com/apptrackit/finance/releases/tag/v3.0) · [Compare v2.11…v3.0](https://github.com/apptrackit/finance/compare/v2.11...v3.0) · [PR #50](https://github.com/apptrackit/finance/pull/50)
 
 ### Added
 
