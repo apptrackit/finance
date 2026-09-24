@@ -4,7 +4,7 @@ A self-hosted personal finance app for tracking accounts, transactions, investme
 
 [Changelog](CHANGELOG.md) · [GitHub releases](https://github.com/apptrackit/finance/releases) · [MCP guide](mcp/README.md) · [Contributor and agent guide](AGENTS.md)
 
-The latest published release is [v2.11](https://github.com/apptrackit/finance/releases/tag/v2.11). This README describes the current source tree, including the pending [v3.0 changes](CHANGELOG.md#v30--pending-release).
+The latest published release is [v3.0](https://github.com/apptrackit/finance/releases/tag/v3.0). This README describes the current source tree; see the [v3.0 changelog](CHANGELOG.md#v30--2026-09-24) for release details.
 
 ## Contents
 
@@ -34,7 +34,7 @@ The latest published release is [v2.11](https://github.com/apptrackit/finance/re
 | Settings | Reporting currency, category management, navigation visibility, Original/Monochrome/Red Filter themes, startup privacy, cache controls, and CSV/JSON export. |
 | PWA | Installable app, responsive desktop/mobile layouts, cached assets, and service-worker updates. Financial writes require an API connection. |
 
-Budget management was retired after v2.11. See the [v3.0 changelog](CHANGELOG.md#v30--pending-release) and the [migration note](#database-migrations) before upgrading an older deployment.
+Budget management was retired in v3.0. See the [v3.0 changelog](CHANGELOG.md#v30--2026-09-24) and the [migration note](#database-migrations) before upgrading an older deployment.
 
 ## How financial data works
 
