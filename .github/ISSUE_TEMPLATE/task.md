@@ -1,6 +1,7 @@
 ---
 name: Documentation or task
 about: Track documentation, maintenance, or other scoped work
+type: Task
 ---
 
 ## Goal
