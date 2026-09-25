@@ -45,4 +45,21 @@ it('upgrades populated legacy data, retires budgets, and preserves immutable for
   expect(await f.db.prepare('SELECT revision FROM financial_data_revision WHERE id = 1').first('revision')).toBe(before! + 1)
   expect(await f.db.prepare('PRAGMA foreign_key_check').all()).toMatchObject({ results: [] })
 })
+
+it('upgrades the preceding schema without changing existing MCP review drafts', async () => {
+  await migrate(f.db, 12)
+  await f.seed()
+  await f.db.prepare(`INSERT INTO transactions
+    (id, account_id, category_id, amount, description, date, status, pending_kind, review_source, review_flags, created_at, updated_at)
+    VALUES ('existing-review', 'cash', 'food', -30, 'Existing review', '2026-01-15',
+      'pending', 'mcp_review', 'chatgpt_mcp', '[]', 1, 1)`).run()
+  const before = await f.db.prepare('SELECT * FROM transactions WHERE id = ?').bind('existing-review').first()
+  await migrate(f.db)
+  expect(await f.db.prepare('SELECT * FROM transactions WHERE id = ?').bind('existing-review').first()).toEqual(before)
+  const revision = await f.db.prepare('SELECT revision FROM financial_data_revision WHERE id = 1').first('revision')
+  await f.db.prepare("UPDATE transactions SET description = 'Corrected review' WHERE id = 'existing-review'").run()
+  expect(await f.db.prepare('SELECT revision FROM financial_data_revision WHERE id = 1').first('revision')).toBe(revision)
+  await f.db.prepare("UPDATE transactions SET status = 'posted' WHERE id = 'existing-review'").run()
+  expect(await f.db.prepare('SELECT revision FROM financial_data_revision WHERE id = 1').first('revision')).toBe((revision as number) + 1)
+})
 import { readdir } from 'node:fs/promises'
