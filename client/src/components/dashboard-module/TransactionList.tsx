@@ -1158,6 +1158,86 @@ export function TransactionList({
           : 'Ready today'
         : `Expected ${formattedDate}`
 
+    if (isMcpReview && linked) {
+      const outgoing = tx.amount < 0 ? tx : linked
+      const incoming = tx.amount < 0 ? linked : tx
+      const hideAmounts = privacyMode === 'hidden'
+
+      return (
+        <div
+          key={outgoing.id}
+          className="group space-y-2 rounded-lg border border-violet-500/20 bg-violet-500/5 p-2 transition-all duration-200 hover:bg-violet-500/10 sm:rounded-xl sm:p-3"
+          onClick={() => setActiveTxId(activeTxId === outgoing.id ? null : outgoing.id)}
+        >
+          <div className="flex items-start gap-2 sm:gap-3">
+            <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-violet-500/10 text-violet-500 sm:h-10 sm:w-10 sm:rounded-xl">
+              <ArrowRightLeft className="h-4 w-4 sm:h-5 sm:w-5" aria-hidden="true" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="flex min-w-0 items-center gap-1.5 text-xs font-medium sm:text-sm">
+                <span className="truncate">{tx.description || 'Transfer'}</span>
+                {renderRecentBadge(tx)}
+              </p>
+              <p className="text-[10px] text-muted-foreground sm:text-xs">
+                {getAccountName(outgoing.account_id)} → {getAccountName(incoming.account_id)}
+              </p>
+              <p className={`text-[10px] font-medium sm:text-xs ${ready ? 'text-success' : 'text-violet-500'}`}>
+                {statusLabel} · No balances changed yet
+              </p>
+            </div>
+            <div className="flex flex-shrink-0 items-center gap-1">
+              {!locked && ready && (
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="h-7 w-7 text-success hover:text-success sm:h-8 sm:w-8"
+                  disabled={actionsDisabled}
+                  onClick={(event) => { event.stopPropagation(); handleConfirmUpcoming(outgoing) }}
+                  title="Confirm transfer review draft"
+                  aria-label="Confirm transfer review draft"
+                >
+                  {isPendingAction ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CircleCheck className="h-3.5 w-3.5" />}
+                </Button>
+              )}
+              {!locked && (
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="h-7 w-7 text-destructive hover:text-destructive sm:h-8 sm:w-8"
+                  disabled={actionsDisabled}
+                  onClick={(event) => { event.stopPropagation(); handleDeclineUpcoming(outgoing) }}
+                  title="Decline transfer review draft"
+                  aria-label="Decline transfer review draft"
+                >
+                  {isPendingAction ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CircleX className="h-3.5 w-3.5" />}
+                </Button>
+              )}
+            </div>
+          </div>
+          <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 rounded-lg bg-background/50 px-2 py-1.5 text-[10px] sm:ml-11 sm:px-3 sm:text-xs">
+            <div className="min-w-0">
+              <span className="block text-muted-foreground">Sent</span>
+              <span className={`block break-words font-semibold text-destructive ${hideAmounts ? 'select-none' : ''}`}>
+                {hideAmounts ? '••••••' : `${formatAmount(Math.abs(outgoing.amount))} ${getAccountCurrency(outgoing.account_id)}`}
+              </span>
+            </div>
+            <ArrowRight className="h-3 w-3 flex-shrink-0 text-violet-500" aria-hidden="true" />
+            <div className="min-w-0">
+              <span className="block text-muted-foreground">Received</span>
+              <span className={`block break-words font-semibold text-success ${hideAmounts ? 'select-none' : ''}`}>
+                {hideAmounts ? '••••••' : `${formatAmount(Math.abs(incoming.amount))} ${getAccountCurrency(incoming.account_id)}`}
+              </span>
+            </div>
+          </div>
+          {possibleDuplicate && (
+            <span className="inline-flex items-center gap-1 rounded-full border border-amber-500/25 bg-amber-500/10 px-1.5 py-0.5 text-[9px] font-medium text-amber-700 dark:text-amber-300 sm:ml-11 sm:text-[10px]">
+              <AlertCircle className="h-2.5 w-2.5" /> Possible duplicate
+            </span>
+          )}
+        </div>
+      )
+    }
+
     return (
       <div
         key={tx.id}
