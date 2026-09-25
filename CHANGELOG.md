@@ -8,6 +8,7 @@ Intermediate package/UI version bumps are grouped under the next published GitHu
 
 ### Added
 
+- The Finance MCP can preview and create same-currency cash transfer review drafts. The app reviews each reciprocal pair as one item and posts or declines both sides atomically; drafts leave balances and projections unchanged.
 - The Finance MCP can list unresolved MCP review drafts and prepare user-confirmed edits or declines. Apply rejects stale previews and makes bounded batches atomic and idempotent; neither action posts transactions or changes balances.
 - Migration `013-mcp-review-corrections.sql` stores expiring correction proposals and completed runs, indexes the active review queue, and keeps draft-only changes from marking financial forecasts stale.
 

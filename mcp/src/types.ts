@@ -6,12 +6,12 @@ export type Env = {
   DISABLE_ACCESS_AUTH?: string
 }
 
-export const MCP_WORKER_VERSION = '1.5.0'
+export const MCP_WORKER_VERSION = '1.6.0'
 
 export type AccountRow = {
   id: string
   name: string
-  type: 'cash' | 'investment' | 'credit'
+  type: 'cash' | 'checking' | 'savings' | 'investment' | 'credit'
   balance: number
   currency: string
   symbol?: string | null

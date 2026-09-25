@@ -419,6 +419,9 @@ export class TransactionService {
     const tx = await this.transactionRepo.findById(id)
 
     if (tx) {
+      if (tx.linked_transaction_id && tx.status === 'pending') {
+        throw new Error('Pending transfer review pairs must be declined together')
+      }
       const account = await this.accountRepo.findById(tx.account_id)
       if (account) {
         this.assertAccountUnlocked(account)
@@ -486,9 +489,7 @@ export class TransactionService {
       throw new Error('Transaction not found')
     }
 
-    if (tx.linked_transaction_id) {
-      throw new Error('Linked transfers cannot be confirmed as upcoming transactions')
-    }
+    if (tx.linked_transaction_id) return this.resolveTransferReview(tx, 'confirm', today)
 
     if ((tx.status || 'posted') === 'posted') {
       return tx
@@ -527,9 +528,7 @@ export class TransactionService {
       throw new Error('Transaction not found')
     }
 
-    if (tx.linked_transaction_id) {
-      throw new Error('Linked transfers cannot be declined as upcoming transactions')
-    }
+    if (tx.linked_transaction_id) return this.resolveTransferReview(tx, 'decline')
 
     if ((tx.status || 'posted') !== 'pending') {
       throw new Error('Transaction is not pending confirmation')
@@ -549,6 +548,37 @@ export class TransactionService {
     })
 
     const updated = await this.transactionRepo.findById(id)
+    return updated!
+  }
+
+  private async resolveTransferReview(tx: Transaction, action: 'confirm' | 'decline', today?: string): Promise<Transaction> {
+    if (tx.pending_kind !== 'mcp_review' || tx.review_source !== 'chatgpt_mcp') {
+      throw new Error(`Linked transfers cannot be ${action === 'confirm' ? 'confirmed' : 'declined'} as upcoming transactions`)
+    }
+    const pair = await this.transactionRepo.findById(tx.linked_transaction_id!)
+    if (!pair || pair.linked_transaction_id !== tx.id || pair.review_batch_id !== tx.review_batch_id
+      || pair.pending_kind !== 'mcp_review' || pair.review_source !== 'chatgpt_mcp'
+      || tx.amount * pair.amount >= 0 || tx.amount + pair.amount !== 0 || tx.date !== pair.date) {
+      throw new Error('Transfer review pair is invalid')
+    }
+    if (action === 'confirm' && tx.status === 'posted' && pair.status === 'posted') return tx
+    if (tx.status !== 'pending' || pair.status !== 'pending') throw new Error('Transfer review pair is not pending')
+    const effectiveToday = this.todayString(today)
+    if (action === 'confirm' && tx.date > effectiveToday) throw new Error('Cannot confirm a transaction dated in the future')
+    const [source, destination] = await Promise.all([
+      this.accountRepo.findById(tx.account_id), this.accountRepo.findById(pair.account_id),
+    ])
+    if (!source || !destination || !['cash', 'checking', 'savings'].includes(source.type) || !['cash', 'checking', 'savings'].includes(destination.type)
+      || source.id === destination.id || source.currency !== destination.currency) throw new Error('Transfer review accounts are invalid')
+    this.assertAccountUnlocked(source)
+    this.assertAccountUnlocked(destination)
+    const debit = tx.amount < 0 ? tx : pair
+    const credit = tx.amount < 0 ? pair : tx
+    const resolved = await this.transactionRepo.resolvePendingTransferPair(debit, credit, action, Date.now(), effectiveToday)
+    const updated = await this.transactionRepo.findById(tx.id)
+    if (!resolved && updated?.status !== (action === 'confirm' ? 'posted' : 'cancelled')) {
+      throw new Error('Transfer review pair is not pending')
+    }
     return updated!
   }
 

@@ -15,7 +15,7 @@ import { BulkTransactionModal, type BulkTransaction } from './BulkTransactionMod
 import { AmountInput } from '../common/amount-input'
 import { formatAmount, formatCalculatedAmount, parseAmount } from '../../lib/amount'
 import type { PendingKind } from '../../lib/transaction-review'
-import { getMcpReviewBalanceDeltas, hasPossibleDuplicateFlag, isMcpReviewTransaction } from '../../lib/transaction-review'
+import { getMcpReviewBalanceDeltas, getMcpReviewItems, hasPossibleDuplicateFlag, isMcpReviewTransaction } from '../../lib/transaction-review'
 import { TransactionCalendar } from './TransactionCalendar'
 
 type Transaction = {
@@ -874,12 +874,16 @@ export function TransactionList({
       }
 
       refreshRecentBadges()
-      setResolvedPendingIds(ids => new Set(ids).add(tx.id))
+      setResolvedPendingIds(ids => {
+        const next = new Set(ids).add(tx.id)
+        if (tx.linked_transaction_id) next.add(tx.linked_transaction_id)
+        return next
+      })
       setActiveTxId(activeId => activeId === tx.id ? null : activeId)
       onTransactionAdded()
       showAlert({
         type: 'success',
-        message: isMcpReview ? 'MCP review draft confirmed' : 'Upcoming transaction confirmed'
+        message: tx.linked_transaction_id ? 'Transfer review pair confirmed' : isMcpReview ? 'MCP review draft confirmed' : 'Upcoming transaction confirmed'
       })
     } catch (error) {
       console.error('Failed to confirm upcoming transaction', error)
@@ -899,7 +903,9 @@ export function TransactionList({
 
     const confirmed = await confirm({
       title: 'Decline Transaction',
-      message: isMcpReview
+      message: tx.linked_transaction_id
+        ? 'Decline both sides of this transfer review draft? Neither balance will change.'
+        : isMcpReview
         ? 'Decline this MCP review draft? It will not affect your balance.'
         : 'Decline this upcoming transaction? It will not affect your balance.',
       confirmText: 'Decline',
@@ -919,12 +925,16 @@ export function TransactionList({
         throw new Error(data.error || 'Failed to decline transaction')
       }
 
-      setResolvedPendingIds(ids => new Set(ids).add(tx.id))
+      setResolvedPendingIds(ids => {
+        const next = new Set(ids).add(tx.id)
+        if (tx.linked_transaction_id) next.add(tx.linked_transaction_id)
+        return next
+      })
       setActiveTxId(activeId => activeId === tx.id ? null : activeId)
       onTransactionAdded()
       showAlert({
         type: 'success',
-        message: isMcpReview ? 'MCP review draft declined' : 'Upcoming transaction declined'
+        message: tx.linked_transaction_id ? 'Transfer review pair declined' : isMcpReview ? 'MCP review draft declined' : 'Upcoming transaction declined'
       })
     } catch (error) {
       console.error('Failed to decline upcoming transaction', error)
@@ -1040,18 +1050,17 @@ export function TransactionList({
   }
 
   const visibleUpcomingTransactions = upcomingTransactions.filter(tx => !resolvedPendingIds.has(tx.id))
-  const mcpReviewCount = visibleUpcomingTransactions.filter(isMcpReviewTransaction).length
-  const standardPendingCount = visibleUpcomingTransactions.length - mcpReviewCount
+  const mcpReviewLegCount = visibleUpcomingTransactions.filter(isMcpReviewTransaction).length
+  const standardPendingCount = visibleUpcomingTransactions.length - mcpReviewLegCount
   const mcpReviewBalanceDeltas = getMcpReviewBalanceDeltas(visibleUpcomingTransactions)
   const mcpBalancePreviews = accounts.flatMap(account => {
     const delta = mcpReviewBalanceDeltas.get(account.id)
     return delta === undefined ? [] : [{ account, acceptedBalance: account.balance + delta }]
   })
 
-  const mcpReviewTransactions = visibleUpcomingTransactions
-    .filter(isMcpReviewTransaction)
-    .filter(applyFilters)
+  const mcpReviewTransactions = getMcpReviewItems(visibleUpcomingTransactions, applyFilters)
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+  const mcpReviewCount = mcpReviewTransactions.length
 
   // MCP drafts keep their original transaction date, so group them by that
   // date just like posted transactions. This gives each review item a clear
@@ -1128,7 +1137,8 @@ export function TransactionList({
     const account = accounts.find(a => a.id === tx.account_id)
     const isInvestmentTx = account?.type === 'investment'
     const shouldHide = privacyMode === 'hidden' || (isInvestmentTx && shouldHideInvestment())
-    const locked = isLocked(tx.account_id)
+    const linked = tx.linked_transaction_id ? visibleUpcomingTransactions.find(other => other.id === tx.linked_transaction_id) : undefined
+    const locked = isLocked(tx.account_id) || (linked ? isLocked(linked.account_id) : false)
     const isMcpReview = isMcpReviewTransaction(tx)
     const isPendingAction = pendingActionId === tx.id
     const actionsDisabled = pendingActionId !== null
@@ -1174,14 +1184,15 @@ export function TransactionList({
           </div>
           <div className="min-w-0">
             <p className="font-medium text-xs sm:text-sm flex items-center gap-1.5 min-w-0">
-              <span className="truncate">{tx.description || getCategoryName(tx.category_id)}</span>
+              <span className="truncate">{linked ? `Transfer ${getAccountName(tx.amount < 0 ? tx.account_id : linked.account_id)} → ${getAccountName(tx.amount > 0 ? tx.account_id : linked.account_id)}` : tx.description || getCategoryName(tx.category_id)}</span>
               {renderRecentBadge(tx)}
             </p>
             <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 sm:gap-x-2 text-[10px] sm:text-xs text-muted-foreground">
               <span className={ready ? 'text-success font-medium' : isMcpReview ? 'text-violet-500 font-medium' : 'text-primary font-medium'}>{statusLabel}</span>
               <span>•</span>
-              <span className="truncate">{getAccountName(tx.account_id)}</span>
+              <span className="truncate">{linked ? 'No balances changed yet' : getAccountName(tx.account_id)}</span>
             </div>
+            {linked && tx.description && <p className="truncate text-[10px] sm:text-xs text-muted-foreground">{tx.description}</p>}
             {possibleDuplicate && (
               <div className="mt-1 flex flex-wrap items-center gap-1.5">
                 <span className="inline-flex items-center gap-1 rounded-full border border-amber-500/25 bg-amber-500/10 px-1.5 py-0.5 text-[9px] sm:text-[10px] font-medium text-amber-700 dark:text-amber-300">
@@ -1197,7 +1208,8 @@ export function TransactionList({
           <div className={`font-bold text-xs sm:text-sm ${tx.amount >= 0 ? 'text-success' : 'text-destructive'} ${shouldHide ? 'select-none' : ''}`}>
             {shouldHide ? '••••••' : (
               <>
-                {tx.amount >= 0 ? '+' : '-'}{Math.abs(tx.amount).toLocaleString('hu-HU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {getAccountCurrency(tx.account_id)}
+                {linked ? '−' : tx.amount >= 0 ? '+' : '-'}{Math.abs(tx.amount).toLocaleString('hu-HU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {getAccountCurrency(tx.account_id)}
+                {linked && <> → +{Math.abs(linked.amount).toLocaleString('hu-HU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {getAccountCurrency(linked.account_id)}</>}
               </>
             )}
           </div>
@@ -1221,7 +1233,7 @@ export function TransactionList({
                       : <CircleCheck className="h-3 w-3 sm:h-3.5 sm:w-3.5" />}
                   </Button>
                 )}
-                <Button
+                {!linked && <Button
                   size="icon"
                   variant="ghost"
                   className="h-7 w-7 sm:h-8 sm:w-8"
@@ -1233,7 +1245,7 @@ export function TransactionList({
                   title={isMcpReview ? 'Edit MCP review draft' : 'Edit upcoming transaction'}
                 >
                   <Pencil className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
-                </Button>
+                </Button>}
                 {(ready || isMcpReview) ? (
                   <Button
                     size="icon"

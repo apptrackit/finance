@@ -94,7 +94,8 @@ export class TransactionController {
       await new AuditRepository(c.env.DB).log('DELETE', 'transaction', id)
       return c.json({ success: true })
     } catch (error: any) {
-      const status = error.message.includes('not found') ? 404 : error.message.includes('locked') ? 409 : 500
+      const status = error.message.includes('not found') ? 404 : error.message.includes('locked') ? 409
+        : error.message.includes('Pending transfer review pairs') ? 400 : 500
       return c.json({ error: error.message }, status)
     }
   }
@@ -103,7 +104,7 @@ export class TransactionController {
     try {
       const id = c.req.param('id')
       const transaction = await this.transactionService.confirmTransaction(id, this.getClientDate(c))
-      await new AuditRepository(c.env.DB).log('UPDATE', 'transaction', id, { status: 'posted' })
+      if (!transaction.linked_transaction_id) await new AuditRepository(c.env.DB).log('UPDATE', 'transaction', id, { status: 'posted' })
       return c.json(TransactionMapper.toResponseDto(transaction))
     } catch (error: any) {
       const status = error.message.includes('not found') ? 404 : error.message.includes('locked') ? 409 : 400
@@ -115,7 +116,7 @@ export class TransactionController {
     try {
       const id = c.req.param('id')
       const transaction = await this.transactionService.declineTransaction(id)
-      await new AuditRepository(c.env.DB).log('UPDATE', 'transaction', id, { status: 'cancelled' })
+      if (!transaction.linked_transaction_id) await new AuditRepository(c.env.DB).log('UPDATE', 'transaction', id, { status: 'cancelled' })
       return c.json(TransactionMapper.toResponseDto(transaction))
     } catch (error: any) {
       const status = error.message.includes('not found') ? 404 : error.message.includes('locked') ? 409 : 400

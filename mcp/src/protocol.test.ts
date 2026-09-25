@@ -73,6 +73,8 @@ describe('MCP protocol surface', () => {
       'create_financial_outlook_snapshot',
       'prepare_mcp_transaction_drafts',
       'create_mcp_transaction_drafts',
+      'prepare_mcp_transfer_drafts',
+      'create_mcp_transfer_drafts',
       'list_mcp_review_drafts',
       'prepare_mcp_review_draft_corrections',
       'apply_mcp_review_draft_corrections',
@@ -87,7 +89,7 @@ describe('MCP protocol surface', () => {
       'get_investment_activity',
     ])
     const writes = body.result.tools.filter(tool => !tool.annotations.readOnlyHint)
-    expect(writes.map(tool => tool.name)).toEqual(['create_financial_outlook_snapshot', 'prepare_mcp_transaction_drafts', 'create_mcp_transaction_drafts', 'prepare_mcp_review_draft_corrections', 'apply_mcp_review_draft_corrections'])
+    expect(writes.map(tool => tool.name)).toEqual(['create_financial_outlook_snapshot', 'prepare_mcp_transaction_drafts', 'create_mcp_transaction_drafts', 'prepare_mcp_transfer_drafts', 'create_mcp_transfer_drafts', 'prepare_mcp_review_draft_corrections', 'apply_mcp_review_draft_corrections'])
     expect(writes.every(tool => tool.annotations.destructiveHint === false && tool.annotations.openWorldHint === false)).toBe(true)
     expect(writes.filter(tool => tool.name.startsWith('prepare_')).every(tool => tool.annotations.idempotentHint === false)).toBe(true)
     expect(writes.filter(tool => !tool.name.startsWith('prepare_')).every(tool => tool.annotations.idempotentHint)).toBe(true)

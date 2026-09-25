@@ -86,6 +86,22 @@ const CREATED_REVIEW_DRAFT = {
   additionalProperties: false,
 } as const
 
+const TRANSFER_FIELDS = {
+  from_account_id: { type: 'string' }, from_account_name: { type: 'string' }, to_account_id: { type: 'string' }, to_account_name: { type: 'string' },
+  debit_amount: { type: 'number' }, credit_amount: { type: 'number' }, currency: { type: 'string' }, effective_fx_rate: { type: 'number' },
+  date: DATE, description: NULLABLE_STRING,
+} as const
+const TRANSFER_PREVIEW_ITEM = output([
+  'item_number', ...Object.keys(TRANSFER_FIELDS), 'warnings',
+], { item_number: { type: 'integer' }, ...TRANSFER_FIELDS, warnings: WARNINGS })
+const CREATED_TRANSFER_DRAFT = output([
+  'outgoing_id', 'incoming_id', ...Object.keys(TRANSFER_FIELDS), 'status', 'pending_kind', 'review_source', 'review_batch_id', 'review_flags',
+], {
+  outgoing_id: { type: 'string' }, incoming_id: { type: 'string' }, ...TRANSFER_FIELDS,
+  status: { type: 'string', enum: ['pending', 'posted', 'cancelled'] }, pending_kind: { type: 'string', enum: ['mcp_review'] },
+  review_source: { type: 'string', enum: ['chatgpt_mcp'] }, review_batch_id: { type: 'string' }, review_flags: WARNINGS,
+})
+
 function output(required: readonly string[], properties: Record<string, unknown>) {
   return { type: 'object', required, properties, additionalProperties: false } as const
 }
@@ -186,6 +202,32 @@ export const TOOL_DEFINITIONS = [
     }),
     annotations: DRAFT_WRITE,
     _meta: { 'openai/toolInvocation/invoking': 'Creating MCP review drafts…', 'openai/toolInvocation/invoked': 'MCP review drafts created' },
+  },
+  {
+    name: 'prepare_mcp_transfer_drafts', title: 'Preview cash transfer review drafts',
+    description: 'Use this to prepare 1–20 same-currency cash-to-cash transfers. Show both native-currency legs and all warnings, then ask the user to explicitly confirm the complete preview. This stores an expiring proposal only.',
+    inputSchema: { type: 'object', required: ['items'], properties: { items: { type: 'array', minItems: 1, maxItems: 20, items: {
+      type: 'object', required: ['from_account_id', 'to_account_id', 'amount', 'date'], properties: {
+        from_account_id: { type: 'string', minLength: 1, maxLength: 128 }, to_account_id: { type: 'string', minLength: 1, maxLength: 128 },
+        amount: { type: 'number', exclusiveMinimum: 0, maximum: 1_000_000_000_000_000 }, date: DATE,
+        description: { type: ['string', 'null'], maxLength: 500 },
+      }, additionalProperties: false,
+    } } }, additionalProperties: false },
+    outputSchema: output(['as_of', 'proposal_id', 'expires_at', 'item_count', 'preview', 'warnings', 'confirmation_required', 'next_action', 'effect'], {
+      as_of: { type: 'string' }, proposal_id: { type: 'string' }, expires_at: { type: 'string' }, item_count: { type: 'integer' },
+      preview: { type: 'array', items: TRANSFER_PREVIEW_ITEM }, warnings: WARNINGS, confirmation_required: { type: 'boolean' },
+      next_action: { type: 'string' }, effect: { type: 'string' },
+    }), annotations: PROPOSAL_PREPARE,
+  },
+  {
+    name: 'create_mcp_transfer_drafts', title: 'Create cash transfer review drafts',
+    description: 'Use this only after explicit user confirmation of the entire prepare_mcp_transfer_drafts preview. Accepts only its opaque proposal_id. Atomically creates reciprocal pending review pairs; no balances change. Say “transfer review drafts created” and direct the user to Finance Manager MCP Review.',
+    inputSchema: { type: 'object', required: ['proposal_id'], properties: { proposal_id: { type: 'string', minLength: 36, maxLength: 36, pattern: '^[0-9a-fA-F-]{36}$' } }, additionalProperties: false },
+    outputSchema: output(['as_of', 'batch_id', 'item_count', 'idempotent_replay', 'result', 'drafts', 'effect', 'next_action'], {
+      as_of: { type: 'string' }, batch_id: { type: 'string' }, item_count: { type: 'integer' }, idempotent_replay: { type: 'boolean' },
+      result: { type: 'string', enum: ['mcp_transfer_review_drafts_created'] }, drafts: { type: 'array', items: CREATED_TRANSFER_DRAFT },
+      effect: { type: 'string' }, next_action: { type: 'string' },
+    }), annotations: DRAFT_WRITE,
   },
   {
     name: 'list_mcp_review_drafts',
@@ -464,6 +506,8 @@ export async function callTool(service: FinanceService, name: string, args: Reco
     case 'create_financial_outlook_snapshot': return service.createFinancialOutlookSnapshot(args)
     case 'prepare_mcp_transaction_drafts': return service.prepareReviewDrafts(args)
     case 'create_mcp_transaction_drafts': return service.createReviewDrafts(args)
+    case 'prepare_mcp_transfer_drafts': return service.prepareTransferDrafts(args)
+    case 'create_mcp_transfer_drafts': return service.createTransferDrafts(args)
     case 'list_mcp_review_drafts': return service.listReviewDrafts(args)
     case 'prepare_mcp_review_draft_corrections': return service.prepareReviewCorrections(args)
     case 'apply_mcp_review_draft_corrections': return service.applyReviewCorrections(args)

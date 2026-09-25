@@ -277,4 +277,44 @@ export class TransactionRepository {
       && cleanupResult.meta.changes === 0
   }
 
+  async resolvePendingTransferPair(outgoing: Transaction, incoming: Transaction, action: 'confirm' | 'decline', now: number, today: string): Promise<boolean> {
+    const token = `resolving:${crypto.randomUUID()}`
+    const validPair = `SELECT COUNT(*) FROM transactions debit JOIN transactions credit ON credit.id = debit.linked_transaction_id
+      JOIN accounts source ON source.id = debit.account_id JOIN accounts destination ON destination.id = credit.account_id
+      WHERE debit.id = ? AND credit.id = ? AND credit.linked_transaction_id = debit.id
+      AND debit.status = 'pending' AND credit.status = 'pending'
+      AND debit.pending_kind = 'mcp_review' AND credit.pending_kind = 'mcp_review'
+      AND debit.review_source = 'chatgpt_mcp' AND credit.review_source = 'chatgpt_mcp'
+      AND debit.review_batch_id = credit.review_batch_id AND debit.review_batch_id IS NOT NULL
+      AND debit.account_id != credit.account_id
+      AND debit.amount < 0 AND credit.amount > 0 AND debit.amount + credit.amount = 0
+      AND debit.date = credit.date AND source.type IN ('cash', 'checking', 'savings') AND destination.type IN ('cash', 'checking', 'savings')
+      AND source.currency = destination.currency AND source.is_locked = 0 AND destination.is_locked = 0
+      ${action === 'confirm' ? 'AND debit.date <= ?' : ''}`
+    const guard = action === 'confirm' ? [outgoing.id, incoming.id, today] : [outgoing.id, incoming.id]
+    const status = action === 'confirm' ? 'posted' : 'cancelled'
+    const statements: D1PreparedStatement[] = [this.db.prepare(
+      `UPDATE transactions SET status = ?, updated_at = ?
+       WHERE id IN (?, ?) AND 1 = (${validPair})`
+    ).bind(token, now, outgoing.id, incoming.id, ...guard)]
+    if (action === 'confirm') {
+      for (const tx of [outgoing, incoming]) {
+        statements.push(this.db.prepare(
+          'UPDATE accounts SET balance = balance + ?, updated_at = ? WHERE id = ? AND 2 = (SELECT COUNT(*) FROM transactions WHERE id IN (?, ?) AND status = ?)'
+        ).bind(tx.amount, now, tx.account_id, outgoing.id, incoming.id, token))
+      }
+    }
+    for (const tx of [outgoing, incoming]) {
+      statements.push(this.db.prepare(
+        "INSERT INTO audit_log (id, action, entity, entity_id, details, created_at) SELECT ?, 'UPDATE', 'transaction', id, ?, ? FROM transactions WHERE id = ? AND status = ?"
+      ).bind(crypto.randomUUID(), JSON.stringify({ status, transfer_pair_id: outgoing.id }), now, tx.id, token))
+    }
+    statements.push(this.db.prepare(
+      'UPDATE transactions SET status = ?, confirmed_at = ?, cancelled_at = ?, updated_at = ? WHERE id IN (?, ?) AND status = ?'
+    ).bind(status, action === 'confirm' ? now : null, action === 'decline' ? now : null, now, outgoing.id, incoming.id, token))
+    const results = await this.db.batch(statements)
+    return results[0].meta.changes === 2 && results.at(-1)?.meta.changes === 2
+      && results.slice(1, -1).every(result => result.meta.changes === 1)
+  }
+
 }

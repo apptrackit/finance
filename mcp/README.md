@@ -29,12 +29,14 @@ Finance Manager MCP Review section → edit / confirm / decline manually
 
 To correct a mistake in an existing draft, call `list_mcp_review_drafts`, following every cursor before claiming the list is complete. Then call `prepare_mcp_review_draft_corrections` with 1–20 edits or declines. Show the complete before/after preview and ask for explicit confirmation. Only then call `apply_mcp_review_draft_corrections` with its opaque proposal ID. The proposal expires after 24 hours; stale app or MCP edits require a fresh list and preview. A decline cancels the draft and removes it from the active review queue. Neither operation posts transactions, changes balances, or adds upcoming projections.
 
+For a cash-to-cash transfer, call `prepare_mcp_transfer_drafts` with 1–20 source/destination account IDs, positive amounts, dates, and optional notes. Version one accepts only same-currency cash accounts (including legacy checking and savings accounts). Show both named legs, equal native amounts, and every duplicate warning. After explicit confirmation of the whole preview, call `create_mcp_transfer_drafts` with the opaque proposal ID alone. The 24-hour proposal creates reciprocal pending MCP review rows atomically and idempotently. The app shows one review item per pair; confirming posts both sides and changes both balances once, while declining cancels both with no balance change. A future-dated pair cannot be confirmed before its date. Pair editing is unavailable; decline it and prepare a new transfer to correct it.
+
 ## Security model
 
 - Cloudflare Access protects the custom MCP hostname and performs the OAuth flow.
 - The Worker independently verifies the Access JWT signature, issuer, audience, expiry, and optional allowed email.
 - `workers.dev` is disabled.
-- The model receives only bounded tool results. There is no arbitrary SQL tool and no tool that can post, confirm, hard-delete, transfer, invest, or update a balance. Edit and decline tools are limited to unresolved, unlinked MCP review drafts.
+- The model receives only bounded tool results. There is no arbitrary SQL tool and no tool that can post, confirm, hard-delete, invest, or update a balance. Transfer tools create pending review pairs only. Edit and decline tools are limited to unresolved, unlinked MCP review drafts.
 - Every tool is non-destructive and closed-world. Read tools advertise `readOnlyHint: true`; proposal preparation advertises its non-financial persistence with `readOnlyHint: false` and `idempotentHint: false`; the creation and forecast writes advertise `readOnlyHint: false`, `destructiveHint: false`, `idempotentHint: true`, and `openWorldHint: false`.
 - Every tool has explicit input and output JSON Schemas. Inputs reject unknown fields and invalid dates before querying D1.
 - Draft preparation accepts 1–20 income/expense items. Accounts must exist, be unlocked, and be non-investment accounts. Categories are optional, but any supplied category must exist and match the income/expense type.
@@ -57,6 +59,8 @@ To correct a mistake in an existing draft, call `list_mcp_review_drafts`, follow
 | `create_financial_outlook_snapshot` | Immediately publish one validated, immutable, idempotent daily 90-day HUF forecast; cannot modify financial source data |
 | `prepare_mcp_transaction_drafts` | Validate and preview 1–20 income/expense drafts; stores an expiring canonical proposal and returns its opaque ID |
 | `create_mcp_transaction_drafts` | After explicit confirmation, atomically create pending MCP review drafts from the proposal ID |
+| `prepare_mcp_transfer_drafts` | Preview 1–20 same-currency cash transfer pairs and store a 24-hour proposal |
+| `create_mcp_transfer_drafts` | After explicit confirmation, atomically create linked pending transfer review pairs |
 | `list_mcp_review_drafts` | Cursor-paginated unresolved MCP review drafts only; excludes ordinary upcoming rows |
 | `prepare_mcp_review_draft_corrections` | Preview 1–20 edits or declines, storing a 24-hour proposal |
 | `apply_mcp_review_draft_corrections` | After explicit confirmation, atomically apply the proposal or reject stale targets |

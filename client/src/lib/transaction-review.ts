@@ -12,6 +12,22 @@ export type ReviewableTransaction = {
 export const isMcpReviewTransaction = (transaction: ReviewableTransaction) =>
   transaction.pending_kind === 'mcp_review'
 
+/** Return one review item per linked transfer, even when only its credit leg matches a filter. */
+export const getMcpReviewItems = <T extends ReviewableTransaction & { id: string; linked_transaction_id?: string | null }>(
+  transactions: T[], matches: (transaction: T) => boolean,
+): T[] => {
+  const byId = new Map(transactions.map(transaction => [transaction.id, transaction]))
+  const seen = new Set<string>()
+  return transactions.filter(isMcpReviewTransaction).filter(matches).flatMap(transaction => {
+    const debit = transaction.linked_transaction_id && transaction.amount! > 0
+      ? byId.get(transaction.linked_transaction_id) : undefined
+    const item = debit && isMcpReviewTransaction(debit) && debit.amount! < 0 ? debit : transaction
+    if (seen.has(item.id)) return []
+    seen.add(item.id)
+    return [item]
+  })
+}
+
 // Projections are deliberately opt-in. A newly introduced pending kind must not
 // affect financial totals until it has been reviewed explicitly.
 export const isUpcomingProjectionTransaction = (transaction: ReviewableTransaction) =>

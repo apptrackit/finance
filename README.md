@@ -30,7 +30,7 @@ The latest published release is [v3.0](https://github.com/apptrackit/finance/rel
 | Investments | Stock/crypto symbol search, Yahoo Finance quotes and price history, buy/sell records, manual assets, allocation, cost basis, and gain/loss views. |
 | Analytics | Configurable widgets for cash trends, cash forecasts, income/expense trends and breakdowns, individual account trends, Money Map, and top expenses. |
 | AI financial forecasts | Saved HUF forecasts with 7/30/90-day ranges, daily cash paths, report history, source-data freshness, and privacy-aware narratives. |
-| MCP review | Prepare transaction drafts from a conversation or receipt, list and correct pending MCP drafts after a confirmed preview, and review/confirm/decline them in the app. |
+| MCP review | Prepare income, expense, or same-currency cash transfer drafts in conversation; list and correct unlinked drafts; review and confirm or decline drafts and transfer pairs in the app. |
 | Settings | Reporting currency, category management, navigation visibility, Original/Monochrome/Red Filter themes, startup privacy, cache controls, and CSV/JSON export. |
 | PWA | Installable app, responsive desktop/mobile layouts, cached assets, and service-worker updates. Financial writes require an API connection. |
 
@@ -74,6 +74,8 @@ The optional MCP Worker accesses D1 directly. Most tools read bounded financial 
 3. Review those drafts in Finance Manager. Only confirmation in the app posts them and updates balances.
 
 The MCP can also list unresolved review drafts. To fix a mistake, it prepares a complete before/after preview for up to 20 edits or declines; after your confirmation, it applies the proposal atomically. A decline removes the draft from the active review queue without deleting its audit history. Changes to review drafts alone do not change balances, projections, or forecast freshness.
+
+For cash-to-cash transfers, `prepare_mcp_transfer_drafts` previews both account legs. After you confirm the complete preview, `create_mcp_transfer_drafts` creates linked pending review drafts. The app shows one review item per transfer and confirms or declines both sides together. This MCP flow supports same-currency cash accounts only; use the app for cross-currency or investment transfers.
 
 For forecasts, an AI client obtains context with `get_financial_outlook_context` and publishes a snapshot with `create_financial_outlook_snapshot`. The current format stores actual cash history and a daily 90-day HUF forecast. Source revisions and timestamps determine freshness; saved reports remain immutable. The API and Analytics UI read those reports without generating them automatically.
 
