@@ -10,6 +10,17 @@ This guide applies to the entire repository. Finance Manager is a personal finan
 - `api/` is a Hono/TypeScript Cloudflare Worker; `client/` is React 19, Vite, Tailwind CSS 4, and Recharts, deployed to Cloudflare Pages; `mcp/` is a separate TypeScript Cloudflare Worker.
 - **API and MCP bind directly to the same D1 database.** MCP does not call API services. Schema and financial-semantics changes often require updates in all three workspaces; there is no shared generated contract package.
 
+## GitHub issue to pull request workflow
+
+Use this workflow for feature, bug, documentation, and task changes. A request to record an idea or bug as an issue stops after the issue is created unless implementation is also requested.
+
+1. **Issue first.** Use the issue number the user provides, or check for an existing matching issue before creating one in `apptrackit/finance`. If none exists, select `.github/ISSUE_TEMPLATE/feature.md` for a feature or idea, `bug.md` for a bug, or `task.md` for documentation or another task. Use the selected template's body headings to write the issue, replacing placeholders with the actual purpose, behavior, scope or reproduction steps, and observable acceptance criteria. Include relevant screenshots or links when available; do not invent or require images. When using `gh`, pass the completed body with `gh issue create --body-file`; do not submit untouched template text. Record the GitHub-assigned issue number before starting implementation.
+2. **Branch from current main.** Fetch `origin/main` before starting implementation. Create a branch at that fetched commit named `<type>/<issue-number>-<short-kebab-name>`: `feature/123-description`, `bug/123-description`, `docs/123-description`, or `task/123-description`. Use the issue number without `#` in the branch name. Preserve unrelated working-tree changes; use an isolated worktree when the current checkout is dirty or occupied.
+3. **Implement and verify.** Keep the branch focused on the issue, run the relevant checks described here, review the diff, and commit the completed work. Push the branch to `origin`.
+4. **Open a pull request to `main`.** Give the PR a clear summary title without an issue number. Fill in `.github/PULL_REQUEST_TEMPLATE.md` with the actual issue number, summary, changes, and verification; pass the completed body with `gh pr create --body-file` when using `gh`. Make the first line of the PR body `Closes #<issue-number>` when the PR fully resolves the issue, or `Refs #<issue-number>` for partial work. The body reference creates the functional GitHub link. Attach the created PR to the Codex task. Do not merge unless the user requests it.
+
+If GitHub access is unavailable, complete the local work that is possible and state which issue, push, or PR step could not be completed. Do not guess an issue number.
+
 ## Local development
 
 Create missing local files from `api/wrangler.toml.example`, `api/.dev.vars.example`, `client/.env.example`, and, if needed, `mcp/wrangler.toml.example`. Do not overwrite existing configuration. API secrets belong in `api/.dev.vars`; client settings belong in `client/.env.local`. Set the same local value for `API_SECRET` and `VITE_API_KEY`, allow `http://localhost:5173` in `ALLOWED_ORIGINS`, and use `VITE_API_DOMAIN=localhost:8787` for a local API.
