@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { Area, CartesianGrid, ComposedChart, Line, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { BrainCircuit } from 'lucide-react'
 import { addDays, format, startOfDay } from 'date-fns'
@@ -23,6 +23,13 @@ type ChartPoint = {
 }
 
 type CashPathPoint = { day: number; low: number; expected: number; high: number }
+type HistoryRange = '90d' | '12m' | 'all'
+
+const HISTORY_RANGES: { value: HistoryRange; label: string }[] = [
+  { value: '90d', label: '90 days + 90 days' },
+  { value: '12m', label: '12 months + 90 days' },
+  { value: 'all', label: 'All time + 90 days' },
+]
 
 function dailyPath(points: CashPathPoint[]) {
   const ordered = [...points]
@@ -97,6 +104,9 @@ function reconstructHistory(transactions: Transaction[], accounts: Account[], co
 export function AICashOutlookChart({ snapshot, transactions, accounts, convertToMasterCurrency }: AICashOutlookChartProps) {
   const { privacyMode } = usePrivacy()
   const hidden = privacyMode === 'hidden'
+  const [historyRange, setHistoryRange] = useState<HistoryRange>('90d')
+  const hasExtendedHistory = Boolean(snapshot?.cash_balance_history_year?.length && snapshot?.cash_balance_history_alltime?.length)
+  const effectiveRange = hasExtendedHistory ? historyRange : '90d'
 
   const { chartData, generationTimestamp } = useMemo(() => {
     if (!snapshot?.cash_balance_path?.length) return { chartData: [] as ChartPoint[], generationTimestamp: null }
@@ -106,9 +116,13 @@ export function AICashOutlookChart({ snapshot, transactions, accounts, convertTo
     if (Number.isNaN(forecastStart.getTime())) return { chartData: [] as ChartPoint[], generationTimestamp: null }
 
     const points = new Map<number, ChartPoint>()
-    const storedHistory = snapshot.cash_balance_history?.length === 90
-      ? snapshot.cash_balance_history
-      : reconstructHistory(transactions, accounts, convertToMasterCurrency, forecastStart)
+    const storedHistory = effectiveRange === 'all'
+      ? snapshot.cash_balance_history_alltime
+      : effectiveRange === '12m'
+        ? snapshot.cash_balance_history_year
+        : snapshot.cash_balance_history?.length === 90
+          ? snapshot.cash_balance_history
+          : reconstructHistory(transactions, accounts, convertToMasterCurrency, forecastStart)
     for (const historical of storedHistory) {
       if (!Number.isFinite(historical.balance)) continue
       const date = dateFromHistory(historical.date)
@@ -140,7 +154,7 @@ export function AICashOutlookChart({ snapshot, transactions, accounts, convertTo
     }
 
     return { chartData: [...points.values()].sort((a, b) => a.timestamp - b.timestamp), generationTimestamp: forecastStart.getTime() }
-  }, [snapshot, transactions, accounts, convertToMasterCurrency])
+  }, [snapshot, transactions, accounts, convertToMasterCurrency, effectiveRange])
 
   const yDomain = useMemo(() => {
     const values = chartData.flatMap(point => [point.actual, point.low, point.high]).filter((value): value is number => Number.isFinite(value))
@@ -158,9 +172,17 @@ export function AICashOutlookChart({ snapshot, transactions, accounts, convertTo
       <div className="flex flex-wrap items-center gap-2">
         <BrainCircuit className="h-4 w-4 text-primary" />
         <p className="text-sm font-medium">Cash history & AI forecast</p>
-        <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] text-primary">90 + 90 days</span>
+        <select
+          aria-label="Cash history range"
+          value={effectiveRange}
+          onChange={event => setHistoryRange(event.target.value as HistoryRange)}
+          className="rounded-md border border-border/70 bg-background px-2 py-1 text-xs text-foreground"
+        >
+          {HISTORY_RANGES.map(range => <option key={range.value} value={range.value} disabled={range.value !== '90d' && !hasExtendedHistory}>{range.label}</option>)}
+        </select>
         <span className="text-xs text-muted-foreground">Actual history through generation date · AI projection</span>
       </div>
+      {!hasExtendedHistory && <p className="mt-1 text-xs text-muted-foreground">Longer history is available for forecasts generated after this update.</p>}
       <div className="mt-3 h-56 sm:h-72">
         <ResponsiveContainer width="100%" height="100%">
           <ComposedChart data={chartData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
@@ -175,7 +197,7 @@ export function AICashOutlookChart({ snapshot, transactions, accounts, convertTo
               </linearGradient>
             </defs>
             <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.5} />
-            <XAxis dataKey="timestamp" type="number" scale="time" domain={['dataMin', 'dataMax']} tickCount={8} tickFormatter={value => format(new Date(value), 'MMM d')} stroke="hsl(var(--muted-foreground))" fontSize={10} tickLine={false} axisLine={false} />
+            <XAxis dataKey="timestamp" type="number" scale="time" domain={['dataMin', 'dataMax']} tickCount={8} tickFormatter={value => format(new Date(value), effectiveRange === 'all' ? 'MMM yyyy' : 'MMM d')} stroke="hsl(var(--muted-foreground))" fontSize={10} tickLine={false} axisLine={false} />
             <YAxis stroke="hsl(var(--muted-foreground))" fontSize={10} tickLine={false} axisLine={false} domain={yDomain} width={50} tickFormatter={value => hidden ? '••••' : value >= 1_000_000 ? `${(value / 1_000_000).toFixed(1)}M` : `${Math.round(value / 1_000)}K`} />
             <Tooltip content={({ active, payload }) => {
               const point = payload?.[0]?.payload as ChartPoint | undefined

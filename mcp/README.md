@@ -67,6 +67,8 @@ Transfers are excluded from income and expense aggregates. Investment accounts a
 
 Financial outlook generation should project repeated income and spending patterns beyond individually recorded upcoming transactions, without counting a recorded occurrence twice. The context includes up to five previous forecast narratives so earlier user plans can be considered again; the model must reconcile them with current data and any user context it can actually access. The MCP server has no direct access to ChatGPT memory. Historical income rows and repeated expense candidates are bounded and disclose truncation.
 
+New forecast snapshots also store immutable HUF cash history for the chart: 90 daily balances, daily balances for the preceding 12 months, and monthly balances from the first posted transaction through the generation date. The chart keeps all three ranges anchored to the selected snapshot. Earlier snapshots retain their available 90-day view because longer history was not stored with them.
+
 `create_mcp_transaction_drafts` must be described to the user as creating **MCP review drafts**, never as saving or posting official transactions. One item is always one transaction. Multiple transactions may be submitted in one tool call, but receipts are not split automatically. Categorization should be logical when supported by the available categories and left uncategorized when uncertain.
 
 ## Deploy
