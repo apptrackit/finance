@@ -130,6 +130,14 @@ export function d1Rows(output) {
   return result.flatMap(item => item.results)
 }
 
+export function migrationSqlWithHistory(sql, name) {
+  const migration = sql.trimEnd()
+  if (!migration.endsWith(';')) throw new Error(`Migration ${name} must end with a semicolon.`)
+  // A second standalone semicolon is an empty statement rejected by D1's
+  // remote file importer, even though the local executor accepts it.
+  return `${migration}\nINSERT INTO migration_history (id, migration_name) VALUES ('${name}', '${name}');\n`
+}
+
 async function prompt(label, { secret = false, signal } = {}) {
   if (!process.stdin.isTTY) throw new Error(`${label} is required. Set it in .deploy-config before running non-interactively.`)
   const output = secret ? new Writable({ write(_chunk, _encoding, done) { done() } }) : process.stdout
@@ -331,7 +339,7 @@ export async function deploy(options, { root = repositoryRoot, run = runCommand,
           const migrationFile = join(temporary, file)
           // Record success in the same SQL submission, rather than ignoring a
           // separate history-write failure and replaying ALTERs on the next run.
-          await writeFile(migrationFile, `${sql}\n;\nINSERT INTO migration_history (id, migration_name) VALUES ('${name}', '${name}');\n`, { mode: 0o600 })
+          await writeFile(migrationFile, migrationSqlWithHistory(sql, name), { mode: 0o600 })
           await d1(`Applying ${name}`, ['--file', migrationFile])
         }
       } else report.success('Migrations up to date')

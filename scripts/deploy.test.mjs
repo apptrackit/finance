@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { test } from 'node:test'
 import { fileURLToPath } from 'node:url'
-import { apiOrigin, createDeploymentReporter, d1Rows, deploy, deploymentPlan, parseArgs, parseConfig, runCommand } from './deploy.mjs'
+import { apiOrigin, createDeploymentReporter, d1Rows, deploy, deploymentPlan, migrationSqlWithHistory, parseArgs, parseConfig, runCommand } from './deploy.mjs'
 
 const script = fileURLToPath(new URL('./deploy.mjs', import.meta.url))
 const fixtureConfig = {
@@ -162,7 +162,22 @@ test('explicit migrations are applied before a targeted Worker, with history in 
   assert.equal(f.sqlFiles.length, 1)
   assert.match(f.sqlFiles[0], /ALTER TABLE example ADD COLUMN value TEXT/)
   assert.match(f.sqlFiles[0], /INSERT INTO migration_history .*'002-change'/)
+  assert.doesNotMatch(f.sqlFiles[0], /(?:^|\n)\s*;\s*(?:\n|$)/)
   assert.deepEqual(f.mutations().map(call => call.argv[0]), ['d1', 'd1', 'deploy'])
+  await f.assertClean()
+})
+
+test('real migration 013 is submitted without an empty statement before its history insert', async t => {
+  const f = await fixture(t)
+  const name = '013-mcp-review-corrections'
+  const sql = await readFile(resolve(dirname(script), `../api/migrations/${name}.sql`), 'utf8')
+  await writeFile(join(f.root, `api/migrations/${name}.sql`), sql)
+  await f.execute(['migrations'])
+  assert.equal(f.sqlFiles.length, 1)
+  assert.match(f.sqlFiles[0], /CREATE TRIGGER financial_revision_transactions_delete/)
+  assert.match(f.sqlFiles[0], /END;\nINSERT INTO migration_history .*'013-mcp-review-corrections'/)
+  assert.doesNotMatch(f.sqlFiles[0], /(?:^|\n)\s*;\s*(?:\n|$)/)
+  assert.throws(() => migrationSqlWithHistory('CREATE TABLE missing_terminator (id TEXT)', name), /must end with a semicolon/)
   await f.assertClean()
 })
 
