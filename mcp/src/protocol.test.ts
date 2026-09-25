@@ -78,6 +78,8 @@ describe('MCP protocol surface', () => {
       'list_mcp_review_drafts',
       'prepare_mcp_review_draft_corrections',
       'apply_mcp_review_draft_corrections',
+      'prepare_mcp_transfer_corrections',
+      'apply_mcp_transfer_corrections',
       'get_accounts_summary',
       'get_finance_overview',
       'search_transactions',
@@ -89,7 +91,7 @@ describe('MCP protocol surface', () => {
       'get_investment_activity',
     ])
     const writes = body.result.tools.filter(tool => !tool.annotations.readOnlyHint)
-    expect(writes.map(tool => tool.name)).toEqual(['create_financial_outlook_snapshot', 'prepare_mcp_transaction_drafts', 'create_mcp_transaction_drafts', 'prepare_mcp_transfer_drafts', 'create_mcp_transfer_drafts', 'prepare_mcp_review_draft_corrections', 'apply_mcp_review_draft_corrections'])
+    expect(writes.map(tool => tool.name)).toEqual(['create_financial_outlook_snapshot', 'prepare_mcp_transaction_drafts', 'create_mcp_transaction_drafts', 'prepare_mcp_transfer_drafts', 'create_mcp_transfer_drafts', 'prepare_mcp_review_draft_corrections', 'apply_mcp_review_draft_corrections', 'prepare_mcp_transfer_corrections', 'apply_mcp_transfer_corrections'])
     expect(writes.every(tool => tool.annotations.destructiveHint === false && tool.annotations.openWorldHint === false)).toBe(true)
     expect(writes.filter(tool => tool.name.startsWith('prepare_')).every(tool => tool.annotations.idempotentHint === false)).toBe(true)
     expect(writes.filter(tool => !tool.name.startsWith('prepare_')).every(tool => tool.annotations.idempotentHint)).toBe(true)
@@ -109,6 +111,7 @@ describe('MCP protocol surface', () => {
     expect(body.result.instructions).toContain('MCP review drafts created')
     expect(body.result.instructions).toContain('list_mcp_review_drafts')
     expect(body.result.instructions).toContain('apply_mcp_review_draft_corrections')
+    expect(body.result.instructions).toContain('apply_mcp_transfer_corrections')
     expect(body.result.instructions).toContain('never posts transactions or changes balances')
     expect(body.result.instructions).toContain('first call get_financial_outlook_context')
     expect(body.result.instructions).toContain('call create_financial_outlook_snapshot in the same request before replying')

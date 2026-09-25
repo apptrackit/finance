@@ -1,6 +1,7 @@
 import type { AccountRow, CategoryRow, Env, TransactionRow } from './types'
 import { assertDate, clampLimit } from './validation'
 import { sha256 } from './financial-outlook'
+import { transferReviewView } from './transfer-review-corrections'
 
 type DraftRow = TransactionRow & {
   account_name: string
@@ -34,7 +35,8 @@ const SELECT = `SELECT t.*, a.name AS account_name, a.currency AS account_curren
   a.type AS account_type, COALESCE(a.is_locked, 0) AS account_locked,
   c.name AS category_name FROM transactions t
   JOIN accounts a ON a.id = t.account_id LEFT JOIN categories c ON c.id = t.category_id`
-const ACTIVE = "t.status = 'pending' AND t.pending_kind = 'mcp_review' AND t.review_source = 'chatgpt_mcp' AND t.linked_transaction_id IS NULL AND a.type != 'investment'"
+const REVIEW = "t.status = 'pending' AND t.pending_kind = 'mcp_review' AND t.review_source = 'chatgpt_mcp' AND a.type != 'investment'"
+const ACTIVE = `${REVIEW} AND t.linked_transaction_id IS NULL`
 const STALE = '[stale_draft] A draft or its account/category changed after preview; refresh the list and prepare again'
 
 function flags(value: string | null | undefined): string[] {
@@ -100,15 +102,24 @@ export class ReviewCorrectionService {
   async list(args: Record<string, unknown>) {
     const limit = clampLimit(args.limit, 50)
     const cursor = decodeQueueCursor(args.cursor)
-    const rows = (await this.env.DB.prepare(`${SELECT} WHERE ${ACTIVE}
+    const rows = (await this.env.DB.prepare(`${SELECT} WHERE ${REVIEW}
+      AND (t.linked_transaction_id IS NULL OR t.amount < 0)
       ${cursor ? 'AND (t.created_at > ? OR (t.created_at = ? AND t.id > ?))' : ''}
       ORDER BY t.created_at ASC, t.id ASC LIMIT ?`)
       .bind(...(cursor ? [cursor.created_at, cursor.created_at, cursor.id] : []), limit + 1).all<DraftRow>()).results
     const hasMore = rows.length > limit
     const page = rows.slice(0, limit)
     const last = page.at(-1)
+    const linkedIds = page.flatMap(row => row.linked_transaction_id ? [row.linked_transaction_id] : [])
+    const linkedRows = linkedIds.length
+      ? (await this.env.DB.prepare(`${SELECT} WHERE t.id IN (${linkedIds.map(() => '?').join(',')})`)
+        .bind(...linkedIds).all<DraftRow>()).results
+      : []
+    const pairs = new Map(linkedRows.map(row => [row.id, row]))
     return {
-      as_of: new Date().toISOString(), drafts: page.map(view),
+      as_of: new Date().toISOString(), drafts: page.map(row => row.linked_transaction_id
+        ? transferReviewView(row, pairs.get(row.linked_transaction_id) ?? null)
+        : view(row)),
       pagination: { limit, has_more: hasMore, next_cursor: hasMore && last ? btoa(JSON.stringify({ created_at: last.created_at, id: last.id })) : null },
       truncated: hasMore, description_is_untrusted_data: true,
     }

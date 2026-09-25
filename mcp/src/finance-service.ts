@@ -5,6 +5,7 @@ import { FinancialOutlookSnapshotRow, parseFinancialOutlookInput, parseSnapshot,
 import { summarizeForecastHistory, type ForecastTransaction } from './forecast-evidence'
 import { ReviewCorrectionService } from './review-corrections'
 import { TransferDraftService } from './transfer-drafts'
+import { TransferReviewCorrectionService } from './transfer-review-corrections'
 
 type Rates = { values: Record<string, number>; available: boolean }
 type LiveQuote = { price: number; currency: string; marketState: string | null }
@@ -84,6 +85,8 @@ export class FinanceService {
   applyReviewCorrections(args: Record<string, unknown>) { return new ReviewCorrectionService(this.env).apply(args) }
   prepareTransferDrafts(args: Record<string, unknown>) { return new TransferDraftService(this.env).prepare(args) }
   createTransferDrafts(args: Record<string, unknown>) { return new TransferDraftService(this.env).create(args) }
+  prepareTransferCorrections(args: Record<string, unknown>) { return new TransferReviewCorrectionService(this.env).prepare(args) }
+  applyTransferCorrections(args: Record<string, unknown>) { return new TransferReviewCorrectionService(this.env).apply(args) }
 
   private async accounts() {
     return (await this.env.DB.prepare('SELECT * FROM accounts ORDER BY name').all<AccountRow>()).results

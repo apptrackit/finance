@@ -62,4 +62,21 @@ it('upgrades the preceding schema without changing existing MCP review drafts', 
   await f.db.prepare("UPDATE transactions SET status = 'posted' WHERE id = 'existing-review'").run()
   expect(await f.db.prepare('SELECT revision FROM financial_data_revision WHERE id = 1').first('revision')).toBe((revision as number) + 1)
 })
+
+it('upgrades schema 013 with a linked transfer review intact', async () => {
+  await migrate(f.db, 13)
+  await f.seed()
+  await f.db.batch([
+    f.db.prepare(`INSERT INTO transactions (id, account_id, amount, date, description, status, pending_kind, review_source, review_batch_id, linked_transaction_id, review_flags, created_at, updated_at)
+      VALUES ('transfer-out', 'cash', -20, '2026-01-15', 'Exchange', 'pending', 'mcp_review', 'chatgpt_mcp', 'batch', 'transfer-in', '[]', 1, 1)`),
+    f.db.prepare(`INSERT INTO transactions (id, account_id, amount, date, description, status, pending_kind, review_source, review_batch_id, linked_transaction_id, review_flags, created_at, updated_at)
+      VALUES ('transfer-in', 'savings', 20, '2026-01-15', 'Exchange', 'pending', 'mcp_review', 'chatgpt_mcp', 'batch', 'transfer-out', '[]', 1, 1)`),
+  ])
+  const before = (await f.db.prepare("SELECT * FROM transactions ORDER BY id").all()).results
+  await migrate(f.db)
+  expect((await f.db.prepare("SELECT * FROM transactions ORDER BY id").all()).results).toEqual(before)
+  expect((await f.db.prepare("SELECT name FROM sqlite_master WHERE name IN ('mcp_transfer_correction_proposals', 'mcp_transfer_correction_runs') ORDER BY name").all()).results)
+    .toEqual([{ name: 'mcp_transfer_correction_proposals' }, { name: 'mcp_transfer_correction_runs' }])
+  expect(await f.db.prepare('PRAGMA foreign_key_check').all()).toMatchObject({ results: [] })
+})
 import { readdir } from 'node:fs/promises'
