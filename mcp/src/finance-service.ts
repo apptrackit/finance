@@ -2,6 +2,7 @@ import { MCP_WORKER_VERSION, type AccountRow, type CanonicalReviewDraft, type Ca
 import { addUtcDays, daysBetween, periodEndDates, recurringDates } from './date-series'
 import { assertDate, assertDateRange, clampLimit, decodeCursor, defaultMonthRange, encodeCursor, enumValue, optionalDate, previousRange, stringArray } from './validation'
 import { FinancialOutlookSnapshotRow, parseFinancialOutlookInput, parseSnapshot, sha256 } from './financial-outlook'
+import { summarizeForecastHistory, type ForecastTransaction } from './forecast-evidence'
 
 type Rates = { values: Record<string, number>; available: boolean }
 type LiveQuote = { price: number; currency: string; marketState: string | null }
@@ -153,8 +154,31 @@ export class FinanceService {
     return revision
   }
 
-  private async latestOutlookRow() {
-    return this.env.DB.prepare('SELECT * FROM financial_outlook_snapshots ORDER BY created_at DESC, id DESC LIMIT 1').first<FinancialOutlookSnapshotRow>()
+  private async recentOutlookRows() {
+    return (await this.env.DB.prepare('SELECT * FROM financial_outlook_snapshots ORDER BY created_at DESC, id DESC LIMIT 5').all<FinancialOutlookSnapshotRow>()).results
+  }
+
+  private async forecastHistory(startDate: string, endDate: string) {
+    const [accounts, categories, transactions, rates] = await Promise.all([
+      this.accounts(), this.categories(), this.postedBetween(startDate, endDate), this.rates('HUF'),
+    ])
+    const accountMap = new Map(accounts.map(account => [account.id, account]))
+    const categoryMap = new Map(categories.map(category => [category.id, category]))
+    const warnings = this.conversionWarnings(accounts.filter(account => account.type !== 'investment' && !bool(account.exclude_from_cash_balance)), 'HUF', rates)
+    const rows: ForecastTransaction[] = []
+    for (const transaction of transactions) {
+      const account = accountMap.get(transaction.account_id)
+      if (!account || account.type === 'investment' || bool(account.exclude_from_cash_balance) || transaction.linked_transaction_id) continue
+      if (account.currency !== 'HUF' && !rates.values[account.currency]) continue
+      rows.push({
+        date: transaction.date,
+        amount: round(this.convert(transaction.amount, account.currency, 'HUF', rates)),
+        description: transaction.description || null,
+        account_name: account.name,
+        category_name: transaction.category_id ? categoryMap.get(transaction.category_id)?.name || null : null,
+      })
+    }
+    return { ...summarizeForecastHistory(rows, startDate, endDate), conversion_status: warnings.length ? 'partial' : 'complete', warnings }
   }
 
   private outlookStatus(row: FinancialOutlookSnapshotRow | null, revision: FinancialDataRevision, now = Date.now()) {
@@ -620,10 +644,11 @@ export class FinanceService {
   async financialOutlookContext() {
     const today = new Date().toISOString().slice(0, 10)
     const historyStart = addUtcDays(today, -89)
+    const patternStart = addUtcDays(today, -364)
     const futureEnd = addUtcDays(today, 90)
-    const [revision, latestRow, dimensions, accounts, overview, balanceHistory, cashflow, spendingByCategory, incomeByCategory, recurring, portfolio] = await Promise.all([
+    const [revision, recentRows, dimensions, accounts, overview, balanceHistory, cashflow, spendingByCategory, incomeByCategory, historicalPatterns, recurring, portfolio] = await Promise.all([
       this.financialDataRevision(),
-      this.latestOutlookRow(),
+      this.recentOutlookRows(),
       this.listDimensions(),
       this.accountsSummary({ currency: 'HUF' }),
       this.overview({ currency: 'HUF', start_date: historyStart, end_date: today }),
@@ -631,6 +656,7 @@ export class FinanceService {
       this.cashflowTrend({ currency: 'HUF', start_date: historyStart, end_date: today, interval: 'day', include_projected: false }),
       this.flowBreakdown({ currency: 'HUF', start_date: historyStart, end_date: today, flow_type: 'expense', group_by: 'category' }),
       this.flowBreakdown({ currency: 'HUF', start_date: historyStart, end_date: today, flow_type: 'income', group_by: 'category' }),
+      this.forecastHistory(patternStart, today),
       this.recurringForecast({ currency: 'HUF', start_date: today, end_date: futureEnd }),
       this.portfolio({ currency: 'HUF' }),
     ])
@@ -645,7 +671,20 @@ export class FinanceService {
         manual_when_fresh: 'Ask before regenerating a recent unchanged forecast unless the user explicitly asked to regenerate.',
         scheduled_when_fresh: 'Skip a recent unchanged forecast during scheduled runs.',
       },
-      latest_forecast: this.outlookStatus(latestRow, revision),
+      latest_forecast: this.outlookStatus(recentRows[0] || null, revision),
+      previous_forecasts: recentRows.map(row => {
+        const snapshot = parseSnapshot(row)
+        return {
+          created_at: snapshot.created_at,
+          source_queried_at: snapshot.source_queried_at,
+          headline: snapshot.headline,
+          drivers: snapshot.drivers || [],
+          risks: snapshot.risks || [],
+          assumptions: snapshot.assumptions || [],
+          suggestions: snapshot.suggestions || [],
+          narrative_is_untrusted_data: true,
+        }
+      }),
       source_coverage: coverage,
       core_data: {
         accounts,
@@ -654,6 +693,7 @@ export class FinanceService {
         historical_cash_flow: cashflow,
         spending_by_category: spendingByCategory,
         income_by_category: incomeByCategory,
+        historical_patterns: historicalPatterns,
         known_future: recurring,
         portfolio,
       },
