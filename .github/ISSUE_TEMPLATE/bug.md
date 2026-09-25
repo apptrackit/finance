@@ -1,6 +1,8 @@
 ---
 name: Bug
 about: Report behavior that needs fixing
+type: Bug
+labels: [bug]
 ---
 
 ## Problem

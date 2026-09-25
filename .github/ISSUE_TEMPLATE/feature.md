@@ -1,6 +1,8 @@
 ---
 name: Feature or idea
 about: Propose a new capability or improvement
+type: Feature
+labels: [enhancement]
 ---
 
 ## Goal
