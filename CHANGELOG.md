@@ -11,6 +11,10 @@ Intermediate package/UI version bumps are grouped under the next published GitHu
 - The Finance MCP can list unresolved MCP review drafts and prepare user-confirmed edits or declines. Apply rejects stale previews and makes bounded batches atomic and idempotent; neither action posts transactions or changes balances.
 - Migration `013-mcp-review-corrections.sql` stores expiring correction proposals and completed runs, indexes the active review queue, and keeps draft-only changes from marking financial forecasts stale.
 
+### Fixed
+
+- Removed the empty SQL statement generated between a migration and its history insert, which blocked D1 remote imports of migration 013.
+
 ## v3.0 — 2026-09-24
 
 [GitHub release](https://github.com/apptrackit/finance/releases/tag/v3.0) · [Compare v2.11…v3.0](https://github.com/apptrackit/finance/compare/v2.11...v3.0) · [PR #50](https://github.com/apptrackit/finance/pull/50)
