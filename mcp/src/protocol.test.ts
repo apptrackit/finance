@@ -106,6 +106,10 @@ describe('MCP protocol surface', () => {
     expect(body.result.instructions).toContain('first call get_financial_outlook_context')
     expect(body.result.instructions).toContain('call create_financial_outlook_snapshot in the same request before replying')
     expect(body.result.instructions).toContain('Do not provide an unsaved chat-only forecast')
+    expect(body.result.instructions).toContain('do not assume income stops after that one deposit')
+    expect(body.result.instructions).toContain('do not count the same likely paycheck or bill twice')
+    expect(body.result.instructions).toContain('Reconcile previous forecast assumptions and plans')
+    expect(body.result.instructions).toContain('For forecasts, make evidence-based assumptions about future events')
   })
 
   it('rejects unknown mutation tools without touching D1', async () => {
