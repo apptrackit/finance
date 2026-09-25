@@ -17,7 +17,7 @@ const fixtureConfig = {
 }
 const json = rows => JSON.stringify([{ success: true, results: rows }])
 
-async function fixture(t, { config = fixtureConfig, applied = ['001-init', '002-change'], fail, branch = 'main', answer = 'n' } = {}) {
+async function fixture(t, { config = fixtureConfig, applied = ['001-init', '002-change'], fail, branch = 'main', answer = 'n', recordMigration = true } = {}) {
   const root = await mkdtemp(join(tmpdir(), 'finance-deploy-test-'))
   t.after(() => rm(root, { recursive: true, force: true }))
   for (const dir of ['api/migrations', 'mcp', 'client/dist/assets']) await mkdir(join(root, dir), { recursive: true })
@@ -28,6 +28,7 @@ async function fixture(t, { config = fixtureConfig, applied = ['001-init', '002-
   const localFiles = ['api/wrangler.toml', 'api/wrangler.prod.toml', 'mcp/wrangler.toml', 'client/.env.production', 'client/.env.local']
   for (const file of localFiles) await writeFile(join(root, file), `private original ${file}\n`)
   const calls = [], logs = [], configs = [], tempDirs = new Set(), sqlFiles = []
+  const recorded = new Set(applied ?? [])
   const run = async (command, args, options) => {
     const kind = command === 'git' ? 'git' : args[0]?.endsWith('wrangler.js') ? 'wrangler' : args[0]?.endsWith('/tsc') ? 'tsc' : 'npm'
     const argv = ['git', 'npm'].includes(command) ? args : args.slice(1)
@@ -53,12 +54,18 @@ async function fixture(t, { config = fixtureConfig, applied = ['001-init', '002-
     if (kind === 'wrangler' && argv[0] === 'whoami') { assert.ok(argv.includes('--json')); return '{"loggedIn":true}' }
     if (kind === 'wrangler' && argv[0] === 'd1') {
       if (argv.includes('--file')) {
-        sqlFiles.push(await readFile(argv[argv.indexOf('--file') + 1], 'utf8'))
-        return json([])
+        const sql = await readFile(argv[argv.indexOf('--file') + 1], 'utf8')
+        sqlFiles.push(sql)
+        const name = /INSERT INTO migration_history .*VALUES \('([^']+)'/.exec(sql)?.[1]
+        if (recordMigration && name) recorded.add(name)
+        return 'Checking if file needs uploading\nUploading complete.\nExecuted queries'
       }
       const query = argv[argv.indexOf('--command') + 1]
       if (query.includes('sqlite_master')) return json(applied === null ? [] : [{ name: 'migration_history' }])
-      if (query.startsWith('SELECT migration_name')) return json(applied.map(migration_name => ({ migration_name })))
+      if (query.startsWith('SELECT migration_name')) {
+        const name = /WHERE migration_name = '([^']+)'/.exec(query)?.[1]
+        return json([...recorded].filter(migration_name => !name || migration_name === name).map(migration_name => ({ migration_name })))
+      }
       return json([])
     }
     if (kind === 'wrangler' && argv[0] === 'deploy' && !argv.includes('--dry-run')) return 'Deployed https://test-api.example.workers.dev'
@@ -164,6 +171,16 @@ test('explicit migrations are applied before a targeted Worker, with history in 
   assert.match(f.sqlFiles[0], /INSERT INTO migration_history .*'002-change'/)
   assert.doesNotMatch(f.sqlFiles[0], /(?:^|\n)\s*;\s*(?:\n|$)/)
   assert.deepEqual(f.mutations().map(call => call.argv[0]), ['d1', 'd1', 'deploy'])
+  const fileImport = f.calls.find(call => call.argv.includes('--file'))
+  assert.ok(!fileImport.argv.includes('--json'))
+  assert.ok(f.calls.some(call => call.argv.includes("SELECT migration_name FROM migration_history WHERE migration_name = '002-change'")))
+  await f.assertClean()
+})
+
+test('successful file import without a migration history row stops deployment', async t => {
+  const f = await fixture(t, { applied: ['001-init'], recordMigration: false })
+  await assert.rejects(f.execute(['api', '--migrations']), /Migration 002-change was not recorded/)
+  assert.ok(!f.mutations().some(call => call.argv[0] === 'deploy'))
   await f.assertClean()
 })
 

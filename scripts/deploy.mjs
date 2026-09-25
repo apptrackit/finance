@@ -340,7 +340,14 @@ export async function deploy(options, { root = repositoryRoot, run = runCommand,
           // Record success in the same SQL submission, rather than ignoring a
           // separate history-write failure and replaying ALTERs on the next run.
           await writeFile(migrationFile, migrationSqlWithHistory(sql, name), { mode: 0o600 })
-          await d1(`Applying ${name}`, ['--file', migrationFile])
+          // Wrangler prints file-import progress to stdout even with --json, so
+          // its output cannot be parsed as a JSON query result. Verify the
+          // history row with a separate read after the import exits successfully.
+          await wrangler(`Applying ${name}`, ['d1', 'execute', 'DB', '--remote', '--yes', '--config', apiConfig, '--file', migrationFile])
+          const recorded = await d1(`Verifying ${name}`, ['--command', `SELECT migration_name FROM migration_history WHERE migration_name = '${name}'`])
+          if (recorded.length !== 1 || recorded[0].migration_name !== name) {
+            throw new Error(`Migration ${name} was not recorded; deployment stopped.`)
+          }
         }
       } else report.success('Migrations up to date')
     }
