@@ -188,6 +188,15 @@ export function Analytics({
     [accounts, exchangeRates, masterCurrency]
   )
 
+  const convertToHuf = useCallback((amount: number, accountId: string): number | null => {
+    const account = accounts.find(item => item.id === accountId)
+    if (!account) return null
+    if (account.currency === 'HUF') return amount
+    const hufRate = masterCurrency === 'HUF' ? 1 : exchangeRates.HUF
+    const accountRate = account.currency === masterCurrency ? 1 : exchangeRates[account.currency]
+    return hufRate && accountRate ? amount * hufRate / accountRate : null
+  }, [accounts, exchangeRates, masterCurrency])
+
   // Filter transactions by period (exclude investment accounts only)
   const filteredTransactions = useMemo(() => {
     return transactionsForAnalytics.filter(tx => {
@@ -1109,7 +1118,7 @@ export function Analytics({
           hasMore={Boolean(outlookNextCursor)}
           transactions={transactions}
           accounts={accounts}
-          convertToMasterCurrency={convertToMasterCurrency}
+          convertToHuf={convertToHuf}
         />
       )}
     </div>
