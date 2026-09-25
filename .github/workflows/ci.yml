@@ -83,6 +83,27 @@ jobs:
           path: test-results/client.xml
           retention-days: 7
 
+  test-client-node26:
+    name: Client tests (Node 26)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '26'
+          cache: npm
+      - run: npm ci
+      - run: npm test -w client -- --reporter=default --reporter=junit --outputFile.junit=../test-results/client-node26.xml
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: ${{ !cancelled() }}
+        with:
+          name: client-node26-test-results
+          path: test-results/client-node26.xml
+          retention-days: 7
+
   test-mcp:
     name: MCP tests and typecheck
     runs-on: ubuntu-latest
@@ -199,7 +220,7 @@ jobs:
   ci:
     name: CI passed
     if: ${{ always() }}
-    needs: [workflow, test-api, test-client, test-mcp, test-deploy, integration, build-client, typecheck-api, lint-client]
+    needs: [workflow, test-api, test-client, test-client-node26, test-mcp, test-deploy, integration, build-client, typecheck-api, lint-client]
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:

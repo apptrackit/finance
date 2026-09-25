@@ -5,7 +5,7 @@ This guide applies to the entire repository. Finance Manager is a personal finan
 ## Start here
 
 - This is an **npm workspace monorepo**: `api`, `client`, and `mcp`. Install from the root with `npm ci`; keep the root `package-lock.json` as the shared lockfile. Use `npm install <package> -w <workspace>` for dependency changes.
-- Use the Node 22 LTS version in `.node-version`, matching CI. The current Wrangler requires Node 22 or newer; use the pinned runtime for consistent integration tests (see `tests/README.md`).
+- Use the Node 22 LTS version in `.node-version`, matching the primary CI jobs. The client suite also runs on Node 26 in CI. The current Wrangler requires Node 22 or newer; use the pinned runtime for consistent integration tests (see `tests/README.md`).
 - Read the relevant entry point and tests before editing. Package scripts, current source, and the complete migration sequence are the implementation reference. `README.md` covers current setup and features; `CHANGELOG.md` separates published releases from unreleased changes.
 - `api/` is a Hono/TypeScript Cloudflare Worker; `client/` is React 19, Vite, Tailwind CSS 4, and Recharts, deployed to Cloudflare Pages; `mcp/` is a separate TypeScript Cloudflare Worker.
 - **API and MCP bind directly to the same D1 database.** MCP does not call API services. Schema and financial-semantics changes often require updates in all three workspaces; there is no shared generated contract package.
@@ -90,7 +90,7 @@ npm test -w api -- src/tests/upcoming-transactions.test.ts
 
 - Root `npm run build` builds only the client. Plain `tsc --noEmit` against the client's root tsconfig does not check its referenced projects; use the build above or `(cd client && npx tsc -b)`.
 - API unit tests live in `api/src/tests/`; client tests are colocated and in `client/src/test/` (Vitest, jsdom, Testing Library); MCP tests are colocated in `mcp/src/`. Cross-workspace tests live in `tests/integration/` and run compiled Workers against disposable shared D1 with signed test JWTs. Keep their runtime flags/dates aligned with the tracked Wrangler examples. See `tests/README.md` for test boundaries and fixtures.
-- `.github/workflows/ci.yml` runs workflow validation, all workspace suites, deployment tests, API/MCP types, client build/lint, and integration tests. `CI passed` fails if any prerequisite fails, is cancelled, or is skipped. Unit/report artifacts do not require production credentials.
+- `.github/workflows/ci.yml` runs workflow validation, all workspace suites, a second client suite on Node 26, deployment tests, API/MCP types, client build/lint, and integration tests. `CI passed` fails if any prerequisite fails, is cancelled, or is skipped. Unit/report artifacts do not require production credentials.
 - Client lint has a clean baseline under its enabled rules; several legacy typing/React rules remain disabled in `client/eslint.config.js`. Do not introduce additional rule exclusions to pass CI. Generated `dist/` and `dev-dist/` are ignored.
 - For financial behavior changes, test balance deltas, posted/pending/cancelled transitions, locks on affected accounts, linked transfers, repeated confirmation, currency conversion, and MCP projection isolation as applicable. Use existing regression suites as starting points.
 - For UI changes, check desktop/mobile layouts, privacy modes, themes, empty/loading/error states, and failed saves. For SQL changes, also validate against a disposable local database; unit mocks are insufficient.

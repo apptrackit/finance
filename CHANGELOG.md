@@ -8,6 +8,7 @@ Intermediate package/UI version bumps are grouped under the next published GitHu
 
 ### Added
 
+- CI runs the client tests on both pinned Node 22 and Node 26, and the required `CI passed` check waits for both jobs.
 - The Finance MCP can preview and create cash transfer review drafts, including cross-currency pairs when both native amounts are supplied. The app reviews each reciprocal pair as one item and posts or declines both sides atomically; drafts leave balances and projections unchanged.
 - The Finance MCP can list unresolved MCP review drafts and prepare user-confirmed edits or declines. Apply rejects stale previews and makes bounded batches atomic and idempotent; neither action posts transactions or changes balances.
 - The MCP review list shows each linked cash transfer once. Separate transfer correction tools preview and atomically edit or decline both legs after user confirmation, including cross-currency amounts.
