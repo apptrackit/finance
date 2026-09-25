@@ -3,6 +3,7 @@ import { addUtcDays, daysBetween, periodEndDates, recurringDates } from './date-
 import { assertDate, assertDateRange, clampLimit, decodeCursor, defaultMonthRange, encodeCursor, enumValue, optionalDate, previousRange, stringArray } from './validation'
 import { FinancialOutlookSnapshotRow, parseFinancialOutlookInput, parseSnapshot, sha256 } from './financial-outlook'
 import { summarizeForecastHistory, type ForecastTransaction } from './forecast-evidence'
+import { ReviewCorrectionService } from './review-corrections'
 
 type Rates = { values: Record<string, number>; available: boolean }
 type LiveQuote = { price: number; currency: string; marketState: string | null }
@@ -76,6 +77,10 @@ function round(value: number) {
 
 export class FinanceService {
   constructor(private env: Env) {}
+
+  listReviewDrafts(args: Record<string, unknown>) { return new ReviewCorrectionService(this.env).list(args) }
+  prepareReviewCorrections(args: Record<string, unknown>) { return new ReviewCorrectionService(this.env).prepare(args) }
+  applyReviewCorrections(args: Record<string, unknown>) { return new ReviewCorrectionService(this.env).apply(args) }
 
   private async accounts() {
     return (await this.env.DB.prepare('SELECT * FROM accounts ORDER BY name').all<AccountRow>()).results

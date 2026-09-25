@@ -1,6 +1,6 @@
 # Finance MCP server
 
-This directory contains the only AI-facing component in Finance Manager: a remote MCP server deployed as a Cloudflare Worker. Most tools are read-only. Its only financial write capability creates review drafts that must still be confirmed manually in the Finance Manager UI; preparation persists an expiring proposal only, and forecasts are append-only derived analytics snapshots. ChatGPT connects directly to the Worker; no Mac bridge, Codex app-server, frontend chat, OpenAI API key, or separate model billing is involved.
+This directory contains the only AI-facing component in Finance Manager: a remote MCP server deployed as a Cloudflare Worker. Most tools are read-only. Its financial writes create or correct pending MCP review drafts that must still be confirmed manually in the Finance Manager UI; preparation persists an expiring proposal only, and forecasts are append-only derived analytics snapshots. ChatGPT connects directly to the Worker; no Mac bridge, Codex app-server, frontend chat, OpenAI API key, or separate model billing is involved.
 
 ```text
 ChatGPT custom MCP app
@@ -27,19 +27,23 @@ create_mcp_transaction_drafts (one atomic, idempotent batch)
 Finance Manager MCP Review section → edit / confirm / decline manually
 ```
 
+To correct a mistake in an existing draft, call `list_mcp_review_drafts`, following every cursor before claiming the list is complete. Then call `prepare_mcp_review_draft_corrections` with 1–20 edits or declines. Show the complete before/after preview and ask for explicit confirmation. Only then call `apply_mcp_review_draft_corrections` with its opaque proposal ID. The proposal expires after 24 hours; stale app or MCP edits require a fresh list and preview. A decline cancels the draft and removes it from the active review queue. Neither operation posts transactions, changes balances, or adds upcoming projections.
+
 ## Security model
 
 - Cloudflare Access protects the custom MCP hostname and performs the OAuth flow.
 - The Worker independently verifies the Access JWT signature, issuer, audience, expiry, and optional allowed email.
 - `workers.dev` is disabled.
-- The model receives only bounded tool results. There is no arbitrary SQL tool and no tool that can post, confirm, edit, decline, delete, transfer, invest, or update a balance.
+- The model receives only bounded tool results. There is no arbitrary SQL tool and no tool that can post, confirm, hard-delete, transfer, invest, or update a balance. Edit and decline tools are limited to unresolved, unlinked MCP review drafts.
 - Every tool is non-destructive and closed-world. Read tools advertise `readOnlyHint: true`; proposal preparation advertises its non-financial persistence with `readOnlyHint: false` and `idempotentHint: false`; the creation and forecast writes advertise `readOnlyHint: false`, `destructiveHint: false`, `idempotentHint: true`, and `openWorldHint: false`.
 - Every tool has explicit input and output JSON Schemas. Inputs reject unknown fields and invalid dates before querying D1.
 - Draft preparation accepts 1–20 income/expense items. Accounts must exist, be unlocked, and be non-investment accounts. Categories are optional, but any supplied category must exist and match the income/expense type.
 - Preparation stores the canonical proposal in D1 and returns only an opaque proposal ID that expires after 24 hours. Creation looks it up, verifies its stored checksum and expiry, and revalidates account/category safety before writing.
 - Creation marks the proposal consumed, inserts the batch marker, every pending transaction, and one minimal audit entry per draft in a single D1 batch. Retrying a successful creation with the same proposal ID returns the original draft rows instead of creating duplicates.
+- Correction preparation captures the complete target state and account/category context. Apply revalidates them and uses guarded audit and update statements in a single D1 batch. A stale guard aborts the entire batch; concurrent retries return the original outcome. Audit details contain operation metadata rather than financial descriptions.
 - Duplicate detection is warning-only, both against nearby existing transactions and within the proposed batch. It never blocks draft creation.
 - MCP review rows have `status=pending`, `pending_kind=mcp_review`, and `review_source=chatgpt_mcp`. They are excluded from balances, cash-flow projections, and recurring forecasts until manually confirmed.
+- Changes to pending MCP review drafts alone do not advance the forecast source revision. Confirming a draft in the app does.
 - Transaction results are paginated to at most 100 records and descriptions are explicitly marked as untrusted data.
 - Chart and forecast series are bounded. Tool responses disclose their date range, reporting currency, conversion status, warnings, and truncation state where applicable.
 - Missing exchange rates cause affected values to be excluded and clearly warned about, rather than mixing currencies into an incorrect total.
@@ -53,6 +57,9 @@ Finance Manager MCP Review section → edit / confirm / decline manually
 | `create_financial_outlook_snapshot` | Immediately publish one validated, immutable, idempotent daily 90-day HUF forecast; cannot modify financial source data |
 | `prepare_mcp_transaction_drafts` | Validate and preview 1–20 income/expense drafts; stores an expiring canonical proposal and returns its opaque ID |
 | `create_mcp_transaction_drafts` | After explicit confirmation, atomically create pending MCP review drafts from the proposal ID |
+| `list_mcp_review_drafts` | Cursor-paginated unresolved MCP review drafts only; excludes ordinary upcoming rows |
+| `prepare_mcp_review_draft_corrections` | Preview 1–20 edits or declines, storing a 24-hour proposal |
+| `apply_mcp_review_draft_corrections` | After explicit confirmation, atomically apply the proposal or reject stale targets |
 | `get_accounts_summary` | Per-account cash/credit balances, exclusions, and locks |
 | `get_finance_overview` | A compact current-period snapshot and previous-period comparison |
 | `search_transactions` | Bounded transaction-level lookup, including pending/cancelled/largest searches |

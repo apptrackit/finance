@@ -59,7 +59,7 @@ describe('MCP protocol surface', () => {
     expect(response.status).toBe(200)
   })
 
-  it('advertises the complete schema-described finance surface with two non-destructive write tools', async () => {
+  it('advertises the complete schema-described finance surface with scoped write tools', async () => {
     const response = await worker.fetch(new Request('http://localhost/mcp', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -73,6 +73,9 @@ describe('MCP protocol surface', () => {
       'create_financial_outlook_snapshot',
       'prepare_mcp_transaction_drafts',
       'create_mcp_transaction_drafts',
+      'list_mcp_review_drafts',
+      'prepare_mcp_review_draft_corrections',
+      'apply_mcp_review_draft_corrections',
       'get_accounts_summary',
       'get_finance_overview',
       'search_transactions',
@@ -84,10 +87,10 @@ describe('MCP protocol surface', () => {
       'get_investment_activity',
     ])
     const writes = body.result.tools.filter(tool => !tool.annotations.readOnlyHint)
-    expect(writes.map(tool => tool.name)).toEqual(['create_financial_outlook_snapshot', 'prepare_mcp_transaction_drafts', 'create_mcp_transaction_drafts'])
+    expect(writes.map(tool => tool.name)).toEqual(['create_financial_outlook_snapshot', 'prepare_mcp_transaction_drafts', 'create_mcp_transaction_drafts', 'prepare_mcp_review_draft_corrections', 'apply_mcp_review_draft_corrections'])
     expect(writes.every(tool => tool.annotations.destructiveHint === false && tool.annotations.openWorldHint === false)).toBe(true)
-    expect(writes.find(tool => tool.name === 'prepare_mcp_transaction_drafts')?.annotations.idempotentHint).toBe(false)
-    expect(writes.filter(tool => tool.name !== 'prepare_mcp_transaction_drafts').every(tool => tool.annotations.idempotentHint)).toBe(true)
+    expect(writes.filter(tool => tool.name.startsWith('prepare_')).every(tool => tool.annotations.idempotentHint === false)).toBe(true)
+    expect(writes.filter(tool => !tool.name.startsWith('prepare_')).every(tool => tool.annotations.idempotentHint)).toBe(true)
     expect(body.result.tools.every(tool => !tool.annotations.destructiveHint)).toBe(true)
     expect(body.result.tools.every(tool => tool.description.includes('Use'))).toBe(true)
     expect(body.result.tools.every(tool => tool.inputSchema && tool.outputSchema)).toBe(true)
@@ -102,6 +105,8 @@ describe('MCP protocol surface', () => {
     const body = await response.json() as { result: { instructions: string } }
     expect(body.result.instructions).toContain('ask for explicit confirmation')
     expect(body.result.instructions).toContain('MCP review drafts created')
+    expect(body.result.instructions).toContain('list_mcp_review_drafts')
+    expect(body.result.instructions).toContain('apply_mcp_review_draft_corrections')
     expect(body.result.instructions).toContain('never posts transactions or changes balances')
     expect(body.result.instructions).toContain('first call get_financial_outlook_context')
     expect(body.result.instructions).toContain('call create_financial_outlook_snapshot in the same request before replying')
