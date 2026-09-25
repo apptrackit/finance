@@ -287,9 +287,10 @@ export class TransactionRepository {
       AND debit.review_source = 'chatgpt_mcp' AND credit.review_source = 'chatgpt_mcp'
       AND debit.review_batch_id = credit.review_batch_id AND debit.review_batch_id IS NOT NULL
       AND debit.account_id != credit.account_id
-      AND debit.amount < 0 AND credit.amount > 0 AND debit.amount + credit.amount = 0
+      AND debit.amount < 0 AND credit.amount > 0
       AND debit.date = credit.date AND source.type IN ('cash', 'checking', 'savings') AND destination.type IN ('cash', 'checking', 'savings')
-      AND source.currency = destination.currency AND source.is_locked = 0 AND destination.is_locked = 0
+      AND (UPPER(source.currency) != UPPER(destination.currency) OR debit.amount + credit.amount = 0)
+      AND source.is_locked = 0 AND destination.is_locked = 0
       ${action === 'confirm' ? 'AND debit.date <= ?' : ''}`
     const guard = action === 'confirm' ? [outgoing.id, incoming.id, today] : [outgoing.id, incoming.id]
     const status = action === 'confirm' ? 'posted' : 'cancelled'

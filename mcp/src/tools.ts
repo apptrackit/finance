@@ -88,7 +88,8 @@ const CREATED_REVIEW_DRAFT = {
 
 const TRANSFER_FIELDS = {
   from_account_id: { type: 'string' }, from_account_name: { type: 'string' }, to_account_id: { type: 'string' }, to_account_name: { type: 'string' },
-  debit_amount: { type: 'number' }, credit_amount: { type: 'number' }, currency: { type: 'string' }, effective_fx_rate: { type: 'number' },
+  debit_amount: { type: 'number' }, credit_amount: { type: 'number' }, from_currency: { type: 'string' }, to_currency: { type: 'string' },
+  effective_fx_rate: { type: 'number', description: 'Display-only destination-currency units per one source-currency unit, rounded to 10 significant digits. The explicit debit and credit amounts are authoritative.' },
   date: DATE, description: NULLABLE_STRING,
 } as const
 const TRANSFER_PREVIEW_ITEM = output([
@@ -205,11 +206,13 @@ export const TOOL_DEFINITIONS = [
   },
   {
     name: 'prepare_mcp_transfer_drafts', title: 'Preview cash transfer review drafts',
-    description: 'Use this to prepare 1–20 same-currency cash-to-cash transfers. Show both native-currency legs and all warnings, then ask the user to explicitly confirm the complete preview. This stores an expiring proposal only.',
+    description: 'Use this to prepare 1–20 cash-to-cash transfers. For different currencies, the user must supply both amount (sent) and amount_to (received); never calculate either from a market rate. Show both native-currency legs, the display-only effective rate, and all warnings, then ask the user to explicitly confirm the complete preview. This stores an expiring proposal only.',
     inputSchema: { type: 'object', required: ['items'], properties: { items: { type: 'array', minItems: 1, maxItems: 20, items: {
       type: 'object', required: ['from_account_id', 'to_account_id', 'amount', 'date'], properties: {
         from_account_id: { type: 'string', minLength: 1, maxLength: 128 }, to_account_id: { type: 'string', minLength: 1, maxLength: 128 },
-        amount: { type: 'number', exclusiveMinimum: 0, maximum: 1_000_000_000_000_000 }, date: DATE,
+        amount: { type: 'number', exclusiveMinimum: 0, maximum: 1_000_000_000_000_000, description: 'Positive amount sent in from_account_id currency.' },
+        amount_to: { type: ['number', 'null'], exclusiveMinimum: 0, maximum: 1_000_000_000_000_000, description: 'Positive amount received in to_account_id currency; required when currencies differ. If supplied for same-currency accounts it must equal amount.' },
+        date: DATE,
         description: { type: ['string', 'null'], maxLength: 500 },
       }, additionalProperties: false,
     } } }, additionalProperties: false },

@@ -1208,8 +1208,8 @@ export function TransactionList({
           <div className={`font-bold text-xs sm:text-sm ${tx.amount >= 0 ? 'text-success' : 'text-destructive'} ${shouldHide ? 'select-none' : ''}`}>
             {shouldHide ? '••••••' : (
               <>
-                {linked ? '−' : tx.amount >= 0 ? '+' : '-'}{Math.abs(tx.amount).toLocaleString('hu-HU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {getAccountCurrency(tx.account_id)}
-                {linked && <> → +{Math.abs(linked.amount).toLocaleString('hu-HU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {getAccountCurrency(linked.account_id)}</>}
+                {linked ? '−' : tx.amount >= 0 ? '+' : '-'}{linked ? formatAmount(Math.abs(tx.amount)) : Math.abs(tx.amount).toLocaleString('hu-HU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {getAccountCurrency(tx.account_id)}
+                {linked && <> → +{formatAmount(Math.abs(linked.amount))} {getAccountCurrency(linked.account_id)}</>}
               </>
             )}
           </div>
@@ -2090,7 +2090,7 @@ export function TransactionList({
                             if (isInvestmentTx && tx.quantity !== undefined) {
                               return <>{tx.quantity > 0 ? '+' : ''}{tx.quantity.toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 8})} {getAccountCurrency(tx.account_id)}</>
                             }
-                            return <>{tx.amount >= 0 ? '+' : '-'}{Math.abs(tx.amount).toLocaleString('hu-HU', {minimumFractionDigits: 2, maximumFractionDigits: 2})} {getAccountCurrency(tx.account_id)}</>
+                            return <>{tx.amount >= 0 ? '+' : '-'}{isTransfer && isMcpReviewTransaction(tx) ? formatAmount(Math.abs(tx.amount)) : Math.abs(tx.amount).toLocaleString('hu-HU', {minimumFractionDigits: 2, maximumFractionDigits: 2})} {getAccountCurrency(tx.account_id)}</>
                           })()}
                         </div>
                         {isTransfer && related && (
@@ -2103,7 +2103,7 @@ export function TransactionList({
                               if (shouldHide) {
                                 return '••••••'
                               }
-                              return <>+{Math.abs(related.amount).toLocaleString('hu-HU', {minimumFractionDigits: 2, maximumFractionDigits: 2})} {getAccountCurrency(related.account_id)}</>
+                              return <>+{isMcpReviewTransaction(tx) ? formatAmount(Math.abs(related.amount)) : Math.abs(related.amount).toLocaleString('hu-HU', {minimumFractionDigits: 2, maximumFractionDigits: 2})} {getAccountCurrency(related.account_id)}</>
                             })()}
                           </div>
                         )}

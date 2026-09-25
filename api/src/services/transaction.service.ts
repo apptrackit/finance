@@ -558,7 +558,7 @@ export class TransactionService {
     const pair = await this.transactionRepo.findById(tx.linked_transaction_id!)
     if (!pair || pair.linked_transaction_id !== tx.id || pair.review_batch_id !== tx.review_batch_id
       || pair.pending_kind !== 'mcp_review' || pair.review_source !== 'chatgpt_mcp'
-      || tx.amount * pair.amount >= 0 || tx.amount + pair.amount !== 0 || tx.date !== pair.date) {
+      || tx.amount * pair.amount >= 0 || tx.date !== pair.date) {
       throw new Error('Transfer review pair is invalid')
     }
     if (action === 'confirm' && tx.status === 'posted' && pair.status === 'posted') return tx
@@ -569,7 +569,9 @@ export class TransactionService {
       this.accountRepo.findById(tx.account_id), this.accountRepo.findById(pair.account_id),
     ])
     if (!source || !destination || !['cash', 'checking', 'savings'].includes(source.type) || !['cash', 'checking', 'savings'].includes(destination.type)
-      || source.id === destination.id || source.currency !== destination.currency) throw new Error('Transfer review accounts are invalid')
+      || source.id === destination.id || (source.currency.toUpperCase() === destination.currency.toUpperCase() && tx.amount + pair.amount !== 0)) {
+      throw new Error('Transfer review accounts or amounts are invalid')
+    }
     this.assertAccountUnlocked(source)
     this.assertAccountUnlocked(destination)
     const debit = tx.amount < 0 ? tx : pair
