@@ -1,4 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest'
+import { TransactionRepository } from '../../api/src/repositories/transaction.repository'
+import type { Transaction } from '../../api/src/models/Transaction'
 import { useFinanceWorkers } from './harness'
 
 type Proposal = { proposal_id: string; preview: Array<{ debit_amount: number; credit_amount: number; from_currency: string; to_currency: string; effective_fx_rate: number; warnings: string[] }> }
@@ -34,7 +36,7 @@ describe('MCP cash transfer review pairs', () => {
     expect(await f.balances()).toEqual([{ id: 'cash', balance: 1000 }, { id: 'savings', balance: 200 }])
     expect((await f.tool<{ summary: { pending_one_time_count: number } }>('get_recurring_forecast', { currency: 'HUF', start_date: '2026-01-15', end_date: '2026-01-16' })).summary.pending_one_time_count).toBe(0)
     expect(await f.db.prepare('SELECT revision FROM financial_data_revision WHERE id = 1').first<number>('revision')).toBe(beforeRevision)
-    expect((await f.request(`/transactions/${incoming_id}`, 'PUT', { amount: 1 })).status).toBe(400)
+    expect((await f.request(`/transactions/${incoming_id}`, 'PUT', { amount: 1, amount_to: 2 })).status).toBe(400)
     expect((await f.request(`/transactions/${incoming_id}`, 'DELETE')).status).toBe(400)
     const duplicate = await prepare()
     expect(duplicate.preview[0].warnings).toContain('possible_duplicate')
@@ -70,6 +72,71 @@ describe('MCP cash transfer review pairs', () => {
     const flow = await f.tool<{ totals: { income: number; expenses: number } }>('get_finance_overview', { start_date: '2026-01-15', end_date: '2026-01-15' })
     expect(flow.totals.income).toBe(0)
     expect(flow.totals.expenses).toBe(0)
+  })
+
+  it('edits both pending legs together without changing balances or forecast revision', async () => {
+    await f.db.prepare("UPDATE accounts SET currency = 'USD' WHERE id = 'cash'").run()
+    await f.db.prepare("UPDATE accounts SET currency = 'EUR' WHERE id = 'savings'").run()
+    const { outgoing_id, incoming_id } = (await create({ amount: 20, amount_to: 19.54 })).drafts[0]
+    const oldOutgoing = (await f.db.prepare('SELECT * FROM transactions WHERE id = ?').bind(outgoing_id).first()) as Transaction
+    const oldIncoming = (await f.db.prepare('SELECT * FROM transactions WHERE id = ?').bind(incoming_id).first()) as Transaction
+    const beforeRevision = await f.db.prepare('SELECT revision FROM financial_data_revision WHERE id = 1').first<number>('revision')
+
+    const edited = await f.request(`/transactions/${incoming_id}`, 'PUT', {
+      account_id: 'cash', to_account_id: 'savings', amount: 25, amount_to: 23.75,
+      date: '2026-01-16', description: 'Corrected exchange',
+    })
+    expect(edited.status).toBe(200)
+    expect((await edited.json() as { amount: number }).amount).toBe(23.75)
+    expect((await f.db.prepare('SELECT id, account_id, amount, description, date, status FROM transactions ORDER BY amount').all()).results)
+      .toEqual([
+        { id: outgoing_id, account_id: 'cash', amount: -25, description: 'Corrected exchange', date: '2026-01-16', status: 'pending' },
+        { id: incoming_id, account_id: 'savings', amount: 23.75, description: 'Corrected exchange', date: '2026-01-16', status: 'pending' },
+      ])
+    expect(await f.balances()).toEqual([{ id: 'cash', balance: 1000 }, { id: 'savings', balance: 200 }])
+    expect(await f.db.prepare('SELECT revision FROM financial_data_revision WHERE id = 1').first<number>('revision')).toBe(beforeRevision)
+    expect((await f.db.prepare("SELECT COUNT(*) AS count FROM audit_log WHERE details LIKE '%review_edit%'").first<{ count: number }>())?.count).toBe(2)
+
+    expect(await new TransactionRepository(f.db).resolvePendingTransferPair(oldOutgoing, oldIncoming, 'confirm', Date.now(), '2026-01-16')).toBe(false)
+    expect(await f.balances()).toEqual([{ id: 'cash', balance: 1000 }, { id: 'savings', balance: 200 }])
+    expect((await f.request(`/transactions/${outgoing_id}/confirm`, 'POST', undefined, '2026-01-15')).status).toBe(400)
+    expect((await f.request(`/transactions/${outgoing_id}/confirm`, 'POST', undefined, '2026-01-16')).status).toBe(200)
+    expect(await f.balances()).toEqual([{ id: 'cash', balance: 975 }, { id: 'savings', balance: 223.75 }])
+  })
+
+  it('rejects invalid or locked review edits and rolls back both legs if audit fails', async () => {
+    const { outgoing_id, incoming_id } = (await create()).drafts[0]
+    expect((await f.request(`/transactions/${outgoing_id}`, 'PUT', { amount: 130, amount_to: 125 })).status).toBe(400)
+    await f.request('/accounts/savings/lock', 'PATCH')
+    expect((await f.request(`/transactions/${outgoing_id}`, 'PUT', { amount: 130, amount_to: 130 })).status).toBe(409)
+    await f.request('/accounts/savings/unlock', 'PATCH')
+
+    await f.db.prepare(`CREATE TRIGGER reject_transfer_edit_audit BEFORE INSERT ON audit_log
+      WHEN NEW.details LIKE '%review_edit%' BEGIN SELECT RAISE(ABORT, 'injected edit audit failure'); END`).run()
+    expect((await f.request(`/transactions/${outgoing_id}`, 'PUT', { amount: 130, amount_to: 130 })).status).toBe(500)
+    expect((await f.db.prepare('SELECT id, amount, status FROM transactions ORDER BY amount').all()).results)
+      .toEqual([{ id: outgoing_id, amount: -125, status: 'pending' }, { id: incoming_id, amount: 125, status: 'pending' }])
+    expect(await f.balances()).toEqual([{ id: 'cash', balance: 1000 }, { id: 'savings', balance: 200 }])
+    await f.db.prepare('DROP TRIGGER reject_transfer_edit_audit').run()
+    expect((await f.request(`/transactions/${outgoing_id}`, 'PUT', { amount: 130, amount_to: 130 })).status).toBe(200)
+  })
+
+  it('moves a pending destination to another cash account without applying either balance early', async () => {
+    await f.db.prepare("UPDATE accounts SET currency = 'USD' WHERE id = 'cash'").run()
+    await f.db.prepare("UPDATE accounts SET currency = 'EUR' WHERE id = 'savings'").run()
+    await f.db.prepare("INSERT INTO accounts (id, name, type, balance, currency, updated_at) VALUES ('reserve', 'Test reserve', 'cash', 50, 'EUR', 1)").run()
+    const { outgoing_id, incoming_id } = (await create({ amount: 20, amount_to: 19.54 })).drafts[0]
+
+    expect((await f.request(`/transactions/${outgoing_id}`, 'PUT', { to_account_id: 'reserve', amount_to: 18.5 })).status).toBe(400)
+    expect((await f.request(`/transactions/${outgoing_id}`, 'PUT', { to_account_id: 'reserve', amount: 20, amount_to: 18.5 })).status).toBe(200)
+    expect(await f.db.prepare('SELECT account_id, amount FROM transactions WHERE id = ?').bind(incoming_id).first()).toEqual({ account_id: 'reserve', amount: 18.5 })
+    expect(await f.balances()).toEqual([
+      { id: 'cash', balance: 1000 }, { id: 'reserve', balance: 50 }, { id: 'savings', balance: 200 },
+    ])
+    expect((await f.request(`/transactions/${outgoing_id}/confirm`, 'POST')).status).toBe(200)
+    expect(await f.balances()).toEqual([
+      { id: 'cash', balance: 980 }, { id: 'reserve', balance: 68.5 }, { id: 'savings', balance: 200 },
+    ])
   })
 
   it('uses explicit native amounts for cross-currency pairs without an exchange-rate lookup', async () => {

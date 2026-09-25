@@ -291,8 +291,12 @@ export class TransactionRepository {
       AND debit.date = credit.date AND source.type IN ('cash', 'checking', 'savings') AND destination.type IN ('cash', 'checking', 'savings')
       AND (UPPER(source.currency) != UPPER(destination.currency) OR debit.amount + credit.amount = 0)
       AND source.is_locked = 0 AND destination.is_locked = 0
+      AND debit.account_id = ? AND credit.account_id = ? AND debit.amount = ? AND credit.amount = ?
+      AND debit.date = ? AND debit.updated_at IS ? AND credit.updated_at IS ?
       ${action === 'confirm' ? 'AND debit.date <= ?' : ''}`
-    const guard = action === 'confirm' ? [outgoing.id, incoming.id, today] : [outgoing.id, incoming.id]
+    const guard = [outgoing.id, incoming.id, outgoing.account_id, incoming.account_id,
+      outgoing.amount, incoming.amount, outgoing.date, outgoing.updated_at ?? null, incoming.updated_at ?? null,
+      ...(action === 'confirm' ? [today] : [])]
     const status = action === 'confirm' ? 'posted' : 'cancelled'
     const statements: D1PreparedStatement[] = [this.db.prepare(
       `UPDATE transactions SET status = ?, updated_at = ?
@@ -316,6 +320,62 @@ export class TransactionRepository {
     const results = await this.db.batch(statements)
     return results[0].meta.changes === 2 && results.at(-1)?.meta.changes === 2
       && results.slice(1, -1).every(result => result.meta.changes === 1)
+  }
+
+  async updatePendingTransferReviewPair(
+    outgoing: Transaction,
+    incoming: Transaction,
+    next: { fromAccountId: string; toAccountId: string; amountFrom: number; amountTo: number; date: string; description: string | null },
+    now: number,
+  ): Promise<boolean> {
+    const token = `editing:${crypto.randomUUID()}`
+    const validPair = `SELECT COUNT(*) FROM transactions debit JOIN transactions credit ON credit.id = debit.linked_transaction_id
+      JOIN accounts source ON source.id = debit.account_id JOIN accounts destination ON destination.id = credit.account_id
+      JOIN accounts new_source ON new_source.id = ? JOIN accounts new_destination ON new_destination.id = ?
+      WHERE debit.id = ? AND credit.id = ? AND credit.linked_transaction_id = debit.id
+      AND debit.status = 'pending' AND credit.status = 'pending'
+      AND debit.pending_kind = 'mcp_review' AND credit.pending_kind = 'mcp_review'
+      AND debit.review_source = 'chatgpt_mcp' AND credit.review_source = 'chatgpt_mcp'
+      AND debit.review_batch_id = credit.review_batch_id AND debit.review_batch_id IS NOT NULL
+      AND debit.review_batch_id = ?
+      AND debit.account_id = ? AND credit.account_id = ? AND debit.amount = ? AND credit.amount = ?
+      AND debit.date = ? AND credit.date = debit.date
+      AND debit.description IS ? AND credit.description IS ?
+      AND debit.updated_at IS ? AND credit.updated_at IS ?
+      AND source.type IN ('cash', 'checking', 'savings') AND destination.type IN ('cash', 'checking', 'savings')
+      AND new_source.type IN ('cash', 'checking', 'savings') AND new_destination.type IN ('cash', 'checking', 'savings')
+      AND source.is_locked = 0 AND destination.is_locked = 0 AND new_source.is_locked = 0 AND new_destination.is_locked = 0
+      AND new_source.id != new_destination.id AND ? > 0 AND ? > 0
+      AND (UPPER(new_source.currency) != UPPER(new_destination.currency) OR ? = ?)`
+    const claim = this.db.prepare(`UPDATE transactions SET status = ?,
+      account_id = CASE id WHEN ? THEN ? ELSE ? END,
+      amount = CASE id WHEN ? THEN ? ELSE ? END,
+      description = ?, date = ?, updated_at = ?
+      WHERE id IN (?, ?) AND 1 = (${validPair})`).bind(
+      token,
+      outgoing.id, next.fromAccountId, next.toAccountId,
+      outgoing.id, -next.amountFrom, next.amountTo,
+      next.description, next.date, now,
+      outgoing.id, incoming.id,
+      next.fromAccountId, next.toAccountId,
+      outgoing.id, incoming.id,
+      outgoing.review_batch_id ?? null,
+      outgoing.account_id, incoming.account_id, outgoing.amount, incoming.amount,
+      outgoing.date, outgoing.description ?? null, incoming.description ?? null,
+      outgoing.updated_at ?? null, incoming.updated_at ?? null,
+      next.amountFrom, next.amountTo, next.amountFrom, next.amountTo,
+    )
+    const statements: D1PreparedStatement[] = [claim]
+    for (const tx of [outgoing, incoming]) {
+      statements.push(this.db.prepare(
+        "INSERT INTO audit_log (id, action, entity, entity_id, details, created_at) SELECT ?, 'UPDATE', 'transaction', id, ?, ? FROM transactions WHERE id = ? AND status = ?"
+      ).bind(crypto.randomUUID(), JSON.stringify({ origin: 'chatgpt_mcp', transfer_pair_id: outgoing.id, change: 'review_edit' }), now, tx.id, token))
+    }
+    statements.push(this.db.prepare('UPDATE transactions SET status = ? WHERE id IN (?, ?) AND status = ?')
+      .bind('pending', outgoing.id, incoming.id, token))
+    const results = await this.db.batch(statements)
+    return results[0].meta.changes === 2 && results[1].meta.changes === 1
+      && results[2].meta.changes === 1 && results[3].meta.changes === 2
   }
 
 }

@@ -173,6 +173,9 @@ export function TransactionList({
   const today = getLocalDateString()
   const isUpcomingForm = formData.type !== 'transfer' && formData.date > today
   const allKnownTransactions = [...transactions, ...upcomingTransactions]
+  const editingReviewTransfer = !!editingId && upcomingTransactions.some(tx =>
+    tx.id === editingId && !!tx.linked_transaction_id && isMcpReviewTransaction(tx)
+  )
   const refreshRecentBadges = () => setBadgeNow(Date.now())
 
   // Reset showAllTransactions when filter, sort, search, or date range changes
@@ -210,6 +213,12 @@ export function TransactionList({
       setSuggestedRate(null)
       setExchangeRate(null)
       setExchangeRateDraft('')
+      setIsLoadingRate(false)
+      return
+    }
+
+    if (editingReviewTransfer) {
+      setSuggestedRate(null)
       setIsLoadingRate(false)
       return
     }
@@ -343,7 +352,7 @@ export function TransactionList({
     return () => {
       cancelled = true
     }
-  }, [formData.account_id, formData.to_account_id, formData.type, accounts, editingId])
+  }, [formData.account_id, formData.to_account_id, formData.type, accounts, editingId, editingReviewTransfer])
 
   // Auto-calculate the received amount only until the user enters it themselves.
   // A manual value must remain the source of truth even if the amount, rate, or
@@ -354,6 +363,8 @@ export function TransactionList({
     const fromAccount = accounts.find(a => a.id === formData.account_id)
     const toAccount = accounts.find(a => a.id === formData.to_account_id)
     const isDifferentCurrency = fromAccount && toAccount && fromAccount.currency !== toAccount.currency
+
+    if (editingReviewTransfer && isDifferentCurrency) return
 
     if (isDifferentCurrency && formData.amount && exchangeRate) {
       // Different currency: amount_to = amount_from × exchange_rate
@@ -370,7 +381,7 @@ export function TransactionList({
     } else if (!formData.amount) {
       setFormData(prev => prev.amount_to ? ({ ...prev, amount_to: '' }) : prev)
     }
-  }, [formData.amount, exchangeRate, formData.type, formData.account_id, formData.to_account_id, accounts])
+  }, [formData.amount, exchangeRate, formData.type, formData.account_id, formData.to_account_id, accounts, editingReviewTransfer])
 
   // Auto-fetch price for investment accounts when date or account changes
   useEffect(() => {
@@ -582,7 +593,7 @@ export function TransactionList({
         const isSameCurrency = sourceAccount && toAccount
           && sourceAccount.currency === toAccount.currency
         const receivedDraft = parseAmount(formData.amount_to)
-        const parsedAmountTo = receivedDraft ?? (isSameCurrency ? amount : null)
+        const parsedAmountTo = isSameCurrency ? amount : receivedDraft
         if (parsedAmountTo === null || parsedAmountTo <= 0) {
           throw new Error('Please enter a valid amount to receive greater than 0')
         }
@@ -718,7 +729,9 @@ export function TransactionList({
       }
     }
 
-    const formatNumber = (num: number) => formatAmount(Math.abs(num), { maximumFractionDigits: 8 })
+    const formatNumber = (num: number) => isMcpReviewTransaction(tx)
+      ? formatAmount(Math.abs(num))
+      : formatAmount(Math.abs(num), { maximumFractionDigits: 8 })
     
     const relatedTx = (tx as Transaction & { relatedTx?: Transaction }).relatedTx
       || (tx.linked_transaction_id ? allKnownTransactions.find(t => t.id === tx.linked_transaction_id) : undefined)
@@ -728,7 +741,9 @@ export function TransactionList({
     if (tx.linked_transaction_id && relatedTx) {
       const outgoing = tx.amount < 0 ? tx : relatedTx
       const incoming = tx.amount < 0 ? relatedTx : tx
-      const transferNote = (outgoing.description || '').split(' - ').slice(1).join(' - ')
+      const transferNote = isMcpReviewTransaction(outgoing)
+        ? outgoing.description || ''
+        : (outgoing.description || '').split(' - ').slice(1).join(' - ')
       const outgoingAccount = accounts.find(account => account.id === outgoing.account_id)
       const incomingAccount = accounts.find(account => account.id === incoming.account_id)
       const incomingValue = incomingAccount?.type === 'investment' && incoming.quantity !== undefined
@@ -757,7 +772,7 @@ export function TransactionList({
         && outgoingAccount.currency !== incomingAccount.currency
       const historicalRate = isDifferentCurrency ? existingRate : null
       editedTransferPairRef.current = getTransferPairKey(outgoing.account_id, incoming.account_id)
-      manuallyEditedTransferFieldsRef.current.amount_to = true
+      manuallyEditedTransferFieldsRef.current.amount_to = !!isDifferentCurrency
       manualRateOverrideRef.current = true
       manuallyEditedTransferFieldsRef.current.manual_price = incomingAccount?.type === 'investment' && incoming.price !== undefined
       setExchangeRate(historicalRate)
@@ -1024,7 +1039,7 @@ export function TransactionList({
   const fromAccount = accounts.find(a => a.id === formData.account_id)
   const toAccount = accounts.find(a => a.id === formData.to_account_id)
   const transferAmount = parseAmount(formData.amount) || 0
-  const transferAmountTo = parseAmount(formData.amount_to) || transferAmount
+  const transferAmountTo = parseAmount(formData.amount_to) || (editingReviewTransfer ? 0 : transferAmount)
   const isEditingTransfer = !!editingId && formData.type === 'transfer'
   const isEditingStandardTransaction = !!editingId && formData.type !== 'transfer'
 
@@ -1186,6 +1201,19 @@ export function TransactionList({
               </p>
             </div>
             <div className="flex flex-shrink-0 items-center gap-1">
+              {!locked && (
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="h-7 w-7 sm:h-8 sm:w-8"
+                  disabled={actionsDisabled}
+                  onClick={(event) => { event.stopPropagation(); handleEdit(outgoing) }}
+                  title="Edit transfer review draft"
+                  aria-label="Edit transfer review draft"
+                >
+                  <Pencil className="h-3.5 w-3.5" />
+                </Button>
+              )}
               {!locked && ready && (
                 <Button
                   size="icon"
@@ -1660,7 +1688,7 @@ export function TransactionList({
                       required
                     >
                       <option value="">Select Account</option>
-                      {accounts.filter(acc => !isLocked(acc.id)).map(acc => (
+                      {accounts.filter(acc => !isLocked(acc.id) && (!editingReviewTransfer || acc.type !== 'investment')).map(acc => (
                         <option key={acc.id} value={acc.id}>{acc.name} ({acc.balance.toLocaleString('hu-HU')} {acc.currency})</option>
                       ))}
                     </Select>
@@ -1675,7 +1703,7 @@ export function TransactionList({
                     >
                       <option value="">Select Account</option>
                       {accounts
-                        .filter(acc => acc.id !== formData.account_id && !isLocked(acc.id))
+                        .filter(acc => acc.id !== formData.account_id && !isLocked(acc.id) && (!editingReviewTransfer || acc.type !== 'investment'))
                         .map(acc => (
                         <option key={acc.id} value={acc.id}>{acc.name} ({acc.balance.toLocaleString('hu-HU')} {acc.currency})</option>
                       ))}
@@ -1730,7 +1758,13 @@ export function TransactionList({
                 </div>
 
                 {/* Exchange Rate Section */}
-                {fromAccount && toAccount && fromAccount.currency !== toAccount.currency && (
+                {fromAccount && toAccount && fromAccount.currency !== toAccount.currency && (editingReviewTransfer ? (
+                  <div className="rounded-lg border border-border bg-background/50 p-3 text-xs text-muted-foreground">
+                    Enter both amounts explicitly. The effective rate is {transferAmount > 0 && transferAmountTo > 0
+                      ? formatCalculatedAmount(transferAmountTo / transferAmount, { maximumFractionDigits: 10 })
+                      : 'shown after both amounts are entered'} {transferAmount > 0 && transferAmountTo > 0 ? `${toAccount.currency} per ${fromAccount.currency}` : ''}.
+                  </div>
+                ) : (
                   <div className="p-3 rounded-lg bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 space-y-2">
                     <Label htmlFor="exchange_rate" className="text-xs font-medium text-blue-900 dark:text-blue-100">
                       Exchange Rate
@@ -1764,7 +1798,7 @@ export function TransactionList({
                       </>
                     )}
                   </div>
-                )}
+                ))}
 
                 {/* Manual Price field for transfers to investment accounts */}
                 {toAccount?.type === 'investment' && (
@@ -1806,7 +1840,7 @@ export function TransactionList({
                 </div>
 
                 {/* Transfer Preview */}
-                {fromAccount && toAccount && transferAmount > 0 && (
+                {fromAccount && toAccount && transferAmount > 0 && (!editingReviewTransfer || transferAmountTo > 0) && (
                   <div className="p-3 rounded-lg bg-background/50 border border-border space-y-2">
                     <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Preview</p>
                     <div className="flex items-center justify-between text-sm">
@@ -1816,7 +1850,7 @@ export function TransactionList({
                     <div className="flex items-center justify-between text-sm">
                       <span>{toAccount.name}</span>
                       <span className="text-success font-medium">
-                        +{formatAmount(transferAmountTo, { maximumFractionDigits: 8 })} {toAccount.type === 'investment' ? 'shares' : toAccount.currency}
+                        +{editingReviewTransfer ? formatAmount(transferAmountTo) : formatAmount(transferAmountTo, { maximumFractionDigits: 8 })} {toAccount.type === 'investment' ? 'shares' : toAccount.currency}
                       </span>
                     </div>
                     {toAccount.type === 'investment' && formData.manual_price && (

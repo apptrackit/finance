@@ -14,7 +14,7 @@ Intermediate package/UI version bumps are grouped under the next published GitHu
 
 ### Fixed
 
-- Linked MCP transfer drafts display as one review card with their source and destination accounts, exact sent and received amounts, and a single pair of review actions.
+- Linked MCP transfer drafts display as one review card with their source and destination accounts, exact sent and received amounts, and one set of review actions. The app can edit both pending legs together without changing balances or forecasts.
 - Removed the empty SQL statement generated between a migration and its history insert, which blocked D1 remote imports of migration 013.
 
 ## v3.0 — 2026-09-24
