@@ -213,7 +213,7 @@ export function AICashOutlookChart({ snapshot, transactions, accounts, convertTo
                 </div>
               )
             }} />
-            {generationTimestamp && <ReferenceLine x={generationTimestamp} stroke="hsl(var(--foreground))" strokeWidth={1.5} strokeDasharray="4 4" label={{ value: 'Generated', position: 'top', fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} />}
+            {generationTimestamp && <ReferenceLine x={generationTimestamp} stroke="hsl(var(--foreground))" strokeWidth={1.5} strokeDasharray="4 4" />}
             <Area type="monotone" dataKey="actual" stroke="hsl(var(--primary))" strokeWidth={2.25} fill="url(#aiOutlookActualGradient)" connectNulls={false} dot={false} />
             <Area type="linear" dataKey="high" stroke="transparent" fill="url(#aiOutlookFutureGradient)" connectNulls={false} />
             <Area type="linear" dataKey="low" stroke="transparent" fill="hsl(var(--card))" fillOpacity={1} connectNulls={false} />
