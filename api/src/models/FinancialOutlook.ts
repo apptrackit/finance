@@ -31,6 +31,8 @@ export interface FinancialOutlookSnapshot {
   horizons: FinancialOutlookHorizon[]
   cash_balance_path: FinancialOutlookCashPathPoint[]
   cash_balance_history: FinancialOutlookHistoricalCashPoint[]
+  cash_balance_history_year: FinancialOutlookHistoricalCashPoint[]
+  cash_balance_history_alltime: FinancialOutlookHistoricalCashPoint[]
   drivers: string[]
   risks: string[]
   assumptions: string[]

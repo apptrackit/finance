@@ -707,12 +707,27 @@ export class FinanceService {
       throw new Error('source_queried_at must be from today\'s financial outlook context')
     }
     const historyStart = addUtcDays(generationDate, -89)
+    const generationDay = new Date(`${generationDate}T00:00:00Z`)
+    const previousYear = generationDay.getUTCFullYear() - 1
+    const month = generationDay.getUTCMonth()
+    const lastDayOfMonth = new Date(Date.UTC(previousYear, month + 1, 0)).getUTCDate()
+    const yearStart = new Date(Date.UTC(previousYear, month, Math.min(generationDay.getUTCDate(), lastDayOfMonth))).toISOString().slice(0, 10)
     const futureEnd = addUtcDays(generationDate, 90)
-    const [coverage, historicalBalances, knownFuture] = await Promise.all([
+    const [coverage, historicalBalances, yearBalances, knownFuture] = await Promise.all([
       this.outlookCoverage(),
       this.balanceTrend({ currency: 'HUF', start_date: historyStart, end_date: generationDate, interval: 'day' }),
+      this.balanceTrend({ currency: 'HUF', start_date: yearStart, end_date: generationDate, interval: 'day' }),
       this.recurringForecast({ currency: 'HUF', start_date: generationDate, end_date: futureEnd }),
     ])
+    const firstCashRow = await this.env.DB.prepare(
+      "SELECT MIN(t.date) AS min_date FROM transactions t JOIN accounts a ON a.id = t.account_id WHERE t.status = 'posted' AND t.date <= ? AND a.type != 'investment' AND COALESCE(a.exclude_from_cash_balance, 0) = 0"
+    ).bind(generationDate).first<{ min_date: string | null }>()
+    const firstCashDate = firstCashRow?.min_date || generationDate
+    const alltimeBalances = await this.balanceTrend({ currency: 'HUF', start_date: firstCashDate, end_date: generationDate, interval: 'month' }, true)
+    const firstAlltimeBalance = firstCashDate === alltimeBalances.series[0]?.date
+      ? null
+      : (await this.balanceTrend({ currency: 'HUF', start_date: firstCashDate, end_date: firstCashDate, interval: 'day' })).series[0]
+    const toCashPoints = (series: Array<{ date: string; cash_balance: number }>) => series.map(point => ({ date: point.date, balance: point.cash_balance }))
     const currentCash = historicalBalances.series.at(-1)?.cash_balance
     const dayZero = input.cash_balance_path[0]
     if (currentCash === undefined || dayZero.low !== currentCash || dayZero.expected !== currentCash || dayZero.high !== currentCash) {
@@ -755,7 +770,9 @@ export class FinanceService {
       headline: input.headline,
       horizons: input.horizons,
       cash_balance_path: input.cash_balance_path,
-      cash_balance_history: historicalBalances.series.map(point => ({ date: point.date, balance: point.cash_balance })),
+      cash_balance_history: toCashPoints(historicalBalances.series),
+      cash_balance_history_year: toCashPoints(yearBalances.series),
+      cash_balance_history_alltime: toCashPoints(firstAlltimeBalance ? [firstAlltimeBalance, ...alltimeBalances.series] : alltimeBalances.series),
       drivers: input.drivers,
       risks: input.risks,
       assumptions: input.assumptions,
@@ -779,7 +796,7 @@ export class FinanceService {
       id,
       idempotency_key: input.idempotency_key,
       payload_hash: payloadHash,
-      schema_version: 3,
+      schema_version: 4,
       currency: 'HUF',
       source_revision: input.source_revision,
       source_queried_at: input.source_queried_at,
@@ -932,10 +949,11 @@ export class FinanceService {
     return { as_of: new Date().toISOString(), currency, period: { start_date: startDate, end_date: endDate }, interval, include_projected: includeProjected, series, truncated: groups.size > 400, conversion_status: warnings.length ? 'partial' : 'complete', warnings }
   }
 
-  async balanceTrend(args: Record<string, unknown>) {
+  async balanceTrend(args: Record<string, unknown>, snapshotHistory = false) {
     const startDate = assertDate(args.start_date, 'start_date')
     const endDate = assertDate(args.end_date, 'end_date')
-    const days = assertDateRange(startDate, endDate)
+    if (startDate > endDate) throw new Error('start_date must not be after end_date')
+    const days = snapshotHistory ? daysBetween(startDate, endDate) : assertDateRange(startDate, endDate)
     const interval = enumValue(args.interval, ['day', 'week', 'month'] as const, days > 400 ? 'month' : days > 120 ? 'week' : 'day', 'interval')
     const currency = typeof args.currency === 'string' ? args.currency.toUpperCase() : 'HUF'
     const includeAccounts = args.include_accounts === true
@@ -944,7 +962,7 @@ export class FinanceService {
     const accountIds = new Set(accounts.map(account => account.id))
     const relevantTransactions = transactions.filter(transaction => accountIds.has(transaction.account_id))
     const warnings = this.conversionWarnings(accounts, currency, rates)
-    const points = periodEndDates(startDate, endDate, interval)
+    const points = periodEndDates(startDate, endDate, interval, snapshotHistory ? 1200 : 400)
     const laterChanges = new Map(accounts.map(account => [account.id, 0]))
     for (const transaction of relevantTransactions) {
       laterChanges.set(transaction.account_id, (laterChanges.get(transaction.account_id) || 0) + transaction.amount)

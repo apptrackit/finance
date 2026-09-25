@@ -35,6 +35,8 @@ describe('FinancialOutlookService', () => {
       id: 'snapshot-1',
       freshness: { status: 'up_to_date', data_changed: false },
       data_quality: { score: 82, label: 'high', reasons: ['Recent ledger activity'] },
+      cash_balance_history_year: [],
+      cash_balance_history_alltime: [],
     })
   })
 
