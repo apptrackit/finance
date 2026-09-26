@@ -86,11 +86,10 @@ export function Investments() {
         const res = await apiFetch(`${API_BASE_URL}/market/quote?symbol=${encodeURIComponent(symbol)}`)
         if (res.ok) {
           const data = await res.json()
-          console.log(`Fetched quote for ${symbol}:`, data) // Debug log
           newQuotes[symbol] = data
         }
-      } catch (error) {
-        console.error(`Failed to fetch quote for ${symbol}:`, error)
+      } catch {
+        console.error('Failed to fetch market quote')
       }
     }))
     setQuotes(newQuotes)
@@ -100,18 +99,12 @@ export function Investments() {
       const ratesRes = await fetch('https://open.er-api.com/v6/latest/USD')
       const ratesData = await ratesRes.json()
       setExchangeRates(ratesData.rates || {})
-    } catch (error) {
-      console.error('Failed to fetch exchange rates:', error)
+    } catch {
+      console.error('Failed to fetch exchange rates')
     }
     
     setRefreshing(false)
     setLoading(false)
-    
-    // Debug: Log accounts and transactions after fetch
-    console.log('=== INVESTMENTS LOADED ===')
-    console.log('Investment Accounts:', investments)
-    console.log('All Investment Transactions:', allInvestmentTxs)
-    console.log('========================')
   }
 
   useEffect(() => {
@@ -126,18 +119,6 @@ export function Investments() {
     const positions = investmentAccounts.map(acc => 
       calculatePosition(acc, getAccountTransactions(acc.id), quotes, exchangeRates)
     )
-    
-    console.log('=== PORTFOLIO DEBUG ===')
-    positions.forEach(pos => {
-      console.log(`Account: ${pos.account.name} (${pos.account.symbol})`)
-      console.log(`  Balance in DB: ${pos.account.balance}`)
-      console.log(`  Actual Quantity (calculated): ${pos.actualQuantity}`)
-      console.log(`  Current Price: ${pos.currentPrice}`)
-      console.log(`  Current Value: ${pos.currentValue}`)
-      console.log(`  Currency: ${pos.account.currency}`)
-      console.log(`  Transactions:`, pos.transactions.map(t => ({ quantity: t.quantity, amount: t.amount })))
-    })
-    console.log('======================')
     
     // Sort positions by current value (descending, most to least)
     const sortedPositions = [...positions].sort((a, b) => b.currentValue - a.currentValue)
