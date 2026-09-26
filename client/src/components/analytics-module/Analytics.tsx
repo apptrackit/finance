@@ -4,7 +4,7 @@ import { Button } from '../common/button'
 import { BarChart3, Calendar, ChevronLeft, ChevronRight, SlidersHorizontal } from 'lucide-react'
 import { loadWidgetVisibility, saveWidgetVisibility, type WidgetId } from './widgetConfig'
 import { WidgetConfigPanel } from './WidgetConfigPanel'
-import { format, subMonths, addMonths, startOfMonth, endOfMonth, isWithinInterval, subYears, addYears, startOfYear, endOfYear, startOfWeek, endOfWeek, addWeeks, startOfQuarter, endOfQuarter, addQuarters } from 'date-fns'
+import { format, parseISO, subMonths, addMonths, startOfMonth, endOfMonth, isWithinInterval, subYears, addYears, startOfYear, endOfYear, startOfWeek, endOfWeek, addWeeks, startOfQuarter, endOfQuarter, addQuarters } from 'date-fns'
 import { API_BASE_URL, apiFetch } from '../../config'
 import { convertToMasterCurrency as convertUtil } from './utils'
 import { SummaryCards } from './SummaryCards'
@@ -99,18 +99,6 @@ export function Analytics({
 
   const show = (id: WidgetId) => widgetVisibility[id]
 
-  const projectableUpcomingTransactions = useMemo(
-    () => upcomingTransactions.filter(isUpcomingProjectionTransaction),
-    [upcomingTransactions]
-  )
-
-  const transactionsForAnalytics = useMemo(() => {
-    if (projectionMode === 'projected') {
-      return [...transactions, ...projectableUpcomingTransactions]
-    }
-    return transactions
-  }, [projectionMode, transactions, projectableUpcomingTransactions])
-
   const customDateRange = useMemo(() => {
     if (period === 'month') {
       return {
@@ -126,6 +114,28 @@ export function Analytics({
     }
     return { startDate: '2000-01-01', endDate: format(new Date(), 'yyyy-MM-dd') }
   }, [period, selectedDate])
+
+  const projectableUpcomingTransactions = useMemo(() => {
+    const investmentAccountIds = new Set(accounts.filter(account => account.type === 'investment').map(account => account.id))
+    // All Time uses the same unbounded date range as the analytics totals.
+    return upcomingTransactions.filter(transaction =>
+      transaction.status === 'pending' &&
+      isUpcomingProjectionTransaction(transaction) &&
+      !investmentAccountIds.has(transaction.account_id) &&
+      (period === 'allTime' || (transaction.date >= customDateRange.startDate && transaction.date <= customDateRange.endDate))
+    )
+  }, [upcomingTransactions, accounts, period, customDateRange])
+
+  const hasProjection = projectableUpcomingTransactions.length > 0
+  const isProjected = hasProjection && projectionMode === 'projected'
+
+  useEffect(() => {
+    if (!hasProjection && projectionMode === 'projected') setProjectionMode('actual')
+  }, [hasProjection, projectionMode])
+
+  const transactionsForAnalytics = useMemo(() => {
+    return isProjected ? [...transactions, ...projectableUpcomingTransactions] : transactions
+  }, [isProjected, transactions, projectableUpcomingTransactions])
   const [outlookHistory, setOutlookHistory] = useState<FinancialOutlookSnapshot[]>([])
   const [selectedOutlookId, setSelectedOutlookId] = useState<string | null>(null)
   const [outlookNextCursor, setOutlookNextCursor] = useState<string | null>(null)
@@ -200,7 +210,6 @@ export function Analytics({
   // Filter transactions by period (exclude investment accounts only)
   const filteredTransactions = useMemo(() => {
     return transactionsForAnalytics.filter(tx => {
-      const txDate = new Date(tx.date)
       const account = accounts.find(a => a.id === tx.account_id)
       
       // Exclude investment account transactions
@@ -209,10 +218,7 @@ export function Analytics({
       switch (period) {
         case 'month':
         case 'year':
-          return isWithinInterval(txDate, {
-            start: new Date(customDateRange.startDate),
-            end: new Date(customDateRange.endDate)
-          })
+          return tx.date >= customDateRange.startDate && tx.date <= customDateRange.endDate
         case 'allTime':
         default:
           return true
@@ -298,7 +304,7 @@ export function Analytics({
 
     const sortedTransactions = [...transactionsForAnalytics]
       .filter(tx => cashAccountIds.has(tx.account_id))
-      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+      .sort((a, b) => parseISO(b.date).getTime() - parseISO(a.date).getTime())
 
     const transactionsByDate: Record<string, number> = {}
     sortedTransactions.forEach(tx => {
@@ -313,7 +319,7 @@ export function Analytics({
     dateBalances[today] = currentCashBalance
 
     const uniqueDates = Object.keys(transactionsByDate).sort(
-      (a, b) => new Date(b).getTime() - new Date(a).getTime()
+      (a, b) => parseISO(b).getTime() - parseISO(a).getTime()
     )
 
     uniqueDates.forEach(date => {
@@ -324,23 +330,23 @@ export function Analytics({
     const rawData = Object.entries(dateBalances)
       .map(([date, balance]) => ({
         date,
-        formattedDate: format(new Date(date), 'MMM d'),
+        formattedDate: format(parseISO(date), 'MMM d'),
         balance
       }))
       .filter(d => {
-        const txDate = new Date(d.date)
+        const txDate = parseISO(d.date)
         switch (period) {
           case 'month':
           case 'year':
             return isWithinInterval(txDate, {
-              start: new Date(customDateRange.startDate),
-              end: new Date(customDateRange.endDate)
+              start: parseISO(customDateRange.startDate),
+              end: parseISO(customDateRange.endDate)
             })
           default:
             return true
         }
       })
-      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+      .sort((a, b) => parseISO(a.date).getTime() - parseISO(b.date).getTime())
 
     // Calculate EMA (Exponential Moving Average) as a smoothed baseline
     if (rawData.length === 0) return rawData
@@ -360,7 +366,7 @@ export function Analytics({
       .filter(account => account.type !== 'investment')
       .map(account => {
         const accountTransactions = transactionsForAnalytics.filter(t => {
-          const txDate = new Date(t.date)
+          const txDate = parseISO(t.date)
           const matchesAccount = t.account_id === account.id
           if (!matchesAccount) return false
           
@@ -368,8 +374,8 @@ export function Analytics({
             case 'month':
             case 'year':
               return isWithinInterval(txDate, {
-                start: new Date(customDateRange.startDate),
-                end: new Date(customDateRange.endDate)
+                start: parseISO(customDateRange.startDate),
+                end: parseISO(customDateRange.endDate)
               })
             default:
               return true
@@ -387,13 +393,13 @@ export function Analytics({
         const today = format(new Date(), 'yyyy-MM-dd')
         
         const todayInRange = (() => {
-          const todayDate = new Date(today)
+          const todayDate = parseISO(today)
           switch (period) {
             case 'month':
             case 'year':
               return isWithinInterval(todayDate, {
-                start: new Date(customDateRange.startDate),
-                end: new Date(customDateRange.endDate)
+                start: parseISO(customDateRange.startDate),
+                end: parseISO(customDateRange.endDate)
               })
             default:
               return true
@@ -405,7 +411,7 @@ export function Analytics({
         }
         
         const uniqueDates = Object.keys(transactionsByDate).sort(
-          (a, b) => new Date(b).getTime() - new Date(a).getTime()
+          (a, b) => parseISO(b).getTime() - parseISO(a).getTime()
         )
         
         uniqueDates.forEach(date => {
@@ -416,10 +422,10 @@ export function Analytics({
         const rawData: TrendDataPoint[] = Object.entries(dateBalances)
           .map(([date, balance]) => ({
             date,
-            formattedDate: format(new Date(date), 'MMM d'),
+            formattedDate: format(parseISO(date), 'MMM d'),
             balance
           }))
-          .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+          .sort((a, b) => parseISO(a.date).getTime() - parseISO(b.date).getTime())
 
         // Calculate EMA (Exponential Moving Average) as a smoothed baseline
         let data = rawData
@@ -459,8 +465,8 @@ export function Analytics({
     const now = new Date()
     
     if (period === 'month') {
-      const monthStart = new Date(customDateRange.startDate)
-      const monthEnd = new Date(customDateRange.endDate)
+      const monthStart = parseISO(customDateRange.startDate)
+      const monthEnd = parseISO(customDateRange.endDate)
       
       let weekStart = startOfWeek(monthStart, { weekStartsOn: 1 })
       let weekNum = 1
@@ -473,7 +479,7 @@ export function Analytics({
           .filter(tx => {
             const account = accounts.find(a => a.id === tx.account_id)
             if (account?.type === 'investment') return false
-            const txDate = new Date(tx.date)
+            const txDate = parseISO(tx.date)
             const inDateRange = tx.amount > 0 && !tx.linked_transaction_id && isWithinInterval(txDate, { 
               start: weekStart < monthStart ? monthStart : weekStart, 
               end: weekEnd > monthEnd ? monthEnd : weekEnd 
@@ -507,7 +513,7 @@ export function Analytics({
       if (incomeTransactions.length === 0) return data
       
       const earliestDate = incomeTransactions.reduce((earliest, tx) => {
-        const txDate = new Date(tx.date)
+        const txDate = parseISO(tx.date)
         return txDate < earliest ? txDate : earliest
       }, new Date())
       
@@ -522,13 +528,13 @@ export function Analytics({
         const monthEnd = endOfMonth(monthDate)
         const monthKey = format(monthDate, 'yyyy-MM')
         
-        if (period === 'year' && !isWithinInterval(monthDate, { start: new Date(customDateRange.startDate), end: new Date(customDateRange.endDate) })) continue
+        if (period === 'year' && !isWithinInterval(monthDate, { start: parseISO(customDateRange.startDate), end: parseISO(customDateRange.endDate) })) continue
         
         const monthIncome = transactionsForAnalytics
           .filter(tx => {
             const account = accounts.find(a => a.id === tx.account_id)
             if (account?.type === 'investment') return false
-            const txDate = new Date(tx.date)
+            const txDate = parseISO(tx.date)
             const inDateRange = tx.amount > 0 && !tx.linked_transaction_id && isWithinInterval(txDate, { start: monthStart, end: monthEnd })
             if (!inDateRange) return false
             if (selectedIncomeCategory === 'all') return true
@@ -553,8 +559,8 @@ export function Analytics({
     const now = new Date()
     
     if (period === 'month') {
-      const monthStart = new Date(customDateRange.startDate)
-      const monthEnd = new Date(customDateRange.endDate)
+      const monthStart = parseISO(customDateRange.startDate)
+      const monthEnd = parseISO(customDateRange.endDate)
       
       let weekStart = startOfWeek(monthStart, { weekStartsOn: 1 })
       let weekNum = 1
@@ -567,7 +573,7 @@ export function Analytics({
           .filter(tx => {
             const account = accounts.find(a => a.id === tx.account_id)
             if (account?.type === 'investment') return false
-            const txDate = new Date(tx.date)
+            const txDate = parseISO(tx.date)
             const inDateRange = tx.amount < 0 && !tx.linked_transaction_id && isWithinInterval(txDate, { 
               start: weekStart < monthStart ? monthStart : weekStart, 
               end: weekEnd > monthEnd ? monthEnd : weekEnd 
@@ -601,7 +607,7 @@ export function Analytics({
       if (expenseTransactions.length === 0) return data
       
       const earliestDate = expenseTransactions.reduce((earliest, tx) => {
-        const txDate = new Date(tx.date)
+        const txDate = parseISO(tx.date)
         return txDate < earliest ? txDate : earliest
       }, new Date())
       
@@ -616,13 +622,13 @@ export function Analytics({
         const monthEnd = endOfMonth(monthDate)
         const monthKey = format(monthDate, 'yyyy-MM')
         
-        if (period === 'year' && !isWithinInterval(monthDate, { start: new Date(customDateRange.startDate), end: new Date(customDateRange.endDate) })) continue
+        if (period === 'year' && !isWithinInterval(monthDate, { start: parseISO(customDateRange.startDate), end: parseISO(customDateRange.endDate) })) continue
         
         const monthExpenses = transactionsForAnalytics
           .filter(tx => {
             const account = accounts.find(a => a.id === tx.account_id)
             if (account?.type === 'investment') return false
-            const txDate = new Date(tx.date)
+            const txDate = parseISO(tx.date)
             const inDateRange = tx.amount < 0 && !tx.linked_transaction_id && isWithinInterval(txDate, { start: monthStart, end: monthEnd })
             if (!inDateRange) return false
             if (selectedExpenseCategory === 'all') return true
@@ -649,7 +655,7 @@ export function Analytics({
     const accountById = new Map(accounts.map(account => [account.id, account]))
     const dates = transactionsForAnalytics
       .filter(transaction => !transaction.linked_transaction_id && accountById.get(transaction.account_id)?.type !== 'investment')
-      .map(transaction => new Date(transaction.date))
+      .map(transaction => parseISO(transaction.date))
 
     if (dates.length === 0) return { monthCount: 0, defaultResolution: 'month' as const, defaultLabel: 'Months' }
 
@@ -717,13 +723,13 @@ export function Analytics({
 
     if (eligibleTransactions.length === 0) return []
 
-    const transactionDates = eligibleTransactions.map(transaction => new Date(transaction.date))
+    const transactionDates = eligibleTransactions.map(transaction => parseISO(transaction.date))
     let rangeStart: Date
     let rangeEnd: Date
 
     if (period === 'month' || period === 'year') {
-      rangeStart = new Date(customDateRange.startDate)
-      rangeEnd = new Date(customDateRange.endDate)
+      rangeStart = parseISO(customDateRange.startDate)
+      rangeEnd = parseISO(customDateRange.endDate)
     } else {
       rangeStart = startOfMonth(new Date(Math.min(...transactionDates.map(date => date.getTime()))))
       rangeEnd = endOfMonth(new Date(Math.max(new Date().getTime(), ...transactionDates.map(date => date.getTime()))))
@@ -820,7 +826,7 @@ export function Analytics({
       const effectiveEnd = bucket.end > rangeEnd ? rangeEnd : bucket.end
 
       const { income, expenses } = eligibleTransactions.reduce((totals, transaction) => {
-        const transactionDate = new Date(transaction.date)
+        const transactionDate = parseISO(transaction.date)
         if (!isWithinInterval(transactionDate, { start: effectiveStart, end: effectiveEnd })) return totals
 
         const amount = convertToMasterCurrency(transaction.amount, transaction.account_id)
@@ -847,10 +853,12 @@ export function Analytics({
   }
 
   const navigateBack = () => {
+    setProjectionMode('actual')
     setSelectedDate(d => period === 'month' ? subMonths(d, 1) : subYears(d, 1))
   }
 
   const navigateForward = () => {
+    setProjectionMode('actual')
     setSelectedDate(d => period === 'month' ? addMonths(d, 1) : addYears(d, 1))
   }
 
@@ -922,6 +930,7 @@ export function Analytics({
                 type="button"
                 onClick={() => {
                   setPeriod(p)
+                  setProjectionMode('actual')
                   setIncomeExpensesTrendResolution('default')
                 }}
                 aria-pressed={period === p}
@@ -960,32 +969,34 @@ export function Analytics({
               </Button>
             </div>
           )}
-          <div className="flex gap-1 p-1 rounded-xl bg-background/80 border border-border/70 shadow-inner w-full min-[430px]:w-auto">
-            <button
-              type="button"
-              onClick={() => setProjectionMode('actual')}
-              aria-pressed={projectionMode === 'actual'}
-              className={`flex-1 min-[430px]:flex-none px-2.5 sm:px-3 py-1.5 text-xs font-medium rounded-lg transition-all whitespace-nowrap ${
-                projectionMode === 'actual'
-                  ? 'bg-primary text-primary-foreground shadow-md'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-secondary/70'
-              }`}
-            >
-              Actual
-            </button>
-            <button
-              type="button"
-              onClick={() => setProjectionMode('projected')}
-              aria-pressed={projectionMode === 'projected'}
-              className={`flex-1 min-[430px]:flex-none px-2.5 sm:px-3 py-1.5 text-xs font-medium rounded-lg transition-all whitespace-nowrap ${
-                projectionMode === 'projected'
-                  ? 'bg-primary text-primary-foreground shadow-md'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-secondary/70'
-              }`}
-            >
-              Projected{projectableUpcomingTransactions.length > 0 ? ` (${projectableUpcomingTransactions.length})` : ''}
-            </button>
-          </div>
+          {hasProjection && (
+            <div className="flex gap-1 p-1 rounded-xl bg-background/80 border border-border/70 shadow-inner w-full min-[430px]:w-auto">
+              <button
+                type="button"
+                onClick={() => setProjectionMode('actual')}
+                aria-pressed={!isProjected}
+                className={`flex-1 min-[430px]:flex-none px-2.5 sm:px-3 py-1.5 text-xs font-medium rounded-lg transition-all whitespace-nowrap ${
+                  !isProjected
+                    ? 'bg-primary text-primary-foreground shadow-md'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-secondary/70'
+                }`}
+              >
+                Actual
+              </button>
+              <button
+                type="button"
+                onClick={() => setProjectionMode('projected')}
+                aria-pressed={isProjected}
+                className={`flex-1 min-[430px]:flex-none px-2.5 sm:px-3 py-1.5 text-xs font-medium rounded-lg transition-all whitespace-nowrap ${
+                  isProjected
+                    ? 'bg-primary text-primary-foreground shadow-md'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-secondary/70'
+                }`}
+              >
+                Projected ({projectableUpcomingTransactions.length})
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
