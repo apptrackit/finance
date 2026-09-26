@@ -200,7 +200,7 @@ export function TransactionList({
     apiFetch(`${API_BASE_URL}/categories`)
       .then(res => res.json())
       .then(data => setCategories(data))
-      .catch(console.error)
+      .catch(() => console.error('Failed to fetch categories'))
   }, [])
 
   // Fetch exchange rate when transfer accounts are selected
@@ -251,8 +251,8 @@ export function TransactionList({
             if (!res.ok) return null
             const data = await res.json()
             return { price: data.regularMarketPrice, currency: data.currency }
-          } catch (e) {
-            console.error('Quote fetch failed', e)
+          } catch {
+            console.error('Quote fetch failed')
             return null
           }
         }
@@ -265,8 +265,8 @@ export function TransactionList({
             if (!res.ok) return null
             const data = await res.json()
             return data.rate
-          } catch (e) {
-            console.error('FX fetch failed', e)
+          } catch {
+            console.error('FX fetch failed')
             return null
           }
         }
@@ -335,9 +335,9 @@ export function TransactionList({
             setExchangeRateDraft('')
           }
         }
-      } catch (error) {
+      } catch {
         if (!isCurrentRequest()) return
-        console.error('Failed to fetch exchange rate:', error)
+        console.error('Failed to fetch exchange rate')
         setSuggestedRate(null)
         if (!shouldKeepCurrentRate()) {
           setExchangeRate(null)
@@ -444,13 +444,10 @@ export function TransactionList({
             const daysDiff = Math.abs(minDiff) / (1000 * 60 * 60 * 24)
             if (daysDiff <= 3) {
               const price = chartData.quotes[closestIdx].close
-              const priceDate = new Date(chartData.quotes[closestIdx].date).toLocaleDateString()
-              console.log(`Auto-filled price for ${investmentAccount.symbol} on ${priceDate}: $${price}`)
               if (!manuallyEditedTransferFieldsRef.current.manual_price) {
                 setFormData(prev => ({ ...prev, manual_price: price.toFixed(2) }))
               }
             } else {
-              console.warn(`No price data within 3 days of ${formData.date}, leaving manual_price empty`)
               if (!manuallyEditedTransferFieldsRef.current.manual_price) {
                 setFormData(prev => ({ ...prev, manual_price: '' }))
               }
@@ -462,8 +459,8 @@ export function TransactionList({
             }
           }
         }
-      } catch (e) {
-        console.error('Failed to auto-fetch price:', e)
+      } catch {
+        console.error('Failed to auto-fetch price')
         // Don't set manual_price on error
       }
     }
@@ -607,7 +604,6 @@ export function TransactionList({
             throw new Error('Please enter a valid price greater than 0')
           }
           price = parsedPrice
-          console.log(`Transfer to investment: ${amountTo} shares @ $${price}`)
         }
 
         if (editingId) {
@@ -671,7 +667,6 @@ export function TransactionList({
               throw new Error('Please enter a valid price greater than 0')
             }
             price = parsedPrice
-            console.log(`Using price for ${account.symbol}: $${price}`)
           }
           
           await apiFetch(`${API_BASE_URL}/transactions`, {
@@ -705,7 +700,7 @@ export function TransactionList({
               : 'Transaction created'
       })
     } catch (error) {
-      console.error('Failed to save transaction', error)
+      console.error('Failed to save transaction')
       showAlert({
         type: 'error',
         message: error instanceof Error ? error.message : 'Failed to save transaction. Please try again.'
@@ -863,7 +858,7 @@ export function TransactionList({
       onTransactionAdded()
       showAlert({ type: 'success', message: 'Transaction deleted' })
     } catch (error) {
-      console.error('Failed to delete transaction', error)
+      console.error('Failed to delete transaction')
       showAlert({
         type: 'error',
         message: error instanceof Error ? error.message : 'Failed to delete transaction. Please try again.'
@@ -901,7 +896,7 @@ export function TransactionList({
         message: tx.linked_transaction_id ? 'Transfer review pair confirmed' : isMcpReview ? 'MCP review draft confirmed' : 'Upcoming transaction confirmed'
       })
     } catch (error) {
-      console.error('Failed to confirm upcoming transaction', error)
+      console.error('Failed to confirm upcoming transaction')
       showAlert({
         type: 'error',
         message: error instanceof Error ? error.message : 'Failed to confirm transaction. Please try again.'
@@ -952,7 +947,7 @@ export function TransactionList({
         message: tx.linked_transaction_id ? 'Transfer review pair declined' : isMcpReview ? 'MCP review draft declined' : 'Upcoming transaction declined'
       })
     } catch (error) {
-      console.error('Failed to decline upcoming transaction', error)
+      console.error('Failed to decline upcoming transaction')
       showAlert({
         type: 'error',
         message: error instanceof Error ? error.message : 'Failed to decline transaction. Please try again.'

@@ -117,8 +117,8 @@ export function RecurringTransactions({
         const data = await res.json()
         setSchedules(data)
       }
-    } catch (error) {
-      console.error('Failed to fetch recurring schedules:', error)
+    } catch {
+      console.error('Failed to fetch recurring schedules')
     } finally {
       setLoading(false)
     }
@@ -250,7 +250,7 @@ export function RecurringTransactions({
         resetForm()
       }
     } catch (error) {
-      console.error(error)
+      console.error('Failed to save recurring schedule')
       showAlert({
         type: 'error',
         message: error instanceof Error ? error.message : 'Failed to save recurring schedule'
@@ -310,7 +310,7 @@ export function RecurringTransactions({
       showAlert({ type: 'success', message: 'Recurring schedule deleted successfully' })
       await fetchSchedules()
     } catch (error) {
-      console.error(error)
+      console.error('Failed to delete recurring schedule')
       showAlert({
         type: 'error',
         message: error instanceof Error ? error.message : 'Failed to delete recurring schedule'
@@ -331,7 +331,7 @@ export function RecurringTransactions({
       showAlert({ type: 'success', message: `Recurring schedule ${!schedule.is_active ? 'activated' : 'deactivated'}` })
       await fetchSchedules()
     } catch (error) {
-      console.error(error)
+      console.error('Failed to update recurring schedule')
       showAlert({
         type: 'error',
         message: error instanceof Error ? error.message : 'Failed to update recurring schedule'
@@ -417,18 +417,8 @@ export function RecurringTransactions({
       accountImpact[account.id] = { debits: 0, credits: 0, currency: account.currency }
     })
 
-    console.log('[RecurringTransactions] Calculating upcoming impact, today:', toLocalDateString(today))
-    console.log('[RecurringTransactions] Active schedules:', schedules.filter(s => s.is_active))
-
     // Calculate occurrences for each schedule in the next 30 days
     schedules.filter(s => s.is_active).forEach(schedule => {
-      console.log(`[RecurringTransactions] Processing schedule ${schedule.id}:`, {
-        frequency: schedule.frequency,
-        last_processed_date: schedule.last_processed_date,
-        remaining_occurrences: schedule.remaining_occurrences,
-        end_date: schedule.end_date
-      })
-      
       const dates: Date[] = []
       const currentDate = new Date(today)
       let occurrenceCount = 0
@@ -464,7 +454,6 @@ export function RecurringTransactions({
         if (shouldProcess && (!schedule.last_processed_date || dateStr > schedule.last_processed_date)) {
           // Check end_date constraint
           if (schedule.end_date && dateStr > schedule.end_date) {
-            console.log(`[RecurringTransactions] Breaking due to end_date: ${dateStr} > ${schedule.end_date}`)
             break
           }
           
@@ -472,7 +461,6 @@ export function RecurringTransactions({
           if (schedule.remaining_occurrences !== undefined && schedule.remaining_occurrences !== null) {
             occurrenceCount++
             if (occurrenceCount > schedule.remaining_occurrences) {
-              console.log(`[RecurringTransactions] Breaking due to remaining_occurrences: ${occurrenceCount} > ${schedule.remaining_occurrences}`)
               break
             }
           }
@@ -483,11 +471,6 @@ export function RecurringTransactions({
         currentDate.setDate(currentDate.getDate() + 1)
       }
       
-      console.log(`[RecurringTransactions] Found ${dates.length} upcoming dates for schedule ${schedule.id}`)
-      if (dates.length > 0) {
-        console.log(`[RecurringTransactions] First 5 dates:`, dates.slice(0, 5).map(d => toLocalDateString(d)))
-      }
-
       // Add impact for each occurrence
       dates.forEach(date => {
         if (schedule.type === 'transaction') {

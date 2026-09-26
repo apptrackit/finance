@@ -89,7 +89,7 @@ export function InvestmentDetailModal({
         </div>
         
         <div className="flex-1 overflow-y-auto p-6 space-y-6">
-          {account.asset_type !== 'manual' && account.symbol && (
+          {privacyMode !== 'hidden' && account.asset_type !== 'manual' && account.symbol && (
             <div className="bg-secondary/20 rounded-xl p-4">
               <InvestmentChart 
                 symbol={account.symbol}
@@ -120,20 +120,7 @@ export function InvestmentDetailModal({
                   .map(tx => (
                     <div 
                       key={tx.id} 
-                      className="p-4 bg-secondary/30 hover:bg-secondary/50 rounded-xl flex justify-between items-center transition-colors cursor-pointer"
-                      onClick={() => {
-                        console.log('=== TRANSACTION DEBUG ===')
-                        console.log('Transaction:', tx)
-                        console.log('ID:', tx.id)
-                        console.log('Amount (USD):', tx.amount)
-                        console.log('Quantity (shares):', tx.quantity)
-                        console.log('Description:', tx.description)
-                        console.log('Date:', tx.date)
-                        console.log('Account:', account)
-                        console.log('Account Balance:', account.balance)
-                        console.log('Account Currency:', account.currency)
-                        console.log('========================')
-                      }}
+                      className="p-4 bg-secondary/30 rounded-xl flex justify-between items-center"
                     >
                       <div className="flex items-center gap-4">
                         <div className={`h-10 w-10 rounded-lg flex items-center justify-center font-medium ${
@@ -169,7 +156,7 @@ export function InvestmentDetailModal({
                         </div>
                         {tx.quantity !== undefined && (
                           <div className="text-sm text-muted-foreground">
-                            {formatValue(Math.abs(tx.amount), undefined, account.quote_currency || position.quoteCurrency)}
+                            {privacyMode === 'hidden' ? '••••••' : formatValue(Math.abs(tx.amount), undefined, account.quote_currency || position.quoteCurrency)}
                           </div>
                         )}
                       </div>
