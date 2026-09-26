@@ -8,12 +8,18 @@ Intermediate package/UI version bumps are grouped under the next published GitHu
 
 ### Added
 
+- CI runs the client tests on both pinned Node 22 and Node 26, and the required `CI passed` check waits for both jobs.
+- The Finance MCP can preview and create cash transfer review drafts, including cross-currency pairs when both native amounts are supplied. The app reviews each reciprocal pair as one item and posts or declines both sides atomically; drafts leave balances and projections unchanged.
 - The Finance MCP can list unresolved MCP review drafts and prepare user-confirmed edits or declines. Apply rejects stale previews and makes bounded batches atomic and idempotent; neither action posts transactions or changes balances.
+- The MCP review list shows each linked cash transfer once. Separate transfer correction tools preview and atomically edit or decline both legs after user confirmation, including cross-currency amounts.
 - Migration `013-mcp-review-corrections.sql` stores expiring correction proposals and completed runs, indexes the active review queue, and keeps draft-only changes from marking financial forecasts stale.
+- Migration `014-mcp-transfer-review-corrections.sql` stores expiring transfer-pair correction proposals and completed runs.
 
 ### Fixed
 
+- Linked MCP transfer drafts display as one review card with their source and destination accounts, exact sent and received amounts, and one set of review actions. The app can edit both pending legs together without changing balances or forecasts.
 - Removed the empty SQL statement generated between a migration and its history insert, which blocked D1 remote imports of migration 013.
+- Client tests provide browser-style local storage under Node 26, so the deployment test gate can complete when the local Node version differs from CI's pinned Node 22.
 
 ## v3.0 — 2026-09-24
 

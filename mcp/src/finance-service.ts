@@ -4,6 +4,8 @@ import { assertDate, assertDateRange, clampLimit, decodeCursor, defaultMonthRang
 import { FinancialOutlookSnapshotRow, parseFinancialOutlookInput, parseSnapshot, sha256 } from './financial-outlook'
 import { summarizeForecastHistory, type ForecastTransaction } from './forecast-evidence'
 import { ReviewCorrectionService } from './review-corrections'
+import { TransferDraftService } from './transfer-drafts'
+import { TransferReviewCorrectionService } from './transfer-review-corrections'
 
 type Rates = { values: Record<string, number>; available: boolean }
 type LiveQuote = { price: number; currency: string; marketState: string | null }
@@ -81,6 +83,10 @@ export class FinanceService {
   listReviewDrafts(args: Record<string, unknown>) { return new ReviewCorrectionService(this.env).list(args) }
   prepareReviewCorrections(args: Record<string, unknown>) { return new ReviewCorrectionService(this.env).prepare(args) }
   applyReviewCorrections(args: Record<string, unknown>) { return new ReviewCorrectionService(this.env).apply(args) }
+  prepareTransferDrafts(args: Record<string, unknown>) { return new TransferDraftService(this.env).prepare(args) }
+  createTransferDrafts(args: Record<string, unknown>) { return new TransferDraftService(this.env).create(args) }
+  prepareTransferCorrections(args: Record<string, unknown>) { return new TransferReviewCorrectionService(this.env).prepare(args) }
+  applyTransferCorrections(args: Record<string, unknown>) { return new TransferReviewCorrectionService(this.env).apply(args) }
 
   private async accounts() {
     return (await this.env.DB.prepare('SELECT * FROM accounts ORDER BY name').all<AccountRow>()).results
@@ -437,6 +443,9 @@ export class FinanceService {
   }
 
   private reviewDraftCreationResult(batchId: string, rows: ReviewDraftResultRow[], idempotentReplay: boolean) {
+    if (!rows.length || rows.some(row => row.linked_transaction_id)) {
+      throw proposalError('proposal_corrupt', 'proposal belongs to a different draft flow')
+    }
     return {
       as_of: new Date().toISOString(),
       batch_id: batchId,

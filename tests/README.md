@@ -20,6 +20,7 @@ npm run test:integration -- -t 'rolls back'
 | Check | Main purpose |
 | --- | --- |
 | API, client, and MCP unit/component tests | Fast business-rule, validation, calculation, and UI regressions |
+| Client tests (Node 26) | Catch client test/runtime issues that appear with the local Node 26 runtime but not the pinned Node 22 |
 | API/MCP TypeScript checks and client production build | Contract/type errors, bundling, and PWA generation |
 | Client lint | Errors and warnings under the project's enabled rules |
 | Worker/D1 integration | Real entry points, HTTP/RPC routing, authentication, SQL, triggers, and cross-workspace behavior |
@@ -60,4 +61,4 @@ These are local runtime tests, not proof of deployed Cloudflare Access/OAuth con
 
 `npm run test:staging -w mcp` remains a separate, explicit operation: it writes a real review draft to a configured staging database and is not part of CI.
 
-Node 22 LTS is pinned because the current Miniflare transport can encounter the upstream [Undici `setTypeOfService EINVAL` socket bug](https://github.com/nodejs/undici/issues/5544) on macOS with newer Node runtimes. Node 22 does not expose the affected socket API. Keep local development and CI on `.node-version` until the transport dependency includes the fix. Vitest must continue failing on unhandled errors; do not suppress them to make a run pass.
+Node 22 LTS is pinned because the current Miniflare transport can encounter the upstream [Undici `setTypeOfService EINVAL` socket bug](https://github.com/nodejs/undici/issues/5544) on macOS with newer Node runtimes. Node 22 does not expose the affected socket API. Keep Worker/D1 integration and the primary CI jobs on `.node-version` until the transport dependency includes the fix. The additional Node 26 client job covers the local runtime used by some contributors without running Miniflare. Vitest must continue failing on unhandled errors; do not suppress them to make a run pass.

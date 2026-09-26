@@ -30,7 +30,7 @@ The latest published release is [v3.0](https://github.com/apptrackit/finance/rel
 | Investments | Stock/crypto symbol search, Yahoo Finance quotes and price history, buy/sell records, manual assets, allocation, cost basis, and gain/loss views. |
 | Analytics | Configurable widgets for cash trends, cash forecasts, income/expense trends and breakdowns, individual account trends, Money Map, and top expenses. |
 | AI financial forecasts | Saved HUF forecasts with 7/30/90-day ranges, daily cash paths, report history, source-data freshness, and privacy-aware narratives. |
-| MCP review | Prepare transaction drafts from a conversation or receipt, list and correct pending MCP drafts after a confirmed preview, and review/confirm/decline them in the app. |
+| MCP review | Prepare income, expense, or cash transfer drafts in conversation; list and correct ordinary drafts or transfer pairs; review and confirm or decline them in the app. |
 | Settings | Reporting currency, category management, navigation visibility, Original/Monochrome/Red Filter themes, startup privacy, cache controls, and CSV/JSON export. |
 | PWA | Installable app, responsive desktop/mobile layouts, cached assets, and service-worker updates. Financial writes require an API connection. |
 
@@ -73,7 +73,9 @@ The optional MCP Worker accesses D1 directly. Most tools read bounded financial 
 2. After you approve the preview, `create_mcp_transaction_drafts` creates pending MCP review drafts using the proposal ID. Retrying the same successful proposal does not duplicate the drafts.
 3. Review those drafts in Finance Manager. Only confirmation in the app posts them and updates balances.
 
-The MCP can also list unresolved review drafts. To fix a mistake, it prepares a complete before/after preview for up to 20 edits or declines; after your confirmation, it applies the proposal atomically. A decline removes the draft from the active review queue without deleting its audit history. Changes to review drafts alone do not change balances, projections, or forecast freshness.
+The MCP can also list unresolved review drafts, showing each cash transfer pair once. To fix a mistake, it prepares a complete before/after preview for up to 20 edits or declines; after your confirmation, it applies the proposal atomically. Ordinary drafts and transfer pairs use separate correction tools. A decline removes the draft or both transfer legs from the active review queue without deleting their audit history. Changes to review drafts alone do not change balances, projections, or forecast freshness.
+
+For cash-to-cash transfers, `prepare_mcp_transfer_drafts` previews both account legs. Different-currency transfers require the amount sent and the amount received; MCP does not calculate either from a market rate. After you confirm the complete preview, `create_mcp_transfer_drafts` creates linked pending review drafts. The app and MCP list show one review item per transfer. You can edit its accounts, both amounts, date, and note while it is pending; changing accounts requires both amounts to be entered. The MCP uses `prepare_mcp_transfer_corrections` and `apply_mcp_transfer_corrections` to edit or decline both legs after your confirmation. Posting remains an app action. Investment transfers remain in the app.
 
 For forecasts, an AI client obtains context with `get_financial_outlook_context` and publishes a snapshot with `create_financial_outlook_snapshot`. The current format stores actual cash history and a daily 90-day HUF forecast. Source revisions and timestamps determine freshness; saved reports remain immutable. The API and Analytics UI read those reports without generating them automatically.
 
@@ -291,7 +293,7 @@ Worker configuration and API secret files are temporary and cleaned up on succes
 
 ### Database migrations
 
-The schema is defined by the full ordered sequence in [api/migrations](api/migrations), currently `001-init.sql` through `013-mcp-review-corrections.sql`. Deployment uses the custom `migration_history` table to skip applied migrations. Create a new numbered SQL file for schema changes instead of editing applied files; one-time `ALTER TABLE` statements should not be rerun manually.
+The schema is defined by the full ordered sequence in [api/migrations](api/migrations), currently `001-init.sql` through `014-mcp-transfer-review-corrections.sql`. Deployment uses the custom `migration_history` table to skip applied migrations. Create a new numbered SQL file for schema changes instead of editing applied files; one-time `ALTER TABLE` statements should not be rerun manually.
 
 **Upgrade note:** migration `012-remove-budgets.sql` permanently drops the retired budget tables and clears the budget navigation preference. Back up any budget data you need before deploying the current branch over an older installation.
 

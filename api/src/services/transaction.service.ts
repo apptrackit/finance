@@ -160,6 +160,11 @@ export class TransactionService {
 
     if (oldTx.linked_transaction_id) {
       if (!this.isPosted(oldTx)) {
+        if (oldTx.status === 'pending' && oldTx.pending_kind === 'mcp_review' && oldTx.review_source === 'chatgpt_mcp') {
+          const linkedReview = await this.transactionRepo.findById(oldTx.linked_transaction_id)
+          if (!linkedReview) throw new Error('Transfer review pair is invalid')
+          return this.updatePendingTransferReview(oldTx, linkedReview, dto)
+        }
         throw new Error('Linked transfers cannot be pending')
       }
 
@@ -228,6 +233,56 @@ export class TransactionService {
 
     const updated = await this.transactionRepo.findById(id)
     return updated!
+  }
+
+  private async updatePendingTransferReview(tx: Transaction, pair: Transaction, dto: UpdateTransactionDto): Promise<Transaction> {
+    if (pair.linked_transaction_id !== tx.id || pair.status !== 'pending'
+      || pair.pending_kind !== 'mcp_review' || pair.review_source !== 'chatgpt_mcp'
+      || !tx.review_batch_id || tx.review_batch_id !== pair.review_batch_id
+      || tx.amount * pair.amount >= 0 || tx.date !== pair.date) {
+      throw new Error('Transfer review pair is invalid')
+    }
+    if (dto.category_id !== undefined || dto.price !== undefined || dto.exclude_from_estimate !== undefined) {
+      throw new Error('Transfer review can only change accounts, amounts, date, and note')
+    }
+
+    const outgoing = tx.amount < 0 ? tx : pair
+    const incoming = tx.amount < 0 ? pair : tx
+    const fromAccountId = dto.account_id ?? outgoing.account_id
+    const toAccountId = dto.to_account_id ?? incoming.account_id
+    const amountFrom = dto.amount ?? Math.abs(outgoing.amount)
+    const amountTo = dto.amount_to ?? incoming.amount
+    const date = dto.date ?? outgoing.date
+    const description = dto.description === undefined ? outgoing.description ?? null : dto.description?.trim() || null
+
+    if (fromAccountId === toAccountId) throw new Error('Cannot transfer to same account')
+    if ((fromAccountId !== outgoing.account_id || toAccountId !== incoming.account_id)
+      && (dto.amount === undefined || dto.amount_to === undefined)) {
+      throw new Error('Transfer review account changes require both amounts')
+    }
+    if (![amountFrom, amountTo].every(amount => Number.isFinite(amount) && amount > 0 && amount <= 1_000_000_000_000_000)) {
+      throw new Error('Transfer amounts must be positive and finite')
+    }
+
+    const accountIds = new Set([outgoing.account_id, incoming.account_id, fromAccountId, toAccountId])
+    const accounts = new Map<string, Account>()
+    for (const accountId of accountIds) {
+      const account = await this.accountRepo.findById(accountId)
+      if (!account) throw new Error('Account not found')
+      if (!['cash', 'checking', 'savings'].includes(account.type)) throw new Error('Transfer review requires cash accounts')
+      this.assertAccountUnlocked(account)
+      accounts.set(accountId, account)
+    }
+    if (accounts.get(fromAccountId)!.currency.toUpperCase() === accounts.get(toAccountId)!.currency.toUpperCase()
+      && amountFrom !== amountTo) {
+      throw new Error('Same-currency transfer amounts must match')
+    }
+
+    const updated = await this.transactionRepo.updatePendingTransferReviewPair(outgoing, incoming, {
+      fromAccountId, toAccountId, amountFrom, amountTo, date, description,
+    }, Date.now())
+    if (!updated) throw new Error('Transfer review changed; refresh and try again')
+    return (await this.transactionRepo.findById(tx.id))!
   }
 
   private async updateTransferPair(tx: Transaction, linkedTx: Transaction, dto: UpdateTransactionDto): Promise<Transaction> {
@@ -419,6 +474,9 @@ export class TransactionService {
     const tx = await this.transactionRepo.findById(id)
 
     if (tx) {
+      if (tx.linked_transaction_id && tx.status === 'pending') {
+        throw new Error('Pending transfer review pairs must be declined together')
+      }
       const account = await this.accountRepo.findById(tx.account_id)
       if (account) {
         this.assertAccountUnlocked(account)
@@ -486,9 +544,7 @@ export class TransactionService {
       throw new Error('Transaction not found')
     }
 
-    if (tx.linked_transaction_id) {
-      throw new Error('Linked transfers cannot be confirmed as upcoming transactions')
-    }
+    if (tx.linked_transaction_id) return this.resolveTransferReview(tx, 'confirm', today)
 
     if ((tx.status || 'posted') === 'posted') {
       return tx
@@ -527,9 +583,7 @@ export class TransactionService {
       throw new Error('Transaction not found')
     }
 
-    if (tx.linked_transaction_id) {
-      throw new Error('Linked transfers cannot be declined as upcoming transactions')
-    }
+    if (tx.linked_transaction_id) return this.resolveTransferReview(tx, 'decline')
 
     if ((tx.status || 'posted') !== 'pending') {
       throw new Error('Transaction is not pending confirmation')
@@ -549,6 +603,39 @@ export class TransactionService {
     })
 
     const updated = await this.transactionRepo.findById(id)
+    return updated!
+  }
+
+  private async resolveTransferReview(tx: Transaction, action: 'confirm' | 'decline', today?: string): Promise<Transaction> {
+    if (tx.pending_kind !== 'mcp_review' || tx.review_source !== 'chatgpt_mcp') {
+      throw new Error(`Linked transfers cannot be ${action === 'confirm' ? 'confirmed' : 'declined'} as upcoming transactions`)
+    }
+    const pair = await this.transactionRepo.findById(tx.linked_transaction_id!)
+    if (!pair || pair.linked_transaction_id !== tx.id || pair.review_batch_id !== tx.review_batch_id
+      || pair.pending_kind !== 'mcp_review' || pair.review_source !== 'chatgpt_mcp'
+      || tx.amount * pair.amount >= 0 || tx.date !== pair.date) {
+      throw new Error('Transfer review pair is invalid')
+    }
+    if (action === 'confirm' && tx.status === 'posted' && pair.status === 'posted') return tx
+    if (tx.status !== 'pending' || pair.status !== 'pending') throw new Error('Transfer review pair is not pending')
+    const effectiveToday = this.todayString(today)
+    if (action === 'confirm' && tx.date > effectiveToday) throw new Error('Cannot confirm a transaction dated in the future')
+    const [source, destination] = await Promise.all([
+      this.accountRepo.findById(tx.account_id), this.accountRepo.findById(pair.account_id),
+    ])
+    if (!source || !destination || !['cash', 'checking', 'savings'].includes(source.type) || !['cash', 'checking', 'savings'].includes(destination.type)
+      || source.id === destination.id || (source.currency.toUpperCase() === destination.currency.toUpperCase() && tx.amount + pair.amount !== 0)) {
+      throw new Error('Transfer review accounts or amounts are invalid')
+    }
+    this.assertAccountUnlocked(source)
+    this.assertAccountUnlocked(destination)
+    const debit = tx.amount < 0 ? tx : pair
+    const credit = tx.amount < 0 ? pair : tx
+    const resolved = await this.transactionRepo.resolvePendingTransferPair(debit, credit, action, Date.now(), effectiveToday)
+    const updated = await this.transactionRepo.findById(tx.id)
+    if (!resolved && updated?.status !== (action === 'confirm' ? 'posted' : 'cancelled')) {
+      throw new Error('Transfer review pair is not pending')
+    }
     return updated!
   }
 
