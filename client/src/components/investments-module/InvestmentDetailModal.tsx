@@ -100,13 +100,6 @@ export function InvestmentDetailModal({
           
           <div>
             <h3 className="font-semibold text-lg mb-4">Transaction History</h3>
-            <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-3 mb-4">
-              <p className="text-sm text-yellow-600 dark:text-yellow-400">
-                <strong>💡 How to log investment transactions:</strong><br/>
-                For stock/crypto investments, log the <strong>dollar amount</strong> you invested, not the number of shares.<br/>
-                Example: If you bought 5 shares of AAPL for $1,400, log an income transaction of <strong>$1,400</strong> with description "Bought 5 AAPL shares"
-              </p>
-            </div>
             
             <div className="space-y-2">
               {transactions.length === 0 ? (
