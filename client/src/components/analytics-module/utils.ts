@@ -1,3 +1,4 @@
+import { convertCurrency } from '../../../../shared/currency'
 import type { Account, TrendDataPoint } from './types'
 
 // Helper function to calculate Y-axis domain for charts
@@ -29,12 +30,8 @@ export const convertToMasterCurrency = (
   accounts: Account[], 
   exchangeRates: Record<string, number>,
   masterCurrency: string
-): number => {
+): number | null => {
   const account = accounts.find(a => a.id === accountId)
-  if (!account || account.currency === masterCurrency) return amount
-  
-  const rate = exchangeRates[account.currency]
-  if (!rate) return amount // Fallback to original if rate unavailable
-  
-  return amount / rate
+  if (!account) return null
+  return convertCurrency(amount, account.currency, masterCurrency, exchangeRates).value
 }

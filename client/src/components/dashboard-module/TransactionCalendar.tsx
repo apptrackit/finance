@@ -1,3 +1,4 @@
+import { sumAvailable } from '../../../../shared/currency'
 import { useEffect, useMemo, useState } from 'react'
 import { addDays, endOfMonth, endOfWeek, format, isSameDay, isSameMonth, startOfMonth, startOfWeek } from 'date-fns'
 import { ArrowRightLeft, CalendarDays, TrendingUp } from 'lucide-react'
@@ -18,7 +19,7 @@ type Transaction = {
 
 type Account = { id: string; name: string; balance: number; currency: string; type: 'cash' | 'investment' }
 type CalendarTransaction = Transaction & { relatedTx?: Transaction }
-type CalendarChartPoint = { dateKey: string; label: string; balance: number; day: Date }
+type CalendarChartPoint = { dateKey: string; label: string; balance: number | null; day: Date }
 
 const dateKey = (date: Date) => format(date, 'yyyy-MM-dd')
 
@@ -31,7 +32,7 @@ export function TransactionCalendar({
   getCategoryIcon,
   getAccountName,
   getAccountCurrency,
-  convertToMasterCurrency = (value) => value,
+  convertToMasterCurrency = () => null,
   masterCurrency,
   sortOrder,
 }: {
@@ -43,7 +44,7 @@ export function TransactionCalendar({
   getCategoryIcon: (id?: string | null) => string
   getAccountName: (id: string) => string
   getAccountCurrency: (id: string) => string
-  convertToMasterCurrency?: (amount: number, accountId: string) => number
+  convertToMasterCurrency?: (amount: number, accountId: string) => number | null
   masterCurrency: string
   sortOrder: 'date' | 'amount-high' | 'amount-low'
 }) {
@@ -101,17 +102,17 @@ export function TransactionCalendar({
   )
 
   const baseline = useMemo(() => {
-    const currentBalance = accounts.filter(a => a.type === 'cash').reduce((sum, account) => sum + convertToMasterCurrency(account.balance, account.id), 0)
-    const totalFlow = displayTransactions.reduce((sum, tx) => sum + convertToMasterCurrency(tx.amount, tx.account_id), 0)
-    return currentBalance - totalFlow
+    const currentBalance = sumAvailable(accounts.filter(a => a.type === 'cash').map(account => convertToMasterCurrency(account.balance, account.id)))
+    const totalFlow = sumAvailable(displayTransactions.map(tx => convertToMasterCurrency(tx.amount, tx.account_id)))
+    return currentBalance === null || totalFlow === null ? null : currentBalance - totalFlow
   }, [accounts, convertToMasterCurrency, displayTransactions])
 
   const balanceByDay = useMemo(() => {
     let balance = baseline
-    const values: Record<string, number> = {}
+    const values: Record<string, number | null> = {}
     calendarDays.forEach(day => {
       const dayTransactions = transactionsByDay[dateKey(day)] || []
-      balance += dayTransactions.reduce((sum, tx) => sum + convertToMasterCurrency(tx.amount, tx.account_id), 0)
+      balance = sumAvailable([balance, ...dayTransactions.map(tx => convertToMasterCurrency(tx.amount, tx.account_id))])
       values[dateKey(day)] = balance
     })
     return values
@@ -136,8 +137,9 @@ export function TransactionCalendar({
       : { minimumFractionDigits: 0, maximumFractionDigits: 0 }
     return `${Math.abs(value).toLocaleString('hu-HU', options)} ${getAccountCurrency(accountId)}`
   }
-  const masterAmount = (value: number) => {
+  const masterAmount = (value: number | null) => {
     if (privacyMode === 'hidden') return '••••••'
+    if (value === null) return 'Unavailable'
     return `${Math.abs(value).toLocaleString('hu-HU', { notation: 'compact', maximumFractionDigits: 1 })} ${masterCurrency}`
   }
 
@@ -171,7 +173,7 @@ export function TransactionCalendar({
           <div className="border-b border-border/60 px-3 py-2.5">
             <div className="mb-1 flex items-center gap-1.5 text-[10px] font-semibold tracking-wide text-muted-foreground"><TrendingUp className="h-3.5 w-3.5 text-success" />BALANCE TREND</div>
             <div className="h-20 cursor-pointer sm:h-24" aria-label="Animated balance trend chart. Click a day to select it.">
-              <ResponsiveContainer width="100%" height="100%">
+              {baseline === null ? <p className="text-xs text-muted-foreground">Balance trend unavailable: missing exchange rates.</p> : <ResponsiveContainer width="100%" height="100%">
                 <AreaChart
                   data={chartData}
                   margin={{ top: 8, right: 4, left: 4, bottom: 0 }}
@@ -196,7 +198,7 @@ export function TransactionCalendar({
                         <div className="rounded-lg border border-border bg-card px-2 py-1.5 shadow-lg">
                           <p className="text-[10px] text-muted-foreground">{format(point.day, 'EEEE, MMM d')}</p>
                           <p className={`text-xs font-bold text-success ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
-                            {privacyMode === 'hidden' ? '••••••' : `${point.balance.toLocaleString('hu-HU', { maximumFractionDigits: 0 })} ${masterCurrency}`}
+                            {privacyMode === 'hidden' ? '••••••' : `${point.balance?.toLocaleString('hu-HU', { maximumFractionDigits: 0 })} ${masterCurrency}`}
                           </p>
                         </div>
                       )
@@ -215,7 +217,7 @@ export function TransactionCalendar({
                     activeDot={{ r: 4, strokeWidth: 2, fill: 'hsl(var(--card))', stroke: 'hsl(var(--success))' }}
                   />
                 </AreaChart>
-              </ResponsiveContainer>
+              </ResponsiveContainer>}
             </div>
           </div>
 
@@ -251,8 +253,8 @@ export function TransactionCalendar({
                       {sortedDayTransactions.length > 3 && <div className="pl-1 text-[9px] font-medium text-muted-foreground">+{sortedDayTransactions.length - 3} more</div>}
                     </div>
                   ) : density === 'compact' && dayTransactions.length > 0 ? (
-                    <div className={`truncate text-[9px] font-semibold sm:text-[10px] ${dayTotals.net > 0 ? 'text-success' : dayTotals.net < 0 ? 'text-destructive' : 'text-muted-foreground'}`}>
-                      {dayTotals.net === 0 ? masterAmount(0) : `${dayTotals.net > 0 ? '+' : '−'}${masterAmount(dayTotals.net)}`}
+                    <div className={`truncate text-[9px] font-semibold sm:text-[10px] ${(dayTotals.net ?? 0) > 0 ? 'text-success' : (dayTotals.net ?? 0) < 0 ? 'text-destructive' : 'text-muted-foreground'}`}>
+                      {dayTotals.net === null ? 'Unavailable' : dayTotals.net === 0 ? masterAmount(0) : `${(dayTotals.net ?? 0) > 0 ? '+' : '−'}${masterAmount(dayTotals.net)}`}
                     </div>
                   ) : null}
                 </button>
@@ -268,9 +270,10 @@ export function TransactionCalendar({
               <h3 className="text-sm font-semibold">{format(selectedDate, 'EEEE, MMM d')}</h3>
             </div>
             <div className="mt-2 flex flex-wrap gap-1.5 text-[9px] sm:text-[10px]">
-              {selectedTotals.income > 0 && <SummaryPill label="Income" value={selectedTotals.income} tone="text-success bg-success/10" />}
-              {selectedTotals.expense > 0 && <SummaryPill label="Expenses" value={selectedTotals.expense} tone="text-destructive bg-destructive/10" />}
-              {selectedTotals.transfer > 0 && <SummaryPill label="Transfer" value={selectedTotals.transfer} tone="text-blue-500 bg-blue-500/10" />}
+              {selectedTotals.net === null && <span>Day totals unavailable: missing exchange rates.</span>}
+              {(selectedTotals.income ?? 0) > 0 && <SummaryPill label="Income" value={selectedTotals.income!} hidden={privacyMode === 'hidden'} tone="text-success bg-success/10" />}
+              {(selectedTotals.expense ?? 0) > 0 && <SummaryPill label="Expenses" value={selectedTotals.expense!} hidden={privacyMode === 'hidden'} tone="text-destructive bg-destructive/10" />}
+              {(selectedTotals.transfer ?? 0) > 0 && <SummaryPill label="Transfer" value={selectedTotals.transfer!} hidden={privacyMode === 'hidden'} tone="text-blue-500 bg-blue-500/10" />}
             </div>
           </div>
           <div className="max-h-[22rem] divide-y divide-border/60 overflow-y-auto">
@@ -290,9 +293,11 @@ export function TransactionCalendar({
   )
 }
 
-function getDayTotals(transactions: CalendarTransaction[], convertToMasterCurrency: (amount: number, accountId: string) => number) {
-  return transactions.reduce((totals, tx) => {
-    const amount = convertToMasterCurrency(tx.amount, tx.account_id)
+function getDayTotals(transactions: CalendarTransaction[], convertToMasterCurrency: (amount: number, accountId: string) => number | null) {
+  const amounts = transactions.map(tx => convertToMasterCurrency(tx.amount, tx.account_id))
+  if (amounts.some(amount => amount === null)) return { income: null, expense: null, transfer: null, net: null }
+  return transactions.reduce((totals, tx, index) => {
+    const amount = amounts[index]!
     if (tx.linked_transaction_id) { totals.transfer += Math.abs(amount); return totals }
     if (amount >= 0) totals.income += amount
     else totals.expense += Math.abs(amount)
@@ -347,6 +352,6 @@ function LegendDot({ className, label }: { className: string; label: string }) {
   return <span className="flex items-center gap-1"><i className={`h-1.5 w-1.5 rounded-full ${className}`} />{label}</span>
 }
 
-function SummaryPill({ label, value, tone }: { label: string; value: number; tone: string }) {
-  return <span className={`rounded-full px-1.5 py-0.5 font-medium ${tone}`}>{label} {value.toLocaleString('hu-HU', { notation: 'compact', maximumFractionDigits: 1 })}</span>
+function SummaryPill({ label, value, tone, hidden }: { label: string; value: number; tone: string; hidden: boolean }) {
+  return <span className={`rounded-full px-1.5 py-0.5 font-medium ${tone}`}>{label} {hidden ? '••••••' : value.toLocaleString('hu-HU', { notation: 'compact', maximumFractionDigits: 1 })}</span>
 }

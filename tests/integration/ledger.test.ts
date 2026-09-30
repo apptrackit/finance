@@ -192,6 +192,15 @@ describe('compiled API and MCP Workers sharing D1', () => {
     expect(summary.accounts).toContainEqual(expect.objectContaining({ id: 'euros', native_balance: 100, converted_balance: 40000 }))
     expect(summary.accounts).toContainEqual(expect.objectContaining({ id: 'pounds', native_balance: 75, converted_balance: null }))
     expect(summary.warnings.join(' ')).toContain('GBP')
+    const netWorth = await (await f.request('/dashboard/net-worth?currency=HUF')).json()
+    expect(netWorth).toMatchObject({ net_worth: null, missing_currencies: ['GBP'] })
+    expect(netWorth).toMatchObject({ accounts: expect.arrayContaining([
+      expect.objectContaining({ id: 'euros', balance: 100, currency: 'EUR', balance_in_master: 40000 }),
+      expect.objectContaining({ id: 'pounds', balance: 75, currency: 'GBP', balance_in_master: null }),
+    ]) })
+    // The reporting failure must not change stored balances.
+    expect(await f.db.prepare("SELECT balance FROM accounts WHERE id = 'pounds'").first('balance')).toBe(75)
+
   })
 
   it('preserves fractional investment quantities and linked cash when a purchase is deleted', async () => {

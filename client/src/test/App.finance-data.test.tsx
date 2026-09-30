@@ -129,4 +129,25 @@ describe('finance read errors in App', () => {
     expect(screen.getByRole('alert')).toHaveTextContent('Categories: Unavailable.')
     expect(screen.queryByText('Loaded recurring transactions')).not.toBeInTheDocument()
   })
+  it('shows missing FX without leaking private values and recovers after retry', async () => {
+    payloads['/accounts'] = [
+      { id: 'cash', name: 'Private HUF', type: 'cash', balance: 100000, currency: 'HUF', updated_at: 1 },
+      { id: 'usd', name: 'Private USD', type: 'cash', balance: 100, currency: 'USD', updated_at: 1 },
+      { id: 'eur', name: 'Private EUR', type: 'cash', balance: 100, currency: 'EUR', updated_at: 1 },
+    ]
+    payloads['/dashboard/net-worth'] = { net_worth: null, missing_currencies: ['EUR'] }
+    payloads['/v6/latest/HUF'] = { rates: { HUF: 1, USD: 1 / 360 } }
+    payloads['/transactions/upcoming'] = [{ id: 'upcoming', account_id: 'eur', amount: 20, date: '2026-09-30', status: 'pending', pending_kind: 'upcoming' }]
+    render(<App />)
+    expect(await screen.findByRole('alert')).toHaveTextContent('Missing or invalid exchange rates: EUR')
+    expect(await screen.findByText('Projection unavailable')).toBeInTheDocument()
+    expect(screen.queryByText(/Private HUF|Private USD|Private EUR|100000/)).not.toBeInTheDocument()
+    expect(document.body.textContent).not.toMatch(/NaN|Infinity/)
+    payloads['/dashboard/net-worth'] = { net_worth: 176000, missing_currencies: [] }
+    payloads['/v6/latest/HUF'] = { rates: { HUF: 1, USD: 1 / 360, EUR: 1 / 400 } }
+    fireEvent.click(screen.getByRole('button', { name: 'Retry rates' }))
+    await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument())
+    expect(screen.queryByText('Projection unavailable')).not.toBeInTheDocument()
+  })
+
 })

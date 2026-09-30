@@ -1,7 +1,8 @@
+import { sumAvailable, validRates, convertCurrency } from '../../../../shared/currency'
+import { MissingExchangeRates } from '../common/MissingExchangeRates'
 import { useState, useEffect } from 'react'
 import { API_BASE_URL, apiFetch } from '../../config'
 import { usePrivacy } from '../../context/PrivacyContext'
-import { getMasterCurrency } from '../settings-module/Settings'
 import type { Account, Transaction, MarketQuote, Category, PortfolioStats } from './types'
 import { calculatePosition, convertToDisplayCurrency } from './utils'
 import { PortfolioSummary } from './PortfolioSummary'
@@ -29,14 +30,10 @@ export function Investments() {
   const [refreshing, setRefreshing] = useState(false)
   const [loading, setLoading] = useState(true)
   const [selectedAccount, setSelectedAccount] = useState<Account | null>(null)
-  const [masterCurrency, setMasterCurrency] = useState('HUF')
   const [currencyDisplay, setCurrencyDisplay] = useState<'HUF' | 'USD'>('HUF')
   
   const { privacyMode } = usePrivacy()
 
-  useEffect(() => {
-    setMasterCurrency(getMasterCurrency())
-  }, [])
 
   const fetchData = async () => {
     setRefreshing(true)
@@ -97,10 +94,11 @@ export function Investments() {
     // Fetch exchange rates for manual assets (USD base)
     try {
       const ratesRes = await fetch('https://open.er-api.com/v6/latest/USD')
+      if (!ratesRes.ok) throw new Error('Rates unavailable')
       const ratesData = await ratesRes.json()
-      setExchangeRates(ratesData.rates || {})
+      setExchangeRates(validRates(ratesData.rates))
     } catch {
-      console.error('Failed to fetch exchange rates')
+      setExchangeRates({})
     }
     
     setRefreshing(false)
@@ -121,23 +119,30 @@ export function Investments() {
     )
     
     // Sort positions by current value (descending, most to least)
-    const sortedPositions = [...positions].sort((a, b) => b.currentValue - a.currentValue)
+    const sortedPositions = [...positions].sort((a, b) => (b.currentValue ?? -Infinity) - (a.currentValue ?? -Infinity))
     
-    const totalValue = positions.reduce((sum, pos) => sum + pos.currentValue, 0)
-    const totalInvested = positions.reduce((sum, pos) => sum + pos.netInvested, 0)
-    const totalGainLoss = totalValue - totalInvested
-    const totalGainLossPercent = totalInvested > 0 ? (totalGainLoss / totalInvested) * 100 : 0
+    const totalValue = sumAvailable(positions.map(pos => pos.currentValue))
+    const totalInvested = sumAvailable(positions.map(pos => pos.netInvested))
+    const totalGainLoss = totalValue === null || totalInvested === null ? null : totalValue - totalInvested
+    const totalGainLossPercent = totalInvested === null || totalGainLoss === null ? null : totalInvested > 0 ? (totalGainLoss / totalInvested) * 100 : 0
     
     return { totalValue, totalInvested, totalGainLoss, totalGainLossPercent, positions: sortedPositions }
   }
 
   const stats = calculatePortfolioStats()
 
-  const convertCurrency = (usdValue: number) => 
-    convertToDisplayCurrency(usdValue, currencyDisplay, exchangeRates, masterCurrency)
+  const convertDisplayCurrency = (usdValue: number | null) =>
+    convertToDisplayCurrency(usdValue, currencyDisplay, exchangeRates)
+
+  const missingCurrencies = [...new Set([
+    ...stats.positions.flatMap(position => position.missingCurrencies),
+    ...convertCurrency(1, 'USD', currencyDisplay, exchangeRates, 'USD').missingCurrencies,
+  ])].sort()
 
   return (
     <div className="space-y-6">
+      {!loading && <MissingExchangeRates currencies={missingCurrencies} targetCurrency={currencyDisplay}
+        onRetry={() => { void fetchData() }} retrying={refreshing} />}
       {/* Currency Toggle */}
       <div className="flex justify-end gap-2">
         <button
@@ -168,7 +173,7 @@ export function Investments() {
         loading={loading}
         privacyMode={privacyMode}
         displayCurrency={currencyDisplay}
-        convertToDisplayCurrency={convertCurrency}
+        convertToDisplayCurrency={convertDisplayCurrency}
         investmentAccountsCount={investmentAccounts.length}
       />
 

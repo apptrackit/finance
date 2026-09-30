@@ -1,3 +1,5 @@
+import { convertCurrency, sumConversions } from '../../../../shared/currency'
+import { MissingExchangeRates } from '../common/MissingExchangeRates'
 import { useState, useMemo, useEffect, useCallback } from 'react'
 import { Card, CardContent } from '../common/card'
 import { Button } from '../common/button'
@@ -35,6 +37,7 @@ type AnalyticsProps = {
   masterCurrency?: string
   exchangeRates?: Record<string, number>
   loading?: boolean
+  onRetryRates?: () => void
 }
 
 function AnalyticsSkeleton() {
@@ -78,7 +81,8 @@ export function Analytics({
   accounts,
   masterCurrency = 'HUF',
   exchangeRates = {},
-  loading = false
+  loading = false,
+  onRetryRates,
 }: AnalyticsProps) {
   const [period, setPeriod] = useState<TimePeriod>('month')
   const [projectionMode, setProjectionMode] = useState<'actual' | 'projected'>('actual')
@@ -97,7 +101,7 @@ export function Analytics({
     })
   }
 
-  const show = (id: WidgetId) => widgetVisibility[id]
+  const show = (id: WidgetId) => widgetVisibility[id] && (conversionsAvailable || id === 'account-trends' || id === 'ai-financial-forecast')
 
   const customDateRange = useMemo(() => {
     if (period === 'month') {
@@ -136,6 +140,17 @@ export function Analytics({
   const transactionsForAnalytics = useMemo(() => {
     return isProjected ? [...transactions, ...projectableUpcomingTransactions] : transactions
   }, [isProjected, transactions, projectableUpcomingTransactions])
+  const requiredConversions = sumConversions([
+    ...accounts.filter(account => account.type !== 'investment' && !account.exclude_from_net_worth)
+      .map(account => convertCurrency(account.balance, account.currency, masterCurrency, exchangeRates)),
+    ...transactionsForAnalytics.filter(transaction => accounts.find(account => account.id === transaction.account_id)?.type !== 'investment')
+      .map(transaction => {
+        const account = accounts.find(account => account.id === transaction.account_id)
+        return convertCurrency(transaction.amount, account?.currency || '', masterCurrency, exchangeRates)
+      }),
+  ])
+  const conversionsAvailable = requiredConversions.value !== null
+
   const [outlookHistory, setOutlookHistory] = useState<FinancialOutlookSnapshot[]>([])
   const [selectedOutlookId, setSelectedOutlookId] = useState<string | null>(null)
   const [outlookNextCursor, setOutlookNextCursor] = useState<string | null>(null)
@@ -193,8 +208,12 @@ export function Analytics({
 
   // Wrapper for convertToMasterCurrency utility
   const convertToMasterCurrency = useCallback(
-    (amount: number, accountId: string): number =>
-      convertUtil(amount, accountId, accounts, exchangeRates, masterCurrency),
+    (amount: number, accountId: string): number => {
+      const value = convertUtil(amount, accountId, accounts, exchangeRates, masterCurrency)
+      // Every converted calculation is gated by requiredConversions below.
+      if (value === null) throw new Error('Exchange rate unavailable')
+      return value
+    },
     [accounts, exchangeRates, masterCurrency]
   )
 
@@ -202,9 +221,7 @@ export function Analytics({
     const account = accounts.find(item => item.id === accountId)
     if (!account) return null
     if (account.currency === 'HUF') return amount
-    const hufRate = masterCurrency === 'HUF' ? 1 : exchangeRates.HUF
-    const accountRate = account.currency === masterCurrency ? 1 : exchangeRates[account.currency]
-    return hufRate && accountRate ? amount * hufRate / accountRate : null
+    return convertCurrency(amount, account.currency, 'HUF', exchangeRates, masterCurrency).value
   }, [accounts, exchangeRates, masterCurrency])
 
   // Filter transactions by period (exclude investment accounts only)
@@ -228,6 +245,7 @@ export function Analytics({
 
   // Calculate totals in master currency
   const { totalIncome, totalExpenses, netFlow } = useMemo(() => {
+    if (!conversionsAvailable) return { totalIncome: 0, totalExpenses: 0, netFlow: 0 }
     const income = filteredTransactions
       .filter(t => t.amount > 0 && !t.linked_transaction_id)
       .reduce((sum, t) => sum + convertToMasterCurrency(t.amount, t.account_id), 0)
@@ -239,10 +257,11 @@ export function Analytics({
       totalExpenses: expenses,
       netFlow: income - expenses
     }
-  }, [filteredTransactions, exchangeRates, accounts, masterCurrency])
+  }, [conversionsAvailable, filteredTransactions, exchangeRates, accounts, masterCurrency])
 
   // Spending by category data in master currency
   const categoryData = useMemo(() => {
+    if (!conversionsAvailable) return []
     const expensesByCategory: Record<string, number> = {}
     
     filteredTransactions
@@ -264,10 +283,11 @@ export function Analytics({
         }
       })
       .sort((a, b) => b.value - a.value)
-  }, [filteredTransactions, categories, totalExpenses, exchangeRates, accounts, masterCurrency])
+  }, [conversionsAvailable, filteredTransactions, categories, totalExpenses, exchangeRates, accounts, masterCurrency])
 
   // Income by category data in master currency
   const incomeCategoryData = useMemo(() => {
+    if (!conversionsAvailable) return []
     const incomeByCategory: Record<string, number> = {}
     
     filteredTransactions
@@ -289,10 +309,11 @@ export function Analytics({
         }
       })
       .sort((a, b) => b.value - a.value)
-  }, [filteredTransactions, categories, totalIncome, exchangeRates, accounts, masterCurrency])
+  }, [conversionsAvailable, filteredTransactions, categories, totalIncome, exchangeRates, accounts, masterCurrency])
 
   // Cash Balance Trend data - only cash accounts (excludes investment and exclude_from_net_worth)
   const cashBalanceTrendData = useMemo((): TrendDataPoint[] => {
+    if (!conversionsAvailable) return []
     const cashAccounts = accounts.filter(
       acc => acc.type !== 'investment' && !acc.exclude_from_net_worth
     )
@@ -358,7 +379,7 @@ export function Analytics({
       ema = point.balance * k + ema * (1 - k)
       return { ...point, smoothed: ema }
     })
-  }, [transactionsForAnalytics, accounts, period, exchangeRates, masterCurrency, customDateRange])
+  }, [conversionsAvailable, transactionsForAnalytics, accounts, period, exchangeRates, masterCurrency, customDateRange])
 
   // Per-account trends remain in each account's native currency (exclude investment accounts).
   const perAccountTrendData = useMemo(() => {
@@ -461,6 +482,7 @@ export function Analytics({
 
   // Income comparison data
   const incomeChartData = useMemo((): ChartDataPoint[] => {
+    if (!conversionsAvailable) return []
     const data: ChartDataPoint[] = []
     const now = new Date()
     
@@ -551,10 +573,11 @@ export function Analytics({
     }
     
     return data
-  }, [transactionsForAnalytics, selectedIncomeCategory, period, customDateRange, accounts, exchangeRates, masterCurrency])
+  }, [conversionsAvailable, transactionsForAnalytics, selectedIncomeCategory, period, customDateRange, accounts, exchangeRates, masterCurrency])
 
   // Expenses comparison data
   const expensesChartData = useMemo((): ChartDataPoint[] => {
+    if (!conversionsAvailable) return []
     const data: ChartDataPoint[] = []
     const now = new Date()
     
@@ -645,7 +668,7 @@ export function Analytics({
     }
     
     return data
-  }, [transactionsForAnalytics, selectedExpenseCategory, period, customDateRange, accounts, exchangeRates, masterCurrency])
+  }, [conversionsAvailable, transactionsForAnalytics, selectedExpenseCategory, period, customDateRange, accounts, exchangeRates, masterCurrency])
 
   // This chart always uses every category, so it stays a complete comparison
   // when either of the smaller charts above is narrowed to one category.
@@ -716,6 +739,7 @@ export function Analytics({
   }, [period, allTimeIncomeExpensesResolution])
 
   const incomeExpensesTrendData = useMemo((): IncomeExpensesTrendPoint[] => {
+    if (!conversionsAvailable) return []
     const accountById = new Map(accounts.map(account => [account.id, account]))
     const eligibleTransactions = transactionsForAnalytics.filter(transaction =>
       !transaction.linked_transaction_id && accountById.get(transaction.account_id)?.type !== 'investment'
@@ -844,7 +868,7 @@ export function Analytics({
         netIncome: income - expenses,
       }
     })
-  }, [accounts, transactionsForAnalytics, period, customDateRange, convertToMasterCurrency, incomeExpensesTrendResolution])
+  }, [conversionsAvailable, accounts, transactionsForAnalytics, period, customDateRange, convertToMasterCurrency, incomeExpensesTrendResolution])
 
   const periodLabels: Record<TimePeriod, string> = {
     allTime: 'All Time',
@@ -897,6 +921,7 @@ export function Analytics({
         visibility={widgetVisibility}
         onToggle={toggleWidget}
         widgetHasData={widgetHasData}
+        conversionsUnavailable={!conversionsAvailable}
       />
 
       {/* Analytics header */}
@@ -1000,6 +1025,7 @@ export function Analytics({
         </div>
       </div>
 
+      <MissingExchangeRates currencies={requiredConversions.missingCurrencies} targetCurrency={masterCurrency} onRetry={onRetryRates} />
       {!hasData ? (
         <Card>
           <CardContent className="py-12">
@@ -1014,6 +1040,7 @@ export function Analytics({
         </Card>
       ) : (
         <>
+          {!conversionsAvailable && <p role="status" className="text-sm text-muted-foreground">Summary, converted charts, and projections unavailable until exchange rates recover.</p>}
           {show('summary-cards') && (
             <SummaryCards
               totalIncome={totalIncome}

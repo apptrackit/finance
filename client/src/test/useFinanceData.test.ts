@@ -205,4 +205,42 @@ describe('useFinanceData', () => {
     expect(result.current.transactions[0]?.id).toBe('newer')
     expect(result.current.dataStatus.transactions.error).toBe(false)
   })
+  it('accepts unavailable API net worth as a loaded result with missing-rate details', async () => {
+    payloads['/dashboard/net-worth'] = { net_worth: null, missing_currencies: ['EUR'] }
+    const { result } = setup()
+    await waitFor(() => expect(result.current.dataStatus.netWorth.loaded).toBe(true))
+    expect(result.current.netWorth).toBeNull()
+    expect(result.current.netWorthMissingCurrencies).toEqual(['EUR'])
+    expect(result.current.dataStatus.netWorth.error).toBe(false)
+  })
+
+  it.each(['manual', 'stock'])('makes %s investment FX unavailable and restores it after retry', async assetType => {
+    payloads['/accounts'] = [{ ...investmentAccount, asset_type: assetType, symbol: 'TEST', currency: 'EUR', quote_currency: 'EUR', balance: 2 }]
+    payloads['/market/quote'] = { regularMarketPrice: 10, currency: 'EUR' }
+    payloads['/v6/latest/HUF'] = { rates: { HUF: 1 } }
+    const { result } = setup()
+    await waitFor(() => expect(result.current.dataStatus.investment.loaded).toBe(true))
+    expect(result.current.investmentValue).toBeNull()
+    expect(result.current.investmentMissingCurrencies).toEqual(['EUR'])
+    payloads['/v6/latest/HUF'] = { rates: { HUF: 1, EUR: 1 / 400 } }
+    await act(async () => { await result.current.fetchInvestmentValue() })
+    expect(result.current.investmentValue).toBe(assetType === 'manual' ? 800 : 8000)
+    expect(result.current.investmentMissingCurrencies).toEqual([])
+  })
+
+  it('withholds required conversions after a rate-service failure and recovers on retry', async () => {
+    payloads['/accounts'] = [{ ...investmentAccount, currency: 'EUR', balance: 100 }]
+    const { result } = setup()
+    await waitFor(() => expect(result.current.dataStatus.investment.loaded).toBe(true))
+    failures.set('/v6/latest/HUF', async () => { throw new Error('offline') })
+    await act(async () => { await result.current.handleDataChange(); await result.current.fetchInvestmentValue() })
+    expect(result.current.usableExchangeRates).toEqual({})
+    expect(result.current.investmentValue).toBeNull()
+    expect(result.current.investmentMissingCurrencies).toEqual(['EUR'])
+    failures.clear()
+    await act(async () => { await result.current.handleDataChange(); await result.current.fetchInvestmentValue() })
+    expect(result.current.investmentValue).toBe(40_000)
+    expect(result.current.investmentMissingCurrencies).toEqual([])
+  })
+
 })

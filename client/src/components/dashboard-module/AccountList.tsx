@@ -1,3 +1,5 @@
+import { convertCurrency, sumAvailable, validRates } from '../../../../shared/currency'
+import { MissingExchangeRates } from '../common/MissingExchangeRates'
 import { useState, useEffect } from 'react'
 import { Button } from '../common/button'
 import { Input } from '../common/input'
@@ -79,6 +81,8 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
   const [manualMode, setManualMode] = useState(false)
   const [activeAccountId, setActiveAccountId] = useState<string | null>(null)
   const [exchangeRates, setExchangeRates] = useState<Record<string, number>>({})
+  const [ratesRefreshKey, setRatesRefreshKey] = useState(0)
+  const [ratesLoading, setRatesLoading] = useState(false)
   const [quotes, setQuotes] = useState<Record<string, MarketQuote>>({})
   const [categories, setCategories] = useState<Category[]>([])
   const [showChoiceModal, setShowChoiceModal] = useState(false)
@@ -115,17 +119,19 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
   useEffect(() => {
     const fetchRates = async () => {
       try {
+        setRatesLoading(true)
         const response = await fetch('https://open.er-api.com/v6/latest/USD')
+        if (!response.ok) throw new Error('Rates unavailable')
         const data = await response.json()
-        if (data.rates) {
-          setExchangeRates(data.rates)
-        }
-      } catch (error) {
-        console.error('Failed to fetch exchange rates:', error)
+        setExchangeRates(validRates(data.rates))
+      } catch {
+        setExchangeRates({})
+      } finally {
+        setRatesLoading(false)
       }
     }
     fetchRates()
-  }, [])
+  }, [ratesRefreshKey, accounts])
 
   // Fetch market quotes for investment accounts
   useEffect(() => {
@@ -156,75 +162,33 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
     }
   }, [accounts])
 
-  // Calculate percentages for cash and investment accounts
-  const calculatePercentages = () => {
-    const cashAccounts = accounts.filter(a => a.type === 'cash')
-    const investmentAccounts = accounts.filter(a => a.type === 'investment')
-
-    // Calculate total cash value in USD (excluding accounts marked to be excluded from all)
-    const totalCashUSD = cashAccounts.reduce((sum, account) => {
-      if (account.exclude_from_cash_balance && account.exclude_from_net_worth) {
-        return sum
-      }
-      const rate = exchangeRates[account.currency] || 1
-      return sum + (account.balance / rate)
-    }, 0)
-
-    // Calculate total investment value in USD (current market value, not cost basis)
-    const totalInvestmentUSD = investmentAccounts.reduce((sum, account) => {
-      if (account.asset_type === 'manual') {
-        // For manual accounts, balance is in the account's currency
-        const rate = exchangeRates[account.currency] || 1
-        return sum + (account.balance / rate)
-      } else if (account.symbol && quotes[account.symbol]) {
-        // For stocks/crypto, balance is the quantity, multiply by current price
-        const quote = quotes[account.symbol]
-        const currentPrice = quote.regularMarketPrice || 0
-        const quoteCurrency = (account.quote_currency || quote.currency || 'USD').toUpperCase()
-        return sum + (account.balance * currentPrice) / (quoteCurrency === 'USD' ? 1 : exchangeRates[quoteCurrency] || 1)
-      }
-      return sum
-    }, 0)
-
-    // Calculate percentages (skip excluded accounts)
-    const cashPercentages: Record<string, number> = {}
-    cashAccounts.forEach(account => {
-      if (account.exclude_from_cash_balance && account.exclude_from_net_worth) {
-        cashPercentages[account.id] = 0
-        return
-      }
-      const rate = exchangeRates[account.currency] || 1
-      const valueUSD = account.balance / rate
-      cashPercentages[account.id] = totalCashUSD > 0 ? (valueUSD / totalCashUSD) * 100 : 0
-    })
-
-    const investmentPercentages: Record<string, number> = {}
-    investmentAccounts.forEach(account => {
-      let valueUSD = 0
-      if (account.asset_type === 'manual') {
-        const rate = exchangeRates[account.currency] || 1
-        valueUSD = account.balance / rate
-      } else if (account.symbol && quotes[account.symbol]) {
-        const quote = quotes[account.symbol]
-        const currentPrice = quote.regularMarketPrice || 0
-        const quoteCurrency = (account.quote_currency || quote.currency || 'USD').toUpperCase()
-        valueUSD = (account.balance * currentPrice) / (quoteCurrency === 'USD' ? 1 : exchangeRates[quoteCurrency] || 1)
-      }
-      investmentPercentages[account.id] = totalInvestmentUSD > 0 ? (valueUSD / totalInvestmentUSD) * 100 : 0
-    })
-
-    return { cashPercentages, investmentPercentages, totalCashUSD, totalInvestmentUSD }
+  const missingCurrencies = new Set<string>()
+  const toUsd = (amount: number, currency: string) => {
+    const result = convertCurrency(amount, currency, 'USD', exchangeRates)
+    result.missingCurrencies.forEach(item => missingCurrencies.add(item))
+    return result.value
   }
-
-  const { cashPercentages, investmentPercentages, totalCashUSD, totalInvestmentUSD } = calculatePercentages()
-  const totalPortfolioUSD = totalCashUSD + totalInvestmentUSD
-  const cashAllocation = totalPortfolioUSD > 0 ? (totalCashUSD / totalPortfolioUSD) * 100 : 0
-  const investmentAllocation = totalPortfolioUSD > 0 ? (totalInvestmentUSD / totalPortfolioUSD) * 100 : 0
-  const formatHufTotal = (usdValue: number) => {
-    const hufRate = exchangeRates.HUF
-    if (!hufRate) return null
-    return `${Math.round(usdValue * hufRate).toLocaleString('hu-HU')} HUF`
+  const accountValueUsd = (account: Account): number | null => {
+    if (account.type === 'cash' || account.asset_type === 'manual') return toUsd(account.balance, account.currency)
+    const quote = account.symbol ? quotes[account.symbol] : null
+    if (!quote || !Number.isFinite(quote.regularMarketPrice)) return null
+    return toUsd(account.balance * quote.regularMarketPrice!, account.quote_currency || quote.currency || 'USD')
   }
+  const accountValues = Object.fromEntries(accounts.map(account => [account.id, accountValueUsd(account)]))
+  const totalCashUSD = sumAvailable(accounts.filter(account => account.type === 'cash' &&
+    !(account.exclude_from_cash_balance && account.exclude_from_net_worth)).map(account => accountValues[account.id]))
+  const totalInvestmentUSD = sumAvailable(accounts.filter(account => account.type === 'investment').map(account => accountValues[account.id]))
+  const totalPortfolioUSD = sumAvailable([totalCashUSD, totalInvestmentUSD])
+  const allocation = (value: number | null, total: number | null) =>
+    value === null || total === null ? null : total > 0 ? value / total * 100 : 0
+  const cashAllocation = allocation(totalCashUSD, totalPortfolioUSD)
+  const investmentAllocation = allocation(totalInvestmentUSD, totalPortfolioUSD)
+  const formatHufTotal = (usdValue: number | null) => {
+    if (usdValue === null) return 'Unavailable'
+    const result = convertCurrency(usdValue, 'USD', 'HUF', exchangeRates, 'USD')
+    return result.value === null ? 'Unavailable' : `${Math.round(result.value).toLocaleString('hu-HU')} HUF`
+  }
+  if (accounts.length) convertCurrency(1, 'USD', 'HUF', exchangeRates, 'USD').missingCurrencies.forEach(item => missingCurrencies.add(item))
 
   const resetForm = () => {
     setFormData({ name: '', type: 'cash', balance: '', currency: 'HUF', quote_currency: 'USD', symbol: '', asset_type: 'stock', adjustWithTransaction: false, exclude_from_net_worth: false, exclude_from_cash_balance: false })
@@ -773,25 +737,22 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
       <div className={`lg:!max-h-none lg:overflow-visible overflow-hidden transition-all duration-500 ease-in-out ${isCollapsed ? 'max-h-0' : 'max-h-[2000px]'}`}>
       <CardContent className="space-y-3 sm:space-y-4">
         {/* Cash Accounts Section */}
+        {!ratesLoading && <MissingExchangeRates currencies={[...missingCurrencies].sort()} targetCurrency="USD"
+          onRetry={() => setRatesRefreshKey(key => key + 1)} retrying={ratesLoading} />}
         {accounts.filter(a => a.type === 'cash').length > 0 && (
           <div className="space-y-2 sm:space-y-3 mb-4 sm:mb-6">
             <div className="flex items-center justify-between px-1">
               <h4 className="text-[10px] sm:text-xs font-semibold text-muted-foreground uppercase tracking-wider">Cash Accounts</h4>
               <div className="flex items-center gap-1.5">
                 {privacyMode === 'hidden' ? <span className="text-[9px] font-medium text-muted-foreground sm:text-[10px]">••••••</span> : formatHufTotal(totalCashUSD) && <span className="whitespace-nowrap text-[9px] font-medium tabular-nums text-muted-foreground sm:text-[10px]">{formatHufTotal(totalCashUSD)}</span>}
-                <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[9px] font-semibold normal-case tracking-normal text-primary sm:text-[10px]">{cashAllocation.toFixed(0)}% total</span>
+                <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[9px] font-semibold normal-case tracking-normal text-primary sm:text-[10px]">{privacyMode === 'hidden' ? '••••' : cashAllocation === null ? 'Allocation unavailable' : `${cashAllocation.toFixed(0)}% total`}</span>
               </div>
             </div>
             <div className="space-y-1.5 sm:space-y-2">
-              {accounts.filter(a => a.type === 'cash').sort((a, b) => {
-                // Convert balances to USD for comparison
-                const aRate = exchangeRates[a.currency] || 1
-                const bRate = exchangeRates[b.currency] || 1
-                const aValueUSD = a.balance / aRate
-                const bValueUSD = b.balance / bRate
-                return bValueUSD - aValueUSD // Sort descending (most to least)
-              }).map(account => {
-                const percentage = cashPercentages[account.id] || 0
+              {accounts.filter(a => a.type === 'cash').sort((a, b) =>
+                (accountValues[b.id] ?? -Infinity) - (accountValues[a.id] ?? -Infinity)
+              ).map(account => {
+                const percentage = allocation(accountValues[account.id], totalCashUSD)
                 const isExcluded = account.exclude_from_cash_balance && account.exclude_from_net_worth
                 
                 return (
@@ -813,7 +774,7 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
                     {!isExcluded && (
                       <div 
                         className="absolute inset-y-0 left-0 bg-gradient-to-r from-primary/20 to-primary/10 transition-all duration-500"
-                        style={{ width: `${percentage}%` }}
+                        style={{ width: `${percentage ?? 0}%` }}
                       />
                     )}
                     
@@ -831,7 +792,7 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
                             <p className="font-semibold text-sm sm:text-base truncate">{account.name}</p>
                             {!isExcluded && (
                               <span className="inline-flex items-center justify-center h-4 sm:h-5 px-1.5 sm:px-2 rounded-full bg-primary/20 text-primary text-[10px] sm:text-xs font-medium">
-                                {percentage.toFixed(1)}%
+                                {privacyMode === 'hidden' ? '••••' : percentage === null ? 'Unavailable' : `${percentage.toFixed(1)}%`}
                               </span>
                             )}
                           </div>
@@ -947,36 +908,14 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
               <h4 className="text-[10px] sm:text-xs font-semibold text-muted-foreground uppercase tracking-wider">Investment Accounts</h4>
               <div className="flex items-center gap-1.5">
                 {privacyMode === 'hidden' ? <span className="text-[9px] font-medium text-muted-foreground sm:text-[10px]">••••••</span> : formatHufTotal(totalInvestmentUSD) && <span className="whitespace-nowrap text-[9px] font-medium tabular-nums text-muted-foreground sm:text-[10px]">{formatHufTotal(totalInvestmentUSD)}</span>}
-                <span className="rounded-full bg-violet-500/10 px-1.5 py-0.5 text-[9px] font-semibold normal-case tracking-normal text-violet-400 sm:text-[10px]">{investmentAllocation.toFixed(0)}% total</span>
+                <span className="rounded-full bg-violet-500/10 px-1.5 py-0.5 text-[9px] font-semibold normal-case tracking-normal text-violet-400 sm:text-[10px]">{privacyMode === 'hidden' ? '••••' : investmentAllocation === null ? 'Allocation unavailable' : `${investmentAllocation.toFixed(0)}% total`}</span>
               </div>
             </div>
             <div className="space-y-1.5 sm:space-y-2">
-              {accounts.filter(a => a.type === 'investment').sort((a, b) => {
-                // Calculate USD value for each investment account
-                let aValueUSD = 0
-                let bValueUSD = 0
-                
-                if (a.asset_type === 'manual') {
-                  const aRate = exchangeRates[a.currency] || 1
-                  aValueUSD = a.balance / aRate
-                } else if (a.symbol && quotes[a.symbol]) {
-                  const aPrice = quotes[a.symbol].regularMarketPrice || 0
-                  const aQuoteCurrency = (a.quote_currency || quotes[a.symbol].currency || 'USD').toUpperCase()
-                  aValueUSD = (a.balance * aPrice) / (aQuoteCurrency === 'USD' ? 1 : exchangeRates[aQuoteCurrency] || 1)
-                }
-                
-                if (b.asset_type === 'manual') {
-                  const bRate = exchangeRates[b.currency] || 1
-                  bValueUSD = b.balance / bRate
-                } else if (b.symbol && quotes[b.symbol]) {
-                  const bPrice = quotes[b.symbol].regularMarketPrice || 0
-                  const bQuoteCurrency = (b.quote_currency || quotes[b.symbol].currency || 'USD').toUpperCase()
-                  bValueUSD = (b.balance * bPrice) / (bQuoteCurrency === 'USD' ? 1 : exchangeRates[bQuoteCurrency] || 1)
-                }
-                
-                return bValueUSD - aValueUSD // Sort descending (most to least)
-              }).map(account => {
-                const percentage = investmentPercentages[account.id] || 0
+              {accounts.filter(a => a.type === 'investment').sort((a, b) =>
+                (accountValues[b.id] ?? -Infinity) - (accountValues[a.id] ?? -Infinity)
+              ).map(account => {
+                const percentage = allocation(accountValues[account.id], totalInvestmentUSD)
                 const quote = account.symbol ? quotes[account.symbol] : null
                 const priceChange = quote?.regularMarketChangePercent || 0
                 
@@ -994,7 +933,7 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
                     {/* Percentage bar background */}
                     <div 
                       className="absolute inset-y-0 left-0 bg-gradient-to-r from-blue-500/20 to-purple-500/10 transition-all duration-500"
-                      style={{ width: `${percentage}%` }}
+                      style={{ width: `${percentage ?? 0}%` }}
                     />
                     
                     <div className="relative p-2.5 sm:p-4 flex items-center justify-between">
@@ -1014,7 +953,7 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
                               {account.symbol || account.name}
                             </p>
                             <span className="inline-flex items-center justify-center h-4 sm:h-5 px-1.5 sm:px-2 rounded-full bg-blue-500/20 text-blue-600 dark:text-blue-400 text-[10px] sm:text-xs font-medium">
-                              {percentage.toFixed(1)}%
+                              {privacyMode === 'hidden' ? '••••' : percentage === null ? 'Unavailable' : `${percentage.toFixed(1)}%`}
                             </span>
                             {account.asset_type !== 'manual' && priceChange !== 0 && (
                               <span className={`inline-flex items-center justify-center h-4 sm:h-5 px-1.5 sm:px-2 rounded-full text-[10px] sm:text-xs font-medium ${

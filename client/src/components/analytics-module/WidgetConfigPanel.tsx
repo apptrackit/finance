@@ -23,6 +23,7 @@ interface WidgetConfigPanelProps {
   visibility: Record<WidgetId, boolean>
   onToggle: (id: WidgetId) => void
   widgetHasData: Record<WidgetId, boolean>
+  conversionsUnavailable?: boolean
 }
 
 function Toggle({ checked, onChange }: { checked: boolean; onChange: () => void }) {
@@ -50,6 +51,7 @@ export function WidgetConfigPanel({
   visibility,
   onToggle,
   widgetHasData,
+  conversionsUnavailable = false,
 }: WidgetConfigPanelProps) {
   // Close on ESC
   useEffect(() => {
@@ -112,6 +114,7 @@ export function WidgetConfigPanel({
             const isVisible = visibility[widget.id]
             const hasData = widgetHasData[widget.id]
 
+            const missingRates = conversionsUnavailable && widget.id !== 'account-trends' && widget.id !== 'ai-financial-forecast'
             return (
               <button
                 key={widget.id}
@@ -144,9 +147,9 @@ export function WidgetConfigPanel({
                       >
                         {widget.label}
                       </span>
-                      {!hasData && (
+                      {(missingRates || !hasData) && (
                         <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-md bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 leading-none">
-                          No data
+                          {missingRates ? 'Missing rates' : 'No data'}
                         </span>
                       )}
                     </div>

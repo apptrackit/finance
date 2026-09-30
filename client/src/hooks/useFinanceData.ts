@@ -1,3 +1,5 @@
+import { convertCurrency, sumConversions, validRates, isValidRate } from '../../../shared/currency'
+import type { ConversionResult } from '../../../shared/currency'
 import { useEffect, useState, useCallback } from 'react'
 import { API_BASE_URL, apiFetch } from '../config'
 import { useLoadableData } from './useLoadableData'
@@ -134,11 +136,10 @@ const readExchangeRates = async (currency: string): Promise<Record<string, numbe
   const response = await fetch(`https://open.er-api.com/v6/latest/${currency}`)
   if (!response.ok) throw new Error('Exchange rates unavailable')
   const data: unknown = await response.json()
-  if (!isRecord(data) || !isRecord(data.rates) || !isNumber(data.rates[currency])
-    || !Object.values(data.rates).every(rate => isNumber(rate) && rate > 0)) {
+  if (!isRecord(data) || !isRecord(data.rates) || !isValidRate(data.rates[currency])) {
     throw new Error('Invalid exchange rates')
   }
-  return data.rates as Record<string, number>
+  return validRates(data.rates)
 }
 
 // A history snapshot is complete only when both cash and investment reads
@@ -166,9 +167,9 @@ export function useFinanceData(
   const { data: allTransactions, status: historyStatus, load: loadHistory } = useLoadableData<Transaction[]>([])
   const { data: upcomingTransactions, status: upcomingStatus, load: loadUpcoming } = useLoadableData<Transaction[]>([])
   const { data: categories, status: categoriesStatus, load: loadCategories } = useLoadableData<Category[]>([])
-  const { data: netWorth, status: netWorthStatus, load: loadNetWorth } = useLoadableData<number | null>(null)
-  const { data: investmentValue, status: investmentStatus, load: loadInvestmentValue } = useLoadableData(0, false)
-  const { data: exchangeRates, status: ratesStatus, load: loadRates } = useLoadableData<Record<string, number>>({})
+  const { data: netWorthResult, status: netWorthStatus, load: loadNetWorth } = useLoadableData<{ value: number | null; currency: string; missingCurrencies: string[] } | null>(null)
+  const { data: investmentResult, status: investmentStatus, load: loadInvestmentValue } = useLoadableData<{ conversion: ConversionResult; currency: string } | null>(null, false)
+  const { data: ratesResult, status: ratesStatus, load: loadRates } = useLoadableData<{ rates: Record<string, number>; currency: string }>({ rates: {}, currency: masterCurrency })
   const [investmentRefreshKey, setInvestmentRefreshKey] = useState(0)
 
   const fetchData = useCallback(async () => {
@@ -182,10 +183,11 @@ export function useFinanceData(
       loadCategories(() => readArray(`${API_BASE_URL}/categories`, isCategory)),
       loadNetWorth(async () => {
         const data = await readJson(`${API_BASE_URL}/dashboard/net-worth?currency=${masterCurrency}`)
-        if (!isRecord(data) || !isNumber(data.net_worth)) throw new Error('Invalid net worth')
-        return data.net_worth
+        if (!isRecord(data) || (data.net_worth !== null && !isNumber(data.net_worth))) throw new Error('Invalid net worth')
+        return { value: data.net_worth as number | null, currency: masterCurrency,
+          missingCurrencies: Array.isArray(data.missing_currencies) && data.missing_currencies.every(item => typeof item === 'string') ? data.missing_currencies as string[] : [] }
       }),
-      loadRates(() => readExchangeRates(masterCurrency)),
+      loadRates(async () => ({ rates: await readExchangeRates(masterCurrency), currency: masterCurrency })),
     ])
   }, [dateRange.startDate, dateRange.endDate, masterCurrency, loadAccounts, loadTransactions,
     loadHistory, loadUpcoming, loadCategories, loadNetWorth, loadRates])
@@ -194,7 +196,7 @@ export function useFinanceData(
     await loadInvestmentValue(async () => {
       const investmentAccounts = accounts.filter(a => a.type === 'investment')
       if (investmentAccounts.length === 0) {
-        return 0
+        return { conversion: sumConversions([]), currency: masterCurrency }
       }
 
       const symbolsToFetch = investmentAccounts
@@ -211,42 +213,16 @@ export function useFinanceData(
       }))
       const quotes: Record<string, MarketQuote> = Object.fromEntries(quotesArray.map(({ symbol, data }) => [symbol, data]))
 
-      let totalValueInMasterCurrency = 0
-      const rates = await readExchangeRates(masterCurrency)
-
-      for (const acc of investmentAccounts) {
-        let valueInAccountCurrency = 0
-
-        if (acc.asset_type === 'manual') {
-          valueInAccountCurrency = acc.balance
-        } else {
-          const totalQuantity = acc.balance
-          const quote = acc.symbol ? quotes[acc.symbol] : null
-          const quotePrice = quote?.regularMarketPrice || 0
-          const quoteCurrency = (acc.quote_currency || quote?.currency || 'USD').toUpperCase()
-          const valueInQuoteCurrency = quotePrice * totalQuantity
-
-          if (quoteCurrency === masterCurrency) {
-            valueInAccountCurrency = valueInQuoteCurrency
-          } else {
-            const masterToQuoteRate = rates[quoteCurrency]
-            if (!masterToQuoteRate) throw new Error('Missing exchange rate')
-            valueInAccountCurrency = valueInQuoteCurrency / masterToQuoteRate
-          }
-          totalValueInMasterCurrency += valueInAccountCurrency
-          continue
-        }
-
-        if (acc.currency === masterCurrency) {
-          totalValueInMasterCurrency += valueInAccountCurrency
-        } else {
-          const rate = rates[acc.currency]
-          if (!rate) throw new Error('Missing exchange rate')
-          totalValueInMasterCurrency += valueInAccountCurrency / rate
-        }
-      }
-
-      return totalValueInMasterCurrency
+      // A rate outage makes only required foreign conversions unavailable.
+      // Same-currency values do not depend on the rate service.
+      const rates = await readExchangeRates(masterCurrency).catch(() => ({}))
+      const conversions = investmentAccounts.map(acc => {
+        if (acc.asset_type === 'manual') return convertCurrency(acc.balance, acc.currency, masterCurrency, rates)
+        const quote = acc.symbol ? quotes[acc.symbol] : null
+        const quoteCurrency = (acc.quote_currency || quote?.currency || 'USD').toUpperCase()
+        return convertCurrency((quote?.regularMarketPrice || 0) * acc.balance, quoteCurrency, masterCurrency, rates)
+      })
+      return { conversion: sumConversions(conversions), currency: masterCurrency }
     })
   }, [accounts, masterCurrency, loadInvestmentValue])
 
@@ -256,8 +232,10 @@ export function useFinanceData(
   }, [accountsStatus.loaded, fetchInvestmentValue])
 
   return {
-    netWorth,
-    investmentValue,
+    netWorth: netWorthResult?.currency === masterCurrency ? netWorthResult.value : null,
+    netWorthMissingCurrencies: netWorthResult?.currency === masterCurrency ? netWorthResult.missingCurrencies : [],
+    investmentValue: investmentResult?.currency === masterCurrency ? investmentResult.conversion.value : null,
+    investmentMissingCurrencies: investmentResult?.currency === masterCurrency ? investmentResult.conversion.missingCurrencies : [],
     investmentLoading: investmentStatus.loading,
     investmentError: investmentStatus.error ? 'Unable to load investment value.' : null,
     accounts,
@@ -267,7 +245,8 @@ export function useFinanceData(
     transactionsLoading: transactionsStatus.loading,
     allTransactionsLoading: historyStatus.loading,
     categories,
-    exchangeRates,
+    exchangeRates: ratesResult.rates,
+    usableExchangeRates: !ratesStatus.error && ratesResult.currency === masterCurrency ? ratesResult.rates : {},
     exchangeRatesLoading: ratesStatus.loading,
     investmentRefreshKey,
     handleDataChange: fetchData,
