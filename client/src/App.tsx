@@ -11,6 +11,8 @@ import { MENU_VISIBILITY_EVENT, type MenuKey } from './components/settings-modul
 import { usePrivacy } from './context/PrivacyContext'
 import { startOfMonth, endOfMonth, format } from 'date-fns'
 import { useFinanceData } from './hooks/useFinanceData'
+import { FinanceDataBoundary, FinanceDataStatus } from './components/common/FinanceDataStatus'
+import type { NamedDataStatus } from './components/common/FinanceDataStatus'
 import { isUpcomingProjectionTransaction } from './lib/transaction-review'
 
 type View = 'dashboard' | 'analytics' | 'settings' | 'investments' | 'recurring'
@@ -41,7 +43,6 @@ function App() {
   const {
     netWorth,
     investmentValue,
-    investmentLoading,
     investmentError,
     accounts,
     transactions,
@@ -54,6 +55,7 @@ function App() {
     exchangeRatesLoading,
     investmentRefreshKey,
     handleDataChange,
+    dataStatus,
   } = useFinanceData(dateRange, masterCurrency)
 
   useEffect(() => {
@@ -91,6 +93,21 @@ function App() {
       navigateTo(next)
     }
   }, [visibleMenus, view])
+
+  const dataset = (key: keyof typeof dataStatus, label: string): NamedDataStatus => ({ label, status: dataStatus[key] })
+  const accountData = [dataset('accounts', 'Accounts')]
+  const transactionData = [...accountData, dataset('transactions', 'Period transactions'), dataset('upcoming', 'Upcoming transactions')]
+  const analyticsData = [...accountData, dataset('history', 'Transaction history'), dataset('upcoming', 'Upcoming transactions'),
+    dataset('categories', 'Categories'), dataset('exchangeRates', 'Exchange rates')]
+  const summaryData = [...accountData, dataset('transactions', 'Period transactions'), dataset('exchangeRates', 'Exchange rates')]
+  const netWorthData = [...accountData, dataset('netWorth', 'Net worth'), dataset('investment', 'Investment value')]
+  const recurringData = [...accountData, dataset('categories', 'Categories')]
+  const visibleData = view === 'dashboard'
+    ? [...transactionData, dataset('categories', 'Categories'), dataset('netWorth', 'Net worth'),
+      dataset('investment', 'Investment value'), dataset('exchangeRates', 'Exchange rates')]
+    : view === 'analytics' ? analyticsData : view === 'recurring' ? recurringData : []
+  const syncText = visibleData.some(({ status }) => status.error) ? 'Load error'
+    : visibleData.some(({ status }) => status.loading) ? 'Updating…' : 'Synced'
 
   const convertToMasterCurrency = (amount: number, accountId: string): number => {
     const account = accounts.find(a => a.id === accountId)
@@ -159,7 +176,7 @@ function App() {
     })
     .reduce((sum, t) => sum + convertToMasterCurrency(t.amount, t.account_id), 0)
 
-  const totalNetWorth = netWorth !== null && !investmentLoading ? netWorth + investmentValue : null
+  const totalNetWorth = netWorth !== null && dataStatus.investment.loaded ? netWorth + investmentValue : null
   const projectedNetWorth = totalNetWorth !== null ? totalNetWorth + pendingNetWorthDelta : null
   const projectedCashBalance = cashBalance + pendingCashDelta
   const hasInvestmentAccounts = accounts.some(a => a.type === 'investment')
@@ -255,7 +272,7 @@ function App() {
                 </button>
                 <div className="hidden lg:flex items-center gap-2">
                   <div className="h-2 w-2 rounded-full bg-primary animate-pulse" />
-                  <span className="text-xs text-muted-foreground">Synced</span>
+                  <span className="text-xs text-muted-foreground" role="status">{syncText}</span>
                 </div>
               </div>
             </div>
@@ -263,9 +280,11 @@ function App() {
         </header>
 
         <main className="max-w-7xl mx-auto px-3 sm:px-6 py-3 sm:py-8">
+          <FinanceDataStatus datasets={visibleData} onRetry={() => { void handleDataChange() }} />
           {view === 'dashboard' && (
             <div className={`grid gap-2.5 sm:gap-4 grid-cols-2 ${showSeparateCashCard ? 'lg:grid-cols-4' : 'lg:grid-cols-3'} mb-3 sm:mb-8`}>
               {/* Net Worth Card */}
+              <FinanceDataBoundary label="Net Worth" datasets={netWorthData}>
               <div className="group relative overflow-hidden rounded-xl sm:rounded-2xl border border-border/50 bg-gradient-to-br from-card to-card/80 p-3 sm:p-6 shadow-xl">
                 <div className="absolute top-0 right-0 w-32 h-32 bg-primary/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" />
                 <div className="relative">
@@ -277,7 +296,7 @@ function App() {
                   </div>
                   <div className="flex items-center gap-1 sm:gap-2">
                     <div className="text-lg sm:text-4xl font-bold tracking-tight text-foreground leading-tight">
-                      {investmentError ? (
+                      {investmentError && !dataStatus.investment.loaded ? (
                         <span className="text-xs sm:text-lg text-destructive">Error loading data</span>
                       ) : totalNetWorth !== null ? (
                         <>
@@ -292,7 +311,7 @@ function App() {
                         <div className="h-6 sm:h-10 w-20 sm:w-32 bg-muted animate-pulse rounded" />
                       )}
                     </div>
-                    {shouldHideNetWorth() && totalNetWorth !== null && !investmentError && (
+                    {shouldHideNetWorth() && totalNetWorth !== null && (
                       <button
                         onClick={() => setShowNetWorth(!showNetWorth)}
                         className="ml-1 sm:ml-2 p-1 sm:p-1.5 rounded-lg hover:bg-primary/10 transition-colors"
@@ -307,7 +326,7 @@ function App() {
                     )}
                   </div>
                   <p className="text-[9px] sm:text-xs text-muted-foreground mt-1 sm:mt-2">
-                    {investmentError ? investmentError : projectedNetWorth !== null && pendingNetWorthDelta !== 0 ? (
+                    {investmentError ? investmentError : !dataStatus.upcoming.loaded ? 'Upcoming data unavailable' : projectedNetWorth !== null && pendingNetWorthDelta !== 0 ? (
                       <>
                         After all upcoming{' '}
                         <span className={shouldHideNetWorth() ? 'select-none' : ''}>
@@ -322,8 +341,11 @@ function App() {
                 </div>
               </div>
 
+              </FinanceDataBoundary>
+
               {/* Cash Balance Card */}
               {showSeparateCashCard && (
+                <FinanceDataBoundary label="Cash" datasets={[...accountData, dataset('exchangeRates', 'Exchange rates')]}>
                 <div className="group relative overflow-hidden rounded-xl sm:rounded-2xl border border-border/50 bg-card p-3 sm:p-6 shadow-xl hover:border-primary/30 transition-colors">
                   <div className="flex items-center justify-between mb-1.5 sm:mb-4">
                     <span className="text-[10px] sm:text-sm font-medium text-muted-foreground">Cash</span>
@@ -332,7 +354,7 @@ function App() {
                     </div>
                   </div>
                   <div className="text-lg sm:text-4xl font-bold tracking-tight text-foreground leading-tight">
-                    {netWorth !== null ? (
+                    {dataStatus.accounts.loaded && dataStatus.exchangeRates.loaded ? (
                       <>
                         <span className={privacyMode === 'hidden' ? 'select-none' : ''}>
                           {privacyMode === 'hidden'
@@ -346,7 +368,7 @@ function App() {
                     )}
                   </div>
                   <p className="text-[9px] sm:text-xs text-muted-foreground mt-1 sm:mt-2">
-                    {pendingCashDelta !== 0 ? (
+                    {!dataStatus.upcoming.loaded ? 'Upcoming data unavailable' : pendingCashDelta !== 0 ? (
                       <>
                         After all upcoming{' '}
                         <span className={privacyMode === 'hidden' ? 'select-none' : ''}>
@@ -363,9 +385,11 @@ function App() {
                     )}
                   </p>
                 </div>
+                </FinanceDataBoundary>
               )}
 
               {/* Income Card */}
+              <FinanceDataBoundary label="Income" datasets={summaryData}>
               <div className="group relative overflow-hidden rounded-xl sm:rounded-2xl border border-border/50 bg-card p-3 sm:p-6 shadow-xl hover:border-success/30 transition-colors">
                 <div className="flex items-center justify-between mb-1.5 sm:mb-4">
                   <span className="text-[10px] sm:text-sm font-medium text-muted-foreground">Income</span>
@@ -374,7 +398,7 @@ function App() {
                   </div>
                 </div>
                 <div className="text-base sm:text-3xl font-bold tracking-tight text-success leading-tight">
-                  {transactionsLoading ? (
+                  {!dataStatus.transactions.loaded && transactionsLoading ? (
                     <div className="h-5 sm:h-9 w-20 sm:w-32 bg-muted animate-pulse rounded" />
                   ) : (
                     <>
@@ -386,7 +410,7 @@ function App() {
                   )}
                 </div>
                 <p className="text-[9px] sm:text-xs text-muted-foreground mt-1 sm:mt-2">
-                  {pendingIncome > 0 ? (
+                  {!dataStatus.upcoming.loaded ? 'Upcoming data unavailable' : pendingIncome > 0 ? (
                     <>
                       +{privacyMode === 'hidden' ? '••••••' : pendingIncome.toLocaleString('hu-HU', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} {masterCurrency} pending
                     </>
@@ -394,7 +418,10 @@ function App() {
                 </p>
               </div>
 
+              </FinanceDataBoundary>
+
               {/* Expenses Card */}
+              <FinanceDataBoundary label="Expenses" datasets={summaryData}>
               <div className="group relative overflow-hidden rounded-xl sm:rounded-2xl border border-border/50 bg-card p-3 sm:p-6 shadow-xl hover:border-destructive/30 transition-colors">
                 <div className="flex items-center justify-between mb-1.5 sm:mb-4">
                   <span className="text-[10px] sm:text-sm font-medium text-muted-foreground">Expenses</span>
@@ -403,7 +430,7 @@ function App() {
                   </div>
                 </div>
                 <div className="text-base sm:text-3xl font-bold tracking-tight text-destructive leading-tight">
-                  {transactionsLoading ? (
+                  {!dataStatus.transactions.loaded && transactionsLoading ? (
                     <div className="h-5 sm:h-9 w-20 sm:w-32 bg-muted animate-pulse rounded" />
                   ) : (
                     <>
@@ -416,13 +443,14 @@ function App() {
                   )}
                 </div>
                 <p className="text-[9px] sm:text-xs text-muted-foreground mt-1 sm:mt-2">
-                  {pendingExpenses > 0 ? (
+                  {!dataStatus.upcoming.loaded ? 'Upcoming data unavailable' : pendingExpenses > 0 ? (
                     <>
                       −{privacyMode === 'hidden' ? '••••••' : pendingExpenses.toLocaleString('hu-HU', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} {masterCurrency} pending
                     </>
                   ) : 'This period'}
                 </p>
               </div>
+              </FinanceDataBoundary>
             </div>
           )}
 
@@ -430,16 +458,19 @@ function App() {
             <div className="grid gap-3 sm:gap-6 grid-cols-1 lg:grid-cols-12">
               {!isTransactionCalendarOpen && (
                 <div className="lg:col-span-4">
-                  <AccountList accounts={accounts} onAccountAdded={handleDataChange} loading={transactionsLoading} />
+                  <FinanceDataBoundary label="Accounts" datasets={accountData}>
+                    <AccountList accounts={accounts} onAccountAdded={handleDataChange} loading={!dataStatus.accounts.loaded && dataStatus.accounts.loading} />
+                  </FinanceDataBoundary>
                 </div>
               )}
               <div className={isTransactionCalendarOpen ? 'lg:col-span-12' : 'lg:col-span-8'}>
+                <FinanceDataBoundary label="Transactions" datasets={transactionData}>
                 <TransactionList
                   transactions={transactions}
                   upcomingTransactions={upcomingTransactions}
                   accounts={accounts}
                   onTransactionAdded={handleDataChange}
-                  loading={transactionsLoading}
+                  loading={!dataStatus.transactions.loaded && transactionsLoading}
                   dateRange={dateRange}
                   onDateRangeChange={(newRange) => setDateRange(newRange)}
                   currentMonth={currentMonth}
@@ -454,9 +485,11 @@ function App() {
                   masterCurrency={masterCurrency}
                   onCalendarViewChange={setIsTransactionCalendarOpen}
                 />
+                </FinanceDataBoundary>
               </div>
             </div>
           ) : view === 'analytics' ? (
+            <FinanceDataBoundary label="Analytics" datasets={analyticsData}>
             <Analytics
               transactions={allTransactions}
               upcomingTransactions={upcomingTransactions}
@@ -464,12 +497,15 @@ function App() {
               accounts={accounts}
               masterCurrency={masterCurrency}
               exchangeRates={exchangeRates}
-              loading={transactionsLoading || allTransactionsLoading || exchangeRatesLoading}
+              loading={(!dataStatus.history.loaded && allTransactionsLoading) || (!dataStatus.exchangeRates.loaded && exchangeRatesLoading)}
             />
+            </FinanceDataBoundary>
           ) : view === 'investments' ? (
             <Investments key={investmentRefreshKey} />
           ) : view === 'recurring' ? (
-            <RecurringTransactions accounts={accounts} categories={categories} dataLoading={transactionsLoading} />
+            <FinanceDataBoundary label="Recurring transactions" datasets={recurringData}>
+              <RecurringTransactions accounts={accounts} categories={categories} dataLoading={!dataStatus.accounts.loaded && dataStatus.accounts.loading} />
+            </FinanceDataBoundary>
           ) : (
             <Settings />
           )}

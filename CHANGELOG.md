@@ -17,6 +17,7 @@ Intermediate package/UI version bumps are grouped under the next published GitHu
 
 ### Fixed
 
+- Financial read failures now show accessible errors and Retry actions. Dashboard and analytics refreshes retain the last successful data with a stale-data notice instead of replacing it with an empty ledger.
 - Linked MCP transfer drafts display as one review card with their source and destination accounts, exact sent and received amounts, and one set of review actions. The app can edit both pending legs together without changing balances or forecasts.
 - Removed the empty SQL statement generated between a migration and its history insert, which blocked D1 remote imports of migration 013.
 - Client tests provide browser-style local storage under Node 26, so the deployment test gate can complete when the local Node version differs from CI's pinned Node 22.
