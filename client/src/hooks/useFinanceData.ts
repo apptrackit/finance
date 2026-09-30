@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react'
 import { API_BASE_URL, apiFetch } from '../config'
-import { getMasterCurrency } from '../components/settings-module/Settings'
+import { useLoadableData } from './useLoadableData'
 import type { PendingKind, ReviewSource } from '../lib/transaction-review'
 
 export type Account = {
@@ -39,7 +39,7 @@ export type Transaction = {
   updated_at?: number | null
 }
 
-const formatInvestmentTransactionDescription = (transaction: any) => {
+const formatInvestmentTransactionDescription = (transaction: InvestmentTransaction) => {
   const price = Number(transaction.price)
   const fallback = `${transaction.quantity} shares @ ${Number.isFinite(price) ? price : ''}`.trim()
   const notes = transaction.notes as string | undefined
@@ -57,7 +57,7 @@ const formatInvestmentTransactionDescription = (transaction: any) => {
   return notes || fallback
 }
 
-const mapInvestmentTransaction = (transaction: any) => ({
+const mapInvestmentTransaction = (transaction: InvestmentTransaction) => ({
   id: transaction.id,
   account_id: transaction.account_id,
   amount: transaction.type === 'buy' ? transaction.total_amount : -transaction.total_amount,
@@ -87,143 +87,114 @@ type MarketQuote = {
   regularMarketChangePercent?: number
 }
 
-const asArray = <T>(value: unknown): T[] => Array.isArray(value) ? value : []
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value)
+const isNumber = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value)
+const isAccount = (value: unknown): value is Account => isRecord(value)
+  && typeof value.id === 'string' && typeof value.name === 'string'
+  && (value.type === 'cash' || value.type === 'investment')
+  && isNumber(value.balance) && typeof value.currency === 'string'
+const isTransaction = (value: unknown): value is Transaction => isRecord(value)
+  && typeof value.id === 'string' && typeof value.account_id === 'string'
+  && isNumber(value.amount) && typeof value.date === 'string'
+const isCategory = (value: unknown): value is Category => isRecord(value)
+  && typeof value.id === 'string' && typeof value.name === 'string'
+  && (value.type === 'income' || value.type === 'expense')
+
+type InvestmentTransaction = {
+  id: string
+  account_id: string
+  type: 'buy' | 'sell'
+  quantity: number
+  price: number
+  total_amount: number
+  date: string
+  notes?: string
+  created_at?: number
+  updated_at?: number
+}
+const isInvestmentTransaction = (value: unknown): value is InvestmentTransaction => isRecord(value)
+  && typeof value.id === 'string' && typeof value.account_id === 'string'
+  && (value.type === 'buy' || value.type === 'sell') && typeof value.date === 'string'
+  && isNumber(value.quantity) && isNumber(value.price) && isNumber(value.total_amount)
+  && (value.notes == null || typeof value.notes === 'string')
+
+const readJson = async (url: string): Promise<unknown> => {
+  const response = await apiFetch(url, { throwOnError: true })
+  return response.json()
+}
+
+const readArray = async <T,>(url: string, validate: (value: unknown) => value is T): Promise<T[]> => {
+  const data = await readJson(url)
+  if (!Array.isArray(data) || !data.every(validate)) throw new Error('Invalid response')
+  return data
+}
+
+const readExchangeRates = async (currency: string): Promise<Record<string, number>> => {
+  const response = await fetch(`https://open.er-api.com/v6/latest/${currency}`)
+  if (!response.ok) throw new Error('Exchange rates unavailable')
+  const data: unknown = await response.json()
+  if (!isRecord(data) || !isRecord(data.rates) || !isNumber(data.rates[currency])
+    || !Object.values(data.rates).every(rate => isNumber(rate) && rate > 0)) {
+    throw new Error('Invalid exchange rates')
+  }
+  return data.rates as Record<string, number>
+}
+
+// A history snapshot is complete only when both cash and investment reads
+// succeed. Never publish a ledger with a failed account's history omitted.
+const readHistory = async (accountsPromise: Promise<Account[]>, range?: { startDate: string; endDate: string }) => {
+  const regularPromise = readArray(
+    range ? `${API_BASE_URL}/transactions/date-range?startDate=${range.startDate}&endDate=${range.endDate}`
+      : `${API_BASE_URL}/transactions`, isTransaction)
+  const investmentPromise = accountsPromise.then(accounts => Promise.all(accounts
+    .filter(account => account.type === 'investment')
+    .map(account => readArray(`${API_BASE_URL}/investment-transactions?account_id=${account.id}`, isInvestmentTransaction))))
+  const [regular, investment] = await Promise.all([regularPromise, investmentPromise])
+  const investmentRows = investment.flat()
+    .filter(transaction => !range || (transaction.date >= range.startDate && transaction.date <= range.endDate))
+    .map(mapInvestmentTransaction)
+  return [...regular, ...investmentRows].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+}
 
 export function useFinanceData(
   dateRange: { startDate: string; endDate: string },
   masterCurrency: string
 ) {
-  const [netWorth, setNetWorth] = useState<number | null>(null)
-  const [investmentValue, setInvestmentValue] = useState<number>(0)
-  const [investmentLoading, setInvestmentLoading] = useState<boolean>(false)
-  const [investmentError, setInvestmentError] = useState<string | null>(null)
-  const [accounts, setAccounts] = useState<Account[]>([])
-  const [transactions, setTransactions] = useState<Transaction[]>([])
-  const [allTransactions, setAllTransactions] = useState<Transaction[]>([])
-  const [upcomingTransactions, setUpcomingTransactions] = useState<Transaction[]>([])
-  const [transactionsLoading, setTransactionsLoading] = useState<boolean>(true)
-  const [allTransactionsLoading, setAllTransactionsLoading] = useState<boolean>(true)
-  const [categories, setCategories] = useState<Category[]>([])
-  const [exchangeRates, setExchangeRates] = useState<Record<string, number>>({})
-  const [exchangeRatesLoading, setExchangeRatesLoading] = useState<boolean>(true)
+  const { data: accounts, status: accountsStatus, load: loadAccounts } = useLoadableData<Account[]>([])
+  const { data: transactions, status: transactionsStatus, load: loadTransactions } = useLoadableData<Transaction[]>([])
+  const { data: allTransactions, status: historyStatus, load: loadHistory } = useLoadableData<Transaction[]>([])
+  const { data: upcomingTransactions, status: upcomingStatus, load: loadUpcoming } = useLoadableData<Transaction[]>([])
+  const { data: categories, status: categoriesStatus, load: loadCategories } = useLoadableData<Category[]>([])
+  const { data: netWorth, status: netWorthStatus, load: loadNetWorth } = useLoadableData<number | null>(null)
+  const { data: investmentValue, status: investmentStatus, load: loadInvestmentValue } = useLoadableData(0, false)
+  const { data: exchangeRates, status: ratesStatus, load: loadRates } = useLoadableData<Record<string, number>>({})
   const [investmentRefreshKey, setInvestmentRefreshKey] = useState(0)
 
   const fetchData = useCallback(async () => {
-    setTransactionsLoading(true)
-    setInvestmentRefreshKey(prev => prev + 1)
-    const currency = getMasterCurrency()
-
-    apiFetch(`${API_BASE_URL}/dashboard/net-worth?currency=${currency}`)
-      .then(res => res.json())
-      .then(data => setNetWorth(data.net_worth))
-      .catch(err => console.error(err))
-
-    try {
-      const accountsRes = await apiFetch(`${API_BASE_URL}/accounts`, { throwOnError: true })
-      const accountsData: unknown = await accountsRes.json()
-      if (!Array.isArray(accountsData)) {
-        throw new Error('Accounts response was not an array')
-      }
-      setAccounts(accountsData)
-
-      const regularTxPromise = apiFetch(
-        `${API_BASE_URL}/transactions/date-range?startDate=${dateRange.startDate}&endDate=${dateRange.endDate}`
-      )
-        .then(res => res.json())
-        .then(asArray<Transaction>)
-        .catch(() => [])
-
-      const upcomingTxPromise = apiFetch(`${API_BASE_URL}/transactions/upcoming`)
-        .then(res => res.json())
-        .then(asArray<Transaction>)
-        .catch(() => [])
-
-      const categoriesPromise = apiFetch(`${API_BASE_URL}/categories`)
-        .then(res => res.json())
-        .then(asArray<Category>)
-        .catch(error => {
-          console.error(error)
-          return []
-        })
-
-      const investmentAccounts = accountsData.filter((acc): acc is Account =>
-        typeof acc === 'object' && acc !== null && 'type' in acc && acc.type === 'investment'
-      )
-
-      const investmentTxPromises = investmentAccounts.map(acc =>
-        apiFetch(`${API_BASE_URL}/investment-transactions?account_id=${acc.id}`)
-          .then(res => res.json())
-          .then((txs: any[]) =>
-            txs
-              .filter(itx => itx.date >= dateRange.startDate && itx.date <= dateRange.endDate)
-              .map(mapInvestmentTransaction))
-          .catch(() => [])
-      )
-
-      const [regularTxs, upcomingTxs, ...investmentTxArrays] = await Promise.all([regularTxPromise, upcomingTxPromise, ...investmentTxPromises])
-      const allTxs = [...regularTxs, ...investmentTxArrays.flat()].sort(
-        (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
-      )
-      setTransactions(allTxs)
-      setUpcomingTransactions(upcomingTxs)
-      setCategories(await categoriesPromise)
-    } catch (error) {
-      console.error('Failed to fetch finance data:', error)
-      setAccounts([])
-      setTransactions([])
-      setUpcomingTransactions([])
-      setCategories([])
-    } finally {
-      setTransactionsLoading(false)
-    }
-  }, [dateRange.startDate, dateRange.endDate])
-
-  const fetchAllTransactions = useCallback(async () => {
-    setAllTransactionsLoading(true)
-    try {
-      const accountsData = accounts.length > 0
-        ? accounts
-        : await apiFetch(`${API_BASE_URL}/accounts`, { throwOnError: true }).then(res => res.json())
-
-      if (!Array.isArray(accountsData)) {
-        throw new Error('Accounts response was not an array')
-      }
-
-      const regularTxPromise = apiFetch(`${API_BASE_URL}/transactions`)
-        .then(res => res.json())
-        .then(asArray<Transaction>)
-        .catch(() => [])
-
-      const investmentAccounts = accountsData.filter((acc: Account) => acc.type === 'investment')
-
-      const investmentTxPromises = investmentAccounts.map((acc: Account) =>
-        apiFetch(`${API_BASE_URL}/investment-transactions?account_id=${acc.id}`)
-          .then(res => res.json())
-          .then((txs: any[]) => txs.map(mapInvestmentTransaction))
-          .catch(() => [])
-      )
-
-      const [regularTxs, ...investmentTxArrays] = await Promise.all([regularTxPromise, ...investmentTxPromises])
-      const allTxs = [...regularTxs, ...investmentTxArrays.flat()].sort(
-        (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
-      )
-      setAllTransactions(allTxs)
-    } catch (error) {
-      console.error('Failed to fetch all transactions:', error)
-    } finally {
-      setAllTransactionsLoading(false)
-    }
-  }, [accounts])
+    setInvestmentRefreshKey(previous => previous + 1)
+    const accountsPromise = readArray(`${API_BASE_URL}/accounts`, isAccount)
+    await Promise.all([
+      loadAccounts(() => accountsPromise),
+      loadTransactions(() => readHistory(accountsPromise, dateRange)),
+      loadHistory(() => readHistory(accountsPromise)),
+      loadUpcoming(() => readArray(`${API_BASE_URL}/transactions/upcoming`, isTransaction)),
+      loadCategories(() => readArray(`${API_BASE_URL}/categories`, isCategory)),
+      loadNetWorth(async () => {
+        const data = await readJson(`${API_BASE_URL}/dashboard/net-worth?currency=${masterCurrency}`)
+        if (!isRecord(data) || !isNumber(data.net_worth)) throw new Error('Invalid net worth')
+        return data.net_worth
+      }),
+      loadRates(() => readExchangeRates(masterCurrency)),
+    ])
+  }, [dateRange.startDate, dateRange.endDate, masterCurrency, loadAccounts, loadTransactions,
+    loadHistory, loadUpcoming, loadCategories, loadNetWorth, loadRates])
 
   const fetchInvestmentValue = useCallback(async () => {
-    setInvestmentLoading(true)
-    setInvestmentError(null)
-    try {
+    await loadInvestmentValue(async () => {
       const investmentAccounts = accounts.filter(a => a.type === 'investment')
       if (investmentAccounts.length === 0) {
-        setInvestmentValue(0)
-        setInvestmentLoading(false)
-        return
+        return 0
       }
 
       const symbolsToFetch = investmentAccounts
@@ -231,28 +202,17 @@ export function useFinanceData(
         .map(acc => acc.symbol!)
       const uniqueSymbols = [...new Set(symbolsToFetch)]
 
-      const quotePromises = uniqueSymbols.map(symbol =>
-        apiFetch(`${API_BASE_URL}/market/quote?symbol=${encodeURIComponent(symbol)}`)
-          .then(res => res.json())
-          .then(data => ({ symbol, data }))
-          .catch(() => ({ symbol, data: null }))
-      )
-      const quotesArray = await Promise.all(quotePromises)
-      const quotes: Record<string, MarketQuote> = {}
-      let failedQuotes = 0
-      quotesArray.forEach(({ symbol, data }) => {
-        if (data) quotes[symbol] = data
-        else failedQuotes++
-      })
-
-      if (uniqueSymbols.length > 0 && failedQuotes === uniqueSymbols.length) {
-        throw new Error('Failed to fetch market data. Yahoo Finance API may be temporarily unavailable.')
-      }
+      const quotesArray = await Promise.all(uniqueSymbols.map(async symbol => {
+        const data = await readJson(`${API_BASE_URL}/market/quote?symbol=${encodeURIComponent(symbol)}`)
+        if (!isRecord(data) || !isNumber(data.regularMarketPrice)) {
+          throw new Error('Invalid market quote')
+        }
+        return { symbol, data: data as MarketQuote }
+      }))
+      const quotes: Record<string, MarketQuote> = Object.fromEntries(quotesArray.map(({ symbol, data }) => [symbol, data]))
 
       let totalValueInMasterCurrency = 0
-      const ratesResponse = await fetch(`https://open.er-api.com/v6/latest/${masterCurrency}`)
-      const ratesData = await ratesResponse.json()
-      const rates = ratesData.rates || {}
+      const rates = await readExchangeRates(masterCurrency)
 
       for (const acc of investmentAccounts) {
         let valueInAccountCurrency = 0
@@ -270,7 +230,8 @@ export function useFinanceData(
             valueInAccountCurrency = valueInQuoteCurrency
           } else {
             const masterToQuoteRate = rates[quoteCurrency]
-            valueInAccountCurrency = masterToQuoteRate ? valueInQuoteCurrency / masterToQuoteRate : valueInQuoteCurrency
+            if (!masterToQuoteRate) throw new Error('Missing exchange rate')
+            valueInAccountCurrency = valueInQuoteCurrency / masterToQuoteRate
           }
           totalValueInMasterCurrency += valueInAccountCurrency
           continue
@@ -280,78 +241,46 @@ export function useFinanceData(
           totalValueInMasterCurrency += valueInAccountCurrency
         } else {
           const rate = rates[acc.currency]
-          totalValueInMasterCurrency += rate ? valueInAccountCurrency / rate : valueInAccountCurrency
+          if (!rate) throw new Error('Missing exchange rate')
+          totalValueInMasterCurrency += valueInAccountCurrency / rate
         }
       }
 
-      setInvestmentValue(totalValueInMasterCurrency)
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Failed to fetch investment data'
-      setInvestmentError(errorMessage)
-      setInvestmentValue(0)
-    } finally {
-      setInvestmentLoading(false)
-    }
-  }, [accounts, masterCurrency])
+      return totalValueInMasterCurrency
+    })
+  }, [accounts, masterCurrency, loadInvestmentValue])
 
-  // Initial load
+  useEffect(() => { void fetchData() }, [fetchData])
   useEffect(() => {
-    fetchData()
-    fetchAllTransactions()
-  }, [])
-
-  // Re-fetch when date range changes (but not on initial mount — fetchData handles that)
-  useEffect(() => {
-    if (accounts.length > 0) {
-      fetchData()
-    }
-  }, [dateRange.startDate, dateRange.endDate])
-
-  // Re-calculate investment value when accounts or master currency changes
-  useEffect(() => {
-    if (accounts.length > 0) {
-      fetchInvestmentValue()
-    }
-  }, [accounts, masterCurrency])
-
-  // Fetch exchange rates for display
-  useEffect(() => {
-    const fetchRates = async () => {
-      setExchangeRatesLoading(true)
-      try {
-        const response = await fetch(`https://open.er-api.com/v6/latest/${masterCurrency}`)
-        const data = await response.json()
-        if (data.rates) setExchangeRates(data.rates)
-      } catch {
-        console.error('Failed to fetch exchange rates')
-      } finally {
-        setExchangeRatesLoading(false)
-      }
-    }
-    fetchRates()
-  }, [masterCurrency])
-
-  const handleDataChange = useCallback(() => {
-    fetchData()
-    fetchAllTransactions()
-  }, [fetchData, fetchAllTransactions])
+    if (accountsStatus.loaded) void fetchInvestmentValue()
+  }, [accountsStatus.loaded, fetchInvestmentValue])
 
   return {
     netWorth,
     investmentValue,
-    investmentLoading,
-    investmentError,
+    investmentLoading: investmentStatus.loading,
+    investmentError: investmentStatus.error ? 'Unable to load investment value.' : null,
     accounts,
     transactions,
     allTransactions,
     upcomingTransactions,
-    transactionsLoading,
-    allTransactionsLoading,
+    transactionsLoading: transactionsStatus.loading,
+    allTransactionsLoading: historyStatus.loading,
     categories,
     exchangeRates,
-    exchangeRatesLoading,
+    exchangeRatesLoading: ratesStatus.loading,
     investmentRefreshKey,
-    handleDataChange,
+    handleDataChange: fetchData,
     fetchInvestmentValue,
+    dataStatus: {
+      accounts: accountsStatus,
+      transactions: transactionsStatus,
+      history: historyStatus,
+      upcoming: upcomingStatus,
+      categories: categoriesStatus,
+      netWorth: netWorthStatus,
+      investment: investmentStatus,
+      exchangeRates: ratesStatus,
+    },
   }
 }
