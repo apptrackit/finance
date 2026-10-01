@@ -17,6 +17,8 @@ Intermediate package/UI version bumps are grouped under the next published GitHu
 
 ### Fixed
 
+- Settings JSON exports a versioned snapshot of all durable financial data, saved app/browser preferences, audit logs, and forecast history with explicit exclusions. CSV accurately describes its posted cash ledger scope and preserves transfer links/currencies. Failed or incomplete reads block downloads; import/restore remains unsupported. [#54](https://github.com/apptrackit/finance/issues/54)
+
 - Yearly recurring schedules retain their selected month across saves, reloads, API execution, client previews, and MCP forecasts. Migration `015-yearly-recurring-month.sql` preserves the creation-month fallback for legacy schedules.
 - Missing or invalid exchange rates now make affected dashboard, calendar, analytics, and investment totals unavailable, with currency details and retry; native values remain visible. API net worth returns null for incomplete conversions, and MCP excludes invalid rates from its warned partial totals.
 
