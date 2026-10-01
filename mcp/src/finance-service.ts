@@ -1063,7 +1063,6 @@ export class FinanceService {
     })
     const pendingIncome = upcoming.filter(item => item.amount > 0 && !item.linked_transaction_id).reduce((sum, item) => sum + item.amount, 0)
     const pendingExpenses = upcoming.filter(item => item.amount < 0 && !item.linked_transaction_id).reduce((sum, item) => sum + Math.abs(item.amount), 0)
-    if (schedules.results.some(schedule => schedule.frequency === 'yearly')) warnings.push('Yearly schedule month is not stored in the current database schema; forecasts use each schedule creation month')
     return {
       as_of: new Date().toISOString(), currency, period: { start_date: startDate, end_date: endDate },
       summary: {

@@ -81,6 +81,7 @@ export type RecurringScheduleRow = {
   frequency: 'daily' | 'weekly' | 'monthly' | 'yearly'
   day_of_week?: number | null
   day_of_month?: number | null
+  month?: number | null
   account_id: string
   to_account_id?: string | null
   category_id?: string | null

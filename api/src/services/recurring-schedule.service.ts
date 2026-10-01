@@ -229,7 +229,7 @@ export class RecurringScheduleService {
       case 'yearly':
         // Check if today matches the yearly schedule date
         const month = today.getMonth() // 0-11
-        const targetMonth = schedule.month !== undefined ? schedule.month : new Date(schedule.created_at).getMonth()
+        const targetMonth = schedule.month ?? new Date(schedule.created_at).getMonth()
         
         if (month !== targetMonth) {
           return false
@@ -364,6 +364,7 @@ export class RecurringScheduleService {
       frequency: schedule.frequency,
       day_of_week: schedule.day_of_week,
       day_of_month: schedule.day_of_month,
+      month: schedule.month,
       account_id: schedule.account_id,
       to_account_id: schedule.to_account_id,
       category_id: schedule.category_id,

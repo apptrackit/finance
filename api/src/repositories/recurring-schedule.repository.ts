@@ -27,16 +27,17 @@ export class RecurringScheduleRepository {
   async create(schedule: RecurringSchedule): Promise<void> {
     await this.db.prepare(
       `INSERT INTO recurring_schedules 
-       (id, type, frequency, day_of_week, day_of_month, account_id, to_account_id, 
+       (id, type, frequency, day_of_week, day_of_month, month, account_id, to_account_id,
         category_id, amount, amount_to, description, is_active, created_at, last_processed_date, 
         remaining_occurrences, end_date) 
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).bind(
       schedule.id,
       schedule.type,
       schedule.frequency,
       schedule.day_of_week ?? null,
       schedule.day_of_month ?? null,
+      schedule.month ?? null,
       schedule.account_id,
       schedule.to_account_id ?? null,
       schedule.category_id ?? null,
@@ -66,6 +67,10 @@ export class RecurringScheduleRepository {
     if (updates.day_of_month !== undefined) {
       fields.push('day_of_month = ?')
       values.push(updates.day_of_month ?? null)
+    }
+    if (updates.month !== undefined) {
+      fields.push('month = ?')
+      values.push(updates.month)
     }
     if (updates.account_id !== undefined) {
       fields.push('account_id = ?')

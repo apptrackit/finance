@@ -42,7 +42,7 @@ type RecurringSchedule = {
   frequency: 'daily' | 'weekly' | 'monthly' | 'yearly'
   day_of_week?: number
   day_of_month?: number
-  month?: number
+  month?: number | null
   account_id: string
   to_account_id?: string
   category_id?: string
@@ -274,7 +274,7 @@ export function RecurringTransactions({
       frequency: schedule.frequency,
       day_of_week: schedule.day_of_week ?? 1,
       day_of_month: schedule.day_of_month?.toString() ?? '1',
-      month: schedule.month ?? new Date().getMonth(),
+      month: schedule.month ?? new Date(schedule.created_at).getMonth(),
       account_id: schedule.account_id,
       to_account_id: schedule.to_account_id || '',
       category_id: schedule.category_id || '',
@@ -370,7 +370,7 @@ export function RecurringTransactions({
           return current.getDate() === (target > lastDay ? lastDay : target)
         }
         if (schedule.frequency === 'yearly') {
-          const targetMonth = schedule.month !== undefined ? schedule.month : new Date(schedule.created_at).getMonth()
+          const targetMonth = schedule.month ?? new Date(schedule.created_at).getMonth()
           if (current.getMonth() !== targetMonth) return false
           const lastDay = new Date(current.getFullYear(), targetMonth + 1, 0).getDate()
           const target = schedule.day_of_month!
@@ -436,7 +436,7 @@ export function RecurringTransactions({
           }
           if (schedule.frequency === 'yearly') {
             const month = currentDate.getMonth()
-            const targetMonth = schedule.month !== undefined ? schedule.month : new Date(schedule.created_at).getMonth()
+            const targetMonth = schedule.month ?? new Date(schedule.created_at).getMonth()
             
             if (month !== targetMonth) return false
             
@@ -546,7 +546,7 @@ export function RecurringTransactions({
         }
         if (schedule.frequency === 'yearly') {
           const month = current.getMonth()
-          const targetMonth = schedule.month !== undefined ? schedule.month : new Date(schedule.created_at).getMonth()
+          const targetMonth = schedule.month ?? new Date(schedule.created_at).getMonth()
           
           if (month !== targetMonth) return false
           
@@ -642,7 +642,7 @@ export function RecurringTransactions({
               }
               if (schedule.frequency === 'yearly') {
                 const month = date.getMonth()
-                const targetMonth = schedule.month !== undefined ? schedule.month : new Date(schedule.created_at).getMonth()
+                const targetMonth = schedule.month ?? new Date(schedule.created_at).getMonth()
                 
                 if (month !== targetMonth) return false
                 
@@ -758,7 +758,7 @@ export function RecurringTransactions({
                 return day === targetDay
               }
               if (schedule.frequency === 'yearly') {
-                const targetMonth = schedule.month !== undefined ? schedule.month : new Date(schedule.created_at).getMonth()
+                const targetMonth = schedule.month ?? new Date(schedule.created_at).getMonth()
                 
                 if (month !== targetMonth) return false
                 
@@ -1323,7 +1323,7 @@ export function RecurringTransactions({
                 if (freq === 'weekly') return (a.day_of_week ?? 0) - (b.day_of_week ?? 0)
                 if (freq === 'monthly') return (a.day_of_month ?? 0) - (b.day_of_month ?? 0)
                 if (freq === 'yearly') {
-                  const monthDiff = (a.month ?? 0) - (b.month ?? 0)
+                  const monthDiff = (a.month ?? new Date(a.created_at).getMonth()) - (b.month ?? new Date(b.created_at).getMonth())
                   return monthDiff !== 0 ? monthDiff : (a.day_of_month ?? 0) - (b.day_of_month ?? 0)
                 }
                 return 0

@@ -153,7 +153,7 @@ Read `mcp/README.md` for the complete tool/workflow contract. `src/index.ts` han
 
 ## Migrations and deployment
 
-- The schema is the ordered sequence in `api/migrations/`, currently through `014-mcp-transfer-review-corrections.sql`. Budgets are retired; earlier migrations remain necessary history. Add the next sequential `NNN-description.sql`; never rewrite an applied migration.
+- The schema is the ordered sequence in `api/migrations/`, currently through `015-yearly-recurring-month.sql`. Budgets are retired; earlier migrations remain necessary history. Add the next sequential `NNN-description.sql`; never rewrite an applied migration.
 - Deployment tracks executed filenames in `migration_history`; local setup rebuilds and applies the full sequence. This is a custom runner, not Wrangler's built-in migration ledger. Use `IF EXISTS`/`IF NOT EXISTS` where supported, but do not assume one-time `ALTER TABLE ADD COLUMN` migrations can be replayed safely.
 - Check source-revision triggers when adding/changing financial tables so forecasts become stale correctly. Validate both a fresh schema and the upgrade from the preceding schema when relevant.
 - Keep `.deploy-config`, actual Wrangler configs, `.dev.vars`, `.env` credentials, local database state, and database backups out of commits and tool output. Use tracked example files for documentation. Never hardcode real account IDs, secrets, personal financial data, or deployment identifiers in tests.
