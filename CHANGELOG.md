@@ -1,31 +1,64 @@
 # Changelog
 
-This file covers every published [GitHub release](https://github.com/apptrackit/finance/releases) through **v3.0**, newest first. Release dates are GitHub publication dates in UTC. Entries summarize the release notes, linked pull requests, and changes between tags.
+This file covers every published [GitHub release](https://github.com/apptrackit/finance/releases) through **v3.1**, newest first. Release dates are GitHub publication dates in UTC. Entries summarize the release notes, linked pull requests, and changes between tags.
 
 Intermediate package/UI version bumps are grouped under the next published GitHub release, rather than presented as separately published releases. The former README's **v1.6.3** notes are retained under v1.7, the release that included them.
 
 ## Unreleased
 
-### Added
+No changes yet.
 
-- CI runs the client tests on both pinned Node 22 and Node 26, and the required `CI passed` check waits for both jobs.
-- The Finance MCP can preview and create cash transfer review drafts, including cross-currency pairs when both native amounts are supplied. The app reviews each reciprocal pair as one item and posts or declines both sides atomically; drafts leave balances and projections unchanged.
-- The Finance MCP can list unresolved MCP review drafts and prepare user-confirmed edits or declines. Apply rejects stale previews and makes bounded batches atomic and idempotent; neither action posts transactions or changes balances.
-- The MCP review list shows each linked cash transfer once. Separate transfer correction tools preview and atomically edit or decline both legs after user confirmation, including cross-currency amounts.
-- Migration `013-mcp-review-corrections.sql` stores expiring correction proposals and completed runs, indexes the active review queue, and keeps draft-only changes from marking financial forecasts stale.
-- Migration `014-mcp-transfer-review-corrections.sql` stores expiring transfer-pair correction proposals and completed runs.
+## v3.1 — 2026-10-01
 
-### Fixed
+[GitHub release](https://github.com/apptrackit/finance/releases/tag/v3.1) · [Compare v3.0…v3.1](https://github.com/apptrackit/finance/compare/v3.0...v3.1)
 
-- Settings JSON exports a versioned snapshot of all durable financial data, saved app/browser preferences, audit logs, and forecast history with explicit exclusions. CSV accurately describes its posted cash ledger scope and preserves transfer links/currencies. Failed or incomplete reads block downloads; import/restore remains unsupported. [#54](https://github.com/apptrackit/finance/issues/54)
+### Highlights
 
-- Yearly recurring schedules retain their selected month across saves, reloads, API execution, client previews, and MCP forecasts. Migration `015-yearly-recurring-month.sql` preserves the creation-month fallback for legacy schedules.
-- Missing or invalid exchange rates now make affected dashboard, calendar, analytics, and investment totals unavailable, with currency details and retry; native values remain visible. API net worth returns null for incomplete conversions, and MCP excludes invalid rates from its warned partial totals.
+- More trustworthy financial totals: missing exchange rates are explicit, failed reads retain the last successful data, yearly schedules keep their selected month, and JSON exports cover all durable app data.
+- Cash transfer review drafts and previewed corrections through MCP, with both transfer legs handled together and no balance changes until confirmation in the app.
+- Richer evidence for AI forecasts and 12-month/all-time cash history views alongside the existing 90-day projection.
 
-- Financial read failures now show accessible errors and Retry actions. Dashboard and analytics refreshes retain the last successful data with a stale-data notice instead of replacing it with an empty ledger.
-- Linked MCP transfer drafts display as one review card with their source and destination accounts, exact sent and received amounts, and one set of review actions. The app can edit both pending legs together without changing balances or forecasts.
-- Removed the empty SQL statement generated between a migration and its history insert, which blocked D1 remote imports of migration 013.
-- Client tests provide browser-style local storage under Node 26, so the deployment test gate can complete when the local Node version differs from CI's pinned Node 22.
+### Fixed — financial correctness and recovery
+
+- Missing, zero, negative, nonnumeric, or nonfinite exchange rates make affected dashboard, calendar, analytics, and portfolio totals unavailable instead of mixing raw foreign amounts. Warnings identify missing currencies and offer retry; native balances, quantities, and account charts remain available. API net worth and converted account balances return null when incomplete, spending estimates fail explicitly, and MCP retains warned partial totals. Rate snapshots are tied to their base currency. [#83](https://github.com/apptrackit/finance/pull/83)
+- Investment display conversion uses the selected reporting currency; manual asset values and returns keep consistent units. [#83](https://github.com/apptrackit/finance/pull/83)
+- Failed financial reads show accessible errors and Retry actions. Failed refreshes retain each dataset's last successful values with a stale-data notice; partial failures keep successful sections usable, older requests cannot overwrite newer results, and forms remain mounted during refresh. [#82](https://github.com/apptrackit/finance/pull/82)
+- Yearly recurring schedules retain their selected month across saves, reloads, API execution, client calendars/previews, and MCP projections. Legacy schedules keep their creation-month fallback until edited. [#84](https://github.com/apptrackit/finance/pull/84)
+- Settings JSON now exports a consistent, versioned snapshot of all durable financial records, saved app/browser preferences, audit logs, forecast history, source revision, and MCP batch/replay records. Coverage, row counts, migrations, exclusions, and restore support are explicit. CSV describes its posted cash ledger scope and preserves IDs, transfer links, native currencies, signed amounts, and spending exclusions. Failed, incomplete, unsupported, or oversized reads block downloads. [#85](https://github.com/apptrackit/finance/pull/85)
+- Removed routine browser-console logging of accounts, balances, investment/market responses, and recurring details; affected failure logs contain operation/status information. Investment detail charts, holding prices, and secondary transaction amounts respect hidden privacy mode. [#80](https://github.com/apptrackit/finance/pull/80)
+- Removed outdated investment guidance that confused share/coin quantities with dollar amounts and assumed all holdings used USD. [#81](https://github.com/apptrackit/finance/pull/81)
+
+### Added — MCP review workflows
+
+- Preview and create cash-to-cash transfer review drafts through MCP. Same-currency legs must match; cross-currency transfers require explicit sent and received amounts. The displayed effective rate does not infer either amount or a separate fee. Proposals expire after 24 hours and creation supports duplicate warnings and idempotent retries. [#78](https://github.com/apptrackit/finance/pull/78)
+- The app and MCP list show each linked transfer pair once, with both accounts and exact native amounts. The app edits, confirms, or declines both legs atomically, with locks, date checks, stale guards, and audit records. Pending edits and declines leave balances and forecasts unchanged; confirmation applies both balance deltas once. [#78](https://github.com/apptrackit/finance/pull/78)
+- List unresolved MCP income/expense review drafts with cursor pagination, provenance, account/currency context, flags, and truncation metadata. Prepare complete before/after previews for batches of edits or declines, then apply after explicit user confirmation with expiry, stale-preview rejection, atomic writes, and idempotent retries. [#75](https://github.com/apptrackit/finance/pull/75)
+- Separate MCP transfer correction tools preview and atomically edit or decline both unresolved legs after explicit confirmation, preserving exact cross-currency amounts. Ordinary correction tools remain limited to unlinked review drafts. [#78](https://github.com/apptrackit/finance/pull/78)
+- Draft-only changes no longer mark published financial forecasts stale; review drafts remain outside balances and upcoming projections until posted in the app. [#75](https://github.com/apptrackit/finance/pull/75), [#78](https://github.com/apptrackit/finance/pull/78)
+
+### Changed — forecasts and analytics
+
+- MCP forecast context includes up to a year of named posted income, recurring income/expense candidates, monthly totals with complete-month flags, conversion/truncation metadata, and narratives from the five most recent snapshots. Forecast instructions use repeated evidence for future pay and bills, avoid double-counting recorded upcoming activity, and distinguish assumptions and prior plans from observed facts. Existing snapshots are unchanged; this improves the evidence and instructions rather than guaranteeing a particular model forecast. [#71](https://github.com/apptrackit/finance/pull/71)
+- AI cash forecasts offer 90-day, 12-month, and all-time actual history ranges, each followed by the existing 90-day projection and anchored to the selected snapshot's generation date. New snapshots retain daily history for the prior year and monthly history from the first eligible cash transaction. Older snapshots can reconstruct longer history from their saved balance and the current posted ledger, with visible ledger-edit/FX caveats. The chart's generation marker no longer has an overlapping label. [#74](https://github.com/apptrackit/finance/pull/74)
+- Analytics shows Projected mode only when the selected period contains eligible ordinary upcoming transactions, excluding MCP review drafts and investments. Period navigation returns to Actual; removing the final eligible row hides the switch. Calendar dates are interpreted locally so period eligibility and charts agree. [#79](https://github.com/apptrackit/finance/pull/79)
+
+### Changed — deployment, tests, and contributor workflow
+
+- Deployment output groups local checks, Cloudflare/database work, and publishing into phases, with command start/result, elapsed time, target order, and restrained interactive-terminal color. Redirected output stays plain. [#52](https://github.com/apptrackit/finance/pull/52)
+- D1 migration submissions no longer add an empty SQL statement before the history insert, fixing remote import of migration 013. Files must end with a semicolon. File-import progress is handled separately from JSON query results, and each successful import is followed by a read verifying its history row. [#77](https://github.com/apptrackit/finance/pull/77), [follow-up fix](https://github.com/apptrackit/finance/commit/ef3f80b)
+- CI runs client tests on pinned Node 22 and Node 26; both jobs are required by `CI passed`. Browser-style test local storage also lets the client deployment gate run under Node 26. Worker/D1 integration remains on the pinned Node 22 runtime. [#78](https://github.com/apptrackit/finance/pull/78)
+- Added regression coverage for transfer review/corrections, forecast evidence/history, missing FX, failed reads, complete exports and limits, yearly recurrence, and fresh/upgrade migrations. [#71](https://github.com/apptrackit/finance/pull/71), [#74](https://github.com/apptrackit/finance/pull/74), [#75](https://github.com/apptrackit/finance/pull/75), [#78](https://github.com/apptrackit/finance/pull/78), [#82](https://github.com/apptrackit/finance/pull/82), [#83](https://github.com/apptrackit/finance/pull/83), [#84](https://github.com/apptrackit/finance/pull/84), [#85](https://github.com/apptrackit/finance/pull/85)
+- Standardized issue-first branches and completed issue/PR templates, with functional issue references first in PR bodies. Contributor guidance now covers native issue Type/Priority, existing labels, milestones, projects, and actual dependency relationships. The README/changelog also record v3.0's publication. [#67](https://github.com/apptrackit/finance/pull/67), [#72](https://github.com/apptrackit/finance/pull/72), [#51](https://github.com/apptrackit/finance/pull/51)
+- Bumped the root application version to **3.1**, used by the API version endpoint and Settings.
+
+### Migration and upgrade notes
+
+- Apply these migrations in order before updating API/MCP Workers:
+  - `013-mcp-review-corrections.sql`: expiring draft correction proposals, replay records, review queue indexing, and revision triggers that ignore draft-only changes.
+  - `014-mcp-transfer-review-corrections.sql`: expiring transfer-pair correction proposals and replay records.
+  - `015-yearly-recurring-month.sql`: nullable zero-based month for yearly schedules, retaining the legacy creation-month fallback.
+- **JSON is a data archive; import/restore remains unsupported.** Exports contain unmasked values, exclude credentials and expiring proposal capabilities, and reject tables above 10,000 rows or JSON above 16 MiB. CSV uses the same export endpoint and limits; use a D1 export for larger datasets. [#85](https://github.com/apptrackit/finance/pull/85)
+- MCP publishes immutable HUF forecasts with the existing 91-point daily path. Richer evidence and longer saved history apply to new snapshots; reconstructed history for older snapshots may change after ledger, account-setting, or exchange-rate changes. [#71](https://github.com/apptrackit/finance/pull/71), [#74](https://github.com/apptrackit/finance/pull/74)
 
 ## v3.0 — 2026-09-24
 
