@@ -58,7 +58,7 @@ export function recurringDates(schedule: RecurringScheduleRow, startDate: string
     const matches = schedule.frequency === 'daily'
       || (schedule.frequency === 'weekly' && day === schedule.day_of_week)
       || (schedule.frequency === 'monthly' && dayOfMonth === targetDay)
-      || (schedule.frequency === 'yearly' && cursor.getUTCMonth() === created.getUTCMonth() && dayOfMonth === targetDay)
+      || (schedule.frequency === 'yearly' && cursor.getUTCMonth() === (schedule.month ?? created.getUTCMonth()) && dayOfMonth === targetDay)
     const value = isoDate(cursor)
     if (matches) dates.push(value)
     cursor = new Date(cursor.getTime() + DAY_MS)

@@ -36,7 +36,7 @@ export interface RecurringScheduleResponseDto {
   frequency: 'daily' | 'weekly' | 'monthly' | 'yearly'
   day_of_week?: number
   day_of_month?: number
-  month?: number
+  month?: number | null
   account_id: string
   to_account_id?: string
   category_id?: string
