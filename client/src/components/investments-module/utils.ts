@@ -1,7 +1,9 @@
+import { convertCurrency } from '../../../../shared/currency'
 import type { Account, Transaction, Position } from './types'
 
 export const formatValue = (value: number, account?: Account, currency?: string) => {
   const valueCurrency = currency || (account?.asset_type === 'manual' ? account.currency : 'USD')
+  if (value === null) return 'Unavailable'
   const currencySymbols: Record<string, string> = {
     HUF: 'Ft',
     EUR: '€',
@@ -18,7 +20,8 @@ export const formatValue = (value: number, account?: Account, currency?: string)
   return valueCurrency === 'HUF' ? `${formatted} ${symbol}` : `${symbol}${formatted}`
 }
 
-export const formatDisplayCurrency = (value: number, displayCurrency: 'HUF' | 'USD') => {
+export const formatDisplayCurrency = (value: number | null, displayCurrency: 'HUF' | 'USD') => {
+  if (value === null) return 'Unavailable'
   const currencySymbols: Record<string, string> = {
     HUF: 'Ft',
     EUR: '€',
@@ -35,10 +38,9 @@ export const formatDisplayCurrency = (value: number, displayCurrency: 'HUF' | 'U
   return displayCurrency === 'HUF' ? `${formatted} ${symbol}` : `${symbol}${formatted}`
 }
 
-export const convertToDisplayCurrency = (usdValue: number, displayCurrency: 'HUF' | 'USD', exchangeRates: Record<string, number>, masterCurrency: string) => {
-  if (displayCurrency === 'USD') return usdValue
-  const rate = exchangeRates[masterCurrency]
-  return rate ? usdValue * rate : usdValue
+export const convertToDisplayCurrency = (usdValue: number | null, displayCurrency: 'HUF' | 'USD', exchangeRates: Record<string, number>): number | null => {
+  if (usdValue === null) return null
+  return convertCurrency(usdValue, 'USD', displayCurrency, exchangeRates, 'USD').value
 }
 
 export const calculatePosition = (
@@ -64,94 +66,24 @@ export const calculatePosition = (
     }
   }
   
+  const missingCurrencies = new Set<string>()
   const convertToUsd = (value: number, currency: string) => {
-    const normalizedCurrency = currency.toUpperCase()
-    if (normalizedCurrency === 'USD') return value
-    const rate = exchangeRates[normalizedCurrency]
-    if (!rate) {
-      console.warn(`No exchange rate for ${normalizedCurrency}, using raw value`)
-      return value
-    }
-    return value / rate
+    const result = convertCurrency(value, currency, 'USD', exchangeRates)
+    result.missingCurrencies.forEach(item => missingCurrencies.add(item))
+    return result.value
   }
 
-  // Calculate current value in USD for portfolio totals.
-  let currentValue = 0
-  let displayValue = 0
-  if (account.asset_type === 'manual') {
-    // For manual: balance is in account's currency, convert to USD
-    const balanceInAccountCurrency = account.balance
-    if (account.currency === 'USD') {
-      currentValue = balanceInAccountCurrency
-    } else {
-      const rate = exchangeRates[account.currency]
-      if (rate) {
-        currentValue = balanceInAccountCurrency / rate
-      } else {
-        console.warn(`No exchange rate for ${account.currency}, using raw value`)
-        currentValue = balanceInAccountCurrency
-      }
-    }
-    displayValue = balanceInAccountCurrency
-  } else {
-    // Quotes can be listed in EUR (for example VWCE.MI), not just USD.
-    displayValue = actualQuantity * currentPrice
-    currentValue = convertToUsd(displayValue, quoteCurrency)
-  }
-  
-  // Calculate invested amount from investment transactions
-  let netInvested = 0
-  let nativeInvested = 0
-  let initialInvestment = 0
-  
-  if (account.asset_type === 'manual') {
-    // For manual: need to get initial balance from account creation
-    const totalAdded = transactions
-      .filter(tx => tx.amount > 0)
-      .reduce((sum, tx) => sum + tx.amount, 0)
-    
-    const totalWithdrawn = transactions
-      .filter(tx => tx.amount < 0)
-      .reduce((sum, tx) => sum + Math.abs(tx.amount), 0)
-    
-    const transactionNet = totalAdded - totalWithdrawn
-    
-    // Initial investment = current balance - transaction gains
-    if (account.currency === 'USD') {
-      initialInvestment = account.balance - transactionNet
-    } else {
-      const rate = exchangeRates[account.currency]
-      if (rate) {
-        initialInvestment = (account.balance - transactionNet) / rate
-      } else {
-        initialInvestment = account.balance - transactionNet
-      }
-    }
-    
-    netInvested = initialInvestment + transactionNet
-    nativeInvested = netInvested
-  } else {
-    // Purchase prices are in the account's trading currency, then normalized
-    // to USD only for portfolio-wide totals.
-    const totalInvested = transactions
-      .filter(tx => tx.amount > 0)
-      .reduce((sum, tx) => sum + tx.amount, 0)
-    
-    const totalWithdrawn = transactions
-      .filter(tx => tx.amount < 0)
-      .reduce((sum, tx) => sum + Math.abs(tx.amount), 0)
-    
-    nativeInvested = totalInvested - totalWithdrawn
-    netInvested = convertToUsd(nativeInvested, account.quote_currency || quoteCurrency)
-  }
-  
-  // For manual assets, gain/loss should only be from transactions
-  // For stock/crypto, gain/loss is current value - invested
-  const gainLoss = account.asset_type === 'manual' 
-    ? (transactions.reduce((sum, tx) => sum + tx.amount, 0)) 
-    : (currentValue - netInvested)
-  const gainLossPercent = netInvested > 0 ? (gainLoss / netInvested) * 100 : 0
-  
+  // Keep native values available even when the portfolio conversion fails.
+  const displayValue = account.asset_type === 'manual' ? account.balance : actualQuantity * currentPrice
+  const currentValue = priceFetchError ? null : convertToUsd(displayValue, quoteCurrency)
+  const transactionNet = transactions.reduce((sum, tx) => sum + tx.amount, 0)
+  const nativeInvested = account.asset_type === 'manual' ? account.balance : transactionNet
+  const netInvested = convertToUsd(nativeInvested, account.asset_type === 'manual' ? account.currency : account.quote_currency || quoteCurrency)
+  const gainLoss = account.asset_type === 'manual'
+    ? convertToUsd(transactionNet, account.currency)
+    : currentValue === null || netInvested === null ? null : currentValue - netInvested
+  const gainLossPercent = gainLoss === null || netInvested === null ? null : netInvested > 0 ? gainLoss / netInvested * 100 : 0
+
   return {
     account,
     netInvested,
@@ -164,6 +96,7 @@ export const calculatePosition = (
     gainLossPercent,
     transactions,
     actualQuantity,
-    priceFetchError
+    priceFetchError,
+    missingCurrencies: [...missingCurrencies],
   }
 }

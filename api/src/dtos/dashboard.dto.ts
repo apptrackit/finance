@@ -1,15 +1,16 @@
 export interface NetWorthResponseDto {
-  net_worth: number
+  net_worth: number | null
   currency: string
   accounts: AccountNetWorth[]
   rates_fetched: boolean
+  missing_currencies: string[]
 }
 
 export interface AccountNetWorth {
   id: string
   balance: number
   currency: string
-  balance_in_master: number
+  balance_in_master: number | null
 }
 
 export interface SpendingEstimateResponseDto {

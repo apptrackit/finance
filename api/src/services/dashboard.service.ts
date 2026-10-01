@@ -1,3 +1,5 @@
+import { convertCurrency, sumConversions } from '../../../shared/currency'
+import { AppError } from '../errors/codes'
 import { AccountRepository } from '../repositories/account.repository'
 import { TransactionRepository } from '../repositories/transaction.repository'
 import { RecurringScheduleRepository } from '../repositories/recurring-schedule.repository'
@@ -20,54 +22,28 @@ export class DashboardService {
     const accounts = await this.accountRepo.findAll()
 
     if (!accounts || accounts.length === 0) {
-      return { net_worth: 0, currency, accounts: [], rates_fetched: false }
+      return { net_worth: 0, currency, accounts: [], rates_fetched: false, missing_currencies: [] }
     }
 
     // Fetch exchange rates from master currency
     const rates = await getExchangeRates(currency)
 
-    let totalNetWorth = 0
-    const accountDetails: AccountNetWorth[] = []
-
-    for (const account of accounts) {
-      // Skip investment accounts - they will be calculated by frontend with market prices
-      if (account.type === 'investment') {
-        continue
-      }
-
-      // Skip accounts excluded from net worth
-      if (account.exclude_from_net_worth) {
-        continue
-      }
-
-      let balanceInMasterCurrency = account.balance
-
-      // Convert to master currency if account is in a different currency
-      if (account.currency !== currency) {
-        const rate = rates[account.currency]
-        if (rate) {
-          // Convert: masterCurrency -> account.currency rate, so reverse to get master currency
-          balanceInMasterCurrency = account.balance / rate
-        } else {
-          console.warn(`Exchange rate not available for ${account.currency}, using original value`)
-        }
-      }
-
-      totalNetWorth += balanceInMasterCurrency
-
-      accountDetails.push({
-        id: account.id,
-        balance: account.balance,
-        currency: account.currency,
-        balance_in_master: balanceInMasterCurrency
-      })
-    }
+    const includedAccounts = accounts.filter(account => account.type !== 'investment' && !account.exclude_from_net_worth)
+    const conversions = includedAccounts.map(account => convertCurrency(account.balance, account.currency, currency, rates))
+    const total = sumConversions(conversions)
+    const accountDetails: AccountNetWorth[] = includedAccounts.map((account, index) => ({
+      id: account.id,
+      balance: account.balance,
+      currency: account.currency,
+      balance_in_master: conversions[index].value,
+    }))
 
     return {
-      net_worth: totalNetWorth,
+      net_worth: total.value,
       currency,
       accounts: accountDetails,
-      rates_fetched: Object.keys(rates).length > 0
+      rates_fetched: Object.keys(rates).length > 0,
+      missing_currencies: total.missingCurrencies,
     }
   }
 
@@ -185,15 +161,14 @@ export class DashboardService {
     const accountCurrencyMap = new Map(accounts.map(a => [a.id, a.currency]))
 
     return transactions.map(t => {
-      const accountCurrency = accountCurrencyMap.get(t.account_id) || targetCurrency
-      let convertedAmount = t.amount
-
-      if (accountCurrency !== targetCurrency) {
-        const rate = rates[accountCurrency]
-        if (rate) {
-          convertedAmount = t.amount / rate
-        }
+      const accountCurrency = accountCurrencyMap.get(t.account_id)
+      if (!accountCurrency) throw AppError.notFound('ACCOUNT_NOT_FOUND', 'Transaction account unavailable')
+      const conversion = convertCurrency(t.amount, accountCurrency, targetCurrency, rates)
+      if (conversion.value === null) {
+        throw new AppError('EXCHANGE_RATE_UNAVAILABLE',
+          `Spending estimate unavailable: missing exchange rates for ${conversion.missingCurrencies.join(', ')} to ${targetCurrency}`, 503)
       }
+      const convertedAmount = conversion.value
 
       return { ...t, convertedAmount }
     })

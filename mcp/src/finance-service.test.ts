@@ -93,6 +93,17 @@ describe('FinanceService read-only calculations', () => {
     expect(result.accounts.find(row => row.id === 'portfolio')).toMatchObject({ investment_quantity: null, converted_balance: null })
   })
 
+  it.each([0, -1, 'invalid'])('excludes invalid FX rate %s with a warning and null account conversion', async rate => {
+    accounts.push({ id: 'eur-cash', name: 'EUR cash', type: 'cash', balance: 100, currency: 'EUR' })
+    vi.stubGlobal('fetch', vi.fn(async () => Response.json({ result: 'success', rates: { HUF: 1, EUR: rate } })))
+    try {
+      const summary = await service.accountsSummary({ currency: 'HUF' })
+      expect(summary.accounts.find(row => row.id === 'eur-cash')?.converted_balance).toBeNull()
+      const overview = await service.overview({ start_date: '2026-07-01', end_date: '2026-07-31', currency: 'HUF' })
+      expect(overview.warnings).toContain('Exchange rate unavailable for EUR; those amounts were excluded from HUF totals')
+    } finally { accounts.pop() }
+  })
+
   it('advertises MXN as a supported account and reporting currency', async () => {
     const result = await service.listDimensions()
     expect(result.supported_currencies).toContain('MXN')

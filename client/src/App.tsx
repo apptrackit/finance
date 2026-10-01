@@ -1,3 +1,5 @@
+import { convertCurrency, sumAvailable } from '../../shared/currency'
+import { MissingExchangeRates } from './components/common/MissingExchangeRates'
 import { useEffect, useState } from 'react'
 import { AccountList } from './components/dashboard-module/AccountList'
 import { TransactionList } from './components/dashboard-module/TransactionList'
@@ -51,7 +53,9 @@ function App() {
     transactionsLoading,
     allTransactionsLoading,
     categories,
-    exchangeRates,
+    usableExchangeRates: exchangeRates,
+    netWorthMissingCurrencies,
+    investmentMissingCurrencies,
     exchangeRatesLoading,
     investmentRefreshKey,
     handleDataChange,
@@ -98,8 +102,8 @@ function App() {
   const accountData = [dataset('accounts', 'Accounts')]
   const transactionData = [...accountData, dataset('transactions', 'Period transactions'), dataset('upcoming', 'Upcoming transactions')]
   const analyticsData = [...accountData, dataset('history', 'Transaction history'), dataset('upcoming', 'Upcoming transactions'),
-    dataset('categories', 'Categories'), dataset('exchangeRates', 'Exchange rates')]
-  const summaryData = [...accountData, dataset('transactions', 'Period transactions'), dataset('exchangeRates', 'Exchange rates')]
+    dataset('categories', 'Categories')]
+  const summaryData = [...accountData, dataset('transactions', 'Period transactions')]
   const netWorthData = [...accountData, dataset('netWorth', 'Net worth'), dataset('investment', 'Investment value')]
   const recurringData = [...accountData, dataset('categories', 'Categories')]
   const visibleData = view === 'dashboard'
@@ -109,36 +113,34 @@ function App() {
   const syncText = visibleData.some(({ status }) => status.error) ? 'Load error'
     : visibleData.some(({ status }) => status.loading) ? 'Updating…' : 'Synced'
 
-  const convertToMasterCurrency = (amount: number, accountId: string): number => {
+  const missingCurrencies = new Set([...netWorthMissingCurrencies, ...investmentMissingCurrencies])
+  const convertToMasterCurrency = (amount: number, accountId: string, absolute = false): number | null => {
     const account = accounts.find(a => a.id === accountId)
-    if (!account || account.currency === masterCurrency) return amount
-    const rate = exchangeRates[account.currency]
-    if (!rate) return amount
-    return amount / rate
+    if (!account) return null
+    const result = convertCurrency(amount, account.currency, masterCurrency, exchangeRates)
+    result.missingCurrencies.forEach(currency => missingCurrencies.add(currency))
+    return absolute && result.value !== null ? Math.abs(result.value) : result.value
   }
 
-  const totalIncome = transactions
+  const totalIncome = sumAvailable(transactions
     .filter(t => {
       const account = accounts.find(a => a.id === t.account_id)
       const isExcluded = account?.exclude_from_cash_balance && account?.exclude_from_net_worth
       return t.amount > 0 && !t.linked_transaction_id && account?.type !== 'investment' && !isExcluded
     })
-    .reduce((sum, t) => sum + convertToMasterCurrency(t.amount, t.account_id), 0)
+    .map(t => convertToMasterCurrency(t.amount, t.account_id)))
 
-  const totalExpenses = transactions
+  const totalExpenses = sumAvailable(transactions
     .filter(t => {
       const account = accounts.find(a => a.id === t.account_id)
       const isExcluded = account?.exclude_from_cash_balance && account?.exclude_from_net_worth
       return t.amount < 0 && !t.linked_transaction_id && account?.type !== 'investment' && !isExcluded
     })
-    .reduce((sum, t) => sum + Math.abs(convertToMasterCurrency(t.amount, t.account_id)), 0)
+    .map(t => convertToMasterCurrency(t.amount, t.account_id, true)))
 
-  const cashBalance = accounts
+  const cashBalance = sumAvailable(accounts
     .filter(a => a.type === 'cash' && !(a.exclude_from_cash_balance && a.exclude_from_net_worth))
-    .reduce((sum, account) => {
-      const rate = exchangeRates[account.currency] || 1
-      return sum + account.balance / rate
-    }, 0)
+    .map(account => convertToMasterCurrency(account.balance, account.id)))
 
   const projectableUpcomingTransactions = upcomingTransactions.filter(isUpcomingProjectionTransaction)
 
@@ -146,39 +148,39 @@ function App() {
     t.date >= dateRange.startDate && t.date <= dateRange.endDate
   )
 
-  const pendingIncome = pendingPeriodTransactions
+  const pendingIncome = sumAvailable(pendingPeriodTransactions
     .filter(t => {
       const account = accounts.find(a => a.id === t.account_id)
       const isExcluded = account?.exclude_from_cash_balance && account?.exclude_from_net_worth
       return t.amount > 0 && !t.linked_transaction_id && account?.type !== 'investment' && !isExcluded
     })
-    .reduce((sum, t) => sum + convertToMasterCurrency(t.amount, t.account_id), 0)
+    .map(t => convertToMasterCurrency(t.amount, t.account_id)))
 
-  const pendingExpenses = pendingPeriodTransactions
+  const pendingExpenses = sumAvailable(pendingPeriodTransactions
     .filter(t => {
       const account = accounts.find(a => a.id === t.account_id)
       const isExcluded = account?.exclude_from_cash_balance && account?.exclude_from_net_worth
       return t.amount < 0 && !t.linked_transaction_id && account?.type !== 'investment' && !isExcluded
     })
-    .reduce((sum, t) => sum + Math.abs(convertToMasterCurrency(t.amount, t.account_id)), 0)
+    .map(t => convertToMasterCurrency(t.amount, t.account_id, true)))
 
-  const pendingCashDelta = projectableUpcomingTransactions
+  const pendingCashDelta = sumAvailable(projectableUpcomingTransactions
     .filter(t => {
       const account = accounts.find(a => a.id === t.account_id)
       return account?.type === 'cash' && !(account.exclude_from_cash_balance && account.exclude_from_net_worth)
     })
-    .reduce((sum, t) => sum + convertToMasterCurrency(t.amount, t.account_id), 0)
+    .map(t => convertToMasterCurrency(t.amount, t.account_id)))
 
-  const pendingNetWorthDelta = projectableUpcomingTransactions
+  const pendingNetWorthDelta = sumAvailable(projectableUpcomingTransactions
     .filter(t => {
       const account = accounts.find(a => a.id === t.account_id)
       return account?.type !== 'investment' && !account?.exclude_from_net_worth
     })
-    .reduce((sum, t) => sum + convertToMasterCurrency(t.amount, t.account_id), 0)
+    .map(t => convertToMasterCurrency(t.amount, t.account_id)))
 
-  const totalNetWorth = netWorth !== null && dataStatus.investment.loaded ? netWorth + investmentValue : null
-  const projectedNetWorth = totalNetWorth !== null ? totalNetWorth + pendingNetWorthDelta : null
-  const projectedCashBalance = cashBalance + pendingCashDelta
+  const totalNetWorth = netWorth !== null && investmentValue !== null && dataStatus.investment.loaded && !dataStatus.netWorth.error && !dataStatus.investment.error ? netWorth + investmentValue : null
+  const projectedNetWorth = sumAvailable([totalNetWorth, pendingNetWorthDelta])
+  const projectedCashBalance = sumAvailable([cashBalance, pendingCashDelta])
   const hasInvestmentAccounts = accounts.some(a => a.type === 'investment')
   const showSeparateCashCard = hasInvestmentAccounts
 
@@ -281,6 +283,10 @@ function App() {
 
         <main className="max-w-7xl mx-auto px-3 sm:px-6 py-3 sm:py-8">
           <FinanceDataStatus datasets={visibleData} onRetry={() => { void handleDataChange() }} />
+          {view === 'dashboard' && dataStatus.accounts.loaded && !dataStatus.exchangeRates.loading && (
+            <div className="mb-4"><MissingExchangeRates currencies={[...missingCurrencies].sort()} targetCurrency={masterCurrency}
+              onRetry={() => { void handleDataChange() }} retrying={visibleData.some(({ status }) => status.loading)} /></div>
+          )}
           {view === 'dashboard' && (
             <div className={`grid gap-2.5 sm:gap-4 grid-cols-2 ${showSeparateCashCard ? 'lg:grid-cols-4' : 'lg:grid-cols-3'} mb-3 sm:mb-8`}>
               {/* Net Worth Card */}
@@ -308,7 +314,7 @@ function App() {
                           <span className="text-muted-foreground text-xs sm:text-2xl ml-0.5 sm:ml-1">{masterCurrency}</span>
                         </>
                       ) : (
-                        <div className="h-6 sm:h-10 w-20 sm:w-32 bg-muted animate-pulse rounded" />
+                        <span className="text-xs sm:text-lg text-muted-foreground">Unavailable</span>
                       )}
                     </div>
                     {shouldHideNetWorth() && totalNetWorth !== null && (
@@ -326,7 +332,7 @@ function App() {
                     )}
                   </div>
                   <p className="text-[9px] sm:text-xs text-muted-foreground mt-1 sm:mt-2">
-                    {investmentError ? investmentError : !dataStatus.upcoming.loaded ? 'Upcoming data unavailable' : projectedNetWorth !== null && pendingNetWorthDelta !== 0 ? (
+                    {investmentError ? investmentError : !dataStatus.upcoming.loaded ? 'Upcoming data unavailable' : projectedNetWorth === null ? 'Projection unavailable' : projectedNetWorth !== null && pendingNetWorthDelta !== 0 ? (
                       <>
                         After all upcoming{' '}
                         <span className={shouldHideNetWorth() ? 'select-none' : ''}>
@@ -345,7 +351,7 @@ function App() {
 
               {/* Cash Balance Card */}
               {showSeparateCashCard && (
-                <FinanceDataBoundary label="Cash" datasets={[...accountData, dataset('exchangeRates', 'Exchange rates')]}>
+                <FinanceDataBoundary label="Cash" datasets={accountData}>
                 <div className="group relative overflow-hidden rounded-xl sm:rounded-2xl border border-border/50 bg-card p-3 sm:p-6 shadow-xl hover:border-primary/30 transition-colors">
                   <div className="flex items-center justify-between mb-1.5 sm:mb-4">
                     <span className="text-[10px] sm:text-sm font-medium text-muted-foreground">Cash</span>
@@ -354,7 +360,7 @@ function App() {
                     </div>
                   </div>
                   <div className="text-lg sm:text-4xl font-bold tracking-tight text-foreground leading-tight">
-                    {dataStatus.accounts.loaded && dataStatus.exchangeRates.loaded ? (
+                    {cashBalance !== null ? (
                       <>
                         <span className={privacyMode === 'hidden' ? 'select-none' : ''}>
                           {privacyMode === 'hidden'
@@ -364,11 +370,11 @@ function App() {
                         <span className="text-muted-foreground text-xs sm:text-2xl ml-0.5 sm:ml-1">{masterCurrency}</span>
                       </>
                     ) : (
-                      <div className="h-6 sm:h-10 w-20 sm:w-32 bg-muted animate-pulse rounded" />
+                      <span className="text-xs sm:text-lg text-muted-foreground">Unavailable</span>
                     )}
                   </div>
                   <p className="text-[9px] sm:text-xs text-muted-foreground mt-1 sm:mt-2">
-                    {!dataStatus.upcoming.loaded ? 'Upcoming data unavailable' : pendingCashDelta !== 0 ? (
+                    {!dataStatus.upcoming.loaded ? 'Upcoming data unavailable' : projectedCashBalance === null ? 'Projection unavailable' : pendingCashDelta !== 0 ? (
                       <>
                         After all upcoming{' '}
                         <span className={privacyMode === 'hidden' ? 'select-none' : ''}>
@@ -400,7 +406,7 @@ function App() {
                 <div className="text-base sm:text-3xl font-bold tracking-tight text-success leading-tight">
                   {!dataStatus.transactions.loaded && transactionsLoading ? (
                     <div className="h-5 sm:h-9 w-20 sm:w-32 bg-muted animate-pulse rounded" />
-                  ) : (
+                  ) : totalIncome === null ? <span className="text-xs sm:text-lg text-muted-foreground">Unavailable</span> : (
                     <>
                       <span className={privacyMode === 'hidden' ? 'select-none' : ''}>
                         +{privacyMode === 'hidden' ? '••••••' : totalIncome.toLocaleString('hu-HU', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
@@ -410,7 +416,7 @@ function App() {
                   )}
                 </div>
                 <p className="text-[9px] sm:text-xs text-muted-foreground mt-1 sm:mt-2">
-                  {!dataStatus.upcoming.loaded ? 'Upcoming data unavailable' : pendingIncome > 0 ? (
+                  {!dataStatus.upcoming.loaded ? 'Upcoming data unavailable' : pendingIncome === null ? 'Pending total unavailable' : pendingIncome > 0 ? (
                     <>
                       +{privacyMode === 'hidden' ? '••••••' : pendingIncome.toLocaleString('hu-HU', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} {masterCurrency} pending
                     </>
@@ -432,7 +438,7 @@ function App() {
                 <div className="text-base sm:text-3xl font-bold tracking-tight text-destructive leading-tight">
                   {!dataStatus.transactions.loaded && transactionsLoading ? (
                     <div className="h-5 sm:h-9 w-20 sm:w-32 bg-muted animate-pulse rounded" />
-                  ) : (
+                  ) : totalExpenses === null ? <span className="text-xs sm:text-lg text-muted-foreground">Unavailable</span> : (
                     <>
                       <span className={privacyMode === 'hidden' ? 'select-none' : ''}>
                         <span className="mr-0.5">−</span>
@@ -443,7 +449,7 @@ function App() {
                   )}
                 </div>
                 <p className="text-[9px] sm:text-xs text-muted-foreground mt-1 sm:mt-2">
-                  {!dataStatus.upcoming.loaded ? 'Upcoming data unavailable' : pendingExpenses > 0 ? (
+                  {!dataStatus.upcoming.loaded ? 'Upcoming data unavailable' : pendingExpenses === null ? 'Pending total unavailable' : pendingExpenses > 0 ? (
                     <>
                       −{privacyMode === 'hidden' ? '••••••' : pendingExpenses.toLocaleString('hu-HU', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} {masterCurrency} pending
                     </>
@@ -497,6 +503,7 @@ function App() {
               accounts={accounts}
               masterCurrency={masterCurrency}
               exchangeRates={exchangeRates}
+              onRetryRates={() => { void handleDataChange() }}
               loading={(!dataStatus.history.loaded && allTransactionsLoading) || (!dataStatus.exchangeRates.loaded && exchangeRatesLoading)}
             />
             </FinanceDataBoundary>

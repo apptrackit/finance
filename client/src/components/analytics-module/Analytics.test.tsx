@@ -137,4 +137,26 @@ describe('Analytics Projected mode', () => {
     expect(screen.getByRole('button', { name: 'Projected (1)' })).toHaveAttribute('aria-pressed', 'false')
     expect(income()).toContain('+100')
   })
+  it('withholds converted charts for missing FX and restores them when rates recover', () => {
+    showIncomeExpensesTrend()
+    const foreignAccounts = [{ ...accounts[0], currency: 'EUR' }]
+    const props = { transactions: [posted], categories: [], accounts: foreignAccounts }
+    const { rerender } = render(<Analytics {...props} exchangeRates={{ HUF: 1 }} />)
+    expect(screen.getByRole('alert')).toHaveTextContent('Missing or invalid exchange rates: EUR')
+    expect(screen.queryByTestId('income-expenses-trend')).not.toBeInTheDocument()
+    expect(screen.queryByText('Income')).not.toBeInTheDocument()
+    rerender(<Analytics {...props} exchangeRates={{ HUF: 1, EUR: 1 / 400 }} />)
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(income()).toContain('40')
+    expect(screen.getByTestId('income-expenses-trend')).toHaveAttribute('data-income', '40000')
+  })
+
+  it('keeps review drafts outside required projection conversions', () => {
+    const foreignAccounts = [...accounts, { ...accounts[0], id: 'eur', currency: 'EUR', exclude_from_net_worth: true }]
+    render(<Analytics transactions={[posted]} categories={[]} accounts={foreignAccounts}
+      upcomingTransactions={[upcoming('review', '2026-09-15', 20, { account_id: 'eur', pending_kind: 'mcp_review' })]} />)
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(income()).toContain('+100')
+  })
+
 })

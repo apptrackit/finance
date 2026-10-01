@@ -121,7 +121,7 @@ export function TransactionList({
   onDateRangeChange: (range: { startDate: string; endDate: string }) => void,
   currentMonth: Date,
   onMonthChange: (month: Date) => void,
-  convertToMasterCurrency?: (amount: number, accountId: string) => number,
+  convertToMasterCurrency?: (amount: number, accountId: string) => number | null,
   masterCurrency: string,
   onCalendarViewChange?: (isCalendar: boolean) => void,
 }) {

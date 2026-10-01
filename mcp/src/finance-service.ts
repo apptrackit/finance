@@ -1,3 +1,4 @@
+import { validRates } from '../../shared/currency'
 import { MCP_WORKER_VERSION, type AccountRow, type CanonicalReviewDraft, type CategoryRow, type Env, type InvestmentTransactionRow, type RecurringScheduleRow, type ReviewDraftInput, type StoredReviewDraftProposal, type TransactionRow } from './types'
 import { addUtcDays, daysBetween, periodEndDates, recurringDates } from './date-series'
 import { assertDate, assertDateRange, clampLimit, decodeCursor, defaultMonthRange, encodeCursor, enumValue, optionalDate, previousRange, stringArray } from './validation'
@@ -101,7 +102,7 @@ export class FinanceService {
       const response = await fetch(`https://open.er-api.com/v6/latest/${encodeURIComponent(currency)}`)
       if (!response.ok) return { values: {}, available: false }
       const body = await response.json<{ result?: string; rates?: Record<string, number> }>()
-      return body.result === 'success' && body.rates ? { values: body.rates, available: true } : { values: {}, available: false }
+      return body.result === 'success' && body.rates ? { values: validRates(body.rates), available: true } : { values: {}, available: false }
     } catch {
       return { values: {}, available: false }
     }

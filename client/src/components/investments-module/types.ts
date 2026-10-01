@@ -42,23 +42,24 @@ export type Category = {
 
 export type Position = {
   account: Account
-  netInvested: number
-  currentValue: number
+  netInvested: number | null
+  currentValue: number | null
   displayValue: number
   currentPrice: number
   quoteCurrency: string
   nativeInvested: number
-  gainLoss: number
-  gainLossPercent: number
+  gainLoss: number | null
+  gainLossPercent: number | null
   transactions: Transaction[]
   actualQuantity: number
   priceFetchError: boolean
+  missingCurrencies: string[]
 }
 
 export type PortfolioStats = {
-  totalValue: number
-  totalInvested: number
-  totalGainLoss: number
-  totalGainLossPercent: number
+  totalValue: number | null
+  totalInvested: number | null
+  totalGainLoss: number | null
+  totalGainLossPercent: number | null
   positions: Position[]
 }

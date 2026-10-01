@@ -106,13 +106,13 @@ export function HoldingsList({
                       ? '••••'
                       : `${position.account.symbol || position.account.name}${position.currentPrice > 0 ? ` @ ${formatValue(position.currentPrice, undefined, position.quoteCurrency)}` : ''}`}
                   </div>
-                  <div className={`text-sm font-semibold mt-1 flex items-center justify-end gap-1 ${position.priceFetchError ? 'text-yellow-600 dark:text-yellow-400' : position.gainLoss >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'} ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
+                  <div className={`text-sm font-semibold mt-1 flex items-center justify-end gap-1 ${position.priceFetchError ? 'text-yellow-600 dark:text-yellow-400' : (position.gainLoss ?? 0) >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'} ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
                     {position.priceFetchError ? (
                       <span className="text-xs">⚠️ Error fetching price</span>
-                    ) : (
+                    ) : position.gainLoss === null || position.gainLossPercent === null ? <span className="text-xs text-muted-foreground">Return unavailable</span> : (
                       <>
-                        {position.gainLoss >= 0 ? <TrendingUp className="h-3.5 w-3.5" /> : <TrendingDown className="h-3.5 w-3.5" />}
-                        {privacyMode === 'hidden' ? '••••' : `${position.gainLoss >= 0 ? '+' : ''}${formatValue(Math.abs(position.gainLoss), position.account)} (${position.gainLossPercent >= 0 ? '+' : ''}${position.gainLossPercent.toFixed(2)}%)`}
+                        {(position.gainLoss ?? 0) >= 0 ? <TrendingUp className="h-3.5 w-3.5" /> : <TrendingDown className="h-3.5 w-3.5" />}
+                        {privacyMode === 'hidden' ? '••••' : `${(position.gainLoss ?? 0) >= 0 ? '+' : ''}${formatValue(Math.abs(position.gainLoss), undefined, 'USD')} (${position.gainLossPercent >= 0 ? '+' : ''}${position.gainLossPercent.toFixed(2)}%)`}
                       </>
                     )}
                   </div>
