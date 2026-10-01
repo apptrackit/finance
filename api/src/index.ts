@@ -10,6 +10,7 @@ import { InvestmentTransactionRepository } from './repositories/investment-trans
 import { RecurringScheduleRepository } from './repositories/recurring-schedule.repository'
 import { SettingsRepository } from './repositories/settings.repository'
 import { FinancialOutlookRepository } from './repositories/financial-outlook.repository'
+import { DataExportRepository } from './repositories/data-export.repository'
 
 // Services
 import { AccountService } from './services/account.service'
@@ -22,6 +23,7 @@ import { MarketDataService } from './services/market-data.service'
 import { RecurringScheduleService } from './services/recurring-schedule.service'
 import { SettingsService } from './services/settings.service'
 import { FinancialOutlookService } from './services/financial-outlook.service'
+import { DataExportService } from './services/data-export.service'
 
 // Controllers
 import { AccountController } from './controllers/account.controller'
@@ -34,6 +36,7 @@ import { MarketDataController } from './controllers/market-data.controller'
 import { RecurringScheduleController } from './controllers/recurring-schedule.controller'
 import { SettingsController } from './controllers/settings.controller'
 import { FinancialOutlookController } from './controllers/financial-outlook.controller'
+import { DataExportController } from './controllers/data-export.controller'
 
 // Middleware
 import { corsMiddleware } from './middlewares/cors.middleware'
@@ -64,6 +67,7 @@ function createDependencies(db: D1Database) {
   const recurringScheduleRepo = new RecurringScheduleRepository(db)
   const settingsRepo = new SettingsRepository(db)
   const financialOutlookRepo = new FinancialOutlookRepository(db)
+  const dataExportRepo = new DataExportRepository(db)
 
   // Initialize services
   const accountService = new AccountService(accountRepo, transactionRepo)
@@ -76,6 +80,7 @@ function createDependencies(db: D1Database) {
   const recurringScheduleService = new RecurringScheduleService(recurringScheduleRepo, transactionRepo, accountRepo)
   const settingsService = new SettingsService(settingsRepo)
   const financialOutlookService = new FinancialOutlookService(financialOutlookRepo)
+  const dataExportService = new DataExportService(dataExportRepo)
 
   // Initialize controllers
   const accountController = new AccountController(accountService)
@@ -88,6 +93,7 @@ function createDependencies(db: D1Database) {
   const recurringScheduleController = new RecurringScheduleController(recurringScheduleService)
   const settingsController = new SettingsController(settingsService)
   const financialOutlookController = new FinancialOutlookController(financialOutlookService)
+  const dataExportController = new DataExportController(dataExportService)
 
   return {
     accountController,
@@ -99,7 +105,8 @@ function createDependencies(db: D1Database) {
     marketDataController,
     recurringScheduleController,
     settingsController,
-    financialOutlookController
+    financialOutlookController,
+    dataExportController
   }
 }
 
@@ -136,6 +143,9 @@ app.get('/version', (c) => {
 
 // Helper to get controllers for current request
 const getControllers = (c: Context<{ Bindings: Bindings }>) => createDependencies(c.env.DB)
+
+// Complete durable app data; ordinary ledger reads remain posted-only.
+app.get('/export', (c) => getControllers(c).dataExportController.getJSON(c))
 
 // Categories
 app.get('/categories', (c) => getControllers(c).categoryController.getAll(c))

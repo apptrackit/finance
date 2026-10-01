@@ -293,11 +293,28 @@ Worker configuration and API secret files are temporary and cleaned up on succes
 
 ### Database migrations
 
-The schema is defined by the full ordered sequence in [api/migrations](api/migrations), currently `001-init.sql` through `014-mcp-transfer-review-corrections.sql`. Deployment uses the custom `migration_history` table to skip applied migrations. Create a new numbered SQL file for schema changes instead of editing applied files; one-time `ALTER TABLE` statements should not be rerun manually.
+The schema is defined by the full ordered sequence in [api/migrations](api/migrations), currently `001-init.sql` through `015-yearly-recurring-month.sql`. Deployment uses the custom `migration_history` table to skip applied migrations. Create a new numbered SQL file for schema changes instead of editing applied files; one-time `ALTER TABLE` statements should not be rerun manually.
 
 **Upgrade note:** migration `012-remove-budgets.sql` permanently drops the retired budget tables and clears the budget navigation preference. Back up any budget data you need before deploying the current branch over an older installation.
 
-Settings exports are convenient data extracts, not complete database backups: CSV contains posted transactions, and JSON contains accounts, posted transactions, categories, and the selected reporting currency. They omit investment history, recurring schedules, pending drafts, forecast snapshots, and audit data. Use a D1 database backup/export for a complete backup.
+### Data exports
+
+Settings CSV exports the **posted cash ledger** (`transactions`), including both cash transfer legs and cash legs of investment purchases/sales. It preserves transaction/account/category IDs, linked IDs, account currencies, signed native amounts, descriptions, and spending-estimate exclusions. Pending/cancelled rows and the separate investment buy/sell history are excluded. Linked rows are labelled Transfer rather than income/expense.
+
+Settings JSON uses authenticated `GET /export`, a single read-only D1 batch for a consistent database snapshot. Its `finance-manager-data-export` format has `exportVersion: 1`, an ISO `exportedAt`, `schemaVersion` (latest applied migration filename without `.sql`), the ordered `migrations` list, and a `manifest` with table row counts, explicit exclusions, and `restoreSupported: false`. This replaces the earlier partial `version: "1.0"` extract. The `data` object includes all rows and columns from:
+
+- `accounts`, `categories`, and `transactions` in every state, including upcoming work, cancelled rows, and MCP review drafts.
+- `investment_transactions`, `recurring_schedules`, and `app_settings`.
+- `audit_log`, immutable `financial_outlook_snapshots`, and `financial_data_revision`.
+- Durable `mcp_draft_batches`, `mcp_draft_correction_runs`, and `mcp_transfer_correction_runs` (provenance/replay records).
+
+Rows preserve database values exactly: SQLite booleans remain numeric, stored JSON fields remain strings, and IDs, links, quantities, currencies, review metadata, and timestamps are retained. Audit logs and forecast snapshots are always included, even if empty; there are no silently omitted optional tables.
+
+The client adds `browserSettings` containing only known saved app preferences: reporting currency, navigation, theme, startup/legacy privacy, last view, analytics widget visibility, and remembered transaction form account/category choices. Values are stored strings or `null` when unset (the app uses its default). Privacy cookies take precedence over local storage, matching the app. Browser preferences cover the exporting browser only and are read after the database snapshot.
+
+Expiring MCP proposal tables are explicitly excluded because their IDs authorize temporary actions; created review drafts and completed replay records are included. Migration ledger rows, SQLite infrastructure, arbitrary browser storage, authentication cookies, API keys, and environment/deployment secrets are excluded. Never store credentials in `app_settings`, which contains user app preferences and is exported in full.
+
+Both formats stop on failed reads or an incomplete/unsupported response and show an error. The endpoint refuses more than 10,000 rows in any included table or more than 16 MiB of serialized JSON; the client also enforces the JSON size limit after adding browser preferences/formatting. It never returns a truncated export. CSV uses the same snapshot and therefore the same endpoint limits. For larger datasets and database recovery, use a D1 database export/backup. App import and restore are **not implemented or verified**. Downloads contain unmasked financial data even when privacy mode is enabled.
 
 ## API reference
 
