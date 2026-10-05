@@ -342,7 +342,7 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
       quote_currency: account.quote_currency || (account.symbol ? quotes[account.symbol]?.currency : undefined) || 'USD',
       symbol: account.symbol || '',
       asset_type: account.asset_type || 'stock',
-      adjustWithTransaction: false,
+      adjustWithTransaction: true,
       exclude_from_net_worth: account.exclude_from_net_worth || false,
       exclude_from_cash_balance: account.exclude_from_cash_balance || false
     })
