@@ -6,6 +6,10 @@ Intermediate package/UI version bumps are grouped under the next published GitHu
 
 ## Unreleased
 
+### Fixed
+
+- All-time AI cash history retains the saved daily movements from the past year, with older monthly samples identified. The main Cash Balance Trend now uses cash-balance exclusions and elapsed dates; actual cash lines no longer smooth away changes. Existing forecast snapshots and projections stay unchanged. [#94](https://github.com/apptrackit/finance/issues/94)
+
 ### Removed
 
 - Removed the legacy seasonal Cash Balance Forecast widget and its customization toggle. AI Financial Forecast remains the supported forecast widget. [#92](https://github.com/apptrackit/finance/issues/92)

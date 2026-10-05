@@ -16,6 +16,11 @@ vi.mock('./IncomeExpensesTrendChart', () => ({
     <div data-testid="income-expenses-trend" data-income={data.reduce((total, point) => total + point.income, 0)} />
   ),
 }))
+vi.mock('./NetWorthTrendChart', () => ({
+  NetWorthTrendChart: ({ data }: { data: Array<{ date: string; balance: number }> }) => (
+    <div data-testid="cash-trend" data-points={JSON.stringify(data)} />
+  ),
+}))
 
 const accounts: Account[] = [
   { id: 'cash', name: 'Cash', type: 'checking', balance: 100, currency: 'HUF' },
@@ -152,11 +157,40 @@ describe('Analytics Projected mode', () => {
   })
 
   it('keeps review drafts outside required projection conversions', () => {
-    const foreignAccounts = [...accounts, { ...accounts[0], id: 'eur', currency: 'EUR', exclude_from_net_worth: true }]
+    const foreignAccounts = [...accounts, { ...accounts[0], id: 'eur', currency: 'EUR', exclude_from_net_worth: true, exclude_from_cash_balance: true }]
     render(<Analytics transactions={[posted]} categories={[]} accounts={foreignAccounts}
       upcomingTransactions={[upcoming('review', '2026-09-15', 20, { account_id: 'eur', pending_kind: 'mcp_review' })]} />)
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
     expect(income()).toContain('+100')
+  })
+
+  it('uses cash exclusions independently from net-worth exclusions and includes cash transfer movements', () => {
+    localStorage.setItem('analytics-widget-visibility', JSON.stringify(Object.fromEntries(
+      WIDGET_DEFS.map(widget => [widget.id, widget.id === 'cash-balance-trend'])
+    )))
+    render(<Analytics accounts={[
+      { id: 'cash', name: 'Cash', type: 'checking', balance: 1000, currency: 'HUF', exclude_from_net_worth: true },
+      { id: 'excluded', name: 'Excluded cash', type: 'checking', balance: 5000, currency: 'HUF', exclude_from_cash_balance: true },
+      accounts[1],
+    ]} transactions={[
+      { id: 'salary', account_id: 'cash', date: '2026-09-01', amount: 500, status: 'posted' },
+      { id: 'transfer', account_id: 'cash', date: '2026-09-10', amount: -200, status: 'posted', linked_transaction_id: 'other-leg' },
+      { id: 'other-leg', account_id: 'excluded', date: '2026-09-10', amount: 200, status: 'posted', linked_transaction_id: 'transfer' },
+    ]} categories={[]} />)
+    fireEvent.click(screen.getByRole('button', { name: 'All Time' }))
+    const points = JSON.parse(screen.getByTestId('cash-trend').getAttribute('data-points')!)
+    expect(points.map((point: { date: string; balance: number }) => ({ date: point.date, balance: point.balance }))).toEqual([
+      { date: '2026-09-01', balance: 1200 },
+      { date: '2026-09-10', balance: 1000 },
+      { date: '2026-09-15', balance: 1000 },
+    ])
+  })
+
+  it('requires FX for accounts included in cash even when excluded from net worth', () => {
+    render(<Analytics transactions={[]} categories={[]} accounts={[
+      { id: 'eur', name: 'Cash', type: 'checking', balance: 100, currency: 'EUR', exclude_from_net_worth: true },
+    ]} />)
+    expect(screen.getByRole('alert')).toHaveTextContent('Missing or invalid exchange rates: EUR')
   })
 
 })

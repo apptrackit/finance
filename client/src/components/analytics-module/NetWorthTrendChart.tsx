@@ -1,4 +1,5 @@
 import { memo } from 'react'
+import { format, parseISO } from 'date-fns'
 import { Card, CardContent, CardHeader, CardTitle } from '../common/card'
 import { TrendingUp } from 'lucide-react'
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
@@ -27,7 +28,7 @@ export const NetWorthTrendChart = memo(function NetWorthTrendChart({ data, maste
         {data.length > 1 ? (
           <div className="h-48 sm:h-64">
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={data} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
+              <AreaChart data={data.map(point => ({ ...point, timestamp: parseISO(point.date).getTime() }))} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
                 <defs>
                   <linearGradient id="netWorthGradient" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.3}/>
@@ -36,9 +37,14 @@ export const NetWorthTrendChart = memo(function NetWorthTrendChart({ data, maste
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.5} />
                 <XAxis 
-                  dataKey="formattedDate" 
+                  dataKey="timestamp"
+                  type="number"
+                  scale="time"
+                  domain={['dataMin', 'dataMax']}
+                  tickFormatter={value => format(new Date(value), 'MMM d')}
                   stroke="hsl(var(--muted-foreground))" 
                   fontSize={10}
+                  minTickGap={24}
                   tickLine={false}
                   axisLine={false}
                   interval="preserveStartEnd"
@@ -64,7 +70,7 @@ export const NetWorthTrendChart = memo(function NetWorthTrendChart({ data, maste
                       const value = balanceEntry?.value ?? payload[0].value
                       return (
                         <div className="bg-card border border-border rounded-lg p-2 shadow-lg">
-                          <p className="text-xs text-muted-foreground mb-1">{label}</p>
+                          <p className="text-xs text-muted-foreground mb-1">{format(new Date(Number(label)), 'MMM d, yyyy')}</p>
                           <p className={`text-sm font-bold text-primary ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
                             {privacyMode === 'hidden' ? '••••••' : `${Number(value)?.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})} ${masterCurrency}`}
                           </p>
@@ -87,9 +93,9 @@ export const NetWorthTrendChart = memo(function NetWorthTrendChart({ data, maste
                   activeDot={false}
                 />
                 <Area
-                  type="monotone"
+                  type="linear"
                   dataKey="balance"
-                  name="Net Worth"
+                  name="Cash balance"
                   stroke="hsl(var(--primary))"
                   strokeWidth={2}
                   fillOpacity={1}
