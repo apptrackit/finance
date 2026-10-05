@@ -25,7 +25,6 @@ import { CategoryBreakdownChart } from './CategoryBreakdownChart'
 import { IncomeBreakdownChart } from './IncomeBreakdownChart'
 import { MoneyMapChart } from './MoneyMapChart'
 import { TopExpensesList } from './TopExpensesList'
-import { PredictionChart } from './PredictionChart'
 import type { Transaction, Category, Account, TimePeriod, FinancialOutlookSnapshot, ChartDataPoint, TrendDataPoint } from './types'
 import { isUpcomingProjectionTransaction } from '../../lib/transaction-review'
 
@@ -155,13 +154,6 @@ export function Analytics({
   const [selectedOutlookId, setSelectedOutlookId] = useState<string | null>(null)
   const [outlookNextCursor, setOutlookNextCursor] = useState<string | null>(null)
   const [outlookLoading, setOutlookLoading] = useState(true)
-
-  // Show prediction chart only when on default current-month view
-  const isCurrentMonthView = useMemo(() => {
-    if (period !== 'month') return false
-    const now = new Date()
-    return selectedDate.getMonth() === now.getMonth() && selectedDate.getFullYear() === now.getFullYear()
-  }, [period, selectedDate])
 
   // Fetch the latest persisted AI forecast plus the first page of immutable history.
   useEffect(() => {
@@ -899,7 +891,6 @@ export function Analytics({
   const widgetHasData: Record<WidgetId, boolean> = {
     'summary-cards':          hasData,
     'cash-balance-trend':     cashBalanceTrendData.length > 0,
-    'cash-balance-forecast':  isCurrentMonthView,
     'income-chart':           incomeChartData.some(d => d.amount > 0),
     'expenses-chart':         expensesChartData.some(d => d.amount > 0),
     'income-expenses-trend':  incomeExpensesTrendData.some(d => d.income > 0 || d.expenses > 0),
@@ -1129,16 +1120,6 @@ export function Analytics({
               transactions={filteredTransactions}
               categories={categories}
               masterCurrency={masterCurrency}
-              convertToMasterCurrency={convertToMasterCurrency}
-            />
-          )}
-
-          {show('cash-balance-forecast') && isCurrentMonthView && (
-            <PredictionChart
-              transactions={transactionsForAnalytics}
-              accounts={accounts}
-              masterCurrency={masterCurrency}
-              exchangeRates={exchangeRates}
               convertToMasterCurrency={convertToMasterCurrency}
             />
           )}

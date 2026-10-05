@@ -6,7 +6,9 @@ Intermediate package/UI version bumps are grouped under the next published GitHu
 
 ## Unreleased
 
-No changes yet.
+### Removed
+
+- Removed the legacy seasonal Cash Balance Forecast widget and its customization toggle. AI Financial Forecast remains the supported forecast widget. [#92](https://github.com/apptrackit/finance/issues/92)
 
 ## v3.1 — 2026-10-01
 
