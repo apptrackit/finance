@@ -1,11 +1,10 @@
 import { useEffect } from 'react'
-import { X, TrendingUp, BarChart3, Sparkles, BrainCircuit, ArrowUpCircle, ArrowDownCircle, LineChart, PieChart, Receipt, Layers, GitFork } from 'lucide-react'
+import { X, TrendingUp, BarChart3, BrainCircuit, ArrowUpCircle, ArrowDownCircle, LineChart, PieChart, Receipt, Layers, GitFork } from 'lucide-react'
 import { WIDGET_DEFS, type WidgetId } from './widgetConfig'
 
 const WIDGET_ICONS: Record<WidgetId, React.ReactNode> = {
   'summary-cards':        <Layers className="h-4 w-4" />,
   'cash-balance-trend':   <TrendingUp className="h-4 w-4" />,
-  'cash-balance-forecast':<Sparkles className="h-4 w-4" />,
   'income-chart':         <ArrowUpCircle className="h-4 w-4" />,
   'expenses-chart':       <ArrowDownCircle className="h-4 w-4" />,
   'income-expenses-trend':<BarChart3 className="h-4 w-4" />,

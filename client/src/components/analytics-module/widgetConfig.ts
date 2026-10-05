@@ -1,7 +1,6 @@
 export type WidgetId =
   | 'summary-cards'
   | 'cash-balance-trend'
-  | 'cash-balance-forecast'
   | 'income-chart'
   | 'expenses-chart'
   | 'income-expenses-trend'
@@ -32,13 +31,6 @@ export const WIDGET_DEFS: WidgetDef[] = [
     label: 'Cash Balance Trend',
     description: 'Historical cash balance over time with a smoothed trend line',
     defaultVisible: true,
-  },
-  {
-    id: 'cash-balance-forecast',
-    label: 'Cash Balance Forecast',
-    description: '3-month projection using seasonal pattern analysis',
-    defaultVisible: true,
-    note: 'Only appears in the current-month view',
   },
   {
     id: 'income-chart',
