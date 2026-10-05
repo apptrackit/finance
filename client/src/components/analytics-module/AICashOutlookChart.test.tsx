@@ -7,7 +7,7 @@ vi.mock('../../context/PrivacyContext', () => ({ usePrivacy: () => ({ privacyMod
 vi.mock('recharts', () => ({
   ResponsiveContainer: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
   ComposedChart: ({ data, children }: { data: Array<{ label: string; actual?: number }>; children: React.ReactNode }) => (
-    <div data-testid="forecast-chart" data-first-date={data[0]?.label} data-first-balance={data[0]?.actual} data-last-date={data.at(-1)?.label} data-anchor-balance={data.find(point => point.label === 'Jun 28, 2026')?.actual}>{children}</div>
+    <div data-testid="forecast-chart" data-points={JSON.stringify(data)} data-first-date={data[0]?.label} data-first-balance={data[0]?.actual} data-last-date={data.at(-1)?.label} data-anchor-balance={data.find(point => point.label === 'Jun 28, 2026')?.actual}>{children}</div>
   ),
   Area: () => null, Line: () => null, ReferenceLine: () => null,
   CartesianGrid: () => null, Tooltip: () => null, XAxis: () => null, YAxis: () => null,
@@ -32,6 +32,47 @@ function snapshot(generationDate: string, extended = true): FinancialOutlookSnap
 const props = { transactions: [], accounts: [], convertToHuf: (value: number) => value }
 
 describe('AICashOutlookChart history ranges', () => {
+  it('retains daily spikes in all-time history and prefers saved daily values to monthly samples', () => {
+    const report = snapshot('2026-09-25')
+    report.cash_balance_history_year = [
+      { date: '2025-09-25', balance: 800 },
+      { date: '2026-04-10', balance: 3000 },
+      { date: '2026-04-11', balance: 1500 },
+      { date: '2026-04-30', balance: 1200 },
+      ...report.cash_balance_history,
+    ]
+    report.cash_balance_history_alltime = [
+      { date: '2020-01-01', balance: 300 },
+      { date: '2026-04-30', balance: 1199 },
+      { date: '2026-09-25', balance: 999 },
+    ]
+    const saved = JSON.stringify(report)
+    render(<AICashOutlookChart snapshot={report} {...props} />)
+    const selector = screen.getByRole('combobox', { name: 'Cash history range' })
+    fireEvent.change(selector, { target: { value: '12m' } })
+    const year = JSON.parse(screen.getByTestId('forecast-chart').getAttribute('data-points')!)
+    fireEvent.change(selector, { target: { value: 'all' } })
+    const all = JSON.parse(screen.getByTestId('forecast-chart').getAttribute('data-points')!)
+    expect(all.filter((point: { timestamp: number }) => point.timestamp >= year[0].timestamp)).toEqual(year)
+    expect(all.find((point: { label: string }) => point.label === 'Apr 10, 2026').actual).toBe(3000)
+    expect(all.find((point: { label: string }) => point.label === 'Sep 25, 2026')).toMatchObject({ actual: 1000, expected: 1000, isForecast: false })
+    expect(screen.getByText(/uses saved monthly balances/)).toBeInTheDocument()
+    expect(JSON.stringify(report)).toBe(saved)
+  })
+
+  it('uses only daily points when all available history fits within the saved year', () => {
+    const report = snapshot('2026-09-25')
+    report.cash_balance_history_alltime = [{ date: '2026-06-30', balance: 900 }, { date: '2026-09-25', balance: 1000 }]
+    report.cash_balance_history_year = report.cash_balance_history
+    render(<AICashOutlookChart snapshot={report} {...props} />)
+    fireEvent.change(screen.getByRole('combobox', { name: 'Cash history range' }), { target: { value: 'all' } })
+    expect(screen.queryByText(/uses saved monthly balances/)).not.toBeInTheDocument()
+    const all = JSON.parse(screen.getByTestId('forecast-chart').getAttribute('data-points')!)
+    expect(all.filter((point: { actual?: number }) => point.actual !== undefined)).toHaveLength(88)
+    expect(screen.getByTestId('forecast-chart')).toHaveAttribute('data-first-date', 'Jun 30, 2026')
+    expect(all.find((point: { label: string }) => point.label === 'Jun 30, 2026').actual).toBe(1000)
+  })
+
   it('switches history ranges and anchors the projection to the selected forecast', () => {
     const { rerender } = render(<AICashOutlookChart snapshot={snapshot('2026-09-25')} {...props} />)
     const selector = screen.getByRole('combobox', { name: 'Cash history range' })

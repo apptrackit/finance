@@ -140,7 +140,7 @@ export function Analytics({
     return isProjected ? [...transactions, ...projectableUpcomingTransactions] : transactions
   }, [isProjected, transactions, projectableUpcomingTransactions])
   const requiredConversions = sumConversions([
-    ...accounts.filter(account => account.type !== 'investment' && !account.exclude_from_net_worth)
+    ...accounts.filter(account => account.type !== 'investment' && (!account.exclude_from_net_worth || !account.exclude_from_cash_balance))
       .map(account => convertCurrency(account.balance, account.currency, masterCurrency, exchangeRates)),
     ...transactionsForAnalytics.filter(transaction => accounts.find(account => account.id === transaction.account_id)?.type !== 'investment')
       .map(transaction => {
@@ -303,11 +303,11 @@ export function Analytics({
       .sort((a, b) => b.value - a.value)
   }, [conversionsAvailable, filteredTransactions, categories, totalIncome, exchangeRates, accounts, masterCurrency])
 
-  // Cash Balance Trend data - only cash accounts (excludes investment and exclude_from_net_worth)
+  // Cash exclusions are separate from net-worth exclusions, matching AI cash history.
   const cashBalanceTrendData = useMemo((): TrendDataPoint[] => {
     if (!conversionsAvailable) return []
     const cashAccounts = accounts.filter(
-      acc => acc.type !== 'investment' && !acc.exclude_from_net_worth
+      acc => acc.type !== 'investment' && !acc.exclude_from_cash_balance
     )
     const cashAccountIds = new Set(cashAccounts.map(a => a.id))
 

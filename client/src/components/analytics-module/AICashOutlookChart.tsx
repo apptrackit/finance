@@ -3,7 +3,7 @@ import { Area, CartesianGrid, ComposedChart, Line, ReferenceLine, ResponsiveCont
 import { BrainCircuit } from 'lucide-react'
 import { addDays, format, isLastDayOfMonth, startOfDay, subMonths } from 'date-fns'
 import { usePrivacy } from '../../context/PrivacyContext'
-import type { Account, FinancialOutlookSnapshot, Transaction } from './types'
+import type { Account, FinancialOutlookHistoricalCashPoint, FinancialOutlookSnapshot, Transaction } from './types'
 
 type AICashOutlookChartProps = {
   snapshot: FinancialOutlookSnapshot | null
@@ -105,6 +105,8 @@ export function AICashOutlookChart({ snapshot, transactions, accounts, convertTo
   const hasExtendedHistory = Boolean(snapshot?.cash_balance_history_year?.length && snapshot?.cash_balance_history_alltime?.length)
   const usesReconstruction = !hasExtendedHistory && (historyRange !== '90d' || snapshot?.cash_balance_history?.length !== 90)
   const hasMissingFx = usesReconstruction && accounts.some(account => account.type !== 'investment' && !account.exclude_from_cash_balance && convertToHuf(1, account.id) === null)
+  const dailyHistoryStart = snapshot?.cash_balance_history_year?.[0]?.date
+  const hasMonthlyHistory = historyRange === 'all' && hasExtendedHistory && Boolean(dailyHistoryStart && snapshot?.cash_balance_history_alltime.some(point => point.date < dailyHistoryStart))
 
   const { chartData, generationTimestamp } = useMemo(() => {
     if (!snapshot?.cash_balance_path?.length) return { chartData: [] as ChartPoint[], generationTimestamp: null }
@@ -114,9 +116,17 @@ export function AICashOutlookChart({ snapshot, transactions, accounts, convertTo
     if (Number.isNaN(forecastStart.getTime())) return { chartData: [] as ChartPoint[], generationTimestamp: null }
 
     const points = new Map<number, ChartPoint>()
+    // All-time snapshots contain month-end samples, but also save daily year
+    // and 90-day history. Prefer those daily values rather than discarding the
+    // movements visible in the shorter ranges. Do not mutate the snapshot.
+    const allTimeHistory = new Map<string, FinancialOutlookHistoricalCashPoint>()
+    const allTimeStart = snapshot.cash_balance_history_alltime?.reduce((first, point) => point.date < first ? point.date : first, snapshot.cash_balance_history_alltime[0]?.date)
+    for (const historical of [...(snapshot.cash_balance_history_alltime || []), ...(snapshot.cash_balance_history_year || []), ...(snapshot.cash_balance_history || [])]) {
+      if (Number.isFinite(historical.balance) && (!allTimeStart || historical.date >= allTimeStart)) allTimeHistory.set(historical.date, historical)
+    }
     const storedHistory = hasExtendedHistory
       ? historyRange === 'all'
-        ? snapshot.cash_balance_history_alltime
+        ? [...allTimeHistory.values()]
         : historyRange === '12m'
           ? snapshot.cash_balance_history_year
           : snapshot.cash_balance_history
@@ -124,7 +134,7 @@ export function AICashOutlookChart({ snapshot, transactions, accounts, convertTo
         ? snapshot.cash_balance_history
         : reconstructHistory(snapshot, transactions, accounts, convertToHuf, forecastStart, historyRange)
     for (const historical of storedHistory) {
-      if (!Number.isFinite(historical.balance)) continue
+      if (!Number.isFinite(historical.balance) || historical.date > format(forecastStart, 'yyyy-MM-dd')) continue
       const date = dateFromHistory(historical.date)
       if (Number.isNaN(date.getTime())) continue
       points.set(date.getTime(), {
@@ -184,6 +194,8 @@ export function AICashOutlookChart({ snapshot, transactions, accounts, convertTo
       </div>
       {usesReconstruction && <p className="mt-1 text-xs text-muted-foreground">Earlier history is reconstructed using current transactions, account settings, and exchange rates, so it may change.</p>}
       {hasMissingFx && <p className="mt-1 text-xs text-muted-foreground">Some account currencies have no exchange rate; their earlier movements are excluded.</p>}
+      {hasMonthlyHistory && <p className="mt-1 text-xs text-muted-foreground">History before {format(dateFromHistory(dailyHistoryStart!), 'MMM d, yyyy')} uses saved monthly balances; the past year uses daily balances.</p>}
+      <p className="mt-1 text-xs text-muted-foreground">Cash balances in HUF through generation day. The main cash chart uses current data and your selected currency.</p>
       <div className="mt-3 h-56 sm:h-72">
         <ResponsiveContainer width="100%" height="100%">
           <ComposedChart data={chartData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
@@ -198,7 +210,7 @@ export function AICashOutlookChart({ snapshot, transactions, accounts, convertTo
               </linearGradient>
             </defs>
             <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.5} />
-            <XAxis dataKey="timestamp" type="number" scale="time" domain={['dataMin', 'dataMax']} tickCount={8} tickFormatter={value => format(new Date(value), historyRange === 'all' ? 'MMM yyyy' : 'MMM d')} stroke="hsl(var(--muted-foreground))" fontSize={10} tickLine={false} axisLine={false} />
+            <XAxis dataKey="timestamp" type="number" scale="time" domain={['dataMin', 'dataMax']} tickCount={8} interval="preserveStartEnd" minTickGap={24} tickFormatter={value => format(new Date(value), historyRange === 'all' ? 'MMM d, yy' : 'MMM d')} stroke="hsl(var(--muted-foreground))" fontSize={10} tickLine={false} axisLine={false} />
             <YAxis stroke="hsl(var(--muted-foreground))" fontSize={10} tickLine={false} axisLine={false} domain={yDomain} width={50} tickFormatter={value => hidden ? '••••' : value >= 1_000_000 ? `${(value / 1_000_000).toFixed(1)}M` : `${Math.round(value / 1_000)}K`} />
             <Tooltip content={({ active, payload }) => {
               const point = payload?.[0]?.payload as ChartPoint | undefined
@@ -214,7 +226,7 @@ export function AICashOutlookChart({ snapshot, transactions, accounts, convertTo
               )
             }} />
             {generationTimestamp && <ReferenceLine x={generationTimestamp} stroke="hsl(var(--foreground))" strokeWidth={1.5} strokeDasharray="4 4" />}
-            <Area type="monotone" dataKey="actual" stroke="hsl(var(--primary))" strokeWidth={2.25} fill="url(#aiOutlookActualGradient)" connectNulls={false} dot={false} />
+            <Area type="linear" dataKey="actual" stroke="hsl(var(--primary))" strokeWidth={2.25} fill="url(#aiOutlookActualGradient)" connectNulls={false} dot={false} />
             <Area type="linear" dataKey="high" stroke="transparent" fill="url(#aiOutlookFutureGradient)" connectNulls={false} />
             <Area type="linear" dataKey="low" stroke="transparent" fill="hsl(var(--card))" fillOpacity={1} connectNulls={false} />
             <Line type="linear" dataKey="low" stroke="hsl(var(--chart-4, 280 65% 60%))" strokeOpacity={0.55} strokeWidth={1} strokeDasharray="4 4" dot={false} connectNulls={false} />
