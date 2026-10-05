@@ -1316,7 +1316,7 @@ export function TransactionList({
               </>
             )}
           </div>
-          <div className={`flex gap-1 transition-opacity ${activeTxId === tx.id ? 'opacity-100' : 'opacity-0 md:group-hover:opacity-100'}`}>
+          <div className={`flex gap-1 transition-opacity ${isMcpReview || activeTxId === tx.id ? 'opacity-100' : 'opacity-0 md:group-hover:opacity-100'}`}>
             {!locked && (
               <>
                 {ready && (
