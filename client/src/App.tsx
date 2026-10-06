@@ -144,7 +144,7 @@ function App() {
         <NavLink to="/settings" aria-label="Settings" className="finance-icon-button"><SettingsIcon className="h-4 w-4" /></NavLink>
       </header>
       <main id="main-content" className="mx-auto max-w-[1600px] px-4 py-4 sm:px-6 lg:px-8 lg:py-6">
-        <div className="mb-5 hidden items-center justify-between lg:flex"><h1 className="text-2xl font-semibold tracking-tight">{title}</h1><span className="text-xs text-muted-foreground">{syncText}</span></div>
+        <div className="mb-5 hidden items-center justify-between lg:flex"><h1 className="text-2xl font-semibold tracking-tight">{title}</h1></div>
         <FinanceDataStatus datasets={visibleData} onRetry={() => { void finance.handleDataChange() }} />
         <Outlet context={{ finance, masterCurrency } satisfies FinancePageContext} />
       </main>
