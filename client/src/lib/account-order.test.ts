@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { accountValueForOrdering, sortAccountsByValue } from './account-order'
+import { accountBalanceShares, accountValueForOrdering, sortAccountsByValue } from './account-order'
 import type { ValuedAccount } from './account-order'
 
 const rates = { HUF: 1, EUR: 1 / 400, USD: 1 / 360 }
@@ -45,5 +45,27 @@ describe('account value ordering', () => {
     for (const price of [0, -1, NaN, Infinity]) {
       expect(accountValueForOrdering({ ...account, balance: 1 }, { TEST: { regularMarketPrice: price } }, 'HUF', rates).value).toBe(null)
     }
+  })
+})
+
+describe('account balance shares', () => {
+  it('uses converted cash values and values investments independently', () => {
+    const cashAccounts = [cash('Local', 60000), cash('Foreign', 100, 'EUR')]
+    const values = Object.fromEntries(cashAccounts.map(account => [account.id, accountValueForOrdering(account, {}, 'HUF', rates).value]))
+    expect(accountBalanceShares(cashAccounts, values)).toEqual({ Local: 60, Foreign: 40 })
+    expect(accountBalanceShares([{ id: 'Stock' }, { id: 'Manual' }], { ...values, Stock: 750000, Manual: 250000 })).toEqual({ Stock: 75, Manual: 25 })
+  })
+
+  it('withholds every group share when any valuation is missing or invalid', () => {
+    for (const unknown of [undefined, null, NaN, Infinity]) {
+      expect(accountBalanceShares([{ id: 'Known' }, { id: 'Unknown' }], { Known: 100, Unknown: unknown })).toEqual({ Known: null, Unknown: null })
+    }
+  })
+
+  it('handles debts and zero totals without negative or oversized bars', () => {
+    const accounts = [{ id: 'Cash' }, { id: 'Debt' }, { id: 'Zero' }]
+    expect(accountBalanceShares(accounts, { Cash: 100, Debt: -50, Zero: 0 })).toEqual({ Cash: 100, Debt: 0, Zero: 0 })
+    expect(accountBalanceShares(accounts, { Cash: 0, Debt: -50, Zero: 0 })).toEqual({ Cash: 0, Debt: 0, Zero: 0 })
+    expect(accountBalanceShares([], {})).toEqual({})
   })
 })

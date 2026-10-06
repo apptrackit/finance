@@ -38,6 +38,8 @@ Only the accounts list scrolls; the main navigation, Accounts heading, Settings,
 
 Add/Edit Account uses a centered dialog on desktop and mobile. The row's icon, name, and balance form one real button with a pointer cursor, hover treatment, and keyboard focus. Locked/archived accounts open read-only details instead of presenting a disabled-looking fake edit action.
 
+Locked accounts show a red lock beside their name in both light and dark modes. Active rows show a compact thin bar and percentage beneath the balance: blue for cash and purple for investments, with independent group totals using the same converted monetary values as ordering. All active accounts participate, including accounts excluded from dashboard totals; archived accounts do not. Missing FX or quotes withhold the entire affected group's shares. Zero totals yield empty bars, negative balances are labelled separately and excluded from the positive-balance denominator, and privacy masks percentages and empties bars.
+
 The three-dot control opens a small anchored menu with icons, descriptions, separators, and a distinct destructive action. It stays within the viewport, flips above the trigger near the bottom and scrolls within the available space on short screens, closes on outside clicks/Escape/scroll, and supports arrow-key navigation. Cash calculation exclusions reuse the existing confirmed behavior. Archive/delete actions explain locked, archived, or nonzero-balance restrictions.
 
 The editor exposes Lock/Unlock, Archive/Restore, and typed permanent deletion. Status operations act on the saved account, retain drafts on success or failure, and disable financial fields while locked/archived. Unlock/restore re-enables editing. Cancelling deletion returns to the draft; successful deletion closes the editor. Read-only balances respect privacy. Confirmations temporarily yield editor focus and initially focus Cancel.
@@ -64,6 +66,8 @@ Apply migration 016 before deploying the new Workers/client. Normal root deploym
 ## Captured preview
 
 These captures use synthetic local accounts.
+
+![Account shares and red locked-account indicator](design/account-shares.jpg)
 
 ![Wide-screen centered content](design/content-wide.jpg)
 

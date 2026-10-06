@@ -1,6 +1,6 @@
 import { useUnsavedChanges } from '../../navigation/UnsavedChanges'
 import { convertCurrency, sumAvailable, validRates } from '../../../../shared/currency'
-import { accountValueForOrdering, sortAccountsByValue } from '../../lib/account-order'
+import { accountBalanceShares, accountValueForOrdering, sortAccountsByValue } from '../../lib/account-order'
 import type { AccountSortValues } from '../../lib/account-order'
 import { MissingExchangeRates } from '../common/MissingExchangeRates'
 import { useState, useEffect, useRef } from 'react'
@@ -1258,8 +1258,11 @@ export function AccountList({ accounts, onAccountAdded, loading, manage = false,
           {!ratesLoading && <MissingExchangeRates currencies={[...missingCurrencies].sort()} targetCurrency="USD" onRetry={() => setRatesRefreshKey(key => key + 1)} retrying={ratesLoading} />}
           {(['cash', 'investment', 'archived'] as const).map(group => {
             const rows = sortAccountsByValue(group === 'archived' ? archivedAccounts : activeAccounts.filter(account => account.type === group), orderingValues)
+            const shares = accountBalanceShares(rows, orderingValues)
+            const hasNegativeBalance = rows.some(account => (orderingValues[account.id] ?? 0) < 0)
             return <section key={group} className="rounded-[14px] border border-border bg-card" aria-label={group === 'cash' ? 'Cash accounts' : group === 'investment' ? 'Investment accounts' : 'Archived accounts'}>
               <div className="flex items-center justify-between px-5 py-4"><h2 className="text-[15px] font-medium">{group === 'cash' ? 'Cash & bank accounts' : group === 'investment' ? 'Investments' : 'Archived'}</h2><span className="text-xs text-muted-foreground">{rows.length}</span></div>
+              {group !== 'archived' && rows.length > 0 && <p className="px-5 pb-3 text-[11px] text-muted-foreground">{hasNegativeBalance && privacyMode !== 'hidden' ? 'Shares use positive balances; negative balances are shown separately.' : `Share of all active ${group === 'cash' ? 'cash balances' : 'investment values'}, including accounts excluded from totals.`}</p>}
               {rows.length === 0 && <p className="border-t border-border px-5 py-6 text-sm text-muted-foreground">{group === 'archived' ? 'No archived accounts. Archive keeps your history without deleting it.' : 'No accounts yet. Add an account to get started.'}</p>}
               {rows.map(account => {
                 const archived = account.archived_at != null
@@ -1267,6 +1270,8 @@ export function AccountList({ accounts, onAccountAdded, loading, manage = false,
                 const hidden = privacyMode === 'hidden' || (market && shouldHideInvestment())
                 const locked = Boolean(account.is_locked)
                 const excluded = Boolean(account.exclude_from_cash_balance && account.exclude_from_net_worth)
+                const share = shares[account.id]
+                const negative = (orderingValues[account.id] ?? 0) < 0
                 return <div key={account.id} className={`relative border-t border-border ${archived ? 'text-muted-foreground' : ''}`}>
                   <div className="flex items-center gap-1 px-3 py-2 sm:px-4">
                     <button type="button" aria-label={archived ? `${account.name}, archived` : locked ? `View ${account.name}` : `Edit ${account.name}`}
@@ -1274,12 +1279,16 @@ export function AccountList({ accounts, onAccountAdded, loading, manage = false,
                       className="flex min-w-0 flex-1 cursor-pointer flex-wrap items-center gap-3 rounded-lg px-2 py-2 text-left transition-colors hover:bg-secondary/70 focus-visible:bg-secondary/70 disabled:cursor-wait disabled:hover:bg-transparent">
                       <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] ${account.type === 'investment' ? 'bg-violet-500/10 text-violet-400' : 'bg-primary/10 text-primary'}`}>{account.type === 'cash' ? <Wallet className="h-[18px] w-[18px]" /> : <span className="text-xs font-bold">{(account.symbol || account.name).slice(0,3).toUpperCase()}</span>}</span>
                       <span className="min-w-0 flex-1">
-                        <span className="flex items-center gap-2 text-[15px] font-medium"><span className="truncate">{account.name}</span>{locked && <Lock className="h-3 w-3 shrink-0" />}</span>
+                        <span className="flex items-center gap-2 text-[15px] font-medium"><span className="truncate">{account.name}</span>{locked && <Lock aria-label="Locked account" className="h-3.5 w-3.5 shrink-0 text-destructive" />}</span>
                         <span className="block truncate text-xs text-muted-foreground">{archived ? `Archived ${new Date(account.archived_at!).toLocaleDateString()}` : `${account.type === 'cash' ? 'Cash / bank' : account.asset_type === 'manual' ? 'Manual asset' : account.symbol || 'Investment'} · ${account.currency}`}</span>
                         {Boolean(account.exclude_from_net_worth || account.exclude_from_cash_balance) && <span className="block text-[11px] text-muted-foreground">{[account.exclude_from_net_worth && 'Excluded from net worth', account.exclude_from_cash_balance && 'Excluded from cash balance'].filter(Boolean).join(' · ')}</span>}
                       </span>
                       <span className="max-w-full text-right text-sm font-semibold tabular-nums">{hidden ? '••••••' : market ? `${account.balance.toLocaleString('hu-HU', { maximumFractionDigits: 8 })} ${account.currency}` : formatCurrency(account.balance, account.currency)}
                         {market && <span className="block text-xs font-normal text-muted-foreground">{hidden ? '••••••' : archived ? 'No position' : formatHufTotal(accountValues[account.id])}</span>}
+                        {!archived && <span className="mt-2 flex items-center justify-end gap-2 text-[11px] font-normal text-muted-foreground">
+                          <span aria-hidden="true" className="h-1 w-16 overflow-hidden rounded-full bg-secondary sm:w-24"><span className={`block h-full rounded-full ${account.type === 'investment' ? 'bg-violet-400' : 'bg-primary'}`} style={{ width: `${hidden ? 0 : share ?? 0}%` }} /></span>
+                          <span>{hidden ? 'Share hidden' : share === null ? 'Share unavailable' : negative ? 'Negative balance' : `${share.toFixed(1)}%`}</span>
+                        </span>}
                       </span>
                     </button>
                     {archived && <Button size="sm" variant="ghost" disabled={accountActionBusy} onClick={() => handleLifecycle(account)}><RotateCcw className="mr-1.5 h-3.5 w-3.5" />Restore</Button>}

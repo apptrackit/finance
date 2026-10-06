@@ -32,6 +32,27 @@ afterEach(() => { cleanup(); vi.unstubAllGlobals() })
 function open() { return render(<AccountList manage accounts={accounts} onAccountAdded={refresh} />) }
 
 describe('dedicated account management', () => {
+  it('shows independent active-group shares, withholding incomplete groups and masking private shares', () => {
+    const sample: ComponentProps<typeof AccountList>['accounts'] = [
+      { id: 'a', name: 'Cash A', type: 'cash', balance: 60, currency: 'USD', is_locked: true },
+      { id: 'b', name: 'Cash B', type: 'cash', balance: 40, currency: 'EUR', exclude_from_cash_balance: true, exclude_from_net_worth: true },
+      { id: 'i', name: 'Investment', type: 'investment', asset_type: 'manual', balance: 100, currency: 'USD' },
+      accounts[1],
+    ]
+    const { rerender } = render(<AccountList manage accounts={sample} sortValues={{ a: 60, b: 40, i: 100 }} onAccountAdded={refresh} />)
+    expect(screen.getByText('60.0%')).toBeInTheDocument()
+    expect(screen.getByText('40.0%')).toBeInTheDocument()
+    expect(screen.getByText('100.0%')).toBeInTheDocument()
+    expect(within(screen.getByRole('region', { name: 'Archived accounts' })).queryByText(/\d+\.\d+%/)).not.toBeInTheDocument()
+    rerender(<AccountList manage accounts={sample} sortValues={{ a: 60, b: null, i: 100 }} onAccountAdded={refresh} />)
+    expect(screen.getAllByText('Share unavailable')).toHaveLength(2)
+    expect(screen.getByText('100.0%')).toBeInTheDocument()
+    privacy.hidden = true
+    rerender(<AccountList manage accounts={sample} sortValues={{ a: 60, b: 40, i: 100 }} onAccountAdded={refresh} />)
+    expect(screen.queryByText(/\d+\.\d+%/)).not.toBeInTheDocument()
+    expect(screen.getAllByText('Share hidden')).toHaveLength(3)
+  })
+
   it('shows active/archived groups and restores through the persisted endpoint', async () => {
     open()
     expect(screen.getByText('1 active · 1 archived')).toBeInTheDocument()
@@ -152,10 +173,10 @@ describe('dedicated account management', () => {
         is_locked: 1, exclude_from_net_worth: 1, exclude_from_cash_balance: 0 },
     ])) as ComponentProps<typeof AccountList>['accounts']
     render(<AccountList manage accounts={legacyAccounts} onAccountAdded={refresh} />)
-    expect(screen.getByRole('button', { name: 'Edit Legacy cash' })).toHaveTextContent(/^Legacy cashCash \/ bank · HUF350 Ft$/)
+    expect(screen.getByRole('button', { name: 'Edit Legacy cash' })).toHaveTextContent(/^Legacy cashCash \/ bank · HUF350 FtShare unavailable$/)
     const locked = screen.getByRole('button', { name: 'View Locked cash' })
     expect(locked).toBeEnabled()
-    expect(locked).toHaveTextContent(/^Locked cashCash \/ bank · HUFExcluded from net worth350 Ft$/)
+    expect(locked).toHaveTextContent(/^Locked cashCash \/ bank · HUFExcluded from net worth350 FtShare unavailable$/)
   })
 
   it('orders management groups by converted value while displaying native balances', async () => {
