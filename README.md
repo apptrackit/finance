@@ -24,6 +24,7 @@ The latest published release is [v3.1](https://github.com/apptrackit/finance/rel
 | Area | Capabilities |
 | --- | --- |
 | Accounts | Dedicated Accounts page for cash accounts and investment holdings; multiple currencies; balance adjustments; locks; independent exclusions; archive/restore with retained history. |
+| Search | Search everything palette (Cmd/Ctrl+K) across full transaction history, pending items, accounts, categories, recurring schedules, amounts, and dates. |
 | Transactions | Income and expenses, categories and icons, linked transfers, search and date filters, bulk entry, split adjustments, and recent-change indicators. |
 | Upcoming transactions | One-time future income and expenses, projected cash balances, and explicit confirmation or decline without changing the posted balance early. |
 | Recurring schedules | Daily, weekly, monthly, and yearly options; transaction and transfer schedules; pause/resume, end dates, occurrence limits, and a calendar view. |
@@ -61,9 +62,9 @@ Market quotes and exchange rates come from external services and may be unavaila
 
 ### Recurring schedules
 
-The API Worker runs recurring processing using the configured daily cron (`0 0 * * *`, midnight UTC). It creates posted transactions and updates balances for eligible schedules, respecting locks, end dates, remaining occurrences, and last-processed dates. Monthly days beyond the end of a month clamp to its final day.
+The API Worker runs recurring processing using the configured daily cron (`0 0 * * *`, midnight UTC). It creates posted transactions and updates balances for eligible schedules, respecting locks, archived accounts, end dates, remaining occurrences, and last-processed dates. Monthly days beyond the end of a month clamp to its final day.
 
-The UI also offers yearly schedules. The selected yearly month is not currently persisted by the repository; processing falls back to the schedule's creation month. Verify the resulting schedule before relying on a different yearly month.
+Yearly schedules keep their selected month across saves, API execution, client calendars, and MCP projections. Legacy schedules without a saved month fall back to their creation month until edited.
 
 ### MCP and AI financial forecasts
 
@@ -94,7 +95,7 @@ flowchart LR
 
 The API and MCP Worker share the deployed D1 database but have separate authentication and application code. The API follows middleware → controller → service → repository. React uses browser routing, component state, context, and a shared finance-data hook, with additional fetching inside feature modules.
 
-### Accounts and archive
+### Accounts, search, and archive
 
 The Accounts page groups cash/bank accounts, investments, and archived accounts. Desktop navigation includes collapsible Cash/Investments shortcuts showing all accounts sorted by converted value, independent account scrolling, compact balances, and Search everything; mobile uses bottom navigation, More, and a header search button. The sidebar and Settings expose light/dark mode independently of the existing color themes.
 
@@ -323,6 +324,8 @@ The schema is defined by the full ordered sequence in [api/migrations](api/migra
 
 **Upgrade note:** migration `012-remove-budgets.sql` permanently drops the retired budget tables and clears the budget navigation preference. Back up any budget data you need before deploying the current branch over an older installation.
 
+**Upgrade note:** migration `016-account-archive.sql` adds account archiving and database guards shared by the API and MCP Workers. After it is applied, locked or archived accounts cannot be deleted, and accounts with linked transfers cannot be permanently deleted; archive them instead.
+
 ### Data exports
 
 Settings CSV exports the **posted cash ledger** (`transactions`), including both cash transfer legs and cash legs of investment purchases/sales. It preserves transaction/account/category IDs, linked IDs, account currencies, signed native amounts, descriptions, and spending-estimate exclusions. Pending/cancelled rows and the separate investment buy/sell history are excluded. Linked rows are labelled Transfer rather than income/expense.
@@ -356,6 +359,8 @@ All non-preflight requests, including `/` and `/version`, require `X-API-Key` an
 | PUT, DELETE | `/accounts/:id` | Update or delete an account |
 | PATCH | `/accounts/:id/lock` | Lock an account |
 | PATCH | `/accounts/:id/unlock` | Unlock an account |
+| PATCH | `/accounts/:id/archive` | Archive an account (idempotent; pauses its schedules) |
+| PATCH | `/accounts/:id/restore` | Restore an archived account (schedules stay paused) |
 | GET, POST | `/transactions` | List posted transactions or create a transaction |
 | GET | `/transactions/paginated` | Paginated posted history |
 | GET | `/transactions/date-range` | Posted history within a date range |
