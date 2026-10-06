@@ -1,3 +1,5 @@
+import type { DashboardFilters, FilterChange } from '../../navigation/filters'
+import { useUnsavedChanges } from '../../navigation/UnsavedChanges'
 import { useState, useEffect, useRef } from 'react'
 import { Button } from '../common/button'
 import { Input } from '../common/input'
@@ -111,6 +113,9 @@ export function TransactionList({
   convertToMasterCurrency,
   masterCurrency,
   onCalendarViewChange,
+  filters,
+  onFiltersChange,
+  availableCategories,
 }: { 
   transactions: Transaction[], 
   upcomingTransactions: Transaction[],
@@ -124,11 +129,15 @@ export function TransactionList({
   convertToMasterCurrency?: (amount: number, accountId: string) => number | null,
   masterCurrency: string,
   onCalendarViewChange?: (isCalendar: boolean) => void,
+  filters?: DashboardFilters,
+  onFiltersChange?: FilterChange<DashboardFilters>,
+  availableCategories?: Category[],
 }) {
   const [isAdding, setIsAdding] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [showBulkModal, setShowBulkModal] = useState(false)
-  const [categories, setCategories] = useState<Category[]>([])
+  const [fetchedCategories, setCategories] = useState<Category[]>([])
+  const categories = availableCategories ?? fetchedCategories
   const [showDatePicker, setShowDatePicker] = useState(false)
   const [customRange, setCustomRange] = useState({ startDate: dateRange.startDate, endDate: dateRange.endDate })
   const [formData, setFormData] = useState({
@@ -155,10 +164,21 @@ export function TransactionList({
   })
   const editedTransferPairRef = useRef<string | null>(null)
   const [activeTxId, setActiveTxId] = useState<string | null>(null)
-  const [categoryFilter, setCategoryFilter] = useState<string>('all')
-  const [sortOrder, setSortOrder] = useState<'date' | 'amount-high' | 'amount-low'>('date')
+  const [localCategoryFilter, setCategoryFilterLocal] = useState<string>('all')
+  const categoryFilter = filters?.category ?? localCategoryFilter
+  const setCategoryFilter = (value: string) => onFiltersChange ? onFiltersChange({ category: value }) : setCategoryFilterLocal(value)
+  const [localSortOrder, setSortOrderLocal] = useState<'date' | 'amount-high' | 'amount-low'>('date')
+  const sortOrder = filters?.sort ?? localSortOrder
+  const setSortOrder = (value: 'date' | 'amount-high' | 'amount-low') => onFiltersChange ? onFiltersChange({ sort: value }) : setSortOrderLocal(value)
   const [showAllTransactions, setShowAllTransactions] = useState(false)
-  const [transactionView, setTransactionView] = useState<'list' | 'calendar'>('list')
+  const [localTransactionView, setTransactionViewLocal] = useState<'list' | 'calendar'>('list')
+  const transactionView = filters?.view ?? localTransactionView
+  const setTransactionView = (value: 'list' | 'calendar') => onFiltersChange ? onFiltersChange({ view: value }) : setTransactionViewLocal(value)
+  const openCalendar = () => {
+    if (onFiltersChange) onFiltersChange({ view: 'calendar', range: 'custom',
+      startDate: format(startOfMonth(currentMonth), 'yyyy-MM-dd'), endDate: format(endOfMonth(currentMonth), 'yyyy-MM-dd') })
+    else { setTransactionView('calendar'); onMonthChange(currentMonth) }
+  }
   const [searchQuery, setSearchQuery] = useState<string>('')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [deletingId, setDeletingId] = useState<string | null>(null)
@@ -167,6 +187,8 @@ export function TransactionList({
   const [isAccountOpen, setIsAccountOpen] = useState(false)
   const [badgeNow, setBadgeNow] = useState(() => Date.now())
   
+  useUnsavedChanges(isAdding || isSubmitting)
+
   const { confirm, showAlert } = useAlert()
   const { privacyMode, shouldHideInvestment } = usePrivacy()
   const isLocked = (accountId: string) => accounts.find(a => a.id === accountId)?.is_locked ?? false
@@ -177,6 +199,10 @@ export function TransactionList({
     tx.id === editingId && !!tx.linked_transaction_id && isMcpReviewTransaction(tx)
   )
   const refreshRecentBadges = () => setBadgeNow(Date.now())
+
+  useEffect(() => {
+    setCustomRange({ startDate: dateRange.startDate, endDate: dateRange.endDate })
+  }, [dateRange.startDate, dateRange.endDate])
 
   // Reset showAllTransactions when filter, sort, search, or date range changes
   useEffect(() => {
@@ -197,11 +223,12 @@ export function TransactionList({
   }, [transactions, upcomingTransactions])
 
   useEffect(() => {
+    if (availableCategories) return
     apiFetch(`${API_BASE_URL}/categories`)
       .then(res => res.json())
       .then(data => setCategories(data))
       .catch(() => console.error('Failed to fetch categories'))
-  }, [])
+  }, [availableCategories])
 
   // Fetch exchange rate when transfer accounts are selected
   useEffect(() => {
@@ -1417,10 +1444,7 @@ export function TransactionList({
                   List
                 </button>
                 <button
-                  onClick={() => {
-                    setTransactionView('calendar')
-                    onMonthChange(currentMonth)
-                  }}
+                  onClick={openCalendar}
                   className={`h-7 rounded-md px-3 text-xs font-medium transition-colors ${transactionView === 'calendar' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
                   aria-pressed={transactionView === 'calendar'}
                 >
@@ -1478,10 +1502,7 @@ export function TransactionList({
               List view
             </button>
             <button
-              onClick={() => {
-                setTransactionView('calendar')
-                onMonthChange(currentMonth)
-              }}
+              onClick={openCalendar}
               className={`flex-1 rounded-md px-2 py-1.5 text-[10px] font-medium transition-colors ${transactionView === 'calendar' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
               aria-pressed={transactionView === 'calendar'}
             >
@@ -1568,7 +1589,7 @@ export function TransactionList({
                   if (range.startDate === '1900-01-01' && range.endDate === '2100-12-31') {
                     onDateRangeChange(range)
                   } else {
-                    onMonthChange(new Date(range.endDate))
+                    if (!onFiltersChange) onMonthChange(new Date(range.endDate))
                     onDateRangeChange(range)
                   }
                   setShowDatePicker(false)
@@ -1583,12 +1604,16 @@ export function TransactionList({
             {/* Category Filter */}
             <Select
               value={categoryFilter}
+              aria-label="Transaction category"
               onChange={(e) => setCategoryFilter(e.target.value)}
               className="h-8 sm:h-9 text-xs sm:text-sm w-auto min-w-[140px] sm:min-w-[160px]"
             >
               <option value="all">All Transactions</option>
               <option value="all-expenses">All Expenses</option>
               <option value="all-income">All Income</option>
+              {!['all', 'all-expenses', 'all-income', 'transfer'].includes(categoryFilter) && !categories.some(category => category.id === categoryFilter) && (
+                <option value={categoryFilter}>Selected category (unavailable)</option>
+              )}
               {categories.filter(c => c.type === 'expense').length > 0 && (
                 <optgroup label="Expenses">
                   {categories.filter(c => c.type === 'expense').map(cat => (
@@ -1609,6 +1634,7 @@ export function TransactionList({
             {/* Sort Order */}
             <Select
               value={sortOrder}
+              aria-label="Transaction sort order"
               onChange={(e) => setSortOrder(e.target.value as 'date' | 'amount-high' | 'amount-low')}
               className="h-8 sm:h-9 text-xs sm:text-sm w-auto min-w-[100px] sm:min-w-[120px]"
             >

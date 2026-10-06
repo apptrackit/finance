@@ -1,6 +1,8 @@
 import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest'
-import App from '../App'
+import { createMemoryRouter, RouterProvider } from 'react-router'
+import { appRoutes } from '../navigation/routes'
+import { AlertProvider } from '../context/AlertContext'
 import type { Account, Transaction } from '../hooks/useFinanceData'
 
 vi.mock('../context/PrivacyContext', () => ({
@@ -50,7 +52,12 @@ beforeEach(() => {
 })
 afterEach(() => vi.unstubAllGlobals())
 
-function navigate(label: string) { fireEvent.click(screen.getAllByRole('button', { name: label })[0]) }
+function renderApp() {
+  const router = createMemoryRouter(appRoutes, { initialEntries: ['/dashboard'] })
+  return render(<AlertProvider><RouterProvider router={router} /></AlertProvider>)
+}
+
+function navigate(label: string) { fireEvent.click(screen.getAllByRole('link', { name: label })[0]) }
 
 async function retry() {
   const button = screen.getByRole('button', { name: 'Retry' })
@@ -61,7 +68,7 @@ async function retry() {
 describe('finance read errors in App', () => {
   it('shows a private, accessible initial load error and enables Retry after dependent loads fail', async () => {
     failures.add('/accounts')
-    render(<App />)
+    renderApp()
     expect(await screen.findByRole('alert')).toHaveTextContent('Accounts: Unavailable.')
     expect(screen.queryByText('No accounts yet')).not.toBeInTheDocument()
     expect(screen.queryByText('No transactions yet')).not.toBeInTheDocument()
@@ -76,7 +83,7 @@ describe('finance read errors in App', () => {
 
   it('keeps successful accounts visible during a partial ledger failure', async () => {
     failures.add('/transactions/date-range')
-    render(<App />)
+    renderApp()
     expect(await screen.findByText('Loaded accounts')).toBeInTheDocument()
     expect(await screen.findByRole('alert')).toHaveTextContent('Period transactions: Unavailable.')
     expect(screen.queryByText('No transactions yet')).not.toBeInTheDocument()
@@ -85,7 +92,7 @@ describe('finance read errors in App', () => {
 
   it('keeps the last successful ledger visible and marks it stale after a failed refresh', async () => {
     failures.add('/categories')
-    render(<App />)
+    renderApp()
     expect(await screen.findByText('Loaded ledger')).toBeInTheDocument()
     failures.clear()
     failures.add('/transactions/date-range')
@@ -102,7 +109,7 @@ describe('finance read errors in App', () => {
     payloads['/accounts'] = []
     payloads['/transactions'] = []
     payloads['/transactions/date-range'] = []
-    render(<App />)
+    renderApp()
     expect(await screen.findByText('No accounts yet')).toBeInTheDocument()
     expect(await screen.findByText('No transactions yet')).toBeInTheDocument()
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
@@ -110,7 +117,7 @@ describe('finance read errors in App', () => {
 
   it('surfaces failed complete history in Analytics without claiming an empty history', async () => {
     failures.add('/transactions')
-    render(<App />)
+    renderApp()
     expect(await screen.findByText('Loaded ledger')).toBeInTheDocument()
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
     navigate('Analytics')
@@ -123,7 +130,7 @@ describe('finance read errors in App', () => {
 
   it('shows category errors where categories are required for recurring transactions', async () => {
     failures.add('/categories')
-    render(<App />)
+    renderApp()
     await screen.findByRole('alert')
     navigate('Recurring')
     expect(screen.getByRole('alert')).toHaveTextContent('Categories: Unavailable.')
@@ -138,7 +145,7 @@ describe('finance read errors in App', () => {
     payloads['/dashboard/net-worth'] = { net_worth: null, missing_currencies: ['EUR'] }
     payloads['/v6/latest/HUF'] = { rates: { HUF: 1, USD: 1 / 360 } }
     payloads['/transactions/upcoming'] = [{ id: 'upcoming', account_id: 'eur', amount: 20, date: '2026-09-30', status: 'pending', pending_kind: 'upcoming' }]
-    render(<App />)
+    renderApp()
     expect(await screen.findByRole('alert')).toHaveTextContent('Missing or invalid exchange rates: EUR')
     expect(await screen.findByText('Projection unavailable')).toBeInTheDocument()
     expect(screen.queryByText(/Private HUF|Private USD|Private EUR|100000/)).not.toBeInTheDocument()

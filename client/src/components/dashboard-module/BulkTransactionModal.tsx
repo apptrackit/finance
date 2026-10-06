@@ -1,3 +1,4 @@
+import { useUnsavedChanges } from '../../navigation/UnsavedChanges'
 import { useState, useEffect } from 'react'
 import { Modal } from '../common/modal'
 import { Button } from '../common/button'
@@ -58,6 +59,8 @@ export function BulkTransactionModal({
   const [transactionType, setTransactionType] = useState<'expense' | 'income'>('expense')
   const [transactions, setTransactions] = useState<BulkTransaction[]>([])
   const [isSubmitting, setIsSubmitting] = useState(false)
+
+  useUnsavedChanges(isOpen || isSubmitting)
 
   // Reset when modal opens
   useEffect(() => {

@@ -1,3 +1,4 @@
+import { useUnsavedChanges } from '../../navigation/UnsavedChanges'
 import { useState, useEffect } from 'react'
 import { API_BASE_URL, apiFetch } from '../../config'
 import { Button } from '../common/button'
@@ -104,6 +105,8 @@ export function RecurringTransactions({
     remaining_occurrences: '',
     end_date: ''
   })
+
+  useUnsavedChanges(isAdding || isSubmitting)
 
   useEffect(() => {
     fetchSchedules()

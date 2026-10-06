@@ -29,24 +29,28 @@ export default defineConfig(({ mode }) => {
       react(),
       VitePWA({
         registerType: 'autoUpdate',
-        includeAssets: ['favicon.svg', 'vite.svg'],
+        manifestFilename: 'site.webmanifest',
+        includeAssets: ['favicon.svg', 'apple-touch-icon.png'],
         manifest: {
-          name: 'Finance App',
+          name: 'Finance',
           short_name: 'Finance',
           description: 'Personal finance management application',
-          theme_color: '#ffffff',
-          background_color: '#ffffff',
+          theme_color: '#000000',
+          background_color: '#000000',
           display: 'standalone',
           orientation: 'portrait',
+          id: '/',
+          start_url: '/dashboard',
+          scope: '/',
           icons: [
             {
-              src: '/icon-192.png',
+              src: '/web-app-manifest-192x192.png',
               sizes: '192x192',
               type: 'image/png',
               purpose: 'any maskable'
             },
             {
-              src: '/icon-512.png',
+              src: '/web-app-manifest-512x512.png',
               sizes: '512x512',
               type: 'image/png',
               purpose: 'any maskable'
@@ -58,8 +62,8 @@ export default defineConfig(({ mode }) => {
           cleanupOutdatedCaches: true,
           skipWaiting: true,
           clientsClaim: true,
-          navigateFallback: null,
-          navigateFallbackDenylist: [/^\/assets\//, /\.(js|css|map)$/],
+          navigateFallback: '/index.html',
+          navigateFallbackDenylist: [/^\/api(?:[/?]|$)/, /^\/assets(?:[/?]|$)/, /^\/[^?]*\.[^/?]+(?:\?|$)/],
           runtimeCaching: [
             {
               urlPattern: /^https:\/\/api\..*/i,

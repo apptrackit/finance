@@ -1,3 +1,4 @@
+import { useUnsavedChanges } from '../../navigation/UnsavedChanges'
 import { useState, useEffect } from 'react'
 import { Modal } from '../common/modal'
 import { Button } from '../common/button'
@@ -57,6 +58,8 @@ export function SplitTransactionModal({
     }
   ])
   const [isConfirming, setIsConfirming] = useState(false)
+
+  useUnsavedChanges(isOpen || isConfirming)
 
   // Reset splits when modal opens
   useEffect(() => {

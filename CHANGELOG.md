@@ -6,6 +6,10 @@ Intermediate package/UI version bumps are grouped under the next published GitHu
 
 ## Unreleased
 
+### Added
+
+- Dashboard startup and browser URLs for all app sections, with bookmarkable Dashboard/Analytics filters, Back/Forward navigation, and protection for unfinished financial editors. Dashboard stays available in navigation; the PWA uses one manifest and opens fresh launches on Dashboard. [#96](https://github.com/apptrackit/finance/issues/96)
+
 ### Fixed
 
 - All-time AI cash history retains the saved daily movements from the past year, with older monthly samples identified. The main Cash Balance Trend now uses cash-balance exclusions and elapsed dates; actual cash lines no longer smooth away changes. Existing forecast snapshots and projections stay unchanged. [#94](https://github.com/apptrackit/finance/issues/94)

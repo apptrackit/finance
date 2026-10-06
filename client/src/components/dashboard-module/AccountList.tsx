@@ -1,3 +1,4 @@
+import { useUnsavedChanges } from '../../navigation/UnsavedChanges'
 import { convertCurrency, sumAvailable, validRates } from '../../../../shared/currency'
 import { MissingExchangeRates } from '../common/MissingExchangeRates'
 import { useState, useEffect } from 'react'
@@ -98,6 +99,8 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [lockingId, setLockingId] = useState<string | null>(null)
   const [isCollapsed, setIsCollapsed] = useState(true)
+
+  useUnsavedChanges(isAdding || showChoiceModal || showSingleModal || showSplitModal || isSubmitting)
 
   const { privacyMode, shouldHideInvestment } = usePrivacy()
 

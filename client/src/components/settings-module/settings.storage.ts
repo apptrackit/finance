@@ -27,6 +27,9 @@ export function normalizeMenuVisibility(
     }
   }
 
+  // Dashboard is the app's stable entry point, including for legacy settings.
+  next.dashboard = true
+
   return next
 }
 

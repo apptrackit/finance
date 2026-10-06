@@ -1,25 +1,23 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../common/card'
 import { Button } from '../../common/button'
 import { Label } from '../../common/label'
 import { Select } from '../../common/select'
 import { Save, Settings as SettingsIcon } from 'lucide-react'
 import { CURRENCIES, STORAGE_KEY } from '../constants'
+import { getMasterCurrency } from '../settings.storage'
+import { useUnsavedChanges } from '../../../navigation/UnsavedChanges'
 
 export function CurrencySettingsCard() {
-  const [masterCurrency, setMasterCurrency] = useState('HUF')
+  const [savedCurrency, setSavedCurrency] = useState(getMasterCurrency)
+  const [masterCurrency, setMasterCurrency] = useState(savedCurrency)
   const [isSaving, setIsSaving] = useState(false)
-
-  useEffect(() => {
-    const saved = localStorage.getItem(STORAGE_KEY)
-    if (saved) {
-      setMasterCurrency(saved)
-    }
-  }, [])
+  useUnsavedChanges(masterCurrency !== savedCurrency && !isSaving)
 
   const handleSave = () => {
     setIsSaving(true)
     localStorage.setItem(STORAGE_KEY, masterCurrency)
+    setSavedCurrency(masterCurrency)
 
     setTimeout(() => {
       setIsSaving(false)
