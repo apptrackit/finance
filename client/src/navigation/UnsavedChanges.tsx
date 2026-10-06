@@ -4,6 +4,8 @@ import { useBeforeUnload, useBlocker } from 'react-router'
 import { useAlert } from '../context/AlertContext'
 
 const UnsavedContext = createContext<((id: string, dirty: boolean) => void) | null>(null)
+const DirtyContext = createContext(false)
+export const useHasUnsavedChanges = () => useContext(DirtyContext)
 
 export function UnsavedChangesProvider({ children }: { children: ReactNode }) {
   const [sources, setSources] = useState<Set<string>>(() => new Set())
@@ -40,7 +42,7 @@ export function UnsavedChangesProvider({ children }: { children: ReactNode }) {
     })
   }, [blocker, confirm])
 
-  return <UnsavedContext.Provider value={register}>{children}</UnsavedContext.Provider>
+  return <UnsavedContext.Provider value={register}><DirtyContext.Provider value={dirty}>{children}</DirtyContext.Provider></UnsavedContext.Provider>
 }
 
 // Active financial editors are protected, including while a save is in flight.

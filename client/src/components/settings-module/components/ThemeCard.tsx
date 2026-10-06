@@ -3,7 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../..
 import { useTheme, THEMES, type ThemeId } from '../../../context/ThemeContext'
 
 export function ThemeCard() {
-  const { theme, setTheme } = useTheme()
+  const { theme, setTheme, colorMode, setColorMode } = useTheme()
 
   return (
     <Card>
@@ -18,7 +18,14 @@ export function ThemeCard() {
           </div>
         </div>
       </CardHeader>
-      <CardContent>
+      <CardContent className="space-y-5">
+        <div className="flex items-center justify-between gap-4">
+          <div><p className="text-sm font-medium">Display mode</p><p className="text-xs text-muted-foreground">Light or dark, with your selected color theme</p></div>
+          <div className="flex rounded-lg border border-border p-1" role="group" aria-label="Display mode">
+            {(['dark', 'light'] as const).map(mode => <button key={mode} type="button" aria-pressed={colorMode === mode}
+              onClick={() => setColorMode(mode)} className={`rounded-md px-3 py-1.5 text-sm capitalize ${colorMode === mode ? 'bg-primary text-primary-foreground' : 'text-muted-foreground'}`}>{mode}</button>)}
+          </div>
+        </div>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
           {THEMES.map((t) => (
             <ThemeSwatch

@@ -1,5 +1,5 @@
 import { useUnsavedChanges } from '../../navigation/UnsavedChanges'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { API_BASE_URL, apiFetch } from '../../config'
 import { Button } from '../common/button'
 import { Card } from '../common/card'
@@ -24,6 +24,8 @@ type Account = {
   id: string
   name: string
   type: 'cash' | 'investment'
+  archived_at?: number | null
+  is_locked?: boolean
   balance: number
   currency: string
   exclude_from_net_worth?: boolean
@@ -70,11 +72,17 @@ const DAYS_OF_WEEK = [
 export function RecurringTransactions({
   accounts,
   categories,
-  dataLoading = false
+  dataLoading = false,
+  addRequest = false,
+  editScheduleId,
+  requestKey = '',
 }: {
   accounts: Account[]
   categories: Category[]
   dataLoading?: boolean
+  addRequest?: boolean
+  editScheduleId?: string
+  requestKey?: string
 }) {
   const { confirm, showAlert } = useAlert()
   const [schedules, setSchedules] = useState<RecurringSchedule[]>([])
@@ -86,7 +94,7 @@ export function RecurringTransactions({
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [togglingId, setTogglingId] = useState<string | null>(null)
-  const [schedulesExpanded, setSchedulesExpanded] = useState(false)
+  const [schedulesExpanded, setSchedulesExpanded] = useState(true)
 
   const [formData, setFormData] = useState({
     type: 'transaction' as 'transaction' | 'transfer',
@@ -295,6 +303,17 @@ export function RecurringTransactions({
     setIsAdding(true)
   }
 
+  const handledRequest = useRef<string | null>(null)
+  useEffect(() => {
+    if (loading || dataLoading || handledRequest.current === requestKey || (!addRequest && !editScheduleId)) return
+    const schedule = schedules.find(item => item.id === editScheduleId)
+    if (editScheduleId && !schedule) return
+    handledRequest.current = requestKey
+    setSchedulesExpanded(true)
+    if (schedule) handleEdit(schedule)
+    else { resetForm(); setIsAdding(true) }
+  }, [loading, dataLoading, requestKey, addRequest, editScheduleId, schedules])
+
   const handleDelete = async (id: string) => {
     const confirmed = await confirm({
       title: 'Delete Recurring Schedule',
@@ -401,7 +420,7 @@ export function RecurringTransactions({
 
   const expenseCategories = categories.filter(c => c.type === 'expense')
   const incomeCategories = categories.filter(c => c.type === 'income')
-  const cashAccounts = accounts.filter(a => a.type === 'cash')
+  const cashAccounts = accounts.filter(a => a.type === 'cash' && a.archived_at == null)
   const { privacyMode } = usePrivacy()
 
   // Calculate upcoming recurring amounts for next 30 days
@@ -899,6 +918,7 @@ export function RecurringTransactions({
         <div className="flex items-center gap-4">
           <button
             onClick={() => setSchedulesExpanded(v => !v)}
+            aria-expanded={schedulesExpanded}
             className="flex items-center gap-2 text-xl font-semibold hover:text-primary transition-colors"
           >
             <Clock className="h-5 w-5 text-primary shrink-0" />

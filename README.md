@@ -23,7 +23,8 @@ The latest published release is [v3.1](https://github.com/apptrackit/finance/rel
 
 | Area | Capabilities |
 | --- | --- |
-| Accounts | Cash accounts and investment holdings; multiple currencies; balance adjustments; account locks; separate cash-balance and net-worth exclusions. |
+| Accounts | Dedicated Accounts page for cash accounts and investment holdings; multiple currencies; balance adjustments; locks; independent exclusions; archive/restore with retained history. |
+| Search | Search everything palette (Cmd/Ctrl+K) across full transaction history, pending items, accounts, categories, recurring schedules, amounts, and dates. |
 | Transactions | Income and expenses, categories and icons, linked transfers, search and date filters, bulk entry, split adjustments, and recent-change indicators. |
 | Upcoming transactions | One-time future income and expenses, projected cash balances, and explicit confirmation or decline without changing the posted balance early. |
 | Recurring schedules | Daily, weekly, monthly, and yearly options; transaction and transfer schedules; pause/resume, end dates, occurrence limits, and a calendar view. |
@@ -31,7 +32,7 @@ The latest published release is [v3.1](https://github.com/apptrackit/finance/rel
 | Analytics | Configurable widgets for cash trends, AI financial forecasts, income/expense trends and breakdowns, individual account trends, Money Map, and top expenses. |
 | AI financial forecasts | Saved HUF forecasts with 7/30/90-day ranges, daily cash paths, report history, source-data freshness, and privacy-aware narratives. |
 | MCP review | Prepare income, expense, or cash transfer drafts in conversation; list and correct ordinary drafts or transfer pairs; review and confirm or decline them in the app. |
-| Settings | Reporting currency, category management, navigation visibility, Original/Monochrome/Red Filter themes, startup privacy, cache controls, and CSV/JSON export. |
+| Settings | Reporting currency, category management, navigation visibility, light/dark modes, Original/Monochrome/Red Filter themes, startup privacy, cache controls, and CSV/JSON export. |
 | PWA | Installable app, responsive desktop/mobile layouts, cached assets, and service-worker updates. Financial writes require an API connection. |
 
 Budget management was retired in v3.0. See the [v3.0 changelog](CHANGELOG.md#v30--2026-09-24) and the [migration note](#database-migrations) before upgrading an older deployment.
@@ -61,9 +62,9 @@ Market quotes and exchange rates come from external services and may be unavaila
 
 ### Recurring schedules
 
-The API Worker runs recurring processing using the configured daily cron (`0 0 * * *`, midnight UTC). It creates posted transactions and updates balances for eligible schedules, respecting locks, end dates, remaining occurrences, and last-processed dates. Monthly days beyond the end of a month clamp to its final day.
+The API Worker runs recurring processing using the configured daily cron (`0 0 * * *`, midnight UTC). It creates posted transactions and updates balances for eligible schedules, respecting locks, archived accounts, end dates, remaining occurrences, and last-processed dates. Monthly days beyond the end of a month clamp to its final day.
 
-The UI also offers yearly schedules. The selected yearly month is not currently persisted by the repository; processing falls back to the schedule's creation month. Verify the resulting schedule before relying on a different yearly month.
+Yearly schedules keep their selected month across saves, API execution, client calendars, and MCP projections. Legacy schedules without a saved month fall back to their creation month until edited.
 
 ### MCP and AI financial forecasts
 
@@ -94,6 +95,18 @@ flowchart LR
 
 The API and MCP Worker share the deployed D1 database but have separate authentication and application code. The API follows middleware → controller → service → repository. React uses browser routing, component state, context, and a shared finance-data hook, with additional fetching inside feature modules.
 
+### Accounts, search, and archive
+
+The Accounts page groups cash/bank accounts, investments, and archived accounts. Desktop navigation includes collapsible Cash/Investments shortcuts showing all accounts sorted by converted value, independent account scrolling, compact balances, and Search everything; mobile uses bottom navigation, More, and a header search button. The sidebar and Settings expose light/dark mode independently of the existing color themes.
+
+Open Search everything with the sidebar/header button or Cmd/Ctrl+K. Its command palette searches full posted history plus pending transactions, account/category names, recurring schedules, native amounts/currencies, and dates. Results open read-only transaction details or existing account/recurring editors; category results and View all matching transactions open filtered full-history lists. Quick actions and visible page destinations appear before typing. N and the transaction plus buttons still open transaction creation. Search respects privacy and unfinished financial forms, with retry controls for unavailable data. Search drafts are not saved in app preferences or URL query parameters.
+
+Archive requires an unlocked account with exactly zero native balance/holding and no unresolved pending transactions (including MCP reviews and linked review pairs). Archive preserves identity, ledger, investment history, exclusions, and exports. It pauses every recurring schedule using the account as source or destination; restore makes the account available again but does not resume schedules. Archived accounts are read-only until restored and are omitted from active account selectors and current market valuations. Historical posted activity and balance reconstruction continue to include them.
+
+`PATCH /accounts/:id/archive` and `/restore` are idempotent and audited. Migration 016 enforces the same write restrictions for API and MCP. Permanent deletion requires a typed account name in the UI and is blocked when linked transfers exist; use archive to retain those records. JSON export is an archive format, not an app restore feature.
+
+See [redesign implementation notes](docs/finance-redesign.md) for the prototype mapping and verification boundaries.
+
 ### Navigation and saved views
 
 Opening `/` or freshly launching the installed app opens `/dashboard` in the current local month. Explicit links, refreshes, and resumed tabs keep their URL. Dashboard is always available; optional hidden sections fall back to Dashboard. Old last-page preferences no longer control startup.
@@ -118,7 +131,7 @@ Cloudflare Pages serves direct page paths using its SPA fallback (do not add a t
 ```text
 finance/
 ├── api/
-│   ├── migrations/          # Ordered schema changes; currently 001–012
+│   ├── migrations/          # Ordered schema changes; apply the complete sequence
 │   ├── src/index.ts         # Live API routes, dependency wiring, and cron
 │   ├── src/controllers/     # HTTP handlers
 │   ├── src/services/        # Business rules
@@ -307,9 +320,11 @@ Worker configuration and API secret files are temporary and cleaned up on succes
 
 ### Database migrations
 
-The schema is defined by the full ordered sequence in [api/migrations](api/migrations), currently `001-init.sql` through `015-yearly-recurring-month.sql`. Deployment uses the custom `migration_history` table to skip applied migrations. Create a new numbered SQL file for schema changes instead of editing applied files; one-time `ALTER TABLE` statements should not be rerun manually.
+The schema is defined by the full ordered sequence in [api/migrations](api/migrations), currently `001-init.sql` through `016-account-archive.sql`. Deployment uses the custom `migration_history` table to skip applied migrations. Create a new numbered SQL file for schema changes instead of editing applied files; one-time `ALTER TABLE` statements should not be rerun manually.
 
 **Upgrade note:** migration `012-remove-budgets.sql` permanently drops the retired budget tables and clears the budget navigation preference. Back up any budget data you need before deploying the current branch over an older installation.
+
+**Upgrade note:** migration `016-account-archive.sql` adds account archiving and database guards shared by the API and MCP Workers. After it is applied, locked or archived accounts cannot be deleted, and accounts with linked transfers cannot be permanently deleted; archive them instead.
 
 ### Data exports
 
@@ -324,7 +339,7 @@ Settings JSON uses authenticated `GET /export`, a single read-only D1 batch for 
 
 Rows preserve database values exactly: SQLite booleans remain numeric, stored JSON fields remain strings, and IDs, links, quantities, currencies, review metadata, and timestamps are retained. Audit logs and forecast snapshots are always included, even if empty; there are no silently omitted optional tables.
 
-The client adds `browserSettings` containing only known saved app preferences: reporting currency, navigation, theme, startup/legacy privacy, analytics widget visibility, and remembered transaction form account/category choices. Values are stored strings or `null` when unset (the app uses its default). Privacy cookies take precedence over local storage, matching the app. Browser preferences cover the exporting browser only and are read after the database snapshot. Applied page filters live in URLs and the retired last-page preference is not exported.
+The client adds `browserSettings` containing only known saved app preferences: reporting currency, navigation, color theme and light/dark mode, sidebar group collapse choices, startup/legacy privacy, analytics widget visibility, and remembered transaction form account/category choices. Values are stored strings or `null` when unset (the app uses its default). Privacy cookies take precedence over local storage, matching the app. Browser preferences cover the exporting browser only and are read after the database snapshot. Applied page filters live in URLs and the retired last-page preference is not exported.
 
 Expiring MCP proposal tables are explicitly excluded because their IDs authorize temporary actions; created review drafts and completed replay records are included. Migration ledger rows, SQLite infrastructure, arbitrary browser storage, authentication cookies, API keys, and environment/deployment secrets are excluded. Never store credentials in `app_settings`, which contains user app preferences and is exported in full.
 
@@ -344,6 +359,8 @@ All non-preflight requests, including `/` and `/version`, require `X-API-Key` an
 | PUT, DELETE | `/accounts/:id` | Update or delete an account |
 | PATCH | `/accounts/:id/lock` | Lock an account |
 | PATCH | `/accounts/:id/unlock` | Unlock an account |
+| PATCH | `/accounts/:id/archive` | Archive an account (idempotent; pauses its schedules) |
+| PATCH | `/accounts/:id/restore` | Restore an archived account (schedules stay paused) |
 | GET, POST | `/transactions` | List posted transactions or create a transaction |
 | GET | `/transactions/paginated` | Paginated posted history |
 | GET | `/transactions/date-range` | Posted history within a date range |

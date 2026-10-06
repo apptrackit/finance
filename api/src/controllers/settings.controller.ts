@@ -16,7 +16,7 @@ export class SettingsController {
 
   async updateNavigation(c: Context) {
     try {
-      const body = await c.req.json<UpdateNavigationSettingsDto>()
+      const body = c.get('validatedBody') as UpdateNavigationSettingsDto
       const settings = await this.settingsService.updateNavigationSettings(body)
       return c.json(settings)
     } catch (error: any) {

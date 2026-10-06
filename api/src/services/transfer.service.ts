@@ -1,3 +1,4 @@
+import { AppError } from '../errors/codes'
 import { AccountRepository } from '../repositories/account.repository'
 import { TransactionRepository } from '../repositories/transaction.repository'
 import { InvestmentTransactionRepository } from '../repositories/investment-transaction.repository'
@@ -42,6 +43,8 @@ export class TransferService {
     if (!fromAccount || !toAccount) {
       throw new Error('Account not found')
     }
+
+    if (fromAccount.archived_at != null || toAccount.archived_at != null) throw new AppError('ACCOUNT_ARCHIVED', 'Restore archived accounts before transferring.', 409)
 
     if (fromAccount.is_locked) {
       throw new Error(`Account "${fromAccount.name}" is locked`)

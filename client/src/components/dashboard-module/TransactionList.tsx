@@ -1,5 +1,6 @@
 import type { DashboardFilters, FilterChange } from '../../navigation/filters'
 import { useUnsavedChanges } from '../../navigation/UnsavedChanges'
+import { matchesTransaction } from '../../lib/global-search'
 import { useState, useEffect, useRef } from 'react'
 import { Button } from '../common/button'
 import { Input } from '../common/input'
@@ -52,6 +53,7 @@ type Account = {
   asset_type?: 'stock' | 'crypto' | 'manual'
   exclude_from_net_worth?: boolean
   exclude_from_cash_balance?: boolean
+  archived_at?: number | null
   is_locked?: boolean
 }
 
@@ -116,6 +118,11 @@ export function TransactionList({
   filters,
   onFiltersChange,
   availableCategories,
+  composerOnly = false,
+  openRequest = 0,
+  searchRequest,
+  searchRequestKey,
+  navigationKey = '',
 }: { 
   transactions: Transaction[], 
   upcomingTransactions: Transaction[],
@@ -132,7 +139,13 @@ export function TransactionList({
   filters?: DashboardFilters,
   onFiltersChange?: FilterChange<DashboardFilters>,
   availableCategories?: Category[],
+  composerOnly?: boolean,
+  openRequest?: number,
+  searchRequest?: string,
+  searchRequestKey?: string,
+  navigationKey?: string,
 }) {
+  const lastNavigationKey = useRef(navigationKey)
   const [isAdding, setIsAdding] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [showBulkModal, setShowBulkModal] = useState(false)
@@ -180,6 +193,9 @@ export function TransactionList({
     else { setTransactionView('calendar'); onMonthChange(currentMonth) }
   }
   const [searchQuery, setSearchQuery] = useState<string>('')
+  useEffect(() => {
+    if (searchRequest !== undefined) setSearchQuery(searchRequest)
+  }, [searchRequest, searchRequestKey])
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [pendingActionId, setPendingActionId] = useState<string | null>(null)
@@ -191,7 +207,10 @@ export function TransactionList({
 
   const { confirm, showAlert } = useAlert()
   const { privacyMode, shouldHideInvestment } = usePrivacy()
-  const isLocked = (accountId: string) => accounts.find(a => a.id === accountId)?.is_locked ?? false
+  const isLocked = (accountId: string) => {
+    const account = accounts.find(a => a.id === accountId)
+    return Boolean(account?.is_locked || account?.archived_at != null)
+  }
   const today = getLocalDateString()
   const isUpcomingForm = formData.type !== 'transfer' && formData.date > today
   const allKnownTransactions = [...transactions, ...upcomingTransactions]
@@ -497,18 +516,19 @@ export function TransactionList({
 
   // Load saved defaults when opening the form
   const loadSavedDefaults = (type: 'expense' | 'income' | 'transfer') => {
+    const availableAccount = (id: string) => accounts.some(account => account.id === id && !isLocked(id)) ? id : ''
     if (type === 'expense') {
       const savedAccount = localStorage.getItem(STORAGE_KEYS.expenseAccount) || ''
       const savedCategory = localStorage.getItem(STORAGE_KEYS.expenseCategory) || ''
-      return { account_id: savedAccount, category_id: savedCategory, to_account_id: '', fee: '0' }
+      return { account_id: availableAccount(savedAccount), category_id: savedCategory, to_account_id: '', fee: '0' }
     } else if (type === 'income') {
       const savedAccount = localStorage.getItem(STORAGE_KEYS.incomeAccount) || ''
       const savedCategory = localStorage.getItem(STORAGE_KEYS.incomeCategory) || ''
-      return { account_id: savedAccount, category_id: savedCategory, to_account_id: '', fee: '0' }
+      return { account_id: availableAccount(savedAccount), category_id: savedCategory, to_account_id: '', fee: '0' }
     } else {
       const savedFrom = localStorage.getItem(STORAGE_KEYS.transferFrom) || ''
       const savedTo = localStorage.getItem(STORAGE_KEYS.transferTo) || ''
-      return { account_id: savedFrom, to_account_id: savedTo, category_id: '', fee: '0', amount_to: '' }
+      return { account_id: availableAccount(savedFrom), to_account_id: availableAccount(savedTo), category_id: '', fee: '0', amount_to: '' }
     }
   }
 
@@ -571,6 +591,14 @@ export function TransactionList({
     setIsAccountOpen(false)
     setIsAdding(true)
   }
+
+  const lastOpenRequest = useRef(0)
+  useEffect(() => {
+    if (openRequest > lastOpenRequest.current) {
+      lastOpenRequest.current = openRequest
+      if (!isAdding) handleOpenForm()
+    }
+  }, [openRequest, isAdding, handleOpenForm])
 
   // Handle type change with saved defaults
   const handleTypeChange = (newType: 'expense' | 'income' | 'transfer') => {
@@ -1027,12 +1055,7 @@ export function TransactionList({
   }
 
   const matchesSearch = (tx: Transaction): boolean => {
-    if (!searchQuery.trim()) return true
-    const q = searchQuery.toLowerCase()
-    const desc = (tx.description || '').toLowerCase()
-    const catName = getCategoryName(tx.category_id).toLowerCase()
-    const accName = getAccountName(tx.account_id).toLowerCase()
-    return desc.includes(q) || catName.includes(q) || accName.includes(q)
+    return matchesTransaction(searchQuery, tx, accounts, categories)
   }
 
   const getCategoryName = (id?: string | null) => {
@@ -1415,9 +1438,15 @@ export function TransactionList({
     )
   }
 
+  useEffect(() => {
+    if (navigationKey === lastNavigationKey.current) return
+    lastNavigationKey.current = navigationKey
+    if (composerOnly && isAdding) handleCancel()
+  }, [navigationKey, composerOnly, isAdding, handleCancel])
+
   return (
-    <Card>
-      <CardHeader className="pb-3 sm:pb-4">
+    <Card className={composerOnly ? "contents" : undefined}>
+      {!composerOnly && <CardHeader className="pb-3 sm:pb-4">
         <div className="flex flex-col gap-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2 sm:gap-3">
@@ -1645,7 +1674,7 @@ export function TransactionList({
             </div>
           </div>
         </div>
-      </CardHeader>
+      </CardHeader>}
       
       <Modal 
         isOpen={isAdding} 
@@ -1659,6 +1688,7 @@ export function TransactionList({
                 type="button"
                 disabled={isEditingTransfer}
                 onClick={() => handleTypeChange('expense')}
+                aria-pressed={formData.type === 'expense'}
                 className={`p-3 rounded-lg border transition-all duration-200 flex items-center justify-center gap-2 ${
                   formData.type === 'expense' 
                     ? 'border-destructive/50 bg-destructive/10 text-destructive' 
@@ -1672,6 +1702,7 @@ export function TransactionList({
                 type="button"
                 disabled={isEditingTransfer}
                 onClick={() => handleTypeChange('income')}
+                aria-pressed={formData.type === 'income'}
                 className={`p-3 rounded-lg border transition-all duration-200 flex items-center justify-center gap-2 ${
                   formData.type === 'income' 
                     ? 'border-success/50 bg-success/10 text-success' 
@@ -1685,6 +1716,7 @@ export function TransactionList({
                 type="button"
                 disabled={isEditingStandardTransaction}
                 onClick={() => handleTypeChange('transfer')}
+                aria-pressed={formData.type === 'transfer'}
                 className={`p-3 rounded-lg border transition-all duration-200 flex items-center justify-center gap-2 ${
                   formData.type === 'transfer' 
                     ? 'border-primary/50 bg-primary/10 text-primary' 
@@ -1892,17 +1924,18 @@ export function TransactionList({
               /* Expense/Income Form */
               <>
                 <div className="grid grid-cols-2 gap-3 overflow-hidden">
-                  <div className="space-y-2 min-w-0">
+                  <div className="col-span-2 space-y-2 min-w-0 rounded-xl border border-border bg-background p-4">
                     <Label htmlFor="amount">{accounts.find(a => a.id === formData.account_id)?.type === 'investment' ? 'Shares' : 'Amount'}</Label>
                     <AmountInput
-                      id="amount" 
+                      id="amount"
+                      className="h-14 border-0 bg-transparent px-0 text-3xl font-semibold shadow-none focus:ring-0"
                       value={formData.amount} 
                       onValueChange={amount => setFormData({...formData, amount})}
                       placeholder="0" 
                       required 
                     />
                   </div>
-                  <div className="space-y-2 min-w-0">
+                  <div className="col-span-2 space-y-2 min-w-0">
                     {/* Mobile: collapsible account selector */}
                     <div className="sm:hidden">
                       <button
@@ -1966,7 +1999,7 @@ export function TransactionList({
                       <p className="text-xs text-gray-500">For old dates (before 2020), enter the price manually for accuracy</p>
                     </div>
                   )}
-                  <div className="space-y-2">
+                  <div className="col-span-2 space-y-2">
                     <Label htmlFor="category">Category</Label>
                     <Select 
                       id="category" 
@@ -1995,7 +2028,7 @@ export function TransactionList({
                       <p className="text-[11px] text-primary">This will be saved as an upcoming transaction.</p>
                     )}
                   </div>
-                  <div className="col-span-2 space-y-2">
+                  <div className="space-y-2 min-w-0">
                     <Label htmlFor="description">Description</Label>
                     <Input 
                       id="description" 
@@ -2029,7 +2062,7 @@ export function TransactionList({
           </form>
       </Modal>
 
-      <CardContent className="space-y-3 sm:space-y-4">
+      {!composerOnly && <CardContent className="space-y-3 sm:space-y-4">
         {transactionView === 'calendar' ? (
           <TransactionCalendar
             transactions={transactions.filter(applyFilters)}
@@ -2505,14 +2538,14 @@ export function TransactionList({
           )}
         </div>
         )}
-      </CardContent>
+      </CardContent>}
 
       {/* Bulk Transaction Modal */}
       <BulkTransactionModal
         isOpen={showBulkModal}
         onClose={() => setShowBulkModal(false)}
         onConfirm={handleBulkTransactionConfirm}
-        accounts={accounts}
+        accounts={accounts.filter(account => account.archived_at == null)}
         categories={categories}
         defaultDate={getLocalDateString()}
       />

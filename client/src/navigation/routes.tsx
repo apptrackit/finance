@@ -1,7 +1,8 @@
-import { Link, Navigate, useOutletContext } from 'react-router'
+import { Link, Navigate, useLocation, useOutletContext } from 'react-router'
 import type { RouteObject } from 'react-router'
 import App from '../App'
 import type { FinancePageContext } from '../App'
+import { AccountsPage } from '../pages/AccountsPage'
 import { DashboardPage } from '../pages/DashboardPage'
 import { AnalyticsPage } from '../pages/AnalyticsPage'
 import { Investments } from '../components/investments-module/Investments'
@@ -11,10 +12,13 @@ import { FinanceDataBoundary } from '../components/common/FinanceDataStatus'
 import { UnsavedChangesProvider } from './UnsavedChanges'
 
 function RecurringPage() {
+  const { state, key } = useLocation()
+  const request = state as { addSchedule?: boolean; editScheduleId?: string } | null
   const { finance } = useOutletContext<FinancePageContext>()
   const datasets = [{ label: 'Accounts', status: finance.dataStatus.accounts }, { label: 'Categories', status: finance.dataStatus.categories }]
   return <FinanceDataBoundary label="Recurring transactions" datasets={datasets}>
     <RecurringTransactions accounts={finance.accounts} categories={finance.categories}
+      addRequest={request?.addSchedule} editScheduleId={request?.editScheduleId} requestKey={key}
       dataLoading={!finance.dataStatus.accounts.loaded && finance.dataStatus.accounts.loading} />
   </FinanceDataBoundary>
 }
@@ -39,6 +43,7 @@ export const appRoutes: RouteObject[] = [{
   children: [
     { index: true, element: <Navigate to="/dashboard" replace /> },
     { path: 'dashboard', element: <DashboardPage /> },
+    { path: 'accounts', element: <AccountsPage /> },
     { path: 'analytics', element: <AnalyticsPage /> },
     { path: 'investments', element: <InvestmentsPage /> },
     { path: 'recurring', element: <RecurringPage /> },

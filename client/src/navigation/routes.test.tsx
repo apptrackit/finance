@@ -1,6 +1,7 @@
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createMemoryRouter, RouterProvider } from 'react-router'
+import { ThemeProvider } from '../context/ThemeContext'
 import { AlertProvider } from '../context/AlertContext'
 import { appRoutes } from './routes'
 import { WIDGET_DEFS } from '../components/analytics-module/widgetConfig'
@@ -62,7 +63,7 @@ afterEach(() => {
 function open(entry: string, entries = [entry], initialIndex = entries.length - 1) {
   const router = createMemoryRouter(appRoutes, { initialEntries: entries, initialIndex })
   routers.push(router)
-  const rendered = render(<AlertProvider><RouterProvider router={router} /></AlertProvider>)
+  const rendered = render(<ThemeProvider><AlertProvider><RouterProvider router={router} /></AlertProvider></ThemeProvider>)
   return { router, ...rendered }
 }
 const href = (router: ReturnType<typeof createMemoryRouter>) => router.state.location.pathname + router.state.location.search
@@ -70,6 +71,47 @@ const clickLink = (name: string) => fireEvent.click(screen.getAllByRole('link', 
 async function go(router: ReturnType<typeof createMemoryRouter>, target: number | string) {
   await act(async () => { if (typeof target === 'number') await router.navigate(target); else await router.navigate(target) })
 }
+
+it('replaces the desktop quick action with search, supports Ctrl+K, preserves filters on dismiss and retains N', async () => {
+  const { router } = open('/analytics?period=year&year=2020')
+  const searchButton = within(screen.getByRole('complementary')).getByRole('button', { name: 'Search everything' })
+  expect(within(screen.getByRole('complementary')).queryByRole('button', { name: 'New transaction' })).not.toBeInTheDocument()
+  fireEvent.keyDown(document.body, { key: 'k', ctrlKey: true })
+  const input = screen.getByRole('combobox', { name: 'Search everything' })
+  expect(input).toHaveFocus()
+  fireEvent.keyDown(input, { key: 'n' })
+  expect(screen.queryByRole('dialog', { name: 'Add Transaction' })).not.toBeInTheDocument()
+  fireEvent.keyDown(input, { key: 'Escape' })
+  expect(screen.queryByRole('dialog', { name: 'Search everything' })).not.toBeInTheDocument()
+  expect(href(router)).toBe('/analytics?period=year&year=2020')
+  fireEvent.click(searchButton)
+  await waitFor(() => expect(screen.getByRole('option', { name: /New transaction/ })).toBeEnabled())
+  fireEvent.keyDown(screen.getByRole('combobox', { name: 'Search everything' }), { key: 'Escape' })
+  fireEvent.keyDown(document.body, { key: 'n' })
+  expect(await screen.findByRole('dialog', { name: 'Add Transaction' })).toBeInTheDocument()
+})
+
+it('searches older history and carries the query into the all-time transaction widget', async () => {
+  const baseFetch = fetchMock.getMockImplementation()!
+  const old = { ...posted, id: 'old', amount: -2990, category_id: 'food', description: 'Netflix', date: '2020-01-05' }
+  fetchMock.mockImplementation(async (input, options) => {
+    const url = new URL(String(input), 'http://localhost')
+    const path = url.pathname.replace(/^\/api/, '')
+    if (path === '/transactions') return Response.json([old])
+    if (path === '/transactions/date-range') return Response.json(url.searchParams.get('startDate') === '1900-01-01' ? [old] : [])
+    if (path === '/recurring-schedules') return Response.json([])
+    return baseFetch(input, options)
+  })
+  const { router } = open('/dashboard')
+  fireEvent.click(screen.getAllByRole('button', { name: 'Search everything' })[0])
+  fireEvent.change(screen.getByRole('combobox', { name: 'Search everything' }), { target: { value: 'Netflix' } })
+  expect(await screen.findByRole('option', { name: /Netflix.*2020-01-05/ })).toBeInTheDocument()
+  fireEvent.click(screen.getByRole('option', { name: 'View all matching transactions (1)' }))
+  await waitFor(() => expect(href(router)).toBe('/dashboard?range=allTime'))
+  expect(await screen.findByPlaceholderText('Search transactions...')).toHaveValue('Netflix')
+  expect(await screen.findByText('Netflix')).toBeInTheDocument()
+  expect(screen.queryByRole('dialog', { name: 'Search everything' })).not.toBeInTheDocument()
+})
 
 describe('page navigation and view filters', () => {
   it('opens Dashboard regardless of last-view storage and legacy hidden-Dashboard settings', async () => {
@@ -218,4 +260,91 @@ describe('page navigation and view filters', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Leave page' }))
     expect(await screen.findByRole('heading', { name: 'App settings' })).toBeInTheDocument()
   })
+})
+
+it('opens the global transaction editor on another section and retains a failed-save draft', async () => {
+  const { router } = open('/settings')
+  await screen.findByRole('heading', { name: 'App settings' })
+  const compose = screen.getAllByRole('button', { name: 'New transaction', exact: true })[0]
+  await waitFor(() => expect(compose).toBeEnabled())
+  fireEvent.click(compose)
+  fireEvent.change(screen.getByLabelText('Description'), { target: { value: 'Global draft' } })
+  fireEvent.change(screen.getByLabelText('Amount'), { target: { value: '20' } })
+  fireEvent.change(screen.getByLabelText('Account'), { target: { value: 'cash' } })
+  fireEvent.change(screen.getByLabelText('Category'), { target: { value: 'food' } })
+  failSave = true
+  fireEvent.click(screen.getByRole('button', { name: 'Add Expense' }))
+  expect(await screen.findByText('Save failed')).toBeInTheDocument()
+  fireEvent.click(compose)
+  expect(screen.getByLabelText('Description')).toHaveValue('Global draft')
+  clickLink('Dashboard')
+  expect(await screen.findByRole('button', { name: 'Keep editing' })).toBeInTheDocument()
+  fireEvent.click(screen.getByRole('button', { name: 'Keep editing' }))
+  await waitFor(() => expect([...router.state.blockers.values()].every(blocker => blocker.state === 'unblocked')).toBe(true))
+  expect(href(router)).toBe('/settings')
+  expect(screen.getByLabelText('Description')).toHaveValue('Global draft')
+  clickLink('Dashboard')
+  fireEvent.click(await screen.findByRole('button', { name: 'Leave page' }))
+  await waitFor(() => expect(href(router)).toBe('/dashboard'))
+  await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Add Transaction' })).not.toBeInTheDocument())
+})
+
+it('supports Accounts deep links, trailing slash canonicalization and saved visibility', async () => {
+  const { router } = open('/accounts/')
+  await waitFor(() => expect(href(router)).toBe('/accounts'))
+  expect(document.title).toBe('Accounts · Finance')
+  expect(screen.getAllByRole('link', { name: 'Accounts' })[0]).toHaveAttribute('aria-current', 'page')
+  localStorage.setItem('finance_visible_menus', JSON.stringify({ accounts: false }))
+  act(() => window.dispatchEvent(new Event('finance:menu-visibility')))
+  await waitFor(() => expect(href(router)).toBe('/dashboard'))
+  expect(screen.queryByRole('link', { name: 'Accounts', exact: true })).not.toBeInTheDocument()
+})
+
+it('groups sidebar cash/investments and sorts both by converted monetary value', async () => {
+  const baseFetch = fetchMock.getMockImplementation()!
+  fetchMock.mockImplementation(async (input, options) => {
+    const url = String(input)
+    const path = new URL(url, 'http://localhost').pathname.replace(/^\/api/, '')
+    if (path === '/accounts') return Response.json([
+      { id: 'huf', name: 'Local cash', type: 'cash', currency: 'HUF', balance: 30000, updated_at: 1 },
+      { id: 'eur', name: 'Euro cash', type: 'cash', currency: 'EUR', balance: 100, updated_at: 1 },
+      { id: 'many', name: 'Many units', type: 'investment', asset_type: 'stock', symbol: 'LOW', currency: 'SHARE', balance: 100, updated_at: 1 },
+      { id: 'valuable', name: 'Valuable holding', type: 'investment', asset_type: 'stock', symbol: 'HIGH', quote_currency: 'EUR', currency: 'SHARE', balance: 2, updated_at: 1 },
+      { id: 'archived', name: 'Archived cash', type: 'cash', currency: 'HUF', balance: 0, archived_at: 1, updated_at: 1 },
+    ])
+    if (path === '/v6/latest/HUF') return Response.json({ rates: { HUF: 1, EUR: 1 / 400, USD: 1 / 360 } })
+    if (path === '/investment-transactions') return Response.json([])
+    if (path === '/market/quote') return Response.json({ regularMarketPrice: url.includes('HIGH') ? 200 : 1, currency: 'USD' })
+    return baseFetch(input, options)
+  })
+  open('/dashboard')
+  const cashGroup = await screen.findByRole('region', { name: 'Cash account shortcuts' })
+  const investments = await screen.findByRole('region', { name: 'Investment account shortcuts' })
+  const order = (group: HTMLElement) => within(group).getAllByRole('link').map(link => link.textContent)
+  await waitFor(() => expect(order(cashGroup)[0]).toMatch(/^Euro cash/))
+  await waitFor(() => expect(order(investments)[0]).toMatch(/^Valuable holding/))
+  expect(order(cashGroup)[1]).toMatch(/^Local cash/)
+  expect(order(investments)[1]).toMatch(/^Many units/)
+  expect(cashGroup).toHaveTextContent('100 EUR')
+  expect(investments).toHaveTextContent('160K HUF')
+  expect(screen.queryByRole('link', { name: /Archived cash/ })).not.toBeInTheDocument()
+})
+
+it('uses a single Accounts heading below the desktop navigation while preserving mobile access', async () => {
+  const { router, container } = open('/accounts')
+  await waitFor(() => expect(document.title).toBe('Accounts · Finance'))
+  const sidebar = container.querySelector('.finance-sidebar')!
+  const desktop = within(sidebar as HTMLElement)
+  expect(desktop.getAllByRole('link', { name: 'Accounts', exact: true })).toHaveLength(1)
+  expect(within(screen.getByRole('navigation', { name: 'Main navigation' })).queryByRole('link', { name: 'Accounts', exact: true })).not.toBeInTheDocument()
+  expect(desktop.getByRole('heading', { name: 'Accounts', exact: true })).toContainElement(desktop.getByRole('link', { name: 'Accounts', exact: true }))
+  expect(desktop.getByRole('link', { name: 'Accounts', exact: true })).toHaveAttribute('aria-current', 'page')
+  expect(desktop.queryByRole('link', { name: /Manage accounts/ })).not.toBeInTheDocument()
+  expect(within(screen.getByRole('navigation', { name: 'Mobile navigation' })).getByRole('link', { name: 'Accounts', exact: true })).toHaveAttribute('href', '/accounts')
+  const links = desktop.getAllByRole('link')
+  expect(links.indexOf(desktop.getByRole('link', { name: 'Accounts', exact: true }))).toBeGreaterThan(links.indexOf(desktop.getByRole('link', { name: 'Recurring', exact: true })))
+  clickLink('Dashboard')
+  await waitFor(() => expect(href(router)).toBe('/dashboard'))
+  fireEvent.click(desktop.getByRole('link', { name: 'Accounts', exact: true }))
+  await waitFor(() => expect(href(router)).toBe('/accounts'))
 })

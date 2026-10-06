@@ -1,3 +1,4 @@
+import { AppError } from '../errors/codes'
 import { Transaction, TransactionStatus } from '../models/Transaction'
 import { InvestmentTransaction } from '../models/InvestmentTransaction'
 import { Account } from '../models/Account'
@@ -16,6 +17,7 @@ export class TransactionService {
   ) {}
 
   private assertAccountUnlocked(account: Account): void {
+    if (account.archived_at != null) throw new AppError('ACCOUNT_ARCHIVED', 'Restore this account before making changes.', 409)
     if (account.is_locked) {
       throw new Error(`Account "${account.name}" is locked`)
     }

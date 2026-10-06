@@ -21,6 +21,7 @@ export class TransferDraftService {
       if (!from || !to) throw new Error(`items[${index}] references a missing account`)
       if (from.id === to.id) throw new Error(`items[${index}] source and destination must differ`)
       if (!['cash', 'checking', 'savings'].includes(from.type) || !['cash', 'checking', 'savings'].includes(to.type)) throw new Error(`items[${index}] requires two cash accounts`)
+      if (from.archived_at != null || to.archived_at != null) throw new Error(`items[${index}] references an archived account`)
       if (from.is_locked || to.is_locked) throw new Error(`items[${index}] references a locked account`)
       if ((item.from_currency && item.from_currency.toUpperCase() !== from.currency.toUpperCase())
         || (item.to_currency && item.to_currency.toUpperCase() !== to.currency.toUpperCase())) {

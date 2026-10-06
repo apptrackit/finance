@@ -131,6 +131,7 @@ export class ReviewCorrectionService {
       categoryId ? this.env.DB.prepare('SELECT * FROM categories WHERE id = ?').bind(categoryId).first<CategoryRow>() : Promise.resolve(null),
     ])
     if (!account) throw new Error(`account_id ${accountId} does not identify an existing account`)
+    if (account.archived_at != null) throw new Error('account_id identifies an archived account; restore it in the app first')
     if (account.is_locked === 1 || account.is_locked === true) throw new Error(`account_id ${accountId} identifies a locked account`)
     if (account.type === 'investment') throw new Error(`account_id ${accountId} identifies an investment account`)
     if (categoryId && !category) throw new Error(`category_id ${categoryId} does not identify an existing category`)

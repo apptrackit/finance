@@ -1,3 +1,4 @@
+import { AppError } from '../errors/codes'
 import { Context } from 'hono'
 import { TransferService } from '../services/transfer.service'
 import { CreateTransferDto } from '../dtos/transfer.dto'
@@ -17,6 +18,7 @@ export class TransferController {
       const result = await this.transferService.getExchangeRate(fromCurrency, toCurrency)
       return c.json(result)
     } catch (error: any) {
+      if (error instanceof AppError || error.message?.includes('ACCOUNT_')) throw error
       return c.json({ error: error.message }, 404)
     }
   }
@@ -27,6 +29,7 @@ export class TransferController {
       const transfer = await this.transferService.createTransfer(body)
       return c.json(transfer, 201)
     } catch (error: any) {
+      if (error instanceof AppError || error.message?.includes('ACCOUNT_')) throw error
       const status = error.message.includes('not found') ? 404 : error.message.includes('locked') ? 409 : 400
       return c.json({ error: error.message }, status)
     }

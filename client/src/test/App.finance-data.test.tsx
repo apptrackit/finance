@@ -2,6 +2,7 @@ import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest'
 import { createMemoryRouter, RouterProvider } from 'react-router'
 import { appRoutes } from '../navigation/routes'
+import { ThemeProvider } from '../context/ThemeContext'
 import { AlertProvider } from '../context/AlertContext'
 import type { Account, Transaction } from '../hooks/useFinanceData'
 
@@ -18,7 +19,7 @@ vi.mock('../components/dashboard-module/AccountList', () => ({
   AccountList: ({ accounts }: { accounts: Account[] }) => <div>{accounts.length ? 'Loaded accounts' : 'No accounts yet'}</div>,
 }))
 vi.mock('../components/dashboard-module/TransactionList', () => ({
-  TransactionList: ({ transactions }: { transactions: Transaction[] }) => <div>{transactions.length ? 'Loaded ledger' : 'No transactions yet'}</div>,
+  TransactionList: ({ transactions, composerOnly }: { transactions: Transaction[]; composerOnly?: boolean }) => composerOnly ? null : <div>{transactions.length ? 'Loaded ledger' : 'No transactions yet'}</div>,
 }))
 vi.mock('../components/analytics-module/Analytics', () => ({
   Analytics: ({ transactions }: { transactions: Transaction[] }) => <div>{transactions.length ? 'Loaded analytics' : 'Empty analytics'}</div>,
@@ -54,7 +55,7 @@ afterEach(() => vi.unstubAllGlobals())
 
 function renderApp() {
   const router = createMemoryRouter(appRoutes, { initialEntries: ['/dashboard'] })
-  return render(<AlertProvider><RouterProvider router={router} /></AlertProvider>)
+  return render(<ThemeProvider><AlertProvider><RouterProvider router={router} /></AlertProvider></ThemeProvider>)
 }
 
 function navigate(label: string) { fireEvent.click(screen.getAllByRole('link', { name: label })[0]) }

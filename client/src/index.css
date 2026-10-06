@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *));
 
 @theme {
   --color-border: hsl(var(--border));
@@ -63,7 +64,7 @@
 :root {
   /* Canvas: #000610. All application surfaces use #010E21. */
   --canvas: 217.5 100% 3.137%;
-  --background: 215.625 94.118% 6.667%;
+  --background: 217.5 100% 3.137%;
   --foreground: 210 40% 98%;
   
   --card: 215.625 94.118% 6.667%;
@@ -73,9 +74,9 @@
   --popover-foreground: 210 40% 98%;
   
   --primary: 215.111 63.38% 58.235%;
-  --primary-foreground: 144 80% 10%;
+  --primary-foreground: 0 0% 100%;
   
-  --secondary: 215.625 94.118% 6.667%;
+  --secondary: 215.22 69.7% 12.94%;
   --secondary-foreground: 210 40% 98%;
   
   --muted: 215.625 94.118% 6.667%;
@@ -92,7 +93,7 @@
   
   --border: 213.75 80% 11.765%;
   --input: 215.625 94.118% 6.667%;
-  --ring: 142 76% 46%;
+  --ring: 215.111 63.38% 58.235%;
   
   --radius: 0.75rem;
 }
@@ -126,32 +127,6 @@
 }
 
 @layer utilities {
-  /* Shared 1px outline for every boxed interface surface. */
-  :where(.border, .border-2, .border-\[0\.5px\]) {
-    border-width: 1px !important;
-    border-color: #061B36 !important;
-  }
-
-  :where(.border-t, .border-y) {
-    border-top-width: 1px !important;
-    border-top-color: #061B36 !important;
-  }
-
-  :where(.border-r, .border-x) {
-    border-right-width: 1px !important;
-    border-right-color: #061B36 !important;
-  }
-
-  :where(.border-b, .border-y) {
-    border-bottom-width: 1px !important;
-    border-bottom-color: #061B36 !important;
-  }
-
-  :where(.border-l, .border-x) {
-    border-left-width: 1px !important;
-    border-left-color: #061B36 !important;
-  }
-
   .glass {
     background: linear-gradient(
       135deg,
@@ -159,7 +134,7 @@
       hsl(var(--card) / 0.4) 100%
     );
     backdrop-filter: blur(20px);
-    border: 1px solid #061B36;
+    border: 1px solid hsl(var(--border));
   }
   
   .gradient-border {
@@ -209,4 +184,50 @@
       0 0 20px hsl(var(--success) / 0.2),
       0 0 40px hsl(var(--success) / 0.1);
   }
+}
+
+/* Approved Finance App design: dark/light surfaces share the same geometry. */
+:root[data-color-mode='light'] {
+  --canvas: 220 38% 97%;
+  --background: 220 38% 97%;
+  --foreground: 215 65% 12%;
+  --card: 0 0% 100%;
+  --card-foreground: 215 65% 12%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 215 65% 12%;
+  --primary: 216 53% 49%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 216 42% 95%;
+  --secondary-foreground: 215 38% 23%;
+  --muted: 216 42% 95%;
+  --muted-foreground: 217 18% 41%;
+  --accent: 216 42% 95%;
+  --accent-foreground: 215 65% 12%;
+  --border: 215 27% 91%;
+  --input: 220 38% 97%;
+  --ring: 216 53% 49%;
+  --destructive: 0 57% 50%;
+  --success: 146 65% 32%;
+}
+.finance-app { position:relative; height:100dvh; overflow:hidden; filter:var(--app-color-filter, none); }
+.finance-main { min-width:0; height:100dvh; overflow-y:auto; overscroll-behavior-y:contain; }
+.finance-sidebar { width: 240px; }
+.finance-sidebar a, .finance-sidebar button { min-height: 36px; }
+.finance-sidebar .finance-account-list a { min-height:32px; padding-top:6px; padding-bottom:6px; }
+.finance-sidebar .finance-account-list button { min-height:28px; }
+.finance-nav-item { display:flex; align-items:center; gap:10px; padding:8px 10px; border-radius:8px; font-size:14px; font-weight:500; color:hsl(var(--muted-foreground)); }
+.finance-nav-item:hover { background:hsl(var(--secondary)); color:hsl(var(--foreground)); }
+.finance-nav-item[aria-current='page'] { background:hsl(var(--primary) / .14); color:hsl(var(--foreground)); }
+.finance-nav-item[aria-current='page'] svg { color:hsl(var(--primary)); }
+.finance-icon-button { display:flex; align-items:center; justify-content:center; width:40px; height:40px; border:1px solid hsl(var(--border)); border-radius:12px; background:hsl(var(--card)); color:hsl(var(--muted-foreground)); }
+.finance-icon-button:hover { color:hsl(var(--foreground)); background:hsl(var(--secondary)); }
+button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
+:focus-visible { outline:2px solid hsl(var(--primary)); outline-offset:3px; }
+.finance-search-input:focus-visible { outline:none; }
+@media (min-width: 1024px) {
+  .finance-main { margin-left:240px; }
+  .finance-mobile-header { display:none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration:.01ms !important; transition-duration:.01ms !important; scroll-behavior:auto !important; }
 }

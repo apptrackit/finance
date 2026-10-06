@@ -50,6 +50,7 @@ import { AppError } from './errors/codes'
 import { logger } from './utils/logger'
 
 // Validators
+import { UpdateNavigationSettingsSchema } from './validators/settings.validator'
 import { CreateAccountSchema, UpdateAccountSchema } from './validators/account.validator'
 import { CreateTransactionSchema, UpdateTransactionSchema } from './validators/transaction.validator'
 import { CreateCategorySchema, UpdateCategorySchema } from './validators/category.validator'
@@ -118,6 +119,15 @@ app.onError((err, c) => {
     logger.warn('AppError', { code: err.code, message: err.message, path: c.req.path })
     return c.json({ error: err.message, code: err.code }, err.statusCode as 400 | 401 | 403 | 404 | 409 | 429 | 500)
   }
+  const accountErrors = {
+    ACCOUNT_ARCHIVED: 'Restore the archived account before making changes.',
+    ACCOUNT_LOCKED: 'Unlock the account before making changes.',
+    ACCOUNT_ARCHIVE_NONZERO: 'The balance or holding must be zero before archiving.',
+    ACCOUNT_ARCHIVE_PENDING: 'Confirm or decline all pending and review transactions before archiving.',
+    ACCOUNT_DELETE_LINKED: 'This account has linked transfers. Archive it to preserve both sides and their history.',
+  }
+  const accountCode = (Object.keys(accountErrors) as (keyof typeof accountErrors)[]).find(code => err.message.includes(code))
+  if (accountCode) return c.json({ error: accountErrors[accountCode], code: accountCode }, 409)
   logger.error('Unhandled error', { message: err.message, stack: err.stack, path: c.req.path })
   return c.json({ error: 'Internal server error', code: 'INTERNAL_ERROR' }, 500)
 })
@@ -160,6 +170,8 @@ app.post('/accounts', validateBody(CreateAccountSchema), (c) => getControllers(c
 app.put('/accounts/:id', validateBody(UpdateAccountSchema), (c) => getControllers(c).accountController.update(c))
 app.patch('/accounts/:id/lock', (c) => getControllers(c).accountController.lock(c))
 app.patch('/accounts/:id/unlock', (c) => getControllers(c).accountController.unlock(c))
+app.patch('/accounts/:id/archive', (c) => getControllers(c).accountController.archive(c))
+app.patch('/accounts/:id/restore', (c) => getControllers(c).accountController.restore(c))
 app.delete('/accounts/:id', (c) => getControllers(c).accountController.delete(c))
 
 // Transactions
@@ -208,7 +220,7 @@ app.delete('/recurring-schedules/:id', (c) => getControllers(c).recurringSchedul
 
 // Settings
 app.get('/settings/navigation', (c) => getControllers(c).settingsController.getNavigation(c))
-app.put('/settings/navigation', (c) => getControllers(c).settingsController.updateNavigation(c))
+app.put('/settings/navigation', validateBody(UpdateNavigationSettingsSchema), (c) => getControllers(c).settingsController.updateNavigation(c))
 
 // Manual trigger for scheduled task (for testing)
 app.post('/test-scheduled-task', async (c) => {

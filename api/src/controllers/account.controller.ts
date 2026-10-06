@@ -42,6 +42,14 @@ export class AccountController {
     return c.json(AccountMapper.toResponseDto(account))
   }
 
+  async archive(c: Context<{ Bindings: Bindings }>) {
+    return c.json(AccountMapper.toResponseDto(await this.accountService.archiveAccount(c.req.param('id'))))
+  }
+
+  async restore(c: Context<{ Bindings: Bindings }>) {
+    return c.json(AccountMapper.toResponseDto(await this.accountService.restoreAccount(c.req.param('id'))))
+  }
+
   async delete(c: Context<{ Bindings: Bindings }>) {
     const id = c.req.param('id')
     await this.accountService.deleteAccount(id)

@@ -45,6 +45,7 @@ export interface AccountResponseDto {
   asset_type?: AssetType
   exclude_from_net_worth?: boolean
   exclude_from_cash_balance?: boolean
+  archived_at?: number | null
   is_locked?: boolean
   updated_at: number
 }

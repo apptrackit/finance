@@ -74,6 +74,7 @@ export function NavigationCard() {
         <div className="grid gap-3 sm:grid-cols-2">
           {[
             { key: 'dashboard', label: 'Dashboard', description: 'Always available as the app start page' },
+            { key: 'accounts', label: 'Accounts', description: 'Manage, archive, and restore accounts' },
             { key: 'analytics', label: 'Analytics', description: 'Trends, charts, and insights' },
             { key: 'investments', label: 'Investments', description: 'Portfolio and holdings' },
             { key: 'recurring', label: 'Recurring', description: 'Scheduled transactions' }

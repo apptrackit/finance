@@ -14,13 +14,14 @@ export class AccountRepository {
 
   async create(account: Account): Promise<void> {
     await this.db.prepare(
-      'INSERT INTO accounts (id, name, type, balance, currency, symbol, asset_type, exclude_from_net_worth, exclude_from_cash_balance, is_locked, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+      'INSERT INTO accounts (id, name, type, balance, currency, quote_currency, symbol, asset_type, exclude_from_net_worth, exclude_from_cash_balance, is_locked, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
     ).bind(
       account.id,
       account.name,
       account.type,
       account.balance,
       account.currency,
+      account.quote_currency || null,
       account.symbol || null,
       account.asset_type || null,
       account.exclude_from_net_worth ? 1 : 0,
@@ -32,12 +33,13 @@ export class AccountRepository {
 
   async update(id: string, updates: Partial<Account>): Promise<void> {
     await this.db.prepare(
-      'UPDATE accounts SET name = COALESCE(?, name), type = COALESCE(?, type), balance = COALESCE(?, balance), currency = COALESCE(?, currency), symbol = COALESCE(?, symbol), asset_type = COALESCE(?, asset_type), exclude_from_net_worth = COALESCE(?, exclude_from_net_worth), exclude_from_cash_balance = COALESCE(?, exclude_from_cash_balance), updated_at = ? WHERE id = ?'
+      'UPDATE accounts SET name = COALESCE(?, name), type = COALESCE(?, type), balance = COALESCE(?, balance), currency = COALESCE(?, currency), quote_currency = COALESCE(?, quote_currency), symbol = COALESCE(?, symbol), asset_type = COALESCE(?, asset_type), exclude_from_net_worth = COALESCE(?, exclude_from_net_worth), exclude_from_cash_balance = COALESCE(?, exclude_from_cash_balance), updated_at = ? WHERE id = ?'
     ).bind(
       updates.name || null,
       updates.type || null,
       updates.balance ?? null,
       updates.currency || null,
+      updates.quote_currency || null,
       updates.symbol !== undefined ? updates.symbol : null,
       updates.asset_type !== undefined ? updates.asset_type : null,
       updates.exclude_from_net_worth !== undefined ? (updates.exclude_from_net_worth ? 1 : 0) : null,
@@ -55,6 +57,14 @@ export class AccountRepository {
   async setLocked(id: string, locked: boolean): Promise<void> {
     await this.db.prepare('UPDATE accounts SET is_locked = ? WHERE id = ?')
       .bind(locked ? 1 : 0, id).run()
+  }
+
+  async setArchived(id: string, archived: boolean): Promise<void> {
+    const now = Date.now()
+    await this.db.prepare(archived
+      ? 'UPDATE accounts SET archived_at = ?, updated_at = ? WHERE id = ? AND archived_at IS NULL'
+      : 'UPDATE accounts SET archived_at = NULL, updated_at = ? WHERE id = ? AND archived_at IS NOT NULL')
+      .bind(...(archived ? [now, now, id] : [now, id])).run()
   }
 
   async delete(id: string): Promise<void> {

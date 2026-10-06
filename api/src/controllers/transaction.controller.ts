@@ -1,3 +1,4 @@
+import { AppError } from '../errors/codes'
 import { Context } from 'hono'
 import { TransactionService } from '../services/transaction.service'
 import { TransactionMapper } from '../mappers/transaction.mapper'
@@ -39,6 +40,7 @@ export class TransactionController {
       await new AuditRepository(c.env.DB).log('CREATE', 'transaction', result.id, { account_id: body.account_id, amount: body.amount })
       return c.json(TransactionMapper.toResponseDto(result), 201)
     } catch (error: any) {
+      if (error instanceof AppError || error.message?.includes('ACCOUNT_')) throw error
       console.error('Transaction creation error:', error)
       
       if (error.message.includes('rate-limiting')) {
@@ -77,6 +79,7 @@ export class TransactionController {
       }
       return c.json(TransactionMapper.toResponseDto(transaction))
     } catch (error: any) {
+      if (error instanceof AppError || error.message?.includes('ACCOUNT_')) throw error
       const message = error.message || ''
       let status: 400 | 404 | 409 | 500 = 500
       if (message.includes('not found')) status = 404
@@ -95,6 +98,7 @@ export class TransactionController {
       await new AuditRepository(c.env.DB).log('DELETE', 'transaction', id)
       return c.json({ success: true })
     } catch (error: any) {
+      if (error instanceof AppError || error.message?.includes('ACCOUNT_')) throw error
       const status = error.message.includes('not found') ? 404 : error.message.includes('locked') ? 409
         : error.message.includes('Pending transfer review pairs') ? 400 : 500
       return c.json({ error: error.message }, status)
@@ -108,6 +112,7 @@ export class TransactionController {
       if (!transaction.linked_transaction_id) await new AuditRepository(c.env.DB).log('UPDATE', 'transaction', id, { status: 'posted' })
       return c.json(TransactionMapper.toResponseDto(transaction))
     } catch (error: any) {
+      if (error instanceof AppError || error.message?.includes('ACCOUNT_')) throw error
       const status = error.message.includes('not found') ? 404 : error.message.includes('locked') ? 409 : 400
       return c.json({ error: error.message }, status)
     }
@@ -120,6 +125,7 @@ export class TransactionController {
       if (!transaction.linked_transaction_id) await new AuditRepository(c.env.DB).log('UPDATE', 'transaction', id, { status: 'cancelled' })
       return c.json(TransactionMapper.toResponseDto(transaction))
     } catch (error: any) {
+      if (error instanceof AppError || error.message?.includes('ACCOUNT_')) throw error
       const status = error.message.includes('not found') ? 404 : error.message.includes('locked') ? 409 : 400
       return c.json({ error: error.message }, status)
     }

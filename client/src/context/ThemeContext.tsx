@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
 
+export type ColorMode = 'dark' | 'light'
 export type ThemeId = 'emerald' | 'mono' | 'redfilter'
 
 export interface Theme {
@@ -45,6 +46,8 @@ export const THEMES: Theme[] = [
 const THEME_STORAGE_KEY = 'finance_theme'
 
 interface ThemeContextType {
+  colorMode: ColorMode
+  setColorMode: (mode: ColorMode) => void
   theme: ThemeId
   setTheme: (theme: ThemeId) => void
 }
@@ -52,6 +55,16 @@ interface ThemeContextType {
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined)
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
+  const [colorMode, setColorModeState] = useState<ColorMode>(() => localStorage.getItem('finance_color_mode') === 'light' ? 'light' : 'dark')
+  const setColorMode = (mode: ColorMode) => {
+    setColorModeState(mode)
+    localStorage.setItem('finance_color_mode', mode)
+  }
+  useEffect(() => {
+    document.documentElement.dataset.colorMode = colorMode
+    document.documentElement.classList.toggle('dark', colorMode === 'dark')
+    document.documentElement.style.colorScheme = colorMode
+  }, [colorMode])
   const [theme, setThemeState] = useState<ThemeId>(() => {
     const saved = localStorage.getItem(THEME_STORAGE_KEY)
     return THEMES.some(t => t.id === saved) ? saved as ThemeId : 'emerald'
@@ -70,9 +83,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
     // Apply CSS filter for filter-based themes
     const activeTheme = THEMES.find(t => t.id === theme)
-    if (activeTheme?.cssFilter) {
-      html.style.filter = activeTheme.cssFilter
-    }
+    html.style.setProperty('--app-color-filter', activeTheme?.cssFilter || 'none')
   }, [theme])
 
   const setTheme = (newTheme: ThemeId) => {
@@ -81,7 +92,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <ThemeContext.Provider value={{ theme, setTheme }}>
+    <ThemeContext.Provider value={{ theme, setTheme, colorMode, setColorMode }}>
       {children}
     </ThemeContext.Provider>
   )
