@@ -1,3 +1,4 @@
+import type { AnalyticsFilters, FilterChange } from '../../navigation/filters'
 import { convertCurrency, sumConversions } from '../../../../shared/currency'
 import { MissingExchangeRates } from '../common/MissingExchangeRates'
 import { useState, useMemo, useEffect, useCallback } from 'react'
@@ -37,6 +38,9 @@ type AnalyticsProps = {
   exchangeRates?: Record<string, number>
   loading?: boolean
   onRetryRates?: () => void
+  filters?: AnalyticsFilters
+  onFiltersChange?: FilterChange<AnalyticsFilters>
+  projectionReady?: boolean
 }
 
 function AnalyticsSkeleton() {
@@ -82,13 +86,29 @@ export function Analytics({
   exchangeRates = {},
   loading = false,
   onRetryRates,
+  filters,
+  onFiltersChange,
+  projectionReady = true,
 }: AnalyticsProps) {
-  const [period, setPeriod] = useState<TimePeriod>('month')
-  const [projectionMode, setProjectionMode] = useState<'actual' | 'projected'>('actual')
-  const [selectedExpenseCategory, setSelectedExpenseCategory] = useState<string>('all')
-  const [selectedIncomeCategory, setSelectedIncomeCategory] = useState<string>('all')
-  const [selectedDate, setSelectedDate] = useState(new Date())
-  const [incomeExpensesTrendResolution, setIncomeExpensesTrendResolution] = useState<IncomeExpensesTrendResolution>('default')
+  const [localFilters, setLocalFilters] = useState<AnalyticsFilters>(() => ({
+    period: 'month', date: format(startOfMonth(new Date()), 'yyyy-MM-dd'), pinned: false,
+    mode: 'actual', expenseCategory: 'all', incomeCategory: 'all', resolution: 'default',
+  }))
+  const viewFilters = filters ?? localFilters
+  const changeFilters = useCallback((patch: Partial<AnalyticsFilters>, replace = false) => {
+    if (onFiltersChange) onFiltersChange(patch, replace)
+    else setLocalFilters(previous => ({ ...previous, ...patch }))
+  }, [onFiltersChange])
+  const period = viewFilters.period
+  const projectionMode = viewFilters.mode
+  const selectedExpenseCategory = viewFilters.expenseCategory
+  const selectedIncomeCategory = viewFilters.incomeCategory
+  const selectedDate = useMemo(() => parseISO(viewFilters.date), [viewFilters.date])
+  const incomeExpensesTrendResolution = viewFilters.resolution
+  const setProjectionMode = (mode: AnalyticsFilters['mode']) => changeFilters({ mode })
+  const setSelectedExpenseCategory = (expenseCategory: string) => changeFilters({ expenseCategory })
+  const setSelectedIncomeCategory = (incomeCategory: string) => changeFilters({ incomeCategory })
+  const setIncomeExpensesTrendResolution = (resolution: IncomeExpensesTrendResolution) => changeFilters({ resolution })
   const [isConfigOpen, setIsConfigOpen] = useState(false)
   const [widgetVisibility, setWidgetVisibility] = useState<Record<WidgetId, boolean>>(loadWidgetVisibility)
 
@@ -133,8 +153,8 @@ export function Analytics({
   const isProjected = hasProjection && projectionMode === 'projected'
 
   useEffect(() => {
-    if (!hasProjection && projectionMode === 'projected') setProjectionMode('actual')
-  }, [hasProjection, projectionMode])
+    if (projectionReady && !hasProjection && projectionMode === 'projected') changeFilters({ mode: 'actual' }, true)
+  }, [hasProjection, projectionMode, projectionReady, changeFilters])
 
   const transactionsForAnalytics = useMemo(() => {
     return isProjected ? [...transactions, ...projectableUpcomingTransactions] : transactions
@@ -869,13 +889,11 @@ export function Analytics({
   }
 
   const navigateBack = () => {
-    setProjectionMode('actual')
-    setSelectedDate(d => period === 'month' ? subMonths(d, 1) : subYears(d, 1))
+    changeFilters({ mode: 'actual', pinned: true, date: format(period === 'month' ? subMonths(selectedDate, 1) : subYears(selectedDate, 1), 'yyyy-MM-dd') })
   }
 
   const navigateForward = () => {
-    setProjectionMode('actual')
-    setSelectedDate(d => period === 'month' ? addMonths(d, 1) : addYears(d, 1))
+    changeFilters({ mode: 'actual', pinned: true, date: format(period === 'month' ? addMonths(selectedDate, 1) : addYears(selectedDate, 1), 'yyyy-MM-dd') })
   }
 
   const isSelectedInCurrentYear = selectedDate.getFullYear() === new Date().getFullYear()
@@ -945,9 +963,7 @@ export function Analytics({
                 key={p}
                 type="button"
                 onClick={() => {
-                  setPeriod(p)
-                  setProjectionMode('actual')
-                  setIncomeExpensesTrendResolution('default')
+                  changeFilters({ period: p, mode: 'actual', resolution: 'default' })
                 }}
                 aria-pressed={period === p}
                 className={`flex-1 min-[430px]:flex-none px-2.5 sm:px-3 py-1.5 text-xs font-medium rounded-lg transition-all whitespace-nowrap ${

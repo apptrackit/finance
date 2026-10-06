@@ -1,188 +1,72 @@
-import { convertCurrency, sumAvailable } from '../../shared/currency'
-import { MissingExchangeRates } from './components/common/MissingExchangeRates'
-import { useEffect, useState } from 'react'
-import { AccountList } from './components/dashboard-module/AccountList'
-import { TransactionList } from './components/dashboard-module/TransactionList'
-import { Analytics } from './components/analytics-module/Analytics'
-import { Investments } from './components/investments-module/Investments'
-import { RecurringTransactions } from './components/dashboard-module/RecurringTransactions'
-import { Wallet, TrendingUp, TrendingDown, Activity, BarChart3, Send, Settings as SettingsIcon, LineChart, Eye, EyeOff, RefreshCw } from 'lucide-react'
-import Settings from './components/settings-module/Settings'
+import { useEffect, useMemo, useState } from 'react'
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router'
+import { Wallet, BarChart3, Send, Settings as SettingsIcon, LineChart, Eye, EyeOff, RefreshCw } from 'lucide-react'
 import { getMasterCurrency, getStoredMenuVisibility, loadNavigationSettings } from './components/settings-module/settings.storage'
 import { MENU_VISIBILITY_EVENT, type MenuKey } from './components/settings-module/constants'
 import { usePrivacy } from './context/PrivacyContext'
-import { startOfMonth, endOfMonth, format } from 'date-fns'
 import { useFinanceData } from './hooks/useFinanceData'
-import { FinanceDataBoundary, FinanceDataStatus } from './components/common/FinanceDataStatus'
-import type { NamedDataStatus } from './components/common/FinanceDataStatus'
-import { isUpcomingProjectionTransaction } from './lib/transaction-review'
+import { FinanceDataStatus } from './components/common/FinanceDataStatus'
+import { parseDashboardFilters } from './navigation/filters'
 
-type View = 'dashboard' | 'analytics' | 'settings' | 'investments' | 'recurring'
+export type FinancePageContext = { finance: ReturnType<typeof useFinanceData>; masterCurrency: string }
 
 function App() {
-  const [view, setView] = useState<View>(() => {
-    const saved = localStorage.getItem('finance_last_view') as View | null
-    const validViews: View[] = ['dashboard', 'analytics', 'settings', 'investments', 'recurring']
-    return (saved && validViews.includes(saved)) ? saved : 'dashboard'
-  })
-
-  const navigateTo = (v: View) => {
-    localStorage.setItem('finance_last_view', v)
-    setView(v)
-  }
-  const [masterCurrency, setMasterCurrency] = useState('HUF')
-  const [showNetWorth, setShowNetWorth] = useState(false)
+  const { pathname, search } = useLocation()
+  const view = pathname.replace(/^\/|\/$/g, '')
+  const navigate = useNavigate()
+  const [masterCurrency, setMasterCurrency] = useState(getMasterCurrency)
   const [visibleMenus, setVisibleMenus] = useState<Record<MenuKey, boolean>>(getStoredMenuVisibility)
-  const { privacyMode, togglePrivacyMode, shouldHideNetWorth } = usePrivacy()
-
-  const [currentMonth, setCurrentMonth] = useState(new Date())
-  const [isTransactionCalendarOpen, setIsTransactionCalendarOpen] = useState(false)
-  const [dateRange, setDateRange] = useState({
-    startDate: format(startOfMonth(new Date()), 'yyyy-MM-dd'),
-    endDate: format(endOfMonth(new Date()), 'yyyy-MM-dd'),
-  })
-
-  const {
-    netWorth,
-    investmentValue,
-    investmentError,
-    accounts,
-    transactions,
-    allTransactions,
-    upcomingTransactions,
-    transactionsLoading,
-    allTransactionsLoading,
-    categories,
-    usableExchangeRates: exchangeRates,
-    netWorthMissingCurrencies,
-    investmentMissingCurrencies,
-    exchangeRatesLoading,
-    investmentRefreshKey,
-    handleDataChange,
-    dataStatus,
-  } = useFinanceData(dateRange, masterCurrency)
+  const [navigationReady, setNavigationReady] = useState(false)
+  const { privacyMode, togglePrivacyMode } = usePrivacy()
+  const dateRange = useMemo(() => {
+    const filters = parseDashboardFilters(new URLSearchParams(view === 'dashboard' ? search : ''))
+    return { startDate: filters.startDate, endDate: filters.endDate }
+  }, [view, search])
+  const finance = useFinanceData(dateRange, masterCurrency)
+  const { dataStatus } = finance
 
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: 'instant' })
+    const titles: Record<string, string> = { dashboard: 'Dashboard', analytics: 'Analytics', investments: 'Investments', recurring: 'Recurring', settings: 'Settings' }
+    document.title = `${titles[view] || 'Page not found'} · Finance`
   }, [view])
 
+  useEffect(() => { setMasterCurrency(getMasterCurrency()) }, [])
   useEffect(() => {
-    setMasterCurrency(getMasterCurrency())
-  }, [])
-
+    if (pathname !== '/' && pathname.endsWith('/') && ['dashboard', 'analytics', 'investments', 'recurring', 'settings'].includes(view)) {
+      void navigate(`/${view}${search}`, { replace: true })
+    }
+  }, [pathname, search, view, navigate])
   useEffect(() => {
     let isMounted = true
-
-    loadNavigationSettings().then(next => {
+    void loadNavigationSettings().then(next => {
       if (isMounted) {
-        setVisibleMenus(next)
+        setVisibleMenus({ ...next, dashboard: true })
+        setNavigationReady(true)
       }
     })
-
-    return () => {
-      isMounted = false
-    }
+    return () => { isMounted = false }
   }, [])
-
   useEffect(() => {
-    const handler = () => setVisibleMenus(getStoredMenuVisibility())
+    const handler = () => setVisibleMenus({ ...getStoredMenuVisibility(), dashboard: true })
     window.addEventListener(MENU_VISIBILITY_EVENT, handler)
     return () => window.removeEventListener(MENU_VISIBILITY_EVENT, handler)
   }, [])
-
   useEffect(() => {
-    const menuOrder: MenuKey[] = ['dashboard', 'analytics', 'investments', 'recurring']
-    if (view !== 'settings' && !visibleMenus[view]) {
-      const next = menuOrder.find(key => visibleMenus[key]) || 'dashboard'
-      navigateTo(next)
+    if (!navigationReady) return
+    if (view === 'analytics' || view === 'investments' || view === 'recurring') {
+      if (!visibleMenus[view]) void navigate('/dashboard', { replace: true })
     }
-  }, [visibleMenus, view])
+  }, [visibleMenus, view, navigate, navigationReady])
 
-  const dataset = (key: keyof typeof dataStatus, label: string): NamedDataStatus => ({ label, status: dataStatus[key] })
+  const dataset = (key: keyof typeof dataStatus, label: string) => ({ label, status: dataStatus[key] })
   const accountData = [dataset('accounts', 'Accounts')]
   const transactionData = [...accountData, dataset('transactions', 'Period transactions'), dataset('upcoming', 'Upcoming transactions')]
-  const analyticsData = [...accountData, dataset('history', 'Transaction history'), dataset('upcoming', 'Upcoming transactions'),
-    dataset('categories', 'Categories')]
-  const summaryData = [...accountData, dataset('transactions', 'Period transactions')]
-  const netWorthData = [...accountData, dataset('netWorth', 'Net worth'), dataset('investment', 'Investment value')]
-  const recurringData = [...accountData, dataset('categories', 'Categories')]
-  const visibleData = view === 'dashboard'
-    ? [...transactionData, dataset('categories', 'Categories'), dataset('netWorth', 'Net worth'),
-      dataset('investment', 'Investment value'), dataset('exchangeRates', 'Exchange rates')]
-    : view === 'analytics' ? analyticsData : view === 'recurring' ? recurringData : []
-  const syncText = visibleData.some(({ status }) => status.error) ? 'Load error'
-    : visibleData.some(({ status }) => status.loading) ? 'Updating…' : 'Synced'
-
-  const missingCurrencies = new Set([...netWorthMissingCurrencies, ...investmentMissingCurrencies])
-  const convertToMasterCurrency = (amount: number, accountId: string, absolute = false): number | null => {
-    const account = accounts.find(a => a.id === accountId)
-    if (!account) return null
-    const result = convertCurrency(amount, account.currency, masterCurrency, exchangeRates)
-    result.missingCurrencies.forEach(currency => missingCurrencies.add(currency))
-    return absolute && result.value !== null ? Math.abs(result.value) : result.value
-  }
-
-  const totalIncome = sumAvailable(transactions
-    .filter(t => {
-      const account = accounts.find(a => a.id === t.account_id)
-      const isExcluded = account?.exclude_from_cash_balance && account?.exclude_from_net_worth
-      return t.amount > 0 && !t.linked_transaction_id && account?.type !== 'investment' && !isExcluded
-    })
-    .map(t => convertToMasterCurrency(t.amount, t.account_id)))
-
-  const totalExpenses = sumAvailable(transactions
-    .filter(t => {
-      const account = accounts.find(a => a.id === t.account_id)
-      const isExcluded = account?.exclude_from_cash_balance && account?.exclude_from_net_worth
-      return t.amount < 0 && !t.linked_transaction_id && account?.type !== 'investment' && !isExcluded
-    })
-    .map(t => convertToMasterCurrency(t.amount, t.account_id, true)))
-
-  const cashBalance = sumAvailable(accounts
-    .filter(a => a.type === 'cash' && !(a.exclude_from_cash_balance && a.exclude_from_net_worth))
-    .map(account => convertToMasterCurrency(account.balance, account.id)))
-
-  const projectableUpcomingTransactions = upcomingTransactions.filter(isUpcomingProjectionTransaction)
-
-  const pendingPeriodTransactions = projectableUpcomingTransactions.filter(t =>
-    t.date >= dateRange.startDate && t.date <= dateRange.endDate
-  )
-
-  const pendingIncome = sumAvailable(pendingPeriodTransactions
-    .filter(t => {
-      const account = accounts.find(a => a.id === t.account_id)
-      const isExcluded = account?.exclude_from_cash_balance && account?.exclude_from_net_worth
-      return t.amount > 0 && !t.linked_transaction_id && account?.type !== 'investment' && !isExcluded
-    })
-    .map(t => convertToMasterCurrency(t.amount, t.account_id)))
-
-  const pendingExpenses = sumAvailable(pendingPeriodTransactions
-    .filter(t => {
-      const account = accounts.find(a => a.id === t.account_id)
-      const isExcluded = account?.exclude_from_cash_balance && account?.exclude_from_net_worth
-      return t.amount < 0 && !t.linked_transaction_id && account?.type !== 'investment' && !isExcluded
-    })
-    .map(t => convertToMasterCurrency(t.amount, t.account_id, true)))
-
-  const pendingCashDelta = sumAvailable(projectableUpcomingTransactions
-    .filter(t => {
-      const account = accounts.find(a => a.id === t.account_id)
-      return account?.type === 'cash' && !(account.exclude_from_cash_balance && account.exclude_from_net_worth)
-    })
-    .map(t => convertToMasterCurrency(t.amount, t.account_id)))
-
-  const pendingNetWorthDelta = sumAvailable(projectableUpcomingTransactions
-    .filter(t => {
-      const account = accounts.find(a => a.id === t.account_id)
-      return account?.type !== 'investment' && !account?.exclude_from_net_worth
-    })
-    .map(t => convertToMasterCurrency(t.amount, t.account_id)))
-
-  const totalNetWorth = netWorth !== null && investmentValue !== null && dataStatus.investment.loaded && !dataStatus.netWorth.error && !dataStatus.investment.error ? netWorth + investmentValue : null
-  const projectedNetWorth = sumAvailable([totalNetWorth, pendingNetWorthDelta])
-  const projectedCashBalance = sumAvailable([cashBalance, pendingCashDelta])
-  const hasInvestmentAccounts = accounts.some(a => a.type === 'investment')
-  const showSeparateCashCard = hasInvestmentAccounts
+  const analyticsData = [...accountData, dataset('history', 'Transaction history'), dataset('upcoming', 'Upcoming transactions'), dataset('categories', 'Categories')]
+  const visibleData = view === 'dashboard' ? [...transactionData, dataset('categories', 'Categories'), dataset('netWorth', 'Net worth'),
+    dataset('investment', 'Investment value'), dataset('exchangeRates', 'Exchange rates')]
+    : view === 'analytics' ? analyticsData : view === 'recurring' ? [...accountData, dataset('categories', 'Categories')] : []
+  const syncText = visibleData.some(({ status }) => status.error) ? 'Load error' : visibleData.some(({ status }) => status.loading) ? 'Updating…' : 'Synced'
 
   const navItems: { key: MenuKey; icon: React.ReactNode; label: string }[] = [
     { key: 'dashboard', icon: <Send className="h-4 w-4 lg:h-3.5 lg:w-3.5" />, label: 'Dashboard' },
@@ -214,11 +98,12 @@ function App() {
               </div>
               <div className="flex items-center gap-1.5 sm:gap-2">
                 {/* Desktop nav — hidden on mobile (replaced by bottom bar) */}
-                <div className="hidden lg:flex gap-0.5 sm:gap-1 p-0.5 sm:p-1 rounded-lg sm:rounded-xl bg-secondary/50 border border-border/50">
+                <nav aria-label="Main navigation" className="hidden lg:flex gap-0.5 sm:gap-1 p-0.5 sm:p-1 rounded-lg sm:rounded-xl bg-secondary/50 border border-border/50">
                   {navItems.filter(n => visibleMenus[n.key]).map(n => (
-                    <button
+                    <NavLink
                       key={n.key}
-                      onClick={() => navigateTo(n.key)}
+                      to={`/${n.key}`}
+                      end
                       className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all flex items-center gap-1.5 ${
                         view === n.key
                           ? 'bg-primary text-primary-foreground shadow-sm'
@@ -227,10 +112,12 @@ function App() {
                     >
                       {n.icon}
                       <span>{n.label}</span>
-                    </button>
+                    </NavLink>
                   ))}
-                  <button
-                    onClick={() => navigateTo('settings')}
+                  <NavLink
+                    to="/settings"
+                    end
+                    aria-label="Settings"
                     className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all flex items-center gap-1.5 ${
                       view === 'settings'
                         ? 'bg-primary text-primary-foreground shadow-sm'
@@ -239,13 +126,15 @@ function App() {
                   >
                     <SettingsIcon className="h-3.5 w-3.5" />
                     <span>Settings</span>
-                  </button>
-                </div>
+                  </NavLink>
+                </nav>
 
                 {/* Mobile header — compact icon buttons */}
                 <div className="flex lg:hidden gap-0.5 p-0.5 rounded-lg bg-secondary/50 border border-border/50">
-                  <button
-                    onClick={() => navigateTo('settings')}
+                  <NavLink
+                    to="/settings"
+                    end
+                    aria-label="Settings"
                     className={`px-2.5 py-2 text-xs font-medium rounded-md transition-all flex items-center gap-1 ${
                       view === 'settings'
                         ? 'bg-primary text-primary-foreground shadow-sm'
@@ -253,7 +142,7 @@ function App() {
                     }`}
                   >
                     <SettingsIcon className="h-4 w-4" />
-                  </button>
+                  </NavLink>
                 </div>
 
                 {/* Privacy Toggle */}
@@ -282,252 +171,18 @@ function App() {
         </header>
 
         <main className="max-w-7xl mx-auto px-3 sm:px-6 py-3 sm:py-8">
-          <FinanceDataStatus datasets={visibleData} onRetry={() => { void handleDataChange() }} />
-          {view === 'dashboard' && dataStatus.accounts.loaded && !dataStatus.exchangeRates.loading && (
-            <div className="mb-4"><MissingExchangeRates currencies={[...missingCurrencies].sort()} targetCurrency={masterCurrency}
-              onRetry={() => { void handleDataChange() }} retrying={visibleData.some(({ status }) => status.loading)} /></div>
-          )}
-          {view === 'dashboard' && (
-            <div className={`grid gap-2.5 sm:gap-4 grid-cols-2 ${showSeparateCashCard ? 'lg:grid-cols-4' : 'lg:grid-cols-3'} mb-3 sm:mb-8`}>
-              {/* Net Worth Card */}
-              <FinanceDataBoundary label="Net Worth" datasets={netWorthData}>
-              <div className="group relative overflow-hidden rounded-xl sm:rounded-2xl border border-border/50 bg-gradient-to-br from-card to-card/80 p-3 sm:p-6 shadow-xl">
-                <div className="absolute top-0 right-0 w-32 h-32 bg-primary/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" />
-                <div className="relative">
-                  <div className="flex items-center justify-between mb-1.5 sm:mb-4">
-                    <span className="text-[10px] sm:text-sm font-medium text-muted-foreground">Net Worth</span>
-                    <div className="h-6 w-6 sm:h-8 sm:w-8 rounded-lg bg-primary/10 flex items-center justify-center">
-                      <Activity className="h-3 w-3 sm:h-4 sm:w-4 text-primary" />
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-1 sm:gap-2">
-                    <div className="text-lg sm:text-4xl font-bold tracking-tight text-foreground leading-tight">
-                      {investmentError && !dataStatus.investment.loaded ? (
-                        <span className="text-xs sm:text-lg text-destructive">Error loading data</span>
-                      ) : totalNetWorth !== null ? (
-                        <>
-                          <span className={shouldHideNetWorth() ? 'select-none' : ''}>
-                            {shouldHideNetWorth() && !showNetWorth
-                              ? '••••••'
-                              : totalNetWorth.toLocaleString('hu-HU', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
-                          </span>
-                          <span className="text-muted-foreground text-xs sm:text-2xl ml-0.5 sm:ml-1">{masterCurrency}</span>
-                        </>
-                      ) : (
-                        <span className="text-xs sm:text-lg text-muted-foreground">Unavailable</span>
-                      )}
-                    </div>
-                    {shouldHideNetWorth() && totalNetWorth !== null && (
-                      <button
-                        onClick={() => setShowNetWorth(!showNetWorth)}
-                        className="ml-1 sm:ml-2 p-1 sm:p-1.5 rounded-lg hover:bg-primary/10 transition-colors"
-                        aria-label={showNetWorth ? 'Hide net worth' : 'Show net worth'}
-                      >
-                        {showNetWorth ? (
-                          <EyeOff className="h-3 w-3 sm:h-4 sm:w-4 text-muted-foreground" />
-                        ) : (
-                          <Eye className="h-3 w-3 sm:h-4 sm:w-4 text-muted-foreground" />
-                        )}
-                      </button>
-                    )}
-                  </div>
-                  <p className="text-[9px] sm:text-xs text-muted-foreground mt-1 sm:mt-2">
-                    {investmentError ? investmentError : !dataStatus.upcoming.loaded ? 'Upcoming data unavailable' : projectedNetWorth === null ? 'Projection unavailable' : projectedNetWorth !== null && pendingNetWorthDelta !== 0 ? (
-                      <>
-                        After all upcoming{' '}
-                        <span className={shouldHideNetWorth() ? 'select-none' : ''}>
-                          {shouldHideNetWorth() && !showNetWorth
-                            ? '••••••'
-                            : projectedNetWorth.toLocaleString('hu-HU', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
-                        </span>{' '}
-                        {masterCurrency}
-                      </>
-                    ) : 'Total value'}
-                  </p>
-                </div>
-              </div>
-
-              </FinanceDataBoundary>
-
-              {/* Cash Balance Card */}
-              {showSeparateCashCard && (
-                <FinanceDataBoundary label="Cash" datasets={accountData}>
-                <div className="group relative overflow-hidden rounded-xl sm:rounded-2xl border border-border/50 bg-card p-3 sm:p-6 shadow-xl hover:border-primary/30 transition-colors">
-                  <div className="flex items-center justify-between mb-1.5 sm:mb-4">
-                    <span className="text-[10px] sm:text-sm font-medium text-muted-foreground">Cash</span>
-                    <div className="h-6 w-6 sm:h-8 sm:w-8 rounded-lg bg-primary/10 flex items-center justify-center">
-                      <Wallet className="h-3 w-3 sm:h-4 sm:w-4 text-primary" />
-                    </div>
-                  </div>
-                  <div className="text-lg sm:text-4xl font-bold tracking-tight text-foreground leading-tight">
-                    {cashBalance !== null ? (
-                      <>
-                        <span className={privacyMode === 'hidden' ? 'select-none' : ''}>
-                          {privacyMode === 'hidden'
-                            ? '••••••'
-                            : cashBalance.toLocaleString('hu-HU', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
-                        </span>
-                        <span className="text-muted-foreground text-xs sm:text-2xl ml-0.5 sm:ml-1">{masterCurrency}</span>
-                      </>
-                    ) : (
-                      <span className="text-xs sm:text-lg text-muted-foreground">Unavailable</span>
-                    )}
-                  </div>
-                  <p className="text-[9px] sm:text-xs text-muted-foreground mt-1 sm:mt-2">
-                    {!dataStatus.upcoming.loaded ? 'Upcoming data unavailable' : projectedCashBalance === null ? 'Projection unavailable' : pendingCashDelta !== 0 ? (
-                      <>
-                        After all upcoming{' '}
-                        <span className={privacyMode === 'hidden' ? 'select-none' : ''}>
-                          {privacyMode === 'hidden'
-                            ? '••••••'
-                            : projectedCashBalance.toLocaleString('hu-HU', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
-                        </span>{' '}
-                        {masterCurrency}
-                      </>
-                    ) : (
-                      <>
-                        {accounts.filter(a => a.type === 'cash').length} account{accounts.filter(a => a.type === 'cash').length !== 1 ? 's' : ''}
-                      </>
-                    )}
-                  </p>
-                </div>
-                </FinanceDataBoundary>
-              )}
-
-              {/* Income Card */}
-              <FinanceDataBoundary label="Income" datasets={summaryData}>
-              <div className="group relative overflow-hidden rounded-xl sm:rounded-2xl border border-border/50 bg-card p-3 sm:p-6 shadow-xl hover:border-success/30 transition-colors">
-                <div className="flex items-center justify-between mb-1.5 sm:mb-4">
-                  <span className="text-[10px] sm:text-sm font-medium text-muted-foreground">Income</span>
-                  <div className="h-6 w-6 sm:h-8 sm:w-8 rounded-lg bg-success/10 flex items-center justify-center">
-                    <TrendingUp className="h-3 w-3 sm:h-4 sm:w-4 text-success" />
-                  </div>
-                </div>
-                <div className="text-base sm:text-3xl font-bold tracking-tight text-success leading-tight">
-                  {!dataStatus.transactions.loaded && transactionsLoading ? (
-                    <div className="h-5 sm:h-9 w-20 sm:w-32 bg-muted animate-pulse rounded" />
-                  ) : totalIncome === null ? <span className="text-xs sm:text-lg text-muted-foreground">Unavailable</span> : (
-                    <>
-                      <span className={privacyMode === 'hidden' ? 'select-none' : ''}>
-                        +{privacyMode === 'hidden' ? '••••••' : totalIncome.toLocaleString('hu-HU', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
-                      </span>{' '}
-                      <span className="text-[10px] sm:text-base">{masterCurrency}</span>
-                    </>
-                  )}
-                </div>
-                <p className="text-[9px] sm:text-xs text-muted-foreground mt-1 sm:mt-2">
-                  {!dataStatus.upcoming.loaded ? 'Upcoming data unavailable' : pendingIncome === null ? 'Pending total unavailable' : pendingIncome > 0 ? (
-                    <>
-                      +{privacyMode === 'hidden' ? '••••••' : pendingIncome.toLocaleString('hu-HU', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} {masterCurrency} pending
-                    </>
-                  ) : 'This period'}
-                </p>
-              </div>
-
-              </FinanceDataBoundary>
-
-              {/* Expenses Card */}
-              <FinanceDataBoundary label="Expenses" datasets={summaryData}>
-              <div className="group relative overflow-hidden rounded-xl sm:rounded-2xl border border-border/50 bg-card p-3 sm:p-6 shadow-xl hover:border-destructive/30 transition-colors">
-                <div className="flex items-center justify-between mb-1.5 sm:mb-4">
-                  <span className="text-[10px] sm:text-sm font-medium text-muted-foreground">Expenses</span>
-                  <div className="h-6 w-6 sm:h-8 sm:w-8 rounded-lg bg-destructive/10 flex items-center justify-center">
-                    <TrendingDown className="h-3 w-3 sm:h-4 sm:w-4 text-destructive" />
-                  </div>
-                </div>
-                <div className="text-base sm:text-3xl font-bold tracking-tight text-destructive leading-tight">
-                  {!dataStatus.transactions.loaded && transactionsLoading ? (
-                    <div className="h-5 sm:h-9 w-20 sm:w-32 bg-muted animate-pulse rounded" />
-                  ) : totalExpenses === null ? <span className="text-xs sm:text-lg text-muted-foreground">Unavailable</span> : (
-                    <>
-                      <span className={privacyMode === 'hidden' ? 'select-none' : ''}>
-                        <span className="mr-0.5">−</span>
-                        {privacyMode === 'hidden' ? '••••••' : totalExpenses.toLocaleString('hu-HU', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
-                      </span>{' '}
-                      <span className="text-[10px] sm:text-base">{masterCurrency}</span>
-                    </>
-                  )}
-                </div>
-                <p className="text-[9px] sm:text-xs text-muted-foreground mt-1 sm:mt-2">
-                  {!dataStatus.upcoming.loaded ? 'Upcoming data unavailable' : pendingExpenses === null ? 'Pending total unavailable' : pendingExpenses > 0 ? (
-                    <>
-                      −{privacyMode === 'hidden' ? '••••••' : pendingExpenses.toLocaleString('hu-HU', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} {masterCurrency} pending
-                    </>
-                  ) : 'This period'}
-                </p>
-              </div>
-              </FinanceDataBoundary>
-            </div>
-          )}
-
-          {view === 'dashboard' ? (
-            <div className="grid gap-3 sm:gap-6 grid-cols-1 lg:grid-cols-12">
-              {!isTransactionCalendarOpen && (
-                <div className="lg:col-span-4">
-                  <FinanceDataBoundary label="Accounts" datasets={accountData}>
-                    <AccountList accounts={accounts} onAccountAdded={handleDataChange} loading={!dataStatus.accounts.loaded && dataStatus.accounts.loading} />
-                  </FinanceDataBoundary>
-                </div>
-              )}
-              <div className={isTransactionCalendarOpen ? 'lg:col-span-12' : 'lg:col-span-8'}>
-                <FinanceDataBoundary label="Transactions" datasets={transactionData}>
-                <TransactionList
-                  transactions={transactions}
-                  upcomingTransactions={upcomingTransactions}
-                  accounts={accounts}
-                  onTransactionAdded={handleDataChange}
-                  loading={!dataStatus.transactions.loaded && transactionsLoading}
-                  dateRange={dateRange}
-                  onDateRangeChange={(newRange) => setDateRange(newRange)}
-                  currentMonth={currentMonth}
-                  onMonthChange={(newMonth) => {
-                    setCurrentMonth(newMonth)
-                    setDateRange({
-                      startDate: format(startOfMonth(newMonth), 'yyyy-MM-dd'),
-                      endDate: format(endOfMonth(newMonth), 'yyyy-MM-dd'),
-                    })
-                  }}
-                  convertToMasterCurrency={convertToMasterCurrency}
-                  masterCurrency={masterCurrency}
-                  onCalendarViewChange={setIsTransactionCalendarOpen}
-                />
-                </FinanceDataBoundary>
-              </div>
-            </div>
-          ) : view === 'analytics' ? (
-            <FinanceDataBoundary label="Analytics" datasets={analyticsData}>
-            <Analytics
-              transactions={allTransactions}
-              upcomingTransactions={upcomingTransactions}
-              categories={categories}
-              accounts={accounts}
-              masterCurrency={masterCurrency}
-              exchangeRates={exchangeRates}
-              onRetryRates={() => { void handleDataChange() }}
-              loading={(!dataStatus.history.loaded && allTransactionsLoading) || (!dataStatus.exchangeRates.loaded && exchangeRatesLoading)}
-            />
-            </FinanceDataBoundary>
-          ) : view === 'investments' ? (
-            <Investments key={investmentRefreshKey} />
-          ) : view === 'recurring' ? (
-            <FinanceDataBoundary label="Recurring transactions" datasets={recurringData}>
-              <RecurringTransactions accounts={accounts} categories={categories} dataLoading={!dataStatus.accounts.loaded && dataStatus.accounts.loading} />
-            </FinanceDataBoundary>
-          ) : (
-            <Settings />
-          )}
+          <FinanceDataStatus datasets={visibleData} onRetry={() => { void finance.handleDataChange() }} />
+          <Outlet context={{ finance, masterCurrency } satisfies FinancePageContext} />
         </main>
-
-
       </div>
-
       {/* Mobile bottom navigation */}
-      <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-50 bg-card/95 backdrop-blur-xl border-t border-border/50">
+      <nav aria-label="Mobile navigation" className="lg:hidden fixed bottom-0 left-0 right-0 z-50 bg-card/95 backdrop-blur-xl border-t border-border/50">
         <div className="flex items-center justify-around px-2 pt-2" style={{paddingBottom: 'max(8px, env(safe-area-inset-bottom))'}}>
           {navItems.filter(n => visibleMenus[n.key]).map(n => (
-            <button
+            <NavLink
               key={n.key}
-              onClick={() => navigateTo(n.key)}
+              to={`/${n.key}`}
+              end
               className={`flex flex-col items-center gap-0.5 px-3 py-2 rounded-xl transition-all min-w-0 ${
                 view === n.key
                   ? 'text-primary'
@@ -538,7 +193,7 @@ function App() {
                 {n.icon}
               </span>
               <span className="text-[10px] font-medium truncate">{n.label}</span>
-            </button>
+            </NavLink>
           ))}
         </div>
       </nav>

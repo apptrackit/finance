@@ -5,7 +5,7 @@ import { isDataExport, MAX_EXPORT_BYTES, type ExportRow } from '../../../../shar
 export const BROWSER_SETTING_KEYS = [
   'finance_master_currency', 'finance_visible_menus', 'finance_theme',
   'finance_privacy_startup', 'finance_privacy_default', 'finance_privacy_investments',
-  'finance_last_view', 'analytics-widget-visibility',
+  'analytics-widget-visibility',
   'finance_last_expense_account', 'finance_last_expense_category',
   'finance_last_income_account', 'finance_last_income_category',
   'finance_last_transfer_from', 'finance_last_transfer_to',

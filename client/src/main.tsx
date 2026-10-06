@@ -1,7 +1,8 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
-import App from './App.tsx'
+import { createBrowserRouter, RouterProvider } from 'react-router'
+import { appRoutes } from './navigation/routes'
 import { PrivacyProvider } from './context/PrivacyContext.tsx'
 import { AlertProvider } from './context/AlertContext.tsx'
 import { ThemeProvider } from './context/ThemeContext.tsx'
@@ -19,12 +20,14 @@ const updateSW = registerSW({
   },
 })
 
+const router = createBrowserRouter(appRoutes)
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <ThemeProvider>
       <PrivacyProvider>
         <AlertProvider>
-          <App />
+          <RouterProvider router={router} />
         </AlertProvider>
       </PrivacyProvider>
     </ThemeProvider>

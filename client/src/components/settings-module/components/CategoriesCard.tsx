@@ -9,6 +9,7 @@ import { API_BASE_URL, apiFetch } from '../../../config'
 import { useAlert } from '../../../context/AlertContext'
 import { EmojiPicker } from './EmojiPicker'
 import type { Category } from '../types'
+import { useUnsavedChanges } from '../../../navigation/UnsavedChanges'
 
 export function CategoriesCard() {
   const { showAlert, confirm } = useAlert()
@@ -32,6 +33,7 @@ export function CategoriesCard() {
 
   const [showIncomeCategoryList, setShowIncomeCategoryList] = useState(false)
   const [showExpenseCategoryList, setShowExpenseCategoryList] = useState(false)
+  useUnsavedChanges(newCategoryName !== '' || !!editingCategoryId || isAddingCategory || isUpdatingCategory)
 
   useEffect(() => {
     loadCategories()

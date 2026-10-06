@@ -92,7 +92,19 @@ flowchart LR
     MCP --> DB
 ```
 
-The API and MCP Worker share the deployed D1 database but have separate authentication and application code. The API follows middleware → controller → service → repository. React uses component state, context, and a shared finance-data hook, with additional fetching inside feature modules.
+The API and MCP Worker share the deployed D1 database but have separate authentication and application code. The API follows middleware → controller → service → repository. React uses browser routing, component state, context, and a shared finance-data hook, with additional fetching inside feature modules.
+
+### Navigation and saved views
+
+Opening `/` or freshly launching the installed app opens `/dashboard` in the current local month. Explicit links, refreshes, and resumed tabs keep their URL. Dashboard is always available; optional hidden sections fall back to Dashboard. Old last-page preferences no longer control startup.
+
+Dashboard filters use `from`/`to` (inclusive `YYYY-MM-DD` dates), `range=allTime`, `category` (category ID, `transfer`, `all-expenses`, or `all-income`), `sort` (`date`, `amount-high`, `amount-low`), and `view` (`list`, `calendar`). No dates means the current local month; explicit dates keep bookmarks fixed. Calendar ranges normalize to the month containing the start date; All Time uses the list view. For example, `/dashboard?from=2026-10-01&to=2026-10-31&view=calendar`.
+
+Analytics filters use `period` (`month`, `year`, `allTime`), `month` (`YYYY-MM`) or `year` (`YYYY`), `mode` (`actual`, `projected`), `incomeCategory`/`expenseCategory` (matching category IDs), and `resolution` (`default`, `quarter`, `year`, as supported by the period). For example, `/analytics?period=year&year=2026&resolution=quarter`. Defaults are omitted; invalid values recover to valid defaults. Projected bookmarks wait for successful loading and fall back to Actual when no eligible upcoming row exists. Changing periods returns to Actual.
+
+Browser Back/Forward restores applied filters. Search text and financial form drafts stay in the current page rather than the URL; open financial editors prompt before navigation and browsers warn before reload/close. Theme, privacy, and widget visibility remain independent saved preferences.
+
+Cloudflare Pages serves direct page paths using its SPA fallback (do not add a top-level `404.html` without replacing that behavior). The PWA manifest is generated from `client/vite.config.ts` as `site.webmanifest`, with launch URL `/dashboard` and scope `/`. The service worker can serve the cached app shell on document paths, excluding API/assets/file requests. Offline pages still show data availability errors where necessary, and writes require an API connection. Existing installed apps may require a browser-managed manifest update; resuming an existing window does not count as a fresh launch.
 
 | Layer | Stack |
 | --- | --- |
@@ -115,7 +127,9 @@ finance/
 │   ├── src/tests/           # API regression tests
 │   └── wrangler.toml.example
 ├── client/
-│   ├── src/App.tsx          # Layout and view switching
+│   ├── src/App.tsx          # Shared layout and finance data context
+│   ├── src/navigation/     # Routes, validated URL filters, editor guard
+│   ├── src/pages/          # Dashboard and Analytics route bindings
 │   ├── src/hooks/           # Shared finance data and refresh handling
 │   ├── src/components/      # Dashboard, analytics, investments, settings
 │   ├── src/context/         # Theme, privacy, and alerts
@@ -310,7 +324,7 @@ Settings JSON uses authenticated `GET /export`, a single read-only D1 batch for 
 
 Rows preserve database values exactly: SQLite booleans remain numeric, stored JSON fields remain strings, and IDs, links, quantities, currencies, review metadata, and timestamps are retained. Audit logs and forecast snapshots are always included, even if empty; there are no silently omitted optional tables.
 
-The client adds `browserSettings` containing only known saved app preferences: reporting currency, navigation, theme, startup/legacy privacy, last view, analytics widget visibility, and remembered transaction form account/category choices. Values are stored strings or `null` when unset (the app uses its default). Privacy cookies take precedence over local storage, matching the app. Browser preferences cover the exporting browser only and are read after the database snapshot.
+The client adds `browserSettings` containing only known saved app preferences: reporting currency, navigation, theme, startup/legacy privacy, analytics widget visibility, and remembered transaction form account/category choices. Values are stored strings or `null` when unset (the app uses its default). Privacy cookies take precedence over local storage, matching the app. Browser preferences cover the exporting browser only and are read after the database snapshot. Applied page filters live in URLs and the retired last-page preference is not exported.
 
 Expiring MCP proposal tables are explicitly excluded because their IDs authorize temporary actions; created review drafts and completed replay records are included. Migration ledger rows, SQLite infrastructure, arbitrary browser storage, authentication cookies, API keys, and environment/deployment secrets are excluded. Never store credentials in `app_settings`, which contains user app preferences and is exported in full.
 

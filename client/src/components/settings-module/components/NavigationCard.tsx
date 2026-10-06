@@ -30,23 +30,12 @@ export function NavigationCard() {
   }, [])
 
   const handleToggleMenu = async (key: MenuKey) => {
-    if (isSaving) return
-
-    const enabledMenus = Object.values(menuVisibility).filter(Boolean).length
-    if (menuVisibility[key] && enabledMenus === 1) {
-      showAlert({
-        type: 'warning',
-        title: 'Keep at least one menu',
-        message: 'You need at least one menu visible in the navigation.'
-      })
-      return
-    }
+    if (isSaving || key === 'dashboard') return
 
     const previous = menuVisibility
     const next = { ...menuVisibility, [key]: !menuVisibility[key] }
     setMenuVisibility(next)
     storeMenuVisibility(next)
-    localStorage.setItem('finance_last_view', 'settings')
     window.dispatchEvent(new Event(MENU_VISIBILITY_EVENT))
 
     setIsSaving(true)
@@ -77,14 +66,14 @@ export function NavigationCard() {
           </div>
           <div>
             <CardTitle>Navigation</CardTitle>
-            <CardDescription>Choose which sections appear in the top menu</CardDescription>
+            <CardDescription>Choose which sections appear in navigation</CardDescription>
           </div>
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="grid gap-3 sm:grid-cols-2">
           {[
-            { key: 'dashboard', label: 'Dashboard', description: 'Accounts and transactions overview' },
+            { key: 'dashboard', label: 'Dashboard', description: 'Always available as the app start page' },
             { key: 'analytics', label: 'Analytics', description: 'Trends, charts, and insights' },
             { key: 'investments', label: 'Investments', description: 'Portfolio and holdings' },
             { key: 'recurring', label: 'Recurring', description: 'Scheduled transactions' }
@@ -99,7 +88,7 @@ export function NavigationCard() {
               </div>
               <button
                 onClick={() => handleToggleMenu(item.key as MenuKey)}
-                disabled={isSaving}
+                disabled={isSaving || item.key === 'dashboard'}
                 className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 ${
                   menuVisibility[item.key as MenuKey] ? 'bg-primary' : 'bg-muted'
                 } disabled:cursor-not-allowed disabled:opacity-60`}
@@ -117,7 +106,7 @@ export function NavigationCard() {
           ))}
         </div>
         <p className="text-xs text-muted-foreground">
-          Changes apply instantly and will hide the menu from the top navigation.
+          Dashboard is always available. Other sections can be hidden from desktop and mobile navigation.
         </p>
       </CardContent>
     </Card>
