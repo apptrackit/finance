@@ -29,6 +29,7 @@ describe('compact sidebar account groups', () => {
     expect(cashGroup.getAllByRole('link')[0]).toHaveTextContent('Cash 11.23M HUF')
     expect(screen.queryByRole('button', { name: /Show all|Show top 3/ })).not.toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Accounts', exact: true })).toHaveAttribute('href', '/accounts')
+    expect(screen.queryByRole('link', { name: /Manage accounts/ })).not.toBeInTheDocument()
   })
 
   it('persists independent collapse preferences on remount and shows the full group when expanded', () => {

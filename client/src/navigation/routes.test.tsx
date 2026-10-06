@@ -288,3 +288,22 @@ it('groups sidebar cash/investments and sorts both by converted monetary value',
   expect(investments).toHaveTextContent('160K HUF')
   expect(screen.queryByRole('link', { name: /Archived cash/ })).not.toBeInTheDocument()
 })
+
+it('uses a single Accounts heading below the desktop navigation while preserving mobile access', async () => {
+  const { router, container } = open('/accounts')
+  await waitFor(() => expect(document.title).toBe('Accounts · Finance'))
+  const sidebar = container.querySelector('.finance-sidebar')!
+  const desktop = within(sidebar as HTMLElement)
+  expect(desktop.getAllByRole('link', { name: 'Accounts', exact: true })).toHaveLength(1)
+  expect(within(screen.getByRole('navigation', { name: 'Main navigation' })).queryByRole('link', { name: 'Accounts', exact: true })).not.toBeInTheDocument()
+  expect(desktop.getByRole('heading', { name: 'Accounts', exact: true })).toContainElement(desktop.getByRole('link', { name: 'Accounts', exact: true }))
+  expect(desktop.getByRole('link', { name: 'Accounts', exact: true })).toHaveAttribute('aria-current', 'page')
+  expect(desktop.queryByRole('link', { name: /Manage accounts/ })).not.toBeInTheDocument()
+  expect(within(screen.getByRole('navigation', { name: 'Mobile navigation' })).getByRole('link', { name: 'Accounts', exact: true })).toHaveAttribute('href', '/accounts')
+  const links = desktop.getAllByRole('link')
+  expect(links.indexOf(desktop.getByRole('link', { name: 'Accounts', exact: true }))).toBeGreaterThan(links.indexOf(desktop.getByRole('link', { name: 'Recurring', exact: true })))
+  clickLink('Dashboard')
+  await waitFor(() => expect(href(router)).toBe('/dashboard'))
+  fireEvent.click(desktop.getByRole('link', { name: 'Accounts', exact: true }))
+  await waitFor(() => expect(href(router)).toBe('/accounts'))
+})

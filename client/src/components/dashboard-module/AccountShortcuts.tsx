@@ -1,6 +1,6 @@
 import { useId, useState } from 'react'
 import { NavLink } from 'react-router'
-import { ChevronDown, Plus } from 'lucide-react'
+import { ChevronDown, CreditCard, Plus } from 'lucide-react'
 import { usePrivacy } from '../../context/PrivacyContext'
 import { sortAccountsByValue } from '../../lib/account-order'
 import type { AccountSortValues, ValuedAccount } from '../../lib/account-order'
@@ -46,8 +46,9 @@ export function AccountShortcuts({ accounts, values, reportingCurrency, status, 
   }
 
   return <section className="mt-4 flex min-h-0 flex-1 flex-col py-1" aria-label="Account shortcuts">
-    <div className="mb-1.5 flex shrink-0 items-center justify-between px-2.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-      <NavLink to="/accounts" className="hover:text-foreground">Accounts</NavLink><NavLink to="/accounts" state={{ addAccount: true }} aria-label="Add account" className="flex items-center"><Plus className="h-3.5 w-3.5" /></NavLink>
+    <div className="mb-1.5 flex shrink-0 items-center gap-1">
+      <h2 className="min-w-0 flex-1"><NavLink to="/accounts" end className="finance-nav-item"><CreditCard className="h-4 w-4" /><span>Accounts</span></NavLink></h2>
+      <NavLink to="/accounts" state={{ addAccount: true }} aria-label="Add account" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-secondary hover:text-foreground"><Plus className="h-3.5 w-3.5" /></NavLink>
     </div>
     <div className="finance-account-list min-h-0 flex-1 overflow-y-auto overscroll-contain" aria-label="Account list">
       {!status.loaded && <p className="px-2.5 py-2 text-xs text-muted-foreground">{status.error ? 'Accounts unavailable' : 'Loading accounts…'}</p>}
@@ -77,6 +78,5 @@ export function AccountShortcuts({ accounts, values, reportingCurrency, status, 
       {activeAccounts.some(account => values[account.id] == null) && !valuationLoading && <p className="px-2.5 pt-2 text-[10px] text-muted-foreground">Unavailable values sort last.</p>}
       {status.loaded && activeAccounts.length === 0 && <p className="px-2.5 py-2 text-xs text-muted-foreground">No active accounts yet</p>}
     </div>
-    <NavLink to="/accounts" className="mt-1 block shrink-0 px-2.5 py-2 text-xs font-medium text-primary">Manage accounts →</NavLink>
   </section>
 }

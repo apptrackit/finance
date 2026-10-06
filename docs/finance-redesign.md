@@ -22,11 +22,11 @@ No sample values, fake synchronization times, or prototype forecast curves are u
 
 ## Compact desktop sidebar
 
-The clickable Accounts title opens the Accounts page. Each group shows every active account in converted-value order, without a top-three limit or preview controls. Counted Cash and Investments headers collapse/expand their groups independently. These collapse choices persist in `finance_sidebar_accounts` and are included in JSON exports; invalid stored preferences use expanded groups by default; legacy showAll fields are ignored. Account identities and values are never saved in that preference.
+One Accounts link sits below the desktop navigation as the account-list heading, with an icon and active-page highlight. It opens the Accounts page; the duplicated desktop menu entry and Manage accounts footer link are removed. The adjacent plus button opens account creation. Mobile retains its Accounts navigation link. Each group shows every active account in converted-value order, without a top-three limit or preview controls. Counted Cash and Investments headers collapse/expand their groups independently. These collapse choices persist in `finance_sidebar_accounts` and are included in JSON exports; invalid stored preferences use expanded groups by default; legacy showAll fields are ignored. Account identities and values are never saved in that preference.
 
 Cash rows show compact native amounts (for example, 1.06M HUF). Investments show their market/manual value in the reporting currency, using the same converted values as ordering. Hover titles show the full account name, monetary amount, and investment quantity where relevant. Privacy mode masks visible amounts and removes monetary/quantity values from those titles. Unknown investment valuations display Unavailable and stay last.
 
-Only the accounts list scrolls; the main navigation, Manage accounts link, Settings, theme/privacy controls, and synchronization status stay accessible. The dedicated Accounts page retains the complete list and native balances/quantities.
+Only the accounts list scrolls; the main navigation, Accounts heading, Settings, theme/privacy controls, and synchronization status stay accessible. The dedicated Accounts page retains the complete list and native balances/quantities.
 
 ## Account lifecycle decisions
 

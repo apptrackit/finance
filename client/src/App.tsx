@@ -121,7 +121,7 @@ function App() {
         <Plus className="h-4 w-4" />New transaction<kbd aria-hidden="true" className="rounded bg-white/20 px-1.5 text-[11px] font-medium">N</kbd>
       </button>
       <nav aria-label="Main navigation" className="shrink-0 space-y-0.5">
-        {availableNav.map(item => <NavLink key={item.key} to={`/${item.key}`} end className="finance-nav-item">{item.icon}<span>{item.label}</span></NavLink>)}
+        {availableNav.filter(item => item.key !== 'accounts').map(item => <NavLink key={item.key} to={`/${item.key}`} end className="finance-nav-item">{item.icon}<span>{item.label}</span></NavLink>)}
       </nav>
       {visibleMenus.accounts && <AccountShortcuts accounts={finance.accounts} values={finance.accountSortValues} reportingCurrency={masterCurrency}
         status={dataStatus.accounts} valuationLoading={dataStatus.exchangeRates.loading || dataStatus.investment.loading} />}
