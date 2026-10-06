@@ -29,6 +29,10 @@ Use this workflow for feature, bug, documentation, and task changes. A request t
 
 If GitHub access is unavailable, complete the local work that is possible and state which issue, push, or PR step could not be completed. Do not guess an issue number.
 
+### Releases
+
+To prepare or publish a release, read and follow `.github/RELEASE_GUIDE.md`. It covers the changelog audit since the previous tag, the version bump, the release PR, and drafting and publishing the GitHub release. Do not merge the release PR or publish the release without the user's explicit approval.
+
 ## Local development
 
 Create missing local files from `api/wrangler.toml.example`, `api/.dev.vars.example`, `client/.env.example`, and, if needed, `mcp/wrangler.toml.example`. Do not overwrite existing configuration. API secrets belong in `api/.dev.vars`; client settings belong in `client/.env.local`. Set the same local value for `API_SECRET` and `VITE_API_KEY`, allow `http://localhost:5173` in `ALLOWED_ORIGINS`, and use `VITE_API_DOMAIN=localhost:8787` for a local API.
