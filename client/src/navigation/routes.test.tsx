@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createMemoryRouter, RouterProvider } from 'react-router'
 import { ThemeProvider } from '../context/ThemeContext'
@@ -257,4 +257,34 @@ it('supports Accounts deep links, trailing slash canonicalization and saved visi
   act(() => window.dispatchEvent(new Event('finance:menu-visibility')))
   await waitFor(() => expect(href(router)).toBe('/dashboard'))
   expect(screen.queryByRole('link', { name: 'Accounts', exact: true })).not.toBeInTheDocument()
+})
+
+it('groups sidebar cash/investments and sorts both by converted monetary value', async () => {
+  const baseFetch = fetchMock.getMockImplementation()!
+  fetchMock.mockImplementation(async (input, options) => {
+    const url = String(input)
+    const path = new URL(url, 'http://localhost').pathname.replace(/^\/api/, '')
+    if (path === '/accounts') return Response.json([
+      { id: 'huf', name: 'Local cash', type: 'cash', currency: 'HUF', balance: 30000, updated_at: 1 },
+      { id: 'eur', name: 'Euro cash', type: 'cash', currency: 'EUR', balance: 100, updated_at: 1 },
+      { id: 'many', name: 'Many units', type: 'investment', asset_type: 'stock', symbol: 'LOW', currency: 'SHARE', balance: 100, updated_at: 1 },
+      { id: 'valuable', name: 'Valuable holding', type: 'investment', asset_type: 'stock', symbol: 'HIGH', quote_currency: 'EUR', currency: 'SHARE', balance: 2, updated_at: 1 },
+      { id: 'archived', name: 'Archived cash', type: 'cash', currency: 'HUF', balance: 0, archived_at: 1, updated_at: 1 },
+    ])
+    if (path === '/v6/latest/HUF') return Response.json({ rates: { HUF: 1, EUR: 1 / 400, USD: 1 / 360 } })
+    if (path === '/investment-transactions') return Response.json([])
+    if (path === '/market/quote') return Response.json({ regularMarketPrice: url.includes('HIGH') ? 200 : 1, currency: 'USD' })
+    return baseFetch(input, options)
+  })
+  open('/dashboard')
+  const cashGroup = await screen.findByRole('region', { name: 'Cash account shortcuts' })
+  const investments = await screen.findByRole('region', { name: 'Investment account shortcuts' })
+  const order = (group: HTMLElement) => within(group).getAllByRole('link').map(link => link.textContent)
+  await waitFor(() => expect(order(cashGroup)[0]).toMatch(/^Euro cash/))
+  await waitFor(() => expect(order(investments)[0]).toMatch(/^Valuable holding/))
+  expect(order(cashGroup)[1]).toMatch(/^Local cash/)
+  expect(order(investments)[1]).toMatch(/^Many units/)
+  expect(cashGroup).toHaveTextContent('100 EUR')
+  expect(investments).toHaveTextContent('2 SHARE')
+  expect(screen.queryByRole('link', { name: /Archived cash/ })).not.toBeInTheDocument()
 })

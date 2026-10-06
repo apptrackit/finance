@@ -1,5 +1,6 @@
 import { convertCurrency, sumConversions, validRates, isValidRate } from '../../../shared/currency'
 import type { ConversionResult } from '../../../shared/currency'
+import { accountValueForOrdering } from '../lib/account-order'
 import { useEffect, useState, useCallback } from 'react'
 import { API_BASE_URL, apiFetch } from '../config'
 import { useLoadableData } from './useLoadableData'
@@ -169,7 +170,7 @@ export function useFinanceData(
   const { data: upcomingTransactions, status: upcomingStatus, load: loadUpcoming } = useLoadableData<Transaction[]>([])
   const { data: categories, status: categoriesStatus, load: loadCategories } = useLoadableData<Category[]>([])
   const { data: netWorthResult, status: netWorthStatus, load: loadNetWorth } = useLoadableData<{ value: number | null; currency: string; missingCurrencies: string[] } | null>(null)
-  const { data: investmentResult, status: investmentStatus, load: loadInvestmentValue } = useLoadableData<{ conversion: ConversionResult; currency: string } | null>(null, false)
+  const { data: investmentResult, status: investmentStatus, load: loadInvestmentValue } = useLoadableData<{ conversion: ConversionResult; currency: string; quotes: Record<string, MarketQuote> } | null>(null, false)
   const { data: ratesResult, status: ratesStatus, load: loadRates } = useLoadableData<{ rates: Record<string, number>; currency: string }>({ rates: {}, currency: masterCurrency })
   const [investmentRefreshKey, setInvestmentRefreshKey] = useState(0)
 
@@ -197,7 +198,7 @@ export function useFinanceData(
     await loadInvestmentValue(async () => {
       const investmentAccounts = accounts.filter(a => a.type === 'investment' && a.archived_at == null)
       if (investmentAccounts.length === 0) {
-        return { conversion: sumConversions([]), currency: masterCurrency }
+        return { conversion: sumConversions([]), currency: masterCurrency, quotes: {} }
       }
 
       const symbolsToFetch = investmentAccounts
@@ -223,7 +224,7 @@ export function useFinanceData(
         const quoteCurrency = (acc.quote_currency || quote?.currency || 'USD').toUpperCase()
         return convertCurrency((quote?.regularMarketPrice || 0) * acc.balance, quoteCurrency, masterCurrency, rates)
       })
-      return { conversion: sumConversions(conversions), currency: masterCurrency }
+      return { conversion: sumConversions(conversions), currency: masterCurrency, quotes }
     })
   }, [accounts, masterCurrency, loadInvestmentValue])
 
@@ -232,7 +233,14 @@ export function useFinanceData(
     if (accountsStatus.loaded) void fetchInvestmentValue()
   }, [accountsStatus.loaded, fetchInvestmentValue])
 
+  const usableExchangeRates = !ratesStatus.error && ratesResult.currency === masterCurrency ? ratesResult.rates : {}
+  const usableQuotes = !investmentStatus.error && investmentResult?.currency === masterCurrency ? investmentResult.quotes : {}
+  const accountSortValues = Object.fromEntries(accounts.map(account => [account.id,
+    accountValueForOrdering(account, usableQuotes, masterCurrency, usableExchangeRates).value,
+  ]))
+
   return {
+    accountSortValues,
     netWorth: netWorthResult?.currency === masterCurrency ? netWorthResult.value : null,
     netWorthMissingCurrencies: netWorthResult?.currency === masterCurrency ? netWorthResult.missingCurrencies : [],
     investmentValue: investmentResult?.currency === masterCurrency ? investmentResult.conversion.value : null,
@@ -247,7 +255,7 @@ export function useFinanceData(
     allTransactionsLoading: historyStatus.loading,
     categories,
     exchangeRates: ratesResult.rates,
-    usableExchangeRates: !ratesStatus.error && ratesResult.currency === masterCurrency ? ratesResult.rates : {},
+    usableExchangeRates,
     exchangeRatesLoading: ratesStatus.loading,
     investmentRefreshKey,
     handleDataChange: fetchData,

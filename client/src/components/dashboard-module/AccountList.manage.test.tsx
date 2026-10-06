@@ -1,5 +1,5 @@
 import type { ComponentProps } from 'react'
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AccountList } from './AccountList'
 
@@ -89,6 +89,33 @@ describe('dedicated account management', () => {
     const locked = screen.getByRole('button', { name: 'Edit Locked cash' })
     expect(locked).toBeDisabled()
     expect(locked).toHaveTextContent(/^Locked cashCash \/ bank · HUFExcluded from net worth$/)
+  })
+
+  it('orders management groups by converted value while displaying native balances', async () => {
+    fetchMock.mockImplementation(async input => String(input).includes('open.er-api')
+      ? Response.json({ rates: { USD: 1, HUF: 360, EUR: 0.9 } }) : Response.json([]))
+    render(<AccountList manage accounts={[
+      { id: 'huf', name: 'Local cash', type: 'cash', currency: 'HUF', balance: 30000 },
+      { id: 'eur', name: 'Euro cash', type: 'cash', currency: 'EUR', balance: 100 },
+      { id: 'manual-local', name: 'Local asset', type: 'investment', asset_type: 'manual', currency: 'HUF', balance: 30000 },
+      { id: 'manual-usd', name: 'Dollar asset', type: 'investment', asset_type: 'manual', currency: 'USD', balance: 100 },
+    ]} onAccountAdded={refresh} />)
+    const cashGroup = within(screen.getByRole('region', { name: 'Cash accounts' }))
+    const investmentGroup = within(screen.getByRole('region', { name: 'Investment accounts' }))
+    const editOrder = (group: typeof cashGroup) => group.getAllByRole('button', { name: /^Edit / }).map(button => button.getAttribute('aria-label'))
+    await waitFor(() => expect(editOrder(cashGroup)).toEqual(['Edit Euro cash', 'Edit Local cash']))
+    expect(editOrder(investmentGroup)).toEqual(['Edit Dollar asset', 'Edit Local asset'])
+    expect(cashGroup.getByText('€100,00')).toBeInTheDocument()
+    expect(cashGroup.getByText(/30\s000 Ft/)).toBeInTheDocument()
+  })
+
+  it('does not require an archived currency rate for active account totals', async () => {
+    render(<AccountList manage accounts={[
+      { id: 'cash', name: 'Active cash', type: 'cash', currency: 'HUF', balance: 12500 },
+      { id: 'archived-eur', name: 'Old euro account', type: 'cash', currency: 'EUR', balance: 0, archived_at: 1 },
+    ]} onAccountAdded={refresh} />)
+    await waitFor(() => expect(screen.queryByText('Accounts with unavailable converted values are listed last.')).not.toBeInTheDocument())
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 
   it('masks native values and never makes an archived account editable', () => {

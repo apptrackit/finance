@@ -8,7 +8,7 @@ The user selected **Finance App.dc.html** from the **Finance Manager UI Redesign
 
 | Reference | Production implementation |
 | --- | --- |
-| 240px desktop sidebar, account shortcuts, New transaction | `App.tsx`; real account data, route links, global reusable transaction editor, N shortcut |
+| 240px desktop sidebar, account shortcuts, New transaction | `App.tsx`; real account data, separate Cash/Investments groups sorted by converted value, route links, global reusable transaction editor, N shortcut |
 | Mobile page heading, New transaction and More | Responsive shell; safe-area bottom navigation, accessible More sheet, saved menu visibility |
 | Dark/light surfaces and color themes | Shared CSS tokens and `ThemeContext`; independent `finance_color_mode` preference included in JSON export |
 | Dashboard summary and ledger/review rows | Existing Dashboard/TransactionList calculations and workflows; responsive summary grid and full-width desktop ledger |
@@ -22,6 +22,7 @@ No sample values, fake synchronization times, or prototype forecast curves are u
 
 ## Account lifecycle decisions
 
+- Account groups sort by descending monetary value in the reporting currency. Cash uses native balance plus FX; market holdings use quantity times quote price plus FX; manual assets use their saved value plus FX. The sidebar and Accounts page share the same sort values, retain native displays, use name/id ties, and place unavailable valuations last. Exclusions do not hide accounts from this ordering.
 - **Archive/Restore** is the terminology. Archive is independent of exclusions and locks.
 - Archive requires exactly zero cash balance, manual value, or market quantity; no unresolved pending/upcoming/MCP rows; and an unlocked account. No balancing transaction is manufactured.
 - `GET /accounts` retains archived accounts for history and the manager. Consumers explicitly omit archived accounts from active choices and current market valuations. Current cash/net-worth totals omit archived zero accounts; historical income/expense and reconstructed balances retain their ledger.

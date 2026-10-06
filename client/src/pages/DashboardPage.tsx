@@ -296,7 +296,7 @@ export function DashboardPage() {
                 <div className="lg:hidden">
                   <Link to="/accounts" className="mb-2 block text-right text-xs font-medium text-primary">Manage accounts →</Link>
                   <FinanceDataBoundary label="Accounts" datasets={accountData}>
-                    <AccountList accounts={accounts.filter(account => account.archived_at == null)} onAccountAdded={handleDataChange} loading={!dataStatus.accounts.loaded && dataStatus.accounts.loading} />
+                    <AccountList sortValues={finance.accountSortValues} accounts={accounts.filter(account => account.archived_at == null)} onAccountAdded={handleDataChange} loading={!dataStatus.accounts.loaded && dataStatus.accounts.loading} />
                   </FinanceDataBoundary>
                 </div>
               )}

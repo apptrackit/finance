@@ -1,5 +1,7 @@
 import { useUnsavedChanges } from '../../navigation/UnsavedChanges'
 import { convertCurrency, sumAvailable, validRates } from '../../../../shared/currency'
+import { accountValueForOrdering, sortAccountsByValue } from '../../lib/account-order'
+import type { AccountSortValues } from '../../lib/account-order'
 import { MissingExchangeRates } from '../common/MissingExchangeRates'
 import { useState, useEffect, useRef } from 'react'
 import { Button } from '../common/button'
@@ -57,8 +59,8 @@ type MarketQuote = {
   regularMarketChangePercent?: number
 }
 
-export function AccountList({ accounts, onAccountAdded, loading, manage = false, editAccountId, addRequest = false, requestKey = '' }: {
-  accounts: Account[]; onAccountAdded: () => void; loading?: boolean; manage?: boolean; editAccountId?: string; addRequest?: boolean; requestKey?: string
+export function AccountList({ accounts, onAccountAdded, loading, manage = false, editAccountId, addRequest = false, requestKey = '', sortValues }: {
+  accounts: Account[]; onAccountAdded: () => void; loading?: boolean; manage?: boolean; editAccountId?: string; addRequest?: boolean; requestKey?: string; sortValues?: AccountSortValues
 }) {
   const { confirm, showAlert } = useAlert()
   const isLocked = (id: string) => accounts.find(a => a.id === id)?.is_locked ?? false
@@ -175,18 +177,12 @@ export function AccountList({ accounts, onAccountAdded, loading, manage = false,
   }, [accounts])
 
   const missingCurrencies = new Set<string>()
-  const toUsd = (amount: number, currency: string) => {
-    const result = convertCurrency(amount, currency, 'USD', exchangeRates)
-    result.missingCurrencies.forEach(item => missingCurrencies.add(item))
-    return result.value
-  }
-  const accountValueUsd = (account: Account): number | null => {
-    if (account.type === 'cash' || account.asset_type === 'manual') return toUsd(account.balance, account.currency)
-    const quote = account.symbol ? quotes[account.symbol] : null
-    if (!quote || !Number.isFinite(quote.regularMarketPrice)) return null
-    return toUsd(account.balance * quote.regularMarketPrice!, account.quote_currency || quote.currency || 'USD')
-  }
-  const accountValues = Object.fromEntries(activeAccounts.map(account => [account.id, accountValueUsd(account)]))
+  const accountValues = Object.fromEntries(accounts.map(account => {
+    const conversion = accountValueForOrdering(account, quotes, 'USD', exchangeRates)
+    if (account.archived_at == null) conversion.missingCurrencies.forEach(currency => missingCurrencies.add(currency))
+    return [account.id, conversion.value]
+  }))
+  const orderingValues = sortValues ?? accountValues
   const totalCashUSD = sumAvailable(activeAccounts.filter(account => account.type === 'cash' &&
     !(account.exclude_from_cash_balance && account.exclude_from_net_worth)).map(account => accountValues[account.id]))
   const totalInvestmentUSD = sumAvailable(activeAccounts.filter(account => account.type === 'investment').map(account => accountValues[account.id]))
@@ -798,9 +794,7 @@ export function AccountList({ accounts, onAccountAdded, loading, manage = false,
               </div>
             </div>
             <div className="space-y-1.5 sm:space-y-2">
-              {activeAccounts.filter(a => a.type === 'cash').sort((a, b) =>
-                (accountValues[b.id] ?? -Infinity) - (accountValues[a.id] ?? -Infinity)
-              ).map(account => {
+              {sortAccountsByValue(activeAccounts.filter(a => a.type === 'cash'), orderingValues).map(account => {
                 const percentage = allocation(accountValues[account.id], totalCashUSD)
                 const isExcluded = account.exclude_from_cash_balance && account.exclude_from_net_worth
                 
@@ -961,9 +955,7 @@ export function AccountList({ accounts, onAccountAdded, loading, manage = false,
               </div>
             </div>
             <div className="space-y-1.5 sm:space-y-2">
-              {activeAccounts.filter(a => a.type === 'investment').sort((a, b) =>
-                (accountValues[b.id] ?? -Infinity) - (accountValues[a.id] ?? -Infinity)
-              ).map(account => {
+              {sortAccountsByValue(activeAccounts.filter(a => a.type === 'investment'), orderingValues).map(account => {
                 const percentage = allocation(accountValues[account.id], totalInvestmentUSD)
                 const quote = account.symbol ? quotes[account.symbol] : null
                 const priceChange = quote?.regularMarketChangePercent || 0
@@ -1235,10 +1227,11 @@ export function AccountList({ accounts, onAccountAdded, loading, manage = false,
       )}
 
       {manage && <div className="space-y-5">
+        {!loading && activeAccounts.some(account => orderingValues[account.id] == null) && <p className="text-xs text-muted-foreground">Accounts with unavailable converted values are listed last.</p>}
         {loading ? <p className="rounded-xl border border-border bg-card p-6 text-sm text-muted-foreground">Loading accounts…</p> : <>
           {!ratesLoading && <MissingExchangeRates currencies={[...missingCurrencies].sort()} targetCurrency="USD" onRetry={() => setRatesRefreshKey(key => key + 1)} retrying={ratesLoading} />}
           {(['cash', 'investment', 'archived'] as const).map(group => {
-            const rows = group === 'archived' ? archivedAccounts : activeAccounts.filter(account => account.type === group)
+            const rows = sortAccountsByValue(group === 'archived' ? archivedAccounts : activeAccounts.filter(account => account.type === group), orderingValues)
             return <section key={group} className="rounded-[14px] border border-border bg-card" aria-label={group === 'cash' ? 'Cash accounts' : group === 'investment' ? 'Investment accounts' : 'Archived accounts'}>
               <div className="flex items-center justify-between px-5 py-4"><h2 className="text-[15px] font-medium">{group === 'cash' ? 'Cash & bank accounts' : group === 'investment' ? 'Investments' : 'Archived'}</h2><span className="text-xs text-muted-foreground">{rows.length}</span></div>
               {rows.length === 0 && <p className="border-t border-border px-5 py-6 text-sm text-muted-foreground">{group === 'archived' ? 'No archived accounts. Archive keeps your history without deleting it.' : 'No accounts yet. Add an account to get started.'}</p>}
