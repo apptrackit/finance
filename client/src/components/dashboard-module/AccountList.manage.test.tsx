@@ -1,3 +1,4 @@
+import type { ComponentProps } from 'react'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AccountList } from './AccountList'
@@ -73,6 +74,21 @@ describe('dedicated account management', () => {
     expect(screen.getAllByRole('button', { name: 'Delete permanently', exact: true }).at(-1)).toBeDisabled()
     fireEvent.change(screen.getByLabelText('Type Everyday to confirm'), { target: { value: 'Everyday' } })
     expect(screen.getAllByRole('button', { name: 'Delete permanently', exact: true }).at(-1)).toBeEnabled()
+  })
+
+  it('renders legacy numeric account flags as status, never as stray zero text', () => {
+    // Older APIs expose SQLite booleans as 0/1 instead of JSON booleans.
+    const legacyAccounts = JSON.parse(JSON.stringify([
+      { id: 'legacy', name: 'Legacy cash', type: 'cash', currency: 'HUF', balance: 350,
+        is_locked: 0, exclude_from_net_worth: 0, exclude_from_cash_balance: 0 },
+      { id: 'locked', name: 'Locked cash', type: 'cash', currency: 'HUF', balance: 350,
+        is_locked: 1, exclude_from_net_worth: 1, exclude_from_cash_balance: 0 },
+    ])) as ComponentProps<typeof AccountList>['accounts']
+    render(<AccountList manage accounts={legacyAccounts} onAccountAdded={refresh} />)
+    expect(screen.getByRole('button', { name: 'Edit Legacy cash' })).toHaveTextContent(/^Legacy cashCash \/ bank · HUF$/)
+    const locked = screen.getByRole('button', { name: 'Edit Locked cash' })
+    expect(locked).toBeDisabled()
+    expect(locked).toHaveTextContent(/^Locked cashCash \/ bank · HUFExcluded from net worth$/)
   })
 
   it('masks native values and never makes an archived account editable', () => {
