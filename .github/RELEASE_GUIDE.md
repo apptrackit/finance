@@ -7,6 +7,7 @@ Use placeholders below: `X.Y` is the new version, `PREV` is the previous publish
 ## 1. Choose the version
 
 - Versions are `vMAJOR.MINOR` tags (`v3.0`, `v3.1`). The root `package.json` stores the same value without `v` (`"version": "3.1"`); API `/version` and Settings read it through `APP_VERSION`. MCP protocol/worker versions are independent and are not bumped by a release.
+- GitHub release titles use only the tag name, for example `v3.2`. Do not prefix them with the application name; use the same short version heading in release notes.
 - Bump **MINOR** for normal feature and fix releases. Bump **MAJOR** only for a large redesign or an upgrade that needs deliberate user action (breaking API/MCP contract, retired features, non-trivial data migration). Use the version the user asks for; if none is given, propose one with a one-line reason before starting.
 - Find the previous release with `gh release view --repo apptrackit/finance --json tagName,publishedAt` (latest published) and confirm it with `git fetch origin --tags`.
 
@@ -112,13 +113,13 @@ Also run the client suite on Node 26 when it is available, matching CI. Then con
 ## 7. Release PR and draft release
 
 - Commit (`Prepare vX.Y release`), push, and open a PR to `main` titled `Prepare vX.Y release`, using `.github/PULL_REQUEST_TEMPLATE.md` with `Closes #<n>` first. List the checks run and the coverage audit in Verification.
-- Write the release notes to a temporary file: `# Finance Manager vX.Y`, a blank line, then the **exact body** of the changelog section (from the link line through the upgrade notes). The GitHub release and the changelog must say the same thing.
+- Write the release notes to a temporary file: `# vX.Y`, a blank line, then the **exact body** of the changelog section (from the link line through the upgrade notes). The GitHub release and the changelog must say the same thing.
 - Create a **draft** release so the user can review the notes alongside the PR:
 
 ```bash
 gh release create vX.Y --repo apptrackit/finance --draft \
   --target "$(git rev-parse HEAD)" \
-  --title "Finance Manager vX.Y" \
+  --title "vX.Y" \
   --notes-file /tmp/finance-vX.Y-release.md
 ```
 
@@ -140,7 +141,7 @@ Use a merge commit (not squash) so `PREV..vX.Y` keeps the full history.
 
 ## 9. After publishing
 
-- Verify: `gh release view vX.Y --repo apptrackit/finance --json tagName,isDraft,publishedAt,targetCommitish,url` shows a published, latest release whose tag points at the merge commit, and the release body matches the changelog section.
+- Verify: `gh release view vX.Y --repo apptrackit/finance --json name,tagName,isDraft,publishedAt,targetCommitish,url` shows a published, latest release whose title equals its tag name and whose tag points at the merge commit, and the release body matches the changelog section.
 - Check `publishedAt` (UTC) against the date in the changelog heading. If they differ, open a small follow-up PR that corrects the heading date and the README anchor. This is the only routine post-release changelog edit.
 - Fast-forward local `main` (`git switch main && git merge --ff-only origin/main`), confirm the release issue closed, and tick its completion checkboxes.
 - Tell the user the release URL and that the app has **not** been deployed. Deploy only when asked (`npm run deploy`, which applies pending migrations first; see `AGENTS.md`).
