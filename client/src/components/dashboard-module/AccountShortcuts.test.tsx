@@ -18,22 +18,21 @@ beforeEach(() => { localStorage.clear(); privacy.hidden = false })
 afterEach(cleanup)
 
 describe('compact sidebar account groups', () => {
-  it('shows the top three per group, with converted order and explicit full-list controls', () => {
+  it('shows every account in converted order and links the Accounts title to management', () => {
+    // Legacy preview preferences must not truncate the list after this change.
+    localStorage.setItem(SIDEBAR_ACCOUNTS_STORAGE_KEY, JSON.stringify({ cash: { collapsed: false }, investment: { collapsed: false } }))
     open({ accounts: [...props.accounts].reverse() })
     const cashGroup = within(screen.getByRole('region', { name: 'Cash account shortcuts' }))
     const investmentGroup = within(screen.getByRole('region', { name: 'Investment account shortcuts' }))
-    expect(cashGroup.getAllByRole('link').map(link => link.textContent)).toEqual(['Cash 11.23M HUF', 'Cash 2500 HUF', 'Cash 3333.33 HUF'])
-    expect(investmentGroup.getAllByRole('link')).toHaveLength(3)
-    fireEvent.click(cashGroup.getByRole('button', { name: 'Show all 7' }))
     expect(cashGroup.getAllByRole('link')).toHaveLength(7)
-    expect(investmentGroup.getAllByRole('link')).toHaveLength(3)
-    fireEvent.click(cashGroup.getByRole('button', { name: 'Show top 3' }))
-    expect(cashGroup.getAllByRole('link')).toHaveLength(3)
+    expect(investmentGroup.getAllByRole('link')).toHaveLength(4)
+    expect(cashGroup.getAllByRole('link')[0]).toHaveTextContent('Cash 11.23M HUF')
+    expect(screen.queryByRole('button', { name: /Show all|Show top 3/ })).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Accounts', exact: true })).toHaveAttribute('href', '/accounts')
   })
 
-  it('persists independent collapse and expansion preferences on remount', () => {
+  it('persists independent collapse preferences on remount and shows the full group when expanded', () => {
     const view = open()
-    fireEvent.click(screen.getByRole('button', { name: 'Show all 7' }))
     fireEvent.click(screen.getByRole('button', { name: 'Investments (4)' }))
     expect(screen.getByRole('button', { name: 'Investments (4)' })).toHaveAttribute('aria-expanded', 'false')
     expect(within(screen.getByRole('region', { name: 'Investment account shortcuts' })).queryAllByRole('link')).toHaveLength(0)
@@ -42,7 +41,7 @@ describe('compact sidebar account groups', () => {
     expect(within(screen.getByRole('region', { name: 'Cash account shortcuts' })).getAllByRole('link')).toHaveLength(7)
     expect(screen.getByRole('button', { name: 'Investments (4)' })).toHaveAttribute('aria-expanded', 'false')
     fireEvent.click(screen.getByRole('button', { name: 'Investments (4)' }))
-    expect(within(screen.getByRole('region', { name: 'Investment account shortcuts' })).getAllByRole('link')).toHaveLength(3)
+    expect(within(screen.getByRole('region', { name: 'Investment account shortcuts' })).getAllByRole('link')).toHaveLength(4)
   })
 
   it('shows compact cash and investment money, with exact balances and quantities on hover', () => {
@@ -69,13 +68,11 @@ describe('compact sidebar account groups', () => {
   it('keeps unknown values last and displays unavailable investment prices honestly', () => {
     open({ accounts: investments, values: { 'asset-0': null, 'asset-1': 2000, 'asset-2': 1000, 'asset-3': 0 } })
     const group = within(screen.getByRole('region', { name: 'Investment account shortcuts' }))
-    expect(group.queryByRole('link', { name: /^Asset 1/ })).not.toBeInTheDocument()
-    fireEvent.click(group.getByRole('button', { name: 'Show all 4' }))
     expect(group.getAllByRole('link').at(-1)).toHaveTextContent('Asset 1Unavailable')
     expect(screen.getByText('Unavailable values sort last.')).toBeInTheDocument()
   })
 
-  it('supports empty/loading states and omits expansion controls for short groups', () => {
+  it('supports empty/loading states and short groups', () => {
     const view = open({ accounts: [] })
     expect(screen.getByText('No active accounts yet')).toBeInTheDocument()
     view.unmount()
@@ -85,8 +82,8 @@ describe('compact sidebar account groups', () => {
 
   it('ignores malformed preferences and unknown fields', () => {
     localStorage.setItem(SIDEBAR_ACCOUNTS_STORAGE_KEY, '{broken')
-    expect(readSidebarAccountPreferences().cash).toEqual({ collapsed: false, showAll: false })
+    expect(readSidebarAccountPreferences().cash).toEqual({ collapsed: false })
     localStorage.setItem(SIDEBAR_ACCOUNTS_STORAGE_KEY, JSON.stringify({ cash: { collapsed: 'true', showAll: true }, investment: null, private_payload: 'ignored' }))
-    expect(readSidebarAccountPreferences()).toEqual({ cash: { collapsed: false, showAll: true }, investment: { collapsed: false, showAll: false } })
+    expect(readSidebarAccountPreferences()).toEqual({ cash: { collapsed: false }, investment: { collapsed: false } })
   })
 })

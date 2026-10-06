@@ -1,11 +1,11 @@
 export const SIDEBAR_ACCOUNTS_STORAGE_KEY = 'finance_sidebar_accounts'
 export type SidebarAccountGroup = 'cash' | 'investment'
-export type SidebarAccountPreferences = Record<SidebarAccountGroup, { collapsed: boolean; showAll: boolean }>
+export type SidebarAccountPreferences = Record<SidebarAccountGroup, { collapsed: boolean }>
 
 export function readSidebarAccountPreferences(): SidebarAccountPreferences {
   const defaults: SidebarAccountPreferences = {
-    cash: { collapsed: false, showAll: false },
-    investment: { collapsed: false, showAll: false },
+    cash: { collapsed: false },
+    investment: { collapsed: false },
   }
   try {
     const value: unknown = JSON.parse(localStorage.getItem(SIDEBAR_ACCOUNTS_STORAGE_KEY) || 'null')
@@ -15,9 +15,8 @@ export function readSidebarAccountPreferences(): SidebarAccountPreferences {
       if (!saved || typeof saved !== 'object') continue
       const flags = saved as Record<string, unknown>
       if (typeof flags.collapsed === 'boolean') defaults[group].collapsed = flags.collapsed
-      if (typeof flags.showAll === 'boolean') defaults[group].showAll = flags.showAll
     }
-  } catch { /* Invalid or unavailable storage uses the compact defaults. */ }
+  } catch { /* Invalid or unavailable storage uses the expanded defaults. */ }
   return defaults
 }
 
