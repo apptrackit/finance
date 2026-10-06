@@ -8,7 +8,7 @@ The user selected **Finance App.dc.html** from the **Finance Manager UI Redesign
 
 | Reference | Production implementation |
 | --- | --- |
-| 240px desktop sidebar, account shortcuts, New transaction | `App.tsx`; real account data, collapsible Cash/Investments groups sorted by converted value showing every account, route links, global reusable transaction editor, N shortcut |
+| 240px desktop sidebar, account shortcuts, search | `App.tsx`; real account data, collapsible Cash/Investments groups sorted by converted value showing every account, route links, Search everything palette, global reusable transaction editor and retained N shortcut |
 | Mobile page heading, New transaction and More | Responsive shell; safe-area bottom navigation, accessible More sheet, saved menu visibility |
 | Dark/light surfaces and color themes | Shared CSS tokens and `ThemeContext`; independent `finance_color_mode` preference included in JSON export |
 | Dashboard summary and ledger/review rows | Existing Dashboard/TransactionList calculations and workflows; responsive summary grid and full-width desktop ledger |
@@ -33,6 +33,16 @@ One Accounts link sits below the desktop navigation as the account-list heading,
 Cash rows show compact native amounts (for example, 1.06M HUF). Investments show their market/manual value in the reporting currency, using the same converted values as ordering. Hover titles show the full account name, monetary amount, and investment quantity where relevant. Privacy mode masks visible amounts and removes monetary/quantity values from those titles. Unknown investment valuations display Unavailable and stay last.
 
 Only the accounts list scrolls; the main navigation, Accounts heading, Settings, theme/privacy controls, and synchronization status stay accessible. The dedicated Accounts page retains the complete list and native balances/quantities.
+
+## Search everything
+
+The desktop New transaction quick action is replaced by Search everything. A mobile header icon and Cmd/Ctrl+K open the same centered palette over a dimmed, blurred background. N and existing transaction plus buttons remain available. Empty search offers existing financial quick actions and visible page destinations; hidden optional pages/actions do not appear.
+
+Search uses the complete posted cash/investment history already owned by useFinanceData, plus pending transactions and account/category names. Recurring schedules load on opening through the existing read endpoint. Matches span descriptions, account/category names, ISO or day/month/year dates, and exact native amounts with optional currency. Grouped amounts such as 2 990 and 2,990 and decimal-comma amounts are accepted; ambiguous single separators can match either interpretation. Investment transaction amounts use fiat quote currency rather than SHARE/BTC units. The transaction widget reuses this matching logic so full-history handoffs retain the same results.
+
+Results group accounts, categories, transactions, and recurring schedules. Transaction previews are limited to six newest matches with a View all action; other entity groups remain scrollable. Transaction selection opens read-only details (including locked/archived-account history), category selection opens all-time category history, and account/recurring results reuse their existing editors. View all carries a local search draft in router state, without adding descriptions/amounts to URL filters or saved browser preferences. Dismissing search leaves current page filters intact.
+
+The palette supports arrow keys, Enter, Escape, focus containment/return and explicit focus when moving between results and details. Privacy masks result/detail amounts. Failed data reads are surfaced with retry, rather than presenting incomplete history as a complete empty result. Financial quick actions and editor results are disabled while another editor is unfinished; ordinary page navigation retains the existing leave/keep-editing guard. The feature introduces no API/MCP mutations or database migration.
 
 ## Account page interactions
 
@@ -66,6 +76,12 @@ Apply migration 016 before deploying the new Workers/client. Normal root deploym
 ## Captured preview
 
 These captures use synthetic local accounts.
+
+![Search quick actions](design/search-actions.jpg)
+
+![Search results across historical transactions](design/search-results.jpg)
+
+![Mobile Search everything](design/search-mobile.jpg)
 
 ![Account shares and red locked-account indicator](design/account-shares.jpg)
 

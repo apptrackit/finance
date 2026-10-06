@@ -1,5 +1,6 @@
 import type { DashboardFilters, FilterChange } from '../../navigation/filters'
 import { useUnsavedChanges } from '../../navigation/UnsavedChanges'
+import { matchesTransaction } from '../../lib/global-search'
 import { useState, useEffect, useRef } from 'react'
 import { Button } from '../common/button'
 import { Input } from '../common/input'
@@ -119,6 +120,8 @@ export function TransactionList({
   availableCategories,
   composerOnly = false,
   openRequest = 0,
+  searchRequest,
+  searchRequestKey,
   navigationKey = '',
 }: { 
   transactions: Transaction[], 
@@ -138,6 +141,8 @@ export function TransactionList({
   availableCategories?: Category[],
   composerOnly?: boolean,
   openRequest?: number,
+  searchRequest?: string,
+  searchRequestKey?: string,
   navigationKey?: string,
 }) {
   const lastNavigationKey = useRef(navigationKey)
@@ -188,6 +193,9 @@ export function TransactionList({
     else { setTransactionView('calendar'); onMonthChange(currentMonth) }
   }
   const [searchQuery, setSearchQuery] = useState<string>('')
+  useEffect(() => {
+    if (searchRequest !== undefined) setSearchQuery(searchRequest)
+  }, [searchRequest, searchRequestKey])
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [pendingActionId, setPendingActionId] = useState<string | null>(null)
@@ -1047,12 +1055,7 @@ export function TransactionList({
   }
 
   const matchesSearch = (tx: Transaction): boolean => {
-    if (!searchQuery.trim()) return true
-    const q = searchQuery.toLowerCase()
-    const desc = (tx.description || '').toLowerCase()
-    const catName = getCategoryName(tx.category_id).toLowerCase()
-    const accName = getAccountName(tx.account_id).toLowerCase()
-    return desc.includes(q) || catName.includes(q) || accName.includes(q)
+    return matchesTransaction(searchQuery, tx, accounts, categories)
   }
 
   const getCategoryName = (id?: string | null) => {

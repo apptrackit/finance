@@ -33,6 +33,22 @@ async function openEdit() {
 }
 
 describe('yearly recurring schedules', () => {
+  it('opens a search-selected schedule after loading and does not overwrite its draft on refresh', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => Response.json([yearly])))
+    const { rerender } = render(<RecurringTransactions accounts={accounts} categories={categories} editScheduleId="yearly" requestKey="search-result" />)
+    const description = await screen.findByLabelText('Description (optional)')
+    expect(description).toHaveValue('Annual bill')
+    fireEvent.change(description, { target: { value: 'Retained draft' } })
+    rerender(<RecurringTransactions accounts={[...accounts]} categories={categories} editScheduleId="yearly" requestKey="search-result" />)
+    expect(description).toHaveValue('Retained draft')
+  })
+
+  it('opens schedule creation from a command-palette request', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => Response.json([])))
+    render(<RecurringTransactions accounts={accounts} categories={categories} addRequest requestKey="new-schedule" />)
+    expect(await screen.findByLabelText('Description (optional)')).toHaveValue('')
+  })
+
   it.each([
     { month: 6, selected: '6', next: '07.31', expenses: '0', calendarCount: 0 },
     { month: 0, selected: '0', next: '2027.01.31', expenses: '0', calendarCount: 0 },

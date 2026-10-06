@@ -40,7 +40,7 @@ export function Modal({ isOpen, onClose, title, children, className, placement =
     if (!isOpen) return
     const previous = document.activeElement as HTMLElement | null
     const panel = panelRef.current
-    const focusable = () => [...(panel?.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), a[href], [tabindex="0"]') || [])].filter(element => element.getClientRects().length > 0)
+    const focusable = () => [...(panel?.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), a[href], [tabindex="0"]') || [])].filter(element => element.tabIndex >= 0 && element.getClientRects().length > 0)
     ;(focusable()[0] || panel)?.focus()
     const trap = (event: KeyboardEvent) => {
       if (event.key !== 'Tab') return

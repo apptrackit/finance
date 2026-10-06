@@ -1,4 +1,4 @@
-import { Link, Navigate, useOutletContext } from 'react-router'
+import { Link, Navigate, useLocation, useOutletContext } from 'react-router'
 import type { RouteObject } from 'react-router'
 import App from '../App'
 import type { FinancePageContext } from '../App'
@@ -12,10 +12,13 @@ import { FinanceDataBoundary } from '../components/common/FinanceDataStatus'
 import { UnsavedChangesProvider } from './UnsavedChanges'
 
 function RecurringPage() {
+  const { state, key } = useLocation()
+  const request = state as { addSchedule?: boolean; editScheduleId?: string } | null
   const { finance } = useOutletContext<FinancePageContext>()
   const datasets = [{ label: 'Accounts', status: finance.dataStatus.accounts }, { label: 'Categories', status: finance.dataStatus.categories }]
   return <FinanceDataBoundary label="Recurring transactions" datasets={datasets}>
     <RecurringTransactions accounts={finance.accounts} categories={finance.categories}
+      addRequest={request?.addSchedule} editScheduleId={request?.editScheduleId} requestKey={key}
       dataLoading={!finance.dataStatus.accounts.loaded && finance.dataStatus.accounts.loading} />
   </FinanceDataBoundary>
 }

@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from 'react'
-import { Link, useOutletContext } from 'react-router'
+import { Link, useLocation, useOutletContext } from 'react-router'
 import { startOfMonth, endOfMonth, format, parseISO } from 'date-fns'
 import { Wallet, TrendingUp, TrendingDown, Activity, Eye, EyeOff } from 'lucide-react'
 import { convertCurrency, sumAvailable } from '../../../shared/currency'
@@ -14,6 +14,8 @@ import { useUrlFilters } from '../navigation/useUrlFilters'
 import type { FinancePageContext } from '../App'
 
 export function DashboardPage() {
+  const location = useLocation()
+  const searchRequest = location.state as { transactionSearch?: string } | null
   const { finance, masterCurrency } = useOutletContext<FinancePageContext>()
   const categoriesReady = finance.dataStatus.categories.loaded && !finance.dataStatus.categories.loading && !finance.dataStatus.categories.error
   const parseFilters = useCallback((params: URLSearchParams) => parseDashboardFilters(params, new Date(), categoriesReady ? finance.categories : undefined), [categoriesReady, finance.categories])
@@ -303,6 +305,7 @@ export function DashboardPage() {
               <div className={isTransactionCalendarOpen ? 'lg:col-span-12' : 'lg:col-span-12'}>
                 <FinanceDataBoundary label="Transactions" datasets={transactionData}>
                 <TransactionList
+                  searchRequest={searchRequest?.transactionSearch} searchRequestKey={location.key}
                   transactions={transactions}
                   upcomingTransactions={upcomingTransactions}
                   accounts={accounts}

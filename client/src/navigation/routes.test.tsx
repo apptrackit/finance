@@ -72,6 +72,47 @@ async function go(router: ReturnType<typeof createMemoryRouter>, target: number 
   await act(async () => { if (typeof target === 'number') await router.navigate(target); else await router.navigate(target) })
 }
 
+it('replaces the desktop quick action with search, supports Ctrl+K, preserves filters on dismiss and retains N', async () => {
+  const { router } = open('/analytics?period=year&year=2020')
+  const searchButton = within(screen.getByRole('complementary')).getByRole('button', { name: 'Search everything' })
+  expect(within(screen.getByRole('complementary')).queryByRole('button', { name: 'New transaction' })).not.toBeInTheDocument()
+  fireEvent.keyDown(document.body, { key: 'k', ctrlKey: true })
+  const input = screen.getByRole('combobox', { name: 'Search everything' })
+  expect(input).toHaveFocus()
+  fireEvent.keyDown(input, { key: 'n' })
+  expect(screen.queryByRole('dialog', { name: 'Add Transaction' })).not.toBeInTheDocument()
+  fireEvent.keyDown(input, { key: 'Escape' })
+  expect(screen.queryByRole('dialog', { name: 'Search everything' })).not.toBeInTheDocument()
+  expect(href(router)).toBe('/analytics?period=year&year=2020')
+  fireEvent.click(searchButton)
+  await waitFor(() => expect(screen.getByRole('option', { name: /New transaction/ })).toBeEnabled())
+  fireEvent.keyDown(screen.getByRole('combobox', { name: 'Search everything' }), { key: 'Escape' })
+  fireEvent.keyDown(document.body, { key: 'n' })
+  expect(await screen.findByRole('dialog', { name: 'Add Transaction' })).toBeInTheDocument()
+})
+
+it('searches older history and carries the query into the all-time transaction widget', async () => {
+  const baseFetch = fetchMock.getMockImplementation()!
+  const old = { ...posted, id: 'old', amount: -2990, category_id: 'food', description: 'Netflix', date: '2020-01-05' }
+  fetchMock.mockImplementation(async (input, options) => {
+    const url = new URL(String(input), 'http://localhost')
+    const path = url.pathname.replace(/^\/api/, '')
+    if (path === '/transactions') return Response.json([old])
+    if (path === '/transactions/date-range') return Response.json(url.searchParams.get('startDate') === '1900-01-01' ? [old] : [])
+    if (path === '/recurring-schedules') return Response.json([])
+    return baseFetch(input, options)
+  })
+  const { router } = open('/dashboard')
+  fireEvent.click(screen.getAllByRole('button', { name: 'Search everything' })[0])
+  fireEvent.change(screen.getByRole('combobox', { name: 'Search everything' }), { target: { value: 'Netflix' } })
+  expect(await screen.findByRole('option', { name: /Netflix.*2020-01-05/ })).toBeInTheDocument()
+  fireEvent.click(screen.getByRole('option', { name: 'View all matching transactions (1)' }))
+  await waitFor(() => expect(href(router)).toBe('/dashboard?range=allTime'))
+  expect(await screen.findByPlaceholderText('Search transactions...')).toHaveValue('Netflix')
+  expect(await screen.findByText('Netflix')).toBeInTheDocument()
+  expect(screen.queryByRole('dialog', { name: 'Search everything' })).not.toBeInTheDocument()
+})
+
 describe('page navigation and view filters', () => {
   it('opens Dashboard regardless of last-view storage and legacy hidden-Dashboard settings', async () => {
     localStorage.setItem('finance_last_view', 'analytics')

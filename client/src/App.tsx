@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router'
-import { Wallet, BarChart3, LayoutDashboard, CreditCard, Settings as SettingsIcon, LineChart, Eye, EyeOff, RefreshCw, Plus, Sun, Moon, MoreHorizontal } from 'lucide-react'
+import { Wallet, BarChart3, LayoutDashboard, CreditCard, Settings as SettingsIcon, LineChart, Eye, EyeOff, RefreshCw, Plus, Sun, Moon, MoreHorizontal, Search } from 'lucide-react'
 import { getMasterCurrency, getStoredMenuVisibility, loadNavigationSettings } from './components/settings-module/settings.storage'
 import { MENU_VISIBILITY_EVENT, type MenuKey } from './components/settings-module/constants'
 import { useTheme } from './context/ThemeContext'
@@ -11,6 +11,8 @@ import { useFinanceData } from './hooks/useFinanceData'
 import { FinanceDataStatus } from './components/common/FinanceDataStatus'
 import { AccountShortcuts } from './components/dashboard-module/AccountShortcuts'
 import { parseDashboardFilters } from './navigation/filters'
+import { SearchPalette } from './components/search-module/SearchPalette'
+import { useHasUnsavedChanges } from './navigation/UnsavedChanges'
 
 export type FinancePageContext = { finance: ReturnType<typeof useFinanceData>; masterCurrency: string }
 
@@ -24,6 +26,9 @@ function App() {
   const { privacyMode, togglePrivacyMode } = usePrivacy()
   const { colorMode, setColorMode } = useTheme()
   const [moreOpen, setMoreOpen] = useState(false)
+  const [searchOpen, setSearchOpen] = useState(false)
+  const hasUnfinishedChanges = useHasUnsavedChanges()
+  const searchShortcut = /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘K' : 'Ctrl K'
   const [transactionRequest, setTransactionRequest] = useState(0)
   const dateRange = useMemo(() => {
     const filters = parseDashboardFilters(new URLSearchParams(view === 'dashboard' ? search : ''))
@@ -92,16 +97,22 @@ function App() {
   const newTransaction = () => { if (canCompose) setTransactionRequest(request => request + 1) }
   useEffect(() => {
     const keyDown = (event: KeyboardEvent) => {
-      const target = event.target as HTMLElement
+      const target = event.target instanceof HTMLElement ? event.target : null
+      if (event.key.toLowerCase() === 'k' && (event.ctrlKey || event.metaKey) && !event.altKey) {
+        if (searchOpen) { event.preventDefault(); return }
+        if (!target?.closest('[role="dialog"], [role="alertdialog"]')) {
+          event.preventDefault(); setSearchOpen(true); return
+        }
+      }
       if (event.key.toLowerCase() === 'n' && !event.ctrlKey && !event.metaKey && !event.altKey &&
-        !target.closest('input, textarea, select, [contenteditable="true"], [role="dialog"]')) {
+        !target?.closest('input, textarea, select, [contenteditable="true"], [role="dialog"], [role="alertdialog"]')) {
         event.preventDefault()
-        if (canCompose) setTransactionRequest(request => request + 1)
+        if (canCompose && !hasUnfinishedChanges) setTransactionRequest(request => request + 1)
       }
     }
     document.addEventListener('keydown', keyDown)
     return () => document.removeEventListener('keydown', keyDown)
-  }, [canCompose])
+  }, [canCompose, searchOpen, hasUnfinishedChanges])
   const themeControl = <button type="button" onClick={() => setColorMode(colorMode === 'dark' ? 'light' : 'dark')}
     className="finance-nav-item w-full" aria-label={colorMode === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}>
     {colorMode === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}<span>{colorMode === 'dark' ? 'Light mode' : 'Dark mode'}</span>
@@ -117,8 +128,8 @@ function App() {
         <span className="flex h-8 w-8 items-center justify-center rounded-[9px] bg-primary text-white"><Wallet className="h-[17px] w-[17px]" /></span>
         <span><span className="block text-[15px] font-semibold">Finance</span><span className="block text-[11px] text-muted-foreground">Self-hosted</span></span>
       </NavLink>
-      <button type="button" onClick={newTransaction} disabled={!canCompose} aria-label="New transaction" aria-keyshortcuts="N" className="mb-5 flex h-10 shrink-0 items-center justify-center gap-2 rounded-[10px] bg-primary text-sm font-semibold text-primary-foreground disabled:opacity-50">
-        <Plus className="h-4 w-4" />New transaction<kbd aria-hidden="true" className="rounded bg-white/20 px-1.5 text-[11px] font-medium">N</kbd>
+      <button type="button" onClick={() => setSearchOpen(true)} aria-label="Search everything" aria-keyshortcuts="Meta+K Control+K" className="mb-5 flex h-10 shrink-0 cursor-pointer items-center gap-2 rounded-[10px] border border-border bg-background px-3 text-xs text-muted-foreground hover:bg-secondary hover:text-foreground">
+        <Search className="h-4 w-4 shrink-0" /><span className="flex-1 text-left">Search everything…</span><kbd aria-hidden="true" className="rounded border border-border px-1 text-[10px]">{searchShortcut}</kbd>
       </button>
       <nav aria-label="Main navigation" className="shrink-0 space-y-0.5">
         {availableNav.filter(item => item.key !== 'accounts').map(item => <NavLink key={item.key} to={`/${item.key}`} end className="finance-nav-item">{item.icon}<span>{item.label}</span></NavLink>)}
@@ -138,6 +149,7 @@ function App() {
       <header className="finance-mobile-header sticky top-0 z-40 flex items-center gap-2 border-b border-border bg-canvas/95 px-4 py-3 backdrop-blur-lg">
         <div className="min-w-0 flex-1"><p className="text-xs text-muted-foreground">Finance</p><h1 className="text-[22px] font-semibold tracking-tight">{title}</h1></div>
         {privacyControl}
+        <button type="button" className="finance-icon-button" aria-label="Search everything" onClick={() => setSearchOpen(true)}><Search className="h-4 w-4" /></button>
         <button type="button" className="finance-icon-button" aria-label={colorMode === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'} onClick={() => setColorMode(colorMode === 'dark' ? 'light' : 'dark')}>
           {colorMode === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
         </button>
@@ -163,6 +175,8 @@ function App() {
         <NavLink to="/settings" onClick={() => setMoreOpen(false)} className="finance-nav-item"><SettingsIcon className="h-4 w-4" />Settings</NavLink>
       </nav>
     </Modal>
+    <SearchPalette isOpen={searchOpen} onClose={() => setSearchOpen(false)} finance={finance} canCompose={canCompose} hasUnfinishedChanges={hasUnfinishedChanges} onNewTransaction={newTransaction}
+      destinations={[...availableNav, { key: 'settings', label: 'Settings', icon: <SettingsIcon className="h-4 w-4" /> }]} />
     <TransactionList composerOnly openRequest={transactionRequest} navigationKey={`${pathname}${search}`} accounts={finance.accounts} transactions={[]} upcomingTransactions={[]}
       availableCategories={finance.categories} onTransactionAdded={finance.handleDataChange} dateRange={dateRange} onDateRangeChange={() => {}}
       currentMonth={new Date()} onMonthChange={() => {}} masterCurrency={masterCurrency} />

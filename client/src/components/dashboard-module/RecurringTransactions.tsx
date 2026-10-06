@@ -1,5 +1,5 @@
 import { useUnsavedChanges } from '../../navigation/UnsavedChanges'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { API_BASE_URL, apiFetch } from '../../config'
 import { Button } from '../common/button'
 import { Card } from '../common/card'
@@ -72,11 +72,17 @@ const DAYS_OF_WEEK = [
 export function RecurringTransactions({
   accounts,
   categories,
-  dataLoading = false
+  dataLoading = false,
+  addRequest = false,
+  editScheduleId,
+  requestKey = '',
 }: {
   accounts: Account[]
   categories: Category[]
   dataLoading?: boolean
+  addRequest?: boolean
+  editScheduleId?: string
+  requestKey?: string
 }) {
   const { confirm, showAlert } = useAlert()
   const [schedules, setSchedules] = useState<RecurringSchedule[]>([])
@@ -296,6 +302,17 @@ export function RecurringTransactions({
     setEditingId(schedule.id)
     setIsAdding(true)
   }
+
+  const handledRequest = useRef<string | null>(null)
+  useEffect(() => {
+    if (loading || dataLoading || handledRequest.current === requestKey || (!addRequest && !editScheduleId)) return
+    const schedule = schedules.find(item => item.id === editScheduleId)
+    if (editScheduleId && !schedule) return
+    handledRequest.current = requestKey
+    setSchedulesExpanded(true)
+    if (schedule) handleEdit(schedule)
+    else { resetForm(); setIsAdding(true) }
+  }, [loading, dataLoading, requestKey, addRequest, editScheduleId, schedules])
 
   const handleDelete = async (id: string) => {
     const confirmed = await confirm({
