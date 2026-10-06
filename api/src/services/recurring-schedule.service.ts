@@ -1,3 +1,4 @@
+import { AppError } from '../errors/codes'
 import { RecurringScheduleRepository } from '../repositories/recurring-schedule.repository'
 import { TransactionRepository } from '../repositories/transaction.repository'
 import { AccountRepository } from '../repositories/account.repository'
@@ -71,8 +72,11 @@ export class RecurringScheduleService {
       throw new Error('Account not found')
     }
 
+    if (account.archived_at != null) throw new AppError('ACCOUNT_ARCHIVED', 'Restore this account before creating schedules.', 409)
+
     if (dto.to_account_id) {
       const toAccount = await this.accountRepo.findById(dto.to_account_id)
+      if (toAccount?.archived_at != null) throw new AppError('ACCOUNT_ARCHIVED', 'Restore this account before creating schedules.', 409)
       if (!toAccount) {
         throw new Error('To account not found')
       }
@@ -254,7 +258,7 @@ export class RecurringScheduleService {
       return false
     }
 
-    if (account.is_locked) {
+    if (account.is_locked || account.archived_at != null) {
       console.warn(`Skipping recurring schedule ${schedule.id}: account ${schedule.account_id} is locked`)
       return false
     }
@@ -294,7 +298,7 @@ export class RecurringScheduleService {
       return false
     }
 
-    if (fromAccount.is_locked || toAccount.is_locked) {
+    if (fromAccount.is_locked || toAccount.is_locked || fromAccount.archived_at != null || toAccount.archived_at != null) {
       console.warn(`Skipping recurring transfer ${schedule.id}: one or more accounts are locked`)
       return false
     }

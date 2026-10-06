@@ -28,7 +28,7 @@ export class DashboardService {
     // Fetch exchange rates from master currency
     const rates = await getExchangeRates(currency)
 
-    const includedAccounts = accounts.filter(account => account.type !== 'investment' && !account.exclude_from_net_worth)
+    const includedAccounts = accounts.filter(account => account.type !== 'investment' && account.archived_at == null && !account.exclude_from_net_worth)
     const conversions = includedAccounts.map(account => convertCurrency(account.balance, account.currency, currency, rates))
     const total = sumConversions(conversions)
     const accountDetails: AccountNetWorth[] = includedAccounts.map((account, index) => ({

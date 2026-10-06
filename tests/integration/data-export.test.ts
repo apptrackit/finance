@@ -39,9 +39,9 @@ it('exports every durable table and transaction state with stored links and fina
   expect(response.headers.get('cache-control')).toBe('no-store')
   const exported = await response.json() as DataExport
   expect(isDataExport(exported)).toBe(true)
-  expect(exported).toMatchObject({ exportVersion: 1, schemaVersion: '015-yearly-recurring-month', manifest: { restoreSupported: false } })
+  expect(exported).toMatchObject({ exportVersion: 1, schemaVersion: '016-account-archive', manifest: { restoreSupported: false } })
   expect(new Date(exported.exportedAt).toISOString()).toBe(exported.exportedAt)
-  expect(exported.migrations).toHaveLength(15)
+  expect(exported.migrations).toHaveLength(16)
   for (const table of EXPORT_TABLES) {
     const stored = (await f.db.prepare(`SELECT * FROM ${table} ORDER BY ${table === 'app_settings' ? 'key' : 'id'}`).all()).results
     expect(exported.data[table], table).toEqual(stored)

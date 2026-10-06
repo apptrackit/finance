@@ -1,3 +1,4 @@
+import { AppError } from '../errors/codes'
 import { InvestmentTransaction } from '../models/InvestmentTransaction'
 import { InvestmentTransactionRepository } from '../repositories/investment-transaction.repository'
 import { AccountRepository } from '../repositories/account.repository'
@@ -23,6 +24,9 @@ export class InvestmentTransactionService {
     if (!account) {
       throw new Error('Account not found')
     }
+
+    if (account.archived_at != null) throw new AppError('ACCOUNT_ARCHIVED', 'Restore this account before making changes.', 409)
+    if (account.is_locked) throw new AppError('ACCOUNT_LOCKED', 'Unlock this account before making changes.', 409)
 
     if (account.type !== 'investment') {
       throw new Error('Account must be of type investment')
@@ -65,6 +69,8 @@ export class InvestmentTransactionService {
       // Revert balance by subtracting the quantity that was added
       const account = await this.accountRepo.findById(invTx.account_id)
       if (account) {
+        if (account.archived_at != null) throw new AppError('ACCOUNT_ARCHIVED', 'Restore this account before making changes.', 409)
+        if (account.is_locked) throw new AppError('ACCOUNT_LOCKED', 'Unlock this account before making changes.', 409)
         // For 'buy' transactions, quantity was added, so we subtract it
         // For 'sell' transactions, quantity was subtracted (negative), so subtracting it adds it back
         const quantityChange = invTx.type === 'buy' ? invTx.quantity : -invTx.quantity

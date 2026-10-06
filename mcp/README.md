@@ -39,7 +39,7 @@ For a cash-to-cash transfer, call `prepare_mcp_transfer_drafts` with 1–20 sour
 - The model receives only bounded tool results. There is no arbitrary SQL tool and no tool that can post, confirm, hard-delete, invest, or update a balance. Transfer tools create or correct unresolved pending review pairs only. Ordinary edit and decline tools are limited to unresolved, unlinked MCP review drafts.
 - Every tool is non-destructive and closed-world. Read tools advertise `readOnlyHint: true`; proposal preparation advertises its non-financial persistence with `readOnlyHint: false` and `idempotentHint: false`; the creation and forecast writes advertise `readOnlyHint: false`, `destructiveHint: false`, `idempotentHint: true`, and `openWorldHint: false`.
 - Every tool has explicit input and output JSON Schemas. Inputs reject unknown fields and invalid dates before querying D1.
-- Draft preparation accepts 1–20 income/expense items. Accounts must exist, be unlocked, and be non-investment accounts. Categories are optional, but any supplied category must exist and match the income/expense type.
+- Draft preparation accepts 1–20 income/expense items. Accounts must exist, be active (not archived), be unlocked, and be non-investment accounts. Categories are optional, but any supplied category must exist and match the income/expense type.
 - Preparation stores the canonical proposal in D1 and returns only an opaque proposal ID that expires after 24 hours. Creation looks it up, verifies its stored checksum and expiry, and revalidates account/category safety before writing.
 - Creation marks the proposal consumed, inserts the batch marker, every pending transaction, and one minimal audit entry per draft in a single D1 batch. Retrying a successful creation with the same proposal ID returns the original draft rows instead of creating duplicates.
 - Correction preparation captures the complete target state and account/category context. Apply revalidates them and uses guarded audit and update statements in a single D1 batch. A stale guard aborts the entire batch; concurrent retries return the original outcome. Audit details contain operation metadata rather than financial descriptions.
@@ -49,6 +49,8 @@ For a cash-to-cash transfer, call `prepare_mcp_transfer_drafts` with 1–20 sour
 - Transaction results are paginated to at most 100 records and descriptions are explicitly marked as untrusted data.
 - Chart and forecast series are bounded. Tool responses disclose their date range, reporting currency, conversion status, warnings, and truncation state where applicable.
 - Missing exchange rates cause affected values to be excluded and clearly warned about, rather than mixing currencies into an incorrect total.
+
+Archived accounts remain in dimensions and account summaries with `archived_at` metadata so historical reports keep their identities. Dimensions expose `available_for_new_activity`; archived/locked accounts are unavailable. Preparation and creation reject archived accounts, including previously prepared proposals. D1 guards ordinary/transfer correction writes too. Current investment valuation omits archived positions, while historical ledger/balance reads retain their activity. Archiving in the app pauses schedules on both legs; restoring does not resume them. Archive/restore advances the financial source revision through the existing account/schedule triggers.
 
 ## Tools
 

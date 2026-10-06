@@ -8,6 +8,8 @@ Intermediate package/UI version bumps are grouped under the next published GitHu
 
 ### Added
 
+- Finance app redesign with a desktop sidebar, mobile New transaction/More navigation, light/dark modes, shared account drawers, and a dedicated Accounts page. Archive/restore retains history, pauses recurring schedules, and enforces read-only archived accounts across API, MCP, and D1. Permanent deletion blocks linked transfers; trading currency and independent exclusions persist through account edits. [#62](https://github.com/apptrackit/finance/issues/62)
+
 - Dashboard startup and browser URLs for all app sections, with bookmarkable Dashboard/Analytics filters, Back/Forward navigation, and protection for unfinished financial editors. Dashboard stays available in navigation; the PWA uses one manifest and opens fresh launches on Dashboard. [#96](https://github.com/apptrackit/finance/issues/96)
 
 ### Fixed
@@ -76,6 +78,8 @@ Intermediate package/UI version bumps are grouped under the next published GitHu
 
 ### Added
 
+- Finance app redesign with a desktop sidebar, mobile New transaction/More navigation, light/dark modes, shared account drawers, and a dedicated Accounts page. Archive/restore retains history, pauses recurring schedules, and enforces read-only archived accounts across API, MCP, and D1. Permanent deletion blocks linked transfers; trading currency and independent exclusions persist through account edits. [#62](https://github.com/apptrackit/finance/issues/62)
+
 - A list/calendar switch for transactions. The monthly calendar shows daily income, expenses, transfers, a balance trend, and a selected day's transactions, with compact and detailed views.
 - Money Map analytics widget showing how income flows into spending and surplus.
 - Income vs Expenses Trend widget with selectable time resolution and net-income data.
@@ -116,6 +120,8 @@ Intermediate package/UI version bumps are grouped under the next published GitHu
 
 ### Added
 
+- Finance app redesign with a desktop sidebar, mobile New transaction/More navigation, light/dark modes, shared account drawers, and a dedicated Accounts page. Archive/restore retains history, pauses recurring schedules, and enforces read-only archived accounts across API, MCP, and D1. Permanent deletion blocks linked transfers; trading currency and independent exclusions persist through account edits. [#62](https://github.com/apptrackit/finance/issues/62)
+
 - Two-step MCP transaction entry: preview proposed income/expense items, then create pending review drafts after approval. The app gained a separate MCP Review section with edit, confirm, and decline actions. Unconfirmed drafts stay out of balances and projected analytics. Draft provenance, duplicate warnings, audit records, and idempotency accompany the workflow. [#46](https://github.com/apptrackit/finance/pull/46)
 - MCP-published HUF financial forecasts with immutable snapshots, source-revision checks, read-only latest/history API endpoints, and an Analytics widget showing 7/30/90-day ranges, expected cash paths, freshness, privacy masking, and report history. Forecast publication does not change source financial records. [#48](https://github.com/apptrackit/finance/pull/48)
 - Quote-currency metadata and improved investment unit/currency validation. [#45](https://github.com/apptrackit/finance/pull/45)
@@ -146,6 +152,8 @@ Intermediate package/UI version bumps are grouped under the next published GitHu
 
 ### Added
 
+- Finance app redesign with a desktop sidebar, mobile New transaction/More navigation, light/dark modes, shared account drawers, and a dedicated Accounts page. Archive/restore retains history, pauses recurring schedules, and enforces read-only archived accounts across API, MCP, and D1. Permanent deletion blocks linked transfers; trading currency and independent exclusions persist through account edits. [#62](https://github.com/apptrackit/finance/issues/62)
+
 - A separate Finance MCP Worker for read-only financial analysis, using a direct D1 binding and Cloudflare Access authentication. Draft and forecast writes were added later in v2.11. [#43](https://github.com/apptrackit/finance/pull/43)
 - Optional MCP deployment in the root deployment flow, with a saved preference and reuse of existing MCP configuration. [#43](https://github.com/apptrackit/finance/pull/43)
 
@@ -162,6 +170,8 @@ Intermediate package/UI version bumps are grouped under the next published GitHu
 [GitHub release](https://github.com/apptrackit/finance/releases/tag/v2.4) · [Compare v1.7…v2.4](https://github.com/apptrackit/finance/compare/v1.7...v2.4)
 
 ### Added
+
+- Finance app redesign with a desktop sidebar, mobile New transaction/More navigation, light/dark modes, shared account drawers, and a dedicated Accounts page. Archive/restore retains history, pauses recurring schedules, and enforces read-only archived accounts across API, MCP, and D1. Permanent deletion blocks linked transfers; trading currency and independent exclusions persist through account edits. [#62](https://github.com/apptrackit/finance/issues/62)
 
 - Persisted account locks, lock/unlock endpoints, UI controls, and enforcement in transaction, transfer, and recurring execution paths. [#41](https://github.com/apptrackit/finance/pull/41)
 - Server-backed navigation visibility with local fallback, saved view selection, and configurable Analytics widget visibility. [#41](https://github.com/apptrackit/finance/pull/41)

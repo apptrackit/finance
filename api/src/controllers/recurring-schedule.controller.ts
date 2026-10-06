@@ -1,3 +1,4 @@
+import { AppError } from '../errors/codes'
 import { Context } from 'hono'
 import { RecurringScheduleService } from '../services/recurring-schedule.service'
 import { CreateRecurringScheduleDto, UpdateRecurringScheduleDto } from '../dtos/recurring-schedule.dto'
@@ -10,6 +11,7 @@ export class RecurringScheduleController {
       const schedules = await this.service.getAllSchedules()
       return c.json(schedules)
     } catch (error: any) {
+      if (error instanceof AppError || error.message?.includes('ACCOUNT_')) throw error
       return c.json({ error: error.message }, 500)
     }
   }
@@ -20,6 +22,7 @@ export class RecurringScheduleController {
       const schedule = await this.service.getScheduleById(id)
       return c.json(schedule)
     } catch (error: any) {
+      if (error instanceof AppError || error.message?.includes('ACCOUNT_')) throw error
       if (error.message === 'Recurring schedule not found') {
         return c.json({ error: error.message }, 404)
       }
@@ -33,6 +36,7 @@ export class RecurringScheduleController {
       const schedule = await this.service.createSchedule(dto)
       return c.json(schedule, 201)
     } catch (error: any) {
+      if (error instanceof AppError || error.message?.includes('ACCOUNT_')) throw error
       return c.json({ error: error.message }, 400)
     }
   }
@@ -44,6 +48,7 @@ export class RecurringScheduleController {
       const schedule = await this.service.updateSchedule(id, dto)
       return c.json(schedule)
     } catch (error: any) {
+      if (error instanceof AppError || error.message?.includes('ACCOUNT_')) throw error
       if (error.message === 'Recurring schedule not found') {
         return c.json({ error: error.message }, 404)
       }
@@ -57,6 +62,7 @@ export class RecurringScheduleController {
       await this.service.deleteSchedule(id)
       return c.json({ message: 'Recurring schedule deleted successfully' })
     } catch (error: any) {
+      if (error instanceof AppError || error.message?.includes('ACCOUNT_')) throw error
       if (error.message === 'Recurring schedule not found') {
         return c.json({ error: error.message }, 404)
       }

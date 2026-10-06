@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from 'react'
-import { useOutletContext } from 'react-router'
+import { Link, useOutletContext } from 'react-router'
 import { startOfMonth, endOfMonth, format, parseISO } from 'date-fns'
 import { Wallet, TrendingUp, TrendingDown, Activity, Eye, EyeOff } from 'lucide-react'
 import { convertCurrency, sumAvailable } from '../../../shared/currency'
@@ -71,7 +71,7 @@ export function DashboardPage() {
     .map(t => convertToMasterCurrency(t.amount, t.account_id, true)))
 
   const cashBalance = sumAvailable(accounts
-    .filter(a => a.type === 'cash' && !(a.exclude_from_cash_balance && a.exclude_from_net_worth))
+    .filter(a => a.archived_at == null && a.type === 'cash' && !(a.exclude_from_cash_balance && a.exclude_from_net_worth))
     .map(account => convertToMasterCurrency(account.balance, account.id)))
 
   const projectableUpcomingTransactions = upcomingTransactions.filter(isUpcomingProjectionTransaction)
@@ -121,14 +121,14 @@ export function DashboardPage() {
             <div className="mb-4"><MissingExchangeRates currencies={[...missingCurrencies].sort()} targetCurrency={masterCurrency}
               onRetry={() => { void handleDataChange() }} retrying={visibleData.some(({ status }) => status.loading)} /></div>
           )}
-            <div className={`grid gap-2.5 sm:gap-4 grid-cols-2 ${showSeparateCashCard ? 'lg:grid-cols-4' : 'lg:grid-cols-3'} mb-3 sm:mb-8`}>
+            <div className={`grid gap-3 sm:gap-4 grid-cols-2 ${showSeparateCashCard ? 'min-[1440px]:grid-cols-4' : 'min-[1440px]:grid-cols-3'} mb-4 sm:mb-6`}>
               {/* Net Worth Card */}
               <FinanceDataBoundary label="Net Worth" datasets={netWorthData}>
-              <div className="group relative overflow-hidden rounded-xl sm:rounded-2xl border border-border/50 bg-gradient-to-br from-card to-card/80 p-3 sm:p-6 shadow-xl">
+              <div className="group relative overflow-hidden rounded-xl sm:rounded-2xl border border-border/50 bg-gradient-to-br from-card to-card/80 p-4 sm:p-6 shadow-xl">
                 <div className="absolute top-0 right-0 w-32 h-32 bg-primary/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" />
                 <div className="relative">
                   <div className="flex items-center justify-between mb-1.5 sm:mb-4">
-                    <span className="text-[10px] sm:text-sm font-medium text-muted-foreground">Net Worth</span>
+                    <span className="text-xs sm:text-sm font-medium text-muted-foreground">Net Worth</span>
                     <div className="h-6 w-6 sm:h-8 sm:w-8 rounded-lg bg-primary/10 flex items-center justify-center">
                       <Activity className="h-3 w-3 sm:h-4 sm:w-4 text-primary" />
                     </div>
@@ -164,7 +164,7 @@ export function DashboardPage() {
                       </button>
                     )}
                   </div>
-                  <p className="text-[9px] sm:text-xs text-muted-foreground mt-1 sm:mt-2">
+                  <p className="text-[10px] sm:text-xs text-muted-foreground mt-1 sm:mt-2">
                     {investmentError ? investmentError : !dataStatus.upcoming.loaded ? 'Upcoming data unavailable' : projectedNetWorth === null ? 'Projection unavailable' : projectedNetWorth !== null && pendingNetWorthDelta !== 0 ? (
                       <>
                         After all upcoming{' '}
@@ -185,9 +185,9 @@ export function DashboardPage() {
               {/* Cash Balance Card */}
               {showSeparateCashCard && (
                 <FinanceDataBoundary label="Cash" datasets={accountData}>
-                <div className="group relative overflow-hidden rounded-xl sm:rounded-2xl border border-border/50 bg-card p-3 sm:p-6 shadow-xl hover:border-primary/30 transition-colors">
+                <div className="group relative overflow-hidden rounded-xl sm:rounded-2xl border border-border/50 bg-card p-4 sm:p-6 shadow-xl hover:border-primary/30 transition-colors">
                   <div className="flex items-center justify-between mb-1.5 sm:mb-4">
-                    <span className="text-[10px] sm:text-sm font-medium text-muted-foreground">Cash</span>
+                    <span className="text-xs sm:text-sm font-medium text-muted-foreground">Cash</span>
                     <div className="h-6 w-6 sm:h-8 sm:w-8 rounded-lg bg-primary/10 flex items-center justify-center">
                       <Wallet className="h-3 w-3 sm:h-4 sm:w-4 text-primary" />
                     </div>
@@ -206,7 +206,7 @@ export function DashboardPage() {
                       <span className="text-xs sm:text-lg text-muted-foreground">Unavailable</span>
                     )}
                   </div>
-                  <p className="text-[9px] sm:text-xs text-muted-foreground mt-1 sm:mt-2">
+                  <p className="text-[10px] sm:text-xs text-muted-foreground mt-1 sm:mt-2">
                     {!dataStatus.upcoming.loaded ? 'Upcoming data unavailable' : projectedCashBalance === null ? 'Projection unavailable' : pendingCashDelta !== 0 ? (
                       <>
                         After all upcoming{' '}
@@ -219,7 +219,7 @@ export function DashboardPage() {
                       </>
                     ) : (
                       <>
-                        {accounts.filter(a => a.type === 'cash').length} account{accounts.filter(a => a.type === 'cash').length !== 1 ? 's' : ''}
+                        {accounts.filter(a => a.archived_at == null && a.type === 'cash').length} account{accounts.filter(a => a.archived_at == null && a.type === 'cash').length !== 1 ? 's' : ''}
                       </>
                     )}
                   </p>
@@ -229,14 +229,14 @@ export function DashboardPage() {
 
               {/* Income Card */}
               <FinanceDataBoundary label="Income" datasets={summaryData}>
-              <div className="group relative overflow-hidden rounded-xl sm:rounded-2xl border border-border/50 bg-card p-3 sm:p-6 shadow-xl hover:border-success/30 transition-colors">
+              <div className="group relative overflow-hidden rounded-xl sm:rounded-2xl border border-border/50 bg-card p-4 sm:p-6 shadow-xl hover:border-success/30 transition-colors">
                 <div className="flex items-center justify-between mb-1.5 sm:mb-4">
-                  <span className="text-[10px] sm:text-sm font-medium text-muted-foreground">Income</span>
+                  <span className="text-xs sm:text-sm font-medium text-muted-foreground">Income</span>
                   <div className="h-6 w-6 sm:h-8 sm:w-8 rounded-lg bg-success/10 flex items-center justify-center">
                     <TrendingUp className="h-3 w-3 sm:h-4 sm:w-4 text-success" />
                   </div>
                 </div>
-                <div className="text-base sm:text-3xl font-bold tracking-tight text-success leading-tight">
+                <div className="text-lg sm:text-3xl font-bold tracking-tight text-success leading-tight">
                   {!dataStatus.transactions.loaded && transactionsLoading ? (
                     <div className="h-5 sm:h-9 w-20 sm:w-32 bg-muted animate-pulse rounded" />
                   ) : totalIncome === null ? <span className="text-xs sm:text-lg text-muted-foreground">Unavailable</span> : (
@@ -248,7 +248,7 @@ export function DashboardPage() {
                     </>
                   )}
                 </div>
-                <p className="text-[9px] sm:text-xs text-muted-foreground mt-1 sm:mt-2">
+                <p className="text-[10px] sm:text-xs text-muted-foreground mt-1 sm:mt-2">
                   {!dataStatus.upcoming.loaded ? 'Upcoming data unavailable' : pendingIncome === null ? 'Pending total unavailable' : pendingIncome > 0 ? (
                     <>
                       +{privacyMode === 'hidden' ? '••••••' : pendingIncome.toLocaleString('hu-HU', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} {masterCurrency} pending
@@ -261,14 +261,14 @@ export function DashboardPage() {
 
               {/* Expenses Card */}
               <FinanceDataBoundary label="Expenses" datasets={summaryData}>
-              <div className="group relative overflow-hidden rounded-xl sm:rounded-2xl border border-border/50 bg-card p-3 sm:p-6 shadow-xl hover:border-destructive/30 transition-colors">
+              <div className="group relative overflow-hidden rounded-xl sm:rounded-2xl border border-border/50 bg-card p-4 sm:p-6 shadow-xl hover:border-destructive/30 transition-colors">
                 <div className="flex items-center justify-between mb-1.5 sm:mb-4">
-                  <span className="text-[10px] sm:text-sm font-medium text-muted-foreground">Expenses</span>
+                  <span className="text-xs sm:text-sm font-medium text-muted-foreground">Expenses</span>
                   <div className="h-6 w-6 sm:h-8 sm:w-8 rounded-lg bg-destructive/10 flex items-center justify-center">
                     <TrendingDown className="h-3 w-3 sm:h-4 sm:w-4 text-destructive" />
                   </div>
                 </div>
-                <div className="text-base sm:text-3xl font-bold tracking-tight text-destructive leading-tight">
+                <div className="text-lg sm:text-3xl font-bold tracking-tight text-destructive leading-tight">
                   {!dataStatus.transactions.loaded && transactionsLoading ? (
                     <div className="h-5 sm:h-9 w-20 sm:w-32 bg-muted animate-pulse rounded" />
                   ) : totalExpenses === null ? <span className="text-xs sm:text-lg text-muted-foreground">Unavailable</span> : (
@@ -281,7 +281,7 @@ export function DashboardPage() {
                     </>
                   )}
                 </div>
-                <p className="text-[9px] sm:text-xs text-muted-foreground mt-1 sm:mt-2">
+                <p className="text-[10px] sm:text-xs text-muted-foreground mt-1 sm:mt-2">
                   {!dataStatus.upcoming.loaded ? 'Upcoming data unavailable' : pendingExpenses === null ? 'Pending total unavailable' : pendingExpenses > 0 ? (
                     <>
                       −{privacyMode === 'hidden' ? '••••••' : pendingExpenses.toLocaleString('hu-HU', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} {masterCurrency} pending
@@ -293,13 +293,14 @@ export function DashboardPage() {
             </div>
             <div className="grid gap-3 sm:gap-6 grid-cols-1 lg:grid-cols-12">
               {!isTransactionCalendarOpen && (
-                <div className="lg:col-span-4">
+                <div className="lg:hidden">
+                  <Link to="/accounts" className="mb-2 block text-right text-xs font-medium text-primary">Manage accounts →</Link>
                   <FinanceDataBoundary label="Accounts" datasets={accountData}>
-                    <AccountList accounts={accounts} onAccountAdded={handleDataChange} loading={!dataStatus.accounts.loaded && dataStatus.accounts.loading} />
+                    <AccountList accounts={accounts.filter(account => account.archived_at == null)} onAccountAdded={handleDataChange} loading={!dataStatus.accounts.loaded && dataStatus.accounts.loading} />
                   </FinanceDataBoundary>
                 </div>
               )}
-              <div className={isTransactionCalendarOpen ? 'lg:col-span-12' : 'lg:col-span-8'}>
+              <div className={isTransactionCalendarOpen ? 'lg:col-span-12' : 'lg:col-span-12'}>
                 <FinanceDataBoundary label="Transactions" datasets={transactionData}>
                 <TransactionList
                   transactions={transactions}

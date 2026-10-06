@@ -24,6 +24,8 @@ type Account = {
   id: string
   name: string
   type: 'cash' | 'investment'
+  archived_at?: number | null
+  is_locked?: boolean
   balance: number
   currency: string
   exclude_from_net_worth?: boolean
@@ -86,7 +88,7 @@ export function RecurringTransactions({
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [togglingId, setTogglingId] = useState<string | null>(null)
-  const [schedulesExpanded, setSchedulesExpanded] = useState(false)
+  const [schedulesExpanded, setSchedulesExpanded] = useState(true)
 
   const [formData, setFormData] = useState({
     type: 'transaction' as 'transaction' | 'transfer',
@@ -401,7 +403,7 @@ export function RecurringTransactions({
 
   const expenseCategories = categories.filter(c => c.type === 'expense')
   const incomeCategories = categories.filter(c => c.type === 'income')
-  const cashAccounts = accounts.filter(a => a.type === 'cash')
+  const cashAccounts = accounts.filter(a => a.type === 'cash' && a.archived_at == null)
   const { privacyMode } = usePrivacy()
 
   // Calculate upcoming recurring amounts for next 30 days
@@ -899,6 +901,7 @@ export function RecurringTransactions({
         <div className="flex items-center gap-4">
           <button
             onClick={() => setSchedulesExpanded(v => !v)}
+            aria-expanded={schedulesExpanded}
             className="flex items-center gap-2 text-xl font-semibold hover:text-primary transition-colors"
           >
             <Clock className="h-5 w-5 text-primary shrink-0" />

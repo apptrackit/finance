@@ -12,9 +12,10 @@ export class AccountMapper {
       quote_currency: account.quote_currency,
       symbol: account.symbol,
       asset_type: account.asset_type,
-      exclude_from_net_worth: account.exclude_from_net_worth,
-      exclude_from_cash_balance: account.exclude_from_cash_balance,
-      is_locked: account.is_locked,
+      exclude_from_net_worth: Boolean(account.exclude_from_net_worth),
+      exclude_from_cash_balance: Boolean(account.exclude_from_cash_balance),
+      is_locked: Boolean(account.is_locked),
+      archived_at: account.archived_at ?? null,
       updated_at: account.updated_at
     }
   }

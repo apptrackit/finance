@@ -91,7 +91,9 @@ const createApiRequestError = async (response: Response) => {
     return new ApiRequestError(message, response.status, data.code, details)
   } catch {
     const text = await response.clone().text().catch(() => '')
-    return new ApiRequestError(text || fallback, response.status)
+    // Reverse proxies may return an HTML error page; keep it out of save alerts.
+    const isHtml = response.headers.get('Content-Type')?.includes('text/html') || /^\s*</.test(text)
+    return new ApiRequestError(isHtml ? fallback : text || fallback, response.status)
   }
 }
 

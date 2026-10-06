@@ -16,6 +16,7 @@ export type Account = {
   asset_type?: 'stock' | 'crypto' | 'manual'
   exclude_from_net_worth?: boolean
   exclude_from_cash_balance?: boolean
+  archived_at?: number | null
   is_locked?: boolean
   updated_at: number
 }
@@ -194,7 +195,7 @@ export function useFinanceData(
 
   const fetchInvestmentValue = useCallback(async () => {
     await loadInvestmentValue(async () => {
-      const investmentAccounts = accounts.filter(a => a.type === 'investment')
+      const investmentAccounts = accounts.filter(a => a.type === 'investment' && a.archived_at == null)
       if (investmentAccounts.length === 0) {
         return { conversion: sumConversions([]), currency: masterCurrency }
       }

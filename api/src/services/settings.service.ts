@@ -4,10 +4,11 @@ import { SettingsRepository } from '../repositories/settings.repository'
 
 const NAVIGATION_SETTING_KEY = 'navigation.visible_menus'
 
-const MENU_KEYS: NavigationMenuKey[] = ['dashboard', 'analytics', 'investments', 'recurring']
+const MENU_KEYS: NavigationMenuKey[] = ['dashboard', 'accounts', 'analytics', 'investments', 'recurring']
 
 const DEFAULT_MENU_VISIBILITY: NavigationMenuVisibility = {
   dashboard: true,
+  accounts: true,
   analytics: true,
   investments: true,
   recurring: true

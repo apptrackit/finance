@@ -42,6 +42,7 @@ export class AccountService {
   }
 
   async updateAccount(id: string, dto: UpdateAccountDto): Promise<Account> {
+    await this.requireActive(id)
     const now = Date.now()
 
     // Get the current account data if we're potentially adjusting balance with a transaction
@@ -122,6 +123,7 @@ export class AccountService {
   }
 
   async lockAccount(id: string): Promise<Account> {
+    await this.requireActive(id, true)
     await this.accountRepo.setLocked(id, true)
     const account = await this.accountRepo.findById(id)
     if (!account) throw AppError.notFound('ACCOUNT_NOT_FOUND', `Account ${id} not found`)
@@ -129,15 +131,40 @@ export class AccountService {
   }
 
   async unlockAccount(id: string): Promise<Account> {
+    const existing = await this.accountRepo.findById(id)
+    if (!existing) throw AppError.notFound('ACCOUNT_NOT_FOUND', 'Account not found')
+    if (existing.archived_at != null) throw new AppError('ACCOUNT_ARCHIVED', 'Restore this account before making changes.', 409)
     await this.accountRepo.setLocked(id, false)
     const account = await this.accountRepo.findById(id)
     if (!account) throw AppError.notFound('ACCOUNT_NOT_FOUND', `Account ${id} not found`)
     return account
   }
 
+  private async requireActive(id: string, allowLocked = false): Promise<Account> {
+    const account = await this.accountRepo.findById(id)
+    if (!account) throw AppError.notFound('ACCOUNT_NOT_FOUND', 'Account not found')
+    if (account.archived_at != null) throw new AppError('ACCOUNT_ARCHIVED', 'Restore this account before making changes.', 409)
+    if (account.is_locked && !allowLocked) throw new AppError('ACCOUNT_LOCKED', 'Unlock this account before making changes.', 409)
+    return account
+  }
+
+  async archiveAccount(id: string): Promise<Account> {
+    const account = await this.accountRepo.findById(id)
+    if (!account) throw AppError.notFound('ACCOUNT_NOT_FOUND', 'Account not found')
+    if (account.archived_at == null) await this.accountRepo.setArchived(id, true)
+    return (await this.accountRepo.findById(id))!
+  }
+
+  async restoreAccount(id: string): Promise<Account> {
+    const account = await this.accountRepo.findById(id)
+    if (!account) throw AppError.notFound('ACCOUNT_NOT_FOUND', 'Account not found')
+    if (account.archived_at != null) await this.accountRepo.setArchived(id, false)
+    return (await this.accountRepo.findById(id))!
+  }
+
   async deleteAccount(id: string): Promise<void> {
-    // Delete associated transactions first
-    await this.transactionRepo.deleteByAccountId(id)
+    await this.requireActive(id)
+    // The database performs guarded ledger cleanup atomically with deletion.
     await this.accountRepo.delete(id)
   }
 }

@@ -138,6 +138,7 @@ export class TransferReviewCorrectionService {
     const account = await this.env.DB.prepare('SELECT * FROM accounts WHERE id = ?').bind(id).first<AccountRow>()
     if (!account) throw new Error(`account_id ${id} does not identify an existing account`)
     if (!CASH_TYPES.has(account.type)) throw new Error(`account_id ${id} must identify a cash account`)
+    if (account.archived_at != null) throw new Error('account_id identifies an archived account; restore it in the app first')
     if (account.is_locked === 1 || account.is_locked === true) throw new Error(`account_id ${id} identifies a locked account`)
     return account
   }

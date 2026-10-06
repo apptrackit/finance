@@ -1,14 +1,14 @@
 import { useUnsavedChanges } from '../../navigation/UnsavedChanges'
 import { convertCurrency, sumAvailable, validRates } from '../../../../shared/currency'
 import { MissingExchangeRates } from '../common/MissingExchangeRates'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Button } from '../common/button'
 import { Input } from '../common/input'
 import { Label } from '../common/label'
 import { Select } from '../common/select'
 import { Card, CardContent, CardHeader, CardTitle } from '../common/card'
 import { Modal } from '../common/modal'
-import { Plus, X, Wallet, CreditCard, Pencil, Trash2, Check, Search, Lock, LockOpen, CircleCheck, CircleX, ChevronDown, Loader2 } from 'lucide-react'
+import { Archive, RotateCcw, MoreHorizontal, Plus, X, Wallet, CreditCard, Pencil, Trash2, Check, Search, Lock, LockOpen, CircleCheck, CircleX, ChevronDown, Loader2 } from 'lucide-react'
 import { API_BASE_URL, apiFetch } from '../../config'
 import { usePrivacy } from '../../context/PrivacyContext'
 import { useAlert } from '../../context/AlertContext'
@@ -29,6 +29,7 @@ type Account = {
   asset_type?: 'stock' | 'crypto' | 'manual'
   exclude_from_net_worth?: boolean
   exclude_from_cash_balance?: boolean
+  archived_at?: number | null
   is_locked?: boolean
 }
 
@@ -56,7 +57,9 @@ type MarketQuote = {
   regularMarketChangePercent?: number
 }
 
-export function AccountList({ accounts, onAccountAdded, loading }: { accounts: Account[], onAccountAdded: () => void, loading?: boolean }) {
+export function AccountList({ accounts, onAccountAdded, loading, manage = false, editAccountId, addRequest = false, requestKey = '' }: {
+  accounts: Account[]; onAccountAdded: () => void; loading?: boolean; manage?: boolean; editAccountId?: string; addRequest?: boolean; requestKey?: string
+}) {
   const { confirm, showAlert } = useAlert()
   const isLocked = (id: string) => accounts.find(a => a.id === id)?.is_locked ?? false
   const [isAdding, setIsAdding] = useState(false)
@@ -98,7 +101,13 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [lockingId, setLockingId] = useState<string | null>(null)
-  const [isCollapsed, setIsCollapsed] = useState(true)
+  const [isCollapsed, setIsCollapsed] = useState(!manage)
+  const [lifecycleId, setLifecycleId] = useState<string | null>(null)
+  const [menuId, setMenuId] = useState<string | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<Account | null>(null)
+  const [deleteName, setDeleteName] = useState('')
+  const activeAccounts = accounts.filter(account => account.archived_at == null)
+  const archivedAccounts = accounts.filter(account => account.archived_at != null)
 
   useUnsavedChanges(isAdding || showChoiceModal || showSingleModal || showSplitModal || isSubmitting)
 
@@ -139,7 +148,7 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
   // Fetch market quotes for investment accounts
   useEffect(() => {
     const fetchQuotes = async () => {
-      const investmentAccounts = accounts.filter(a => a.type === 'investment' && a.symbol && a.asset_type !== 'manual')
+      const investmentAccounts = activeAccounts.filter(a => a.type === 'investment' && a.symbol && a.asset_type !== 'manual')
       if (investmentAccounts.length === 0) return
 
       const symbols = [...new Set(investmentAccounts.map(a => a.symbol!))]
@@ -177,10 +186,10 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
     if (!quote || !Number.isFinite(quote.regularMarketPrice)) return null
     return toUsd(account.balance * quote.regularMarketPrice!, account.quote_currency || quote.currency || 'USD')
   }
-  const accountValues = Object.fromEntries(accounts.map(account => [account.id, accountValueUsd(account)]))
-  const totalCashUSD = sumAvailable(accounts.filter(account => account.type === 'cash' &&
+  const accountValues = Object.fromEntries(activeAccounts.map(account => [account.id, accountValueUsd(account)]))
+  const totalCashUSD = sumAvailable(activeAccounts.filter(account => account.type === 'cash' &&
     !(account.exclude_from_cash_balance && account.exclude_from_net_worth)).map(account => accountValues[account.id]))
-  const totalInvestmentUSD = sumAvailable(accounts.filter(account => account.type === 'investment').map(account => accountValues[account.id]))
+  const totalInvestmentUSD = sumAvailable(activeAccounts.filter(account => account.type === 'investment').map(account => accountValues[account.id]))
   const totalPortfolioUSD = sumAvailable([totalCashUSD, totalInvestmentUSD])
   const allocation = (value: number | null, total: number | null) =>
     value === null || total === null ? null : total > 0 ? value / total * 100 : 0
@@ -277,6 +286,8 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
         type: formData.type,
         balance: balanceValue ?? 0,
         currency: formData.currency,
+        exclude_from_net_worth: formData.exclude_from_net_worth,
+        exclude_from_cash_balance: formData.exclude_from_cash_balance,
         quote_currency: formData.type === 'investment' && formData.asset_type !== 'manual' ? formData.quote_currency : undefined
       }
 
@@ -358,18 +369,11 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
   }
 
   const handleDelete = async (id: string) => {
-    const confirmed = await confirm({
-      title: 'Delete Account',
-      message: 'Delete this account and all its transactions? This action cannot be undone.',
-      confirmText: 'Delete',
-      cancelText: 'Cancel'
-    })
-    
-    if (!confirmed) return
-    
     setDeletingId(id)
     try {
       await apiFetch(`${API_BASE_URL}/accounts/${id}`, { method: 'DELETE' })
+      setDeleteTarget(null)
+      setDeleteName('')
       onAccountAdded()
       showAlert({ type: 'success', message: 'Account deleted' })
     } catch (error) {
@@ -381,6 +385,42 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
     } finally {
       setDeletingId(null)
     }
+  }
+
+  const handledRequest = useRef<string>('')
+  useEffect(() => {
+    const action = editAccountId || (addRequest ? 'add' : '')
+    const request = action ? `${requestKey}:${action}` : ''
+    if (!request || request === handledRequest.current) return
+    if (editAccountId) {
+      const account = accounts.find(item => item.id === editAccountId)
+      if (!account) return
+      handledRequest.current = request
+      if (account.archived_at == null && !account.is_locked) handleEdit(account)
+    } else {
+      handledRequest.current = request
+      setIsAdding(true)
+    }
+  }, [accounts, editAccountId, addRequest, requestKey])
+
+  const handleLifecycle = async (account: Account) => {
+    const archived = account.archived_at != null
+    if (!archived && (account.balance !== 0 || account.is_locked)) {
+      showAlert({ type: 'error', message: account.is_locked ? 'Unlock the account before archiving.' : 'The balance or holding must be zero before archiving. Transfer it out or record the final transaction first.' })
+      return
+    }
+    const approved = await confirm({ title: archived ? 'Restore account' : 'Archive account',
+      message: archived ? `Restore "${account.name}" to active account choices? Recurring schedules will remain paused.` : `Archive "${account.name}"? History and exports are kept. New transactions, transfers and MCP drafts will be blocked. Recurring schedules using this account will be paused. All pending and review items must be resolved first.`,
+      confirmText: archived ? 'Restore account' : 'Archive account' })
+    if (!approved) return
+    setLifecycleId(account.id)
+    try {
+      await apiFetch(`${API_BASE_URL}/accounts/${account.id}/${archived ? 'restore' : 'archive'}`, { method: 'PATCH' })
+      onAccountAdded()
+      setMenuId(null)
+      showAlert({ type: 'success', message: archived ? 'Account restored. Schedules remain paused.' : 'Account archived. History preserved.' })
+    } catch (error) { showAlert({ type: 'error', message: error instanceof Error ? error.message : 'Unable to update account' }) }
+    finally { setLifecycleId(null) }
   }
 
   const handleCancel = () => {
@@ -555,18 +595,19 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
   }
 
   return (
-    <Card className="h-fit">
-      <CardHeader className="flex flex-row items-center justify-between pb-3 sm:pb-4">
+    <Card className={manage ? "contents" : "h-fit"}>
+      <CardHeader className={`flex flex-row items-center justify-between pb-3 sm:pb-4 ${manage ? "px-0 sm:px-0 pt-0 sm:pt-0" : ""}`}>
         <button
           type="button"
           className="flex items-center gap-2 sm:gap-3 lg:cursor-default"
+          disabled={manage}
           onClick={() => setIsCollapsed(c => !c)}
         >
           <div className="h-7 w-7 sm:h-8 sm:w-8 rounded-lg bg-secondary flex items-center justify-center">
             <CreditCard className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-muted-foreground" />
           </div>
-          <CardTitle className="text-sm sm:text-base">Accounts</CardTitle>
-          <ChevronDown className={`lg:hidden h-4 w-4 text-muted-foreground transition-transform duration-300 ${isCollapsed ? '' : 'rotate-180'}`} />
+          <CardTitle className="text-sm sm:text-base">{manage ? `${activeAccounts.length} active · ${archivedAccounts.length} archived` : 'Accounts'}</CardTitle>
+          <ChevronDown className={`${manage ? 'hidden' : ''} lg:hidden h-4 w-4 text-muted-foreground transition-transform duration-300 ${isCollapsed ? '' : 'rotate-180'}`} />
         </button>
         <Button
           onClick={() => isAdding ? handleCancel() : setIsAdding(true)}
@@ -578,7 +619,7 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
           <span className="ml-1">{isAdding ? 'Cancel' : 'Add'}</span>
         </Button>
       </CardHeader>
-      <Modal isOpen={isAdding} onClose={handleCancel} title={editingId ? 'Edit Account' : 'Add Account'}>
+      <Modal isOpen={isAdding && !showSymbolSearch && !showChoiceModal && !showSingleModal && !showSplitModal} onClose={() => { if (!isSubmitting) handleCancel() }} title={editingId ? 'Edit Account' : 'Add Account'} placement="drawer">
         <form onSubmit={handleSubmit} className="space-y-4">
             <div className="grid grid-cols-2 gap-3">
               <div className="col-span-2 space-y-2">
@@ -730,6 +771,11 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
                 </div>
               )}
             </div>
+            <fieldset className="rounded-xl border border-border p-4 space-y-3">
+              <legend className="px-1 text-sm font-medium">Calculation exclusions</legend>
+              <label className="flex items-start gap-3 text-sm"><input type="checkbox" checked={formData.exclude_from_net_worth} onChange={event => setFormData({ ...formData, exclude_from_net_worth: event.target.checked })} className="mt-1" /><span>Exclude from net worth<span className="block text-xs text-muted-foreground">Keep the account's records in history.</span></span></label>
+              {formData.type === 'cash' && <label className="flex items-start gap-3 text-sm"><input type="checkbox" checked={formData.exclude_from_cash_balance} onChange={event => setFormData({ ...formData, exclude_from_cash_balance: event.target.checked })} className="mt-1" /><span>Exclude from cash balance<span className="block text-xs text-muted-foreground">Independent of net worth and archive status.</span></span></label>}
+            </fieldset>
             <Button type="submit" className="w-full" disabled={isSubmitting}>
               {editingId ? <Check className="h-4 w-4 mr-2" /> : <Plus className="h-4 w-4 mr-2" />}
               {isSubmitting ? 'Saving...' : (editingId ? 'Save Changes' : 'Add Account')}
@@ -737,12 +783,12 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
           </form>
       </Modal>
 
-      <div className={`lg:!max-h-none lg:overflow-visible overflow-hidden transition-all duration-500 ease-in-out ${isCollapsed ? 'max-h-0' : 'max-h-[2000px]'}`}>
+      {!manage && <div className={`lg:!max-h-none lg:overflow-visible overflow-hidden transition-all duration-500 ease-in-out ${isCollapsed ? 'max-h-0' : 'max-h-[2000px]'}`}>
       <CardContent className="space-y-3 sm:space-y-4">
         {/* Cash Accounts Section */}
         {!ratesLoading && <MissingExchangeRates currencies={[...missingCurrencies].sort()} targetCurrency="USD"
           onRetry={() => setRatesRefreshKey(key => key + 1)} retrying={ratesLoading} />}
-        {accounts.filter(a => a.type === 'cash').length > 0 && (
+        {activeAccounts.filter(a => a.type === 'cash').length > 0 && (
           <div className="space-y-2 sm:space-y-3 mb-4 sm:mb-6">
             <div className="flex items-center justify-between px-1">
               <h4 className="text-[10px] sm:text-xs font-semibold text-muted-foreground uppercase tracking-wider">Cash Accounts</h4>
@@ -752,7 +798,7 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
               </div>
             </div>
             <div className="space-y-1.5 sm:space-y-2">
-              {accounts.filter(a => a.type === 'cash').sort((a, b) =>
+              {activeAccounts.filter(a => a.type === 'cash').sort((a, b) =>
                 (accountValues[b.id] ?? -Infinity) - (accountValues[a.id] ?? -Infinity)
               ).map(account => {
                 const percentage = allocation(accountValues[account.id], totalCashUSD)
@@ -777,7 +823,7 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
                     {!isExcluded && (
                       <div 
                         className="absolute inset-y-0 left-0 bg-gradient-to-r from-primary/20 to-primary/10 transition-all duration-500"
-                        style={{ width: `${percentage ?? 0}%` }}
+                        style={{ width: `${privacyMode === 'hidden' ? 0 : percentage ?? 0}%` }}
                       />
                     )}
                     
@@ -888,7 +934,7 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
                               disabled={deletingId === account.id}
                               onClick={(e) => {
                                 e.stopPropagation()
-                                handleDelete(account.id)
+                                setDeleteTarget(account); setDeleteName('')
                               }}
                             >
                               <Trash2 className="h-4 w-4" />
@@ -905,7 +951,7 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
         )}
 
         {/* Investment Accounts Section */}
-        {accounts.filter(a => a.type === 'investment').length > 0 && (
+        {activeAccounts.filter(a => a.type === 'investment').length > 0 && (
           <div className="space-y-2 sm:space-y-3">
             <div className="flex items-center justify-between px-1">
               <h4 className="text-[10px] sm:text-xs font-semibold text-muted-foreground uppercase tracking-wider">Investment Accounts</h4>
@@ -915,7 +961,7 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
               </div>
             </div>
             <div className="space-y-1.5 sm:space-y-2">
-              {accounts.filter(a => a.type === 'investment').sort((a, b) =>
+              {activeAccounts.filter(a => a.type === 'investment').sort((a, b) =>
                 (accountValues[b.id] ?? -Infinity) - (accountValues[a.id] ?? -Infinity)
               ).map(account => {
                 const percentage = allocation(accountValues[account.id], totalInvestmentUSD)
@@ -936,7 +982,7 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
                     {/* Percentage bar background */}
                     <div 
                       className="absolute inset-y-0 left-0 bg-gradient-to-r from-blue-500/20 to-purple-500/10 transition-all duration-500"
-                      style={{ width: `${percentage ?? 0}%` }}
+                      style={{ width: `${privacyMode === 'hidden' ? 0 : percentage ?? 0}%` }}
                     />
                     
                     <div className="relative p-2.5 sm:p-4 flex items-center justify-between">
@@ -1039,7 +1085,7 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
                                 if (window.innerWidth < 768 && activeAccountId !== account.id) {
                                   return
                                 }
-                                handleDelete(account.id)
+                                setDeleteTarget(account); setDeleteName('')
                               }}
                             >
                               <Trash2 className="h-4 w-4" />
@@ -1073,11 +1119,11 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
           )
         )}
       </CardContent>
-      </div>
+      </div>}
 
       {/* Symbol Search Modal */}
       {showSymbolSearch && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[80] p-4">
           <div className="bg-card w-full max-w-md rounded-2xl shadow-2xl border border-border overflow-hidden">
             <div className="p-4 border-b border-border flex justify-between items-center">
               <h3 className="font-semibold">Select Investment Asset</h3>
@@ -1187,6 +1233,53 @@ export function AccountList({ accounts, onAccountAdded, loading }: { accounts: A
           defaultDate={new Date().toISOString().split('T')[0]}
         />
       )}
+
+      {manage && <div className="space-y-5">
+        {loading ? <p className="rounded-xl border border-border bg-card p-6 text-sm text-muted-foreground">Loading accounts…</p> : <>
+          {!ratesLoading && <MissingExchangeRates currencies={[...missingCurrencies].sort()} targetCurrency="USD" onRetry={() => setRatesRefreshKey(key => key + 1)} retrying={ratesLoading} />}
+          {(['cash', 'investment', 'archived'] as const).map(group => {
+            const rows = group === 'archived' ? archivedAccounts : activeAccounts.filter(account => account.type === group)
+            return <section key={group} className="rounded-[14px] border border-border bg-card" aria-label={group === 'cash' ? 'Cash accounts' : group === 'investment' ? 'Investment accounts' : 'Archived accounts'}>
+              <div className="flex items-center justify-between px-5 py-4"><h2 className="text-[15px] font-medium">{group === 'cash' ? 'Cash & bank accounts' : group === 'investment' ? 'Investments' : 'Archived'}</h2><span className="text-xs text-muted-foreground">{rows.length}</span></div>
+              {rows.length === 0 && <p className="border-t border-border px-5 py-6 text-sm text-muted-foreground">{group === 'archived' ? 'No archived accounts. Archive keeps your history without deleting it.' : 'No accounts yet. Add an account to get started.'}</p>}
+              {rows.map(account => {
+                const archived = account.archived_at != null
+                const market = account.type === 'investment' && account.asset_type !== 'manual'
+                const hidden = privacyMode === 'hidden' || (market && shouldHideInvestment())
+                return <div key={account.id} className={`relative border-t border-border ${archived ? 'text-muted-foreground' : ''}`}>
+                  <div className="flex flex-wrap items-center gap-3 px-4 py-3.5 sm:px-5">
+                    <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] ${account.type === 'investment' ? 'bg-violet-500/10 text-violet-400' : 'bg-primary/10 text-primary'}`}>{account.type === 'cash' ? <Wallet className="h-[18px] w-[18px]" /> : <span className="text-xs font-bold">{(account.symbol || account.name).slice(0,3).toUpperCase()}</span>}</span>
+                    <button type="button" aria-label={archived ? `${account.name}, archived` : `Edit ${account.name}`} disabled={archived || Boolean(account.is_locked)} onClick={() => handleEdit(account)} className={`min-w-0 flex-1 text-left disabled:cursor-default ${archived ? 'basis-[calc(100%-56px)] sm:basis-auto' : ''}`}>
+                      <span className="flex items-center gap-2 text-[15px] font-medium"><span className="truncate">{account.name}</span>{account.is_locked && <Lock className="h-3 w-3 shrink-0" />}</span>
+                      <span className="block truncate text-xs text-muted-foreground">{archived ? `Archived ${new Date(account.archived_at!).toLocaleDateString()}` : `${account.type === 'cash' ? 'Cash / bank' : account.asset_type === 'manual' ? 'Manual asset' : account.symbol || 'Investment'} · ${account.currency}`}</span>
+                      {(account.exclude_from_net_worth || account.exclude_from_cash_balance) && <span className="block text-[11px] text-muted-foreground">{[account.exclude_from_net_worth && 'Excluded from net worth', account.exclude_from_cash_balance && 'Excluded from cash balance'].filter(Boolean).join(' · ')}</span>}
+                    </button>
+                    <span className={`max-w-full text-right text-sm font-semibold tabular-nums ${archived ? 'ml-[52px] sm:ml-0' : ''}`}>{hidden ? '••••••' : market ? `${account.balance.toLocaleString('hu-HU', { maximumFractionDigits: 8 })} ${account.currency}` : formatCurrency(account.balance, account.currency)}
+                      {market && <span className="block text-xs font-normal text-muted-foreground">{hidden ? '••••••' : archived ? 'No position' : formatHufTotal(accountValues[account.id])}</span>}
+                    </span>
+                    {archived && <Button size="sm" variant="ghost" disabled={lifecycleId === account.id} onClick={() => handleLifecycle(account)}><RotateCcw className="mr-1.5 h-3.5 w-3.5" />Restore</Button>}
+                    <button type="button" aria-label={`Actions for ${account.name}`} aria-expanded={menuId === account.id} onClick={() => setMenuId(menuId === account.id ? null : account.id)} className="flex h-9 w-9 items-center justify-center rounded-lg hover:bg-secondary"><MoreHorizontal className="h-4 w-4" /></button>
+                  </div>
+                  {menuId === account.id && <div className="flex flex-wrap gap-2 border-t border-border bg-secondary/40 px-5 py-3" role="group" aria-label={`${account.name} actions`}>
+                    {!archived && <>
+                      <Button size="sm" variant="outline" disabled={Boolean(account.is_locked)} onClick={() => handleEdit(account)}><Pencil className="mr-1.5 h-3.5 w-3.5" />Edit</Button>
+                      <Button size="sm" variant="outline" disabled={lockingId === account.id} onClick={() => handleLockToggle(account.id)}>{account.is_locked ? <LockOpen className="mr-1.5 h-3.5 w-3.5" /> : <Lock className="mr-1.5 h-3.5 w-3.5" />}{account.is_locked ? 'Unlock' : 'Lock'}</Button>
+                    </>}
+                    <Button size="sm" variant="outline" disabled={lifecycleId === account.id} onClick={() => handleLifecycle(account)}><Archive className="mr-1.5 h-3.5 w-3.5" />{archived ? 'Restore account' : 'Archive account'}</Button>
+                    {!archived && <Button size="sm" variant="ghost" disabled={Boolean(account.is_locked)} onClick={() => { setDeleteTarget(account); setDeleteName('') }} className="text-destructive"><Trash2 className="mr-1.5 h-3.5 w-3.5" />Delete permanently</Button>}
+                  </div>}
+                </div>
+              })}
+            </section>
+          })}
+        </>}
+      </div>}
+      <Modal isOpen={deleteTarget !== null} onClose={() => { if (!deletingId) setDeleteTarget(null) }} title="Delete account permanently?">
+        <div className="space-y-4"><p className="text-sm text-muted-foreground">This deletes the account, its transactions, investment history, and recurring schedules. Linked transfers block deletion to protect the other account. Archive instead to retain history. Deleted data can only be recovered from a database backup.</p>
+          <Label htmlFor="delete-account-name">Type {deleteTarget?.name} to confirm</Label><Input id="delete-account-name" value={deleteName} onChange={event => setDeleteName(event.target.value)} autoComplete="off" />
+          <div className="flex flex-wrap justify-end gap-2"><Button variant="outline" disabled={Boolean(deletingId)} onClick={() => setDeleteTarget(null)}>Cancel</Button><Button variant="destructive" disabled={!deleteTarget || deleteName !== deleteTarget.name || Boolean(deletingId)} onClick={() => { if (deleteTarget) void handleDelete(deleteTarget.id) }}>{deletingId ? 'Deleting…' : 'Delete permanently'}</Button></div>
+        </div>
+      </Modal>
     </Card>
   )
 }

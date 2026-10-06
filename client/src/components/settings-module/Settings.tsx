@@ -9,7 +9,7 @@ import { ThemeCard } from './components/ThemeCard'
 import { version as APP_VERSION } from '../../../../package.json'
 export default function Settings() {
   return (
-    <div className="max-w-2xl mx-auto space-y-6">
+    <div className="grid grid-cols-1 gap-5 xl:grid-cols-2 items-start">
       <ThemeCard />
       <CategoriesCard />
       <CurrencySettingsCard />
@@ -18,7 +18,7 @@ export default function Settings() {
       <ScheduledTasksCard />
       <CacheManagementCard />
       <DataExportCard />
-      <p className="text-center text-xs text-muted-foreground pb-2">v{APP_VERSION}</p>
+      <p className="xl:col-span-2 text-center text-xs text-muted-foreground pb-2">v{APP_VERSION}</p>
     </div>
   )
 }

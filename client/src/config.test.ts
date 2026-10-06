@@ -39,6 +39,11 @@ describe('finance API request contract', () => {
     await expect(apiFetch('/transactions', { method: 'POST' })).rejects.toThrow('Request failed (503)')
   })
 
+  it('shows a concise failed-save error instead of an HTML proxy page', async () => {
+    fetchMock.mockResolvedValue(new Response('<!DOCTYPE html><html>Proxy error</html>', { status: 502, headers: { 'Content-Type': 'text/html' } }))
+    await expect(apiFetch('/accounts/test', { method: 'PUT' })).rejects.toMatchObject({ message: 'Request failed (502)', status: 502 })
+  })
+
   it('allows reads and explicit callers to inspect an unconsumed error response', async () => {
     fetchMock.mockImplementation(async () => Response.json({ error: 'Unavailable' }, { status: 503 }))
     const read = await apiFetch('/accounts')

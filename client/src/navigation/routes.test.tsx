@@ -1,6 +1,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createMemoryRouter, RouterProvider } from 'react-router'
+import { ThemeProvider } from '../context/ThemeContext'
 import { AlertProvider } from '../context/AlertContext'
 import { appRoutes } from './routes'
 import { WIDGET_DEFS } from '../components/analytics-module/widgetConfig'
@@ -62,7 +63,7 @@ afterEach(() => {
 function open(entry: string, entries = [entry], initialIndex = entries.length - 1) {
   const router = createMemoryRouter(appRoutes, { initialEntries: entries, initialIndex })
   routers.push(router)
-  const rendered = render(<AlertProvider><RouterProvider router={router} /></AlertProvider>)
+  const rendered = render(<ThemeProvider><AlertProvider><RouterProvider router={router} /></AlertProvider></ThemeProvider>)
   return { router, ...rendered }
 }
 const href = (router: ReturnType<typeof createMemoryRouter>) => router.state.location.pathname + router.state.location.search
@@ -218,4 +219,42 @@ describe('page navigation and view filters', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Leave page' }))
     expect(await screen.findByRole('heading', { name: 'App settings' })).toBeInTheDocument()
   })
+})
+
+it('opens the global transaction editor on another section and retains a failed-save draft', async () => {
+  const { router } = open('/settings')
+  await screen.findByRole('heading', { name: 'App settings' })
+  const compose = screen.getAllByRole('button', { name: 'New transaction', exact: true })[0]
+  await waitFor(() => expect(compose).toBeEnabled())
+  fireEvent.click(compose)
+  fireEvent.change(screen.getByLabelText('Description'), { target: { value: 'Global draft' } })
+  fireEvent.change(screen.getByLabelText('Amount'), { target: { value: '20' } })
+  fireEvent.change(screen.getByLabelText('Account'), { target: { value: 'cash' } })
+  fireEvent.change(screen.getByLabelText('Category'), { target: { value: 'food' } })
+  failSave = true
+  fireEvent.click(screen.getByRole('button', { name: 'Add Expense' }))
+  expect(await screen.findByText('Save failed')).toBeInTheDocument()
+  fireEvent.click(compose)
+  expect(screen.getByLabelText('Description')).toHaveValue('Global draft')
+  clickLink('Dashboard')
+  expect(await screen.findByRole('button', { name: 'Keep editing' })).toBeInTheDocument()
+  fireEvent.click(screen.getByRole('button', { name: 'Keep editing' }))
+  await waitFor(() => expect([...router.state.blockers.values()].every(blocker => blocker.state === 'unblocked')).toBe(true))
+  expect(href(router)).toBe('/settings')
+  expect(screen.getByLabelText('Description')).toHaveValue('Global draft')
+  clickLink('Dashboard')
+  fireEvent.click(await screen.findByRole('button', { name: 'Leave page' }))
+  await waitFor(() => expect(href(router)).toBe('/dashboard'))
+  await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Add Transaction' })).not.toBeInTheDocument())
+})
+
+it('supports Accounts deep links, trailing slash canonicalization and saved visibility', async () => {
+  const { router } = open('/accounts/')
+  await waitFor(() => expect(href(router)).toBe('/accounts'))
+  expect(document.title).toBe('Accounts · Finance')
+  expect(screen.getAllByRole('link', { name: 'Accounts' })[0]).toHaveAttribute('aria-current', 'page')
+  localStorage.setItem('finance_visible_menus', JSON.stringify({ accounts: false }))
+  act(() => window.dispatchEvent(new Event('finance:menu-visibility')))
+  await waitFor(() => expect(href(router)).toBe('/dashboard'))
+  expect(screen.queryByRole('link', { name: 'Accounts', exact: true })).not.toBeInTheDocument()
 })

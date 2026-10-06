@@ -10,7 +10,7 @@ type NavigationSettingsResponse = {
   updated_at: number | null
 }
 
-const MENU_KEYS: MenuKey[] = ['dashboard', 'analytics', 'investments', 'recurring']
+const MENU_KEYS: MenuKey[] = ['dashboard', 'accounts', 'analytics', 'investments', 'recurring']
 
 export function normalizeMenuVisibility(
   value?: Partial<Record<MenuKey, boolean>> | null

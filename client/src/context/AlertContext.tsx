@@ -152,7 +152,7 @@ export function AlertProvider({ children }: { children: ReactNode }) {
       {children}
       
       {/* Alert Container */}
-      <div className="fixed inset-0 z-50 pointer-events-none">
+      <div className="fixed inset-0 z-[100] pointer-events-none" style={{ filter: 'var(--app-color-filter, none)' }}>
         {/* Backdrop for confirm dialogs */}
         {alerts.some(a => a.type === 'confirm') && (
           <div 

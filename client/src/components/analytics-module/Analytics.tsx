@@ -4,7 +4,7 @@ import { MissingExchangeRates } from '../common/MissingExchangeRates'
 import { useState, useMemo, useEffect, useCallback } from 'react'
 import { Card, CardContent } from '../common/card'
 import { Button } from '../common/button'
-import { BarChart3, Calendar, ChevronLeft, ChevronRight, SlidersHorizontal } from 'lucide-react'
+import { Calendar, ChevronLeft, ChevronRight, SlidersHorizontal } from 'lucide-react'
 import { loadWidgetVisibility, saveWidgetVisibility, type WidgetId } from './widgetConfig'
 import { WidgetConfigPanel } from './WidgetConfigPanel'
 import { format, parseISO, subMonths, addMonths, startOfMonth, endOfMonth, isWithinInterval, subYears, addYears, startOfYear, endOfYear, startOfWeek, endOfWeek, addWeeks, startOfQuarter, endOfQuarter, addQuarters } from 'date-fns'
@@ -936,10 +936,7 @@ export function Analytics({
       {/* Analytics header */}
       <div className="flex flex-col items-start gap-3">
         <div className="flex items-center justify-between w-full">
-          <div className="flex items-center gap-2">
-            <BarChart3 className="h-5 w-5 text-primary" />
-            <h2 className="text-lg font-semibold">Analytics</h2>
-          </div>
+<span className="text-sm text-muted-foreground">Trends and insights</span>
           <button
             onClick={() => setIsConfigOpen(true)}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-secondary border border-transparent hover:border-border/60 transition-all"
@@ -955,7 +952,7 @@ export function Analytics({
         the top of the page. This must be a page-level sibling so it can remain
         sticky for the full analytics feed. The offsets match the app header.
       */}
-      <div className="sticky top-[44px] sm:top-[72px] z-40 -mx-3 sm:-mx-6 w-[calc(100%+1.5rem)] sm:w-[calc(100%+3rem)] border-b border-border/70 bg-canvas px-3 sm:px-6 py-2.5">
+      <div className="sticky top-[76px] lg:top-0 z-40 -mx-3 sm:-mx-6 w-[calc(100%+1.5rem)] sm:w-[calc(100%+3rem)] border-b border-border/70 bg-canvas px-3 sm:px-6 py-2.5">
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex gap-1 p-1 rounded-xl bg-background/80 border border-border/70 shadow-inner w-full min-[430px]:w-auto">
             {(Object.keys(periodLabels) as TimePeriod[]).map((p) => (

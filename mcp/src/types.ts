@@ -18,6 +18,7 @@ export type AccountRow = {
   asset_type?: 'stock' | 'crypto' | 'manual' | null
   exclude_from_net_worth?: number | boolean
   exclude_from_cash_balance?: number | boolean
+  archived_at?: number | null
   is_locked?: number | boolean
   updated_at?: number | null
 }

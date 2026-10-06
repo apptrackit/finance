@@ -280,7 +280,7 @@ export class FinanceService {
       default_currency: 'HUF',
       supported_currencies: ['HUF', 'EUR', 'USD', 'GBP', 'CHF', 'PLN', 'CZK', 'RON', 'MXN'],
       available_date_range: { start_date: range?.min_date || null, end_date: range?.max_date || null },
-      accounts: accounts.map(a => ({ id: a.id, name: a.name, type: a.type, currency: a.currency, excluded_from_net_worth: bool(a.exclude_from_net_worth), excluded_from_cash_balance: bool(a.exclude_from_cash_balance), locked: bool(a.is_locked) })),
+      accounts: accounts.map(a => ({ id: a.id, name: a.name, type: a.type, currency: a.currency, excluded_from_net_worth: bool(a.exclude_from_net_worth), excluded_from_cash_balance: bool(a.exclude_from_cash_balance), archived_at: a.archived_at ?? null, available_for_new_activity: a.archived_at == null && !bool(a.is_locked), locked: bool(a.is_locked) })),
       categories,
       semantics: {
         posted_transactions_affect_balances: true,
@@ -301,6 +301,7 @@ export class FinanceService {
     items.forEach((item, index) => {
       const account = accountMap.get(item.account_id)
       if (!account) throw new Error(`items[${index}].account_id does not identify an existing account`)
+      if (account.archived_at != null) throw new Error(`items[${index}].account_id identifies an archived account; restore it in the app first`)
       if (bool(account.is_locked)) throw new Error(`items[${index}].account_id identifies locked account "${account.name}"`)
       if (account.type === 'investment') throw new Error(`items[${index}].account_id identifies an investment account; v1 supports only income and expenses on cash or credit accounts`)
       if (item.category_id) {
@@ -573,13 +574,13 @@ export class FinanceService {
   async accountsSummary(args: Record<string, unknown>) {
     const currency = typeof args.currency === 'string' ? args.currency.toUpperCase() : 'HUF'
     const [accounts, rates] = await Promise.all([this.accounts(), this.rates(currency)])
-    const warnings = this.conversionWarnings(accounts.filter(account => account.type !== 'investment'), currency, rates)
+    const warnings = this.conversionWarnings(accounts.filter(account => account.archived_at == null && account.type !== 'investment'), currency, rates)
     let cashTotal = 0
     let nonInvestmentNetWorth = 0
     const summaries = accounts.map(account => {
       const isInvestment = account.type === 'investment'
       const missingRate = account.currency !== currency && !rates.values[account.currency]
-      const convertedBalance = isInvestment || missingRate ? null : round(this.convert(account.balance, account.currency, currency, rates))
+      const convertedBalance = isInvestment ? null : account.archived_at != null ? 0 : missingRate ? null : round(this.convert(account.balance, account.currency, currency, rates))
       if (!isInvestment && !bool(account.exclude_from_cash_balance)) cashTotal += convertedBalance ?? 0
       if (!isInvestment && !bool(account.exclude_from_net_worth)) nonInvestmentNetWorth += convertedBalance ?? 0
       return {
@@ -595,6 +596,7 @@ export class FinanceService {
         asset_type: account.asset_type || null,
         excluded_from_cash_balance: bool(account.exclude_from_cash_balance),
         excluded_from_net_worth: bool(account.exclude_from_net_worth),
+        archived_at: account.archived_at ?? null,
         locked: bool(account.is_locked),
       }
     })
@@ -1026,7 +1028,7 @@ export class FinanceService {
     const warnings = this.conversionWarnings(accounts.filter(account => account.type !== 'investment'), currency, rates)
     for (const schedule of schedules.results) {
       const account = accountMap.get(schedule.account_id)
-      if (!account || schedule.remaining_occurrences === 0) continue
+      if (!account || account.archived_at != null || (schedule.to_account_id && accountMap.get(schedule.to_account_id)?.archived_at != null) || schedule.remaining_occurrences === 0) continue
       const dates = recurringDates(schedule, startDate, endDate, Math.max(0, 201 - occurrences.length))
       for (const date of dates) {
         occurrences.push({
@@ -1084,7 +1086,7 @@ export class FinanceService {
       this.accounts(), this.rates(currency),
       this.env.DB.prepare('SELECT * FROM investment_transactions ORDER BY date ASC, rowid ASC').all<InvestmentTransactionRow>(),
     ])
-    const investmentAccounts = accounts.filter(item => item.type === 'investment' && !bool(item.exclude_from_net_worth))
+    const investmentAccounts = accounts.filter(item => item.type === 'investment' && item.archived_at == null && !bool(item.exclude_from_net_worth))
     const quotes = await this.liveQuotes(investmentAccounts.filter(account => account.asset_type !== 'manual' && Boolean(account.symbol)))
     const holdings = []
     const warnings: string[] = []

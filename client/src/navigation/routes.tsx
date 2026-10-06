@@ -2,6 +2,7 @@ import { Link, Navigate, useOutletContext } from 'react-router'
 import type { RouteObject } from 'react-router'
 import App from '../App'
 import type { FinancePageContext } from '../App'
+import { AccountsPage } from '../pages/AccountsPage'
 import { DashboardPage } from '../pages/DashboardPage'
 import { AnalyticsPage } from '../pages/AnalyticsPage'
 import { Investments } from '../components/investments-module/Investments'
@@ -39,6 +40,7 @@ export const appRoutes: RouteObject[] = [{
   children: [
     { index: true, element: <Navigate to="/dashboard" replace /> },
     { path: 'dashboard', element: <DashboardPage /> },
+    { path: 'accounts', element: <AccountsPage /> },
     { path: 'analytics', element: <AnalyticsPage /> },
     { path: 'investments', element: <InvestmentsPage /> },
     { path: 'recurring', element: <RecurringPage /> },

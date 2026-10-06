@@ -1,3 +1,4 @@
+import { AppError } from '../errors/codes'
 import { Context } from 'hono'
 import { InvestmentTransactionService } from '../services/investment-transaction.service'
 import { InvestmentTransactionMapper } from '../mappers/investment-transaction.mapper'
@@ -18,6 +19,7 @@ export class InvestmentTransactionController {
       const transaction = await this.investmentTransactionService.createInvestmentTransaction(body)
       return c.json(InvestmentTransactionMapper.toResponseDto(transaction), 201)
     } catch (error: any) {
+      if (error instanceof AppError || error.message?.includes('ACCOUNT_')) throw error
       const status = error.message.includes('not found') ? 404 : 400
       return c.json({ error: error.message }, status)
     }
@@ -29,6 +31,7 @@ export class InvestmentTransactionController {
       await this.investmentTransactionService.deleteInvestmentTransaction(id)
       return c.json({ success: true })
     } catch (error: any) {
+      if (error instanceof AppError || error.message?.includes('ACCOUNT_')) throw error
       console.error('Delete investment transaction error:', error)
       return c.json({ error: error.message || 'Internal server error' }, 500)
     }

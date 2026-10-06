@@ -42,7 +42,7 @@ export function Investments() {
     // Fetch accounts
     const accountsRes = await apiFetch(`${API_BASE_URL}/accounts`)
     const allAccounts = await accountsRes.json()
-    const investments = allAccounts.filter((acc: Account) => acc.type === 'investment')
+    const investments = allAccounts.filter((acc: Account) => acc.type === 'investment' && acc.archived_at == null)
     setInvestmentAccounts(investments)
     
     // Fetch investment transactions for all investment accounts

@@ -3,7 +3,7 @@ import { isDataExport, MAX_EXPORT_BYTES, type ExportRow } from '../../../../shar
 
 // Export only known app preferences, never arbitrary storage or auth cookies.
 export const BROWSER_SETTING_KEYS = [
-  'finance_master_currency', 'finance_visible_menus', 'finance_theme',
+  'finance_master_currency', 'finance_visible_menus', 'finance_theme', 'finance_color_mode',
   'finance_privacy_startup', 'finance_privacy_default', 'finance_privacy_investments',
   'analytics-widget-visibility',
   'finance_last_expense_account', 'finance_last_expense_category',
