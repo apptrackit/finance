@@ -20,6 +20,12 @@ The user selected **Finance App.dc.html** from the **Finance Manager UI Redesign
 
 No sample values, fake synchronization times, or prototype forecast curves are used in production. Existing features absent from the prototype remain available. Account/transaction inputs retain AmountInput parsing, caret behavior, and investment precision. Dialogs use focus containment, mobile transaction sheets and centered account dialogs, and preserve failed-save drafts. Error alerts appear above editors. Color filtering uses a viewport-sized shell so fixed navigation and dialogs retain their position when the page scrolls.
 
+## Responsive page gutters
+
+All routed pages share a centered 1,280px maximum-width container inside the pane beside the sidebar. Extra width becomes equal left/right gutters, while narrower windows retain the existing 16px mobile, 24px small-screen, and 32px desktop minimum padding. Analytics' sticky filter dock follows the same content edges as its charts. The sidebar width and mobile navigation remain unchanged.
+
+Visual checks at 1,920px confirmed matching 232px content gutters beside the 240px sidebar; at 1,100px the gutters shrink to 32px, and at 390px they remain 16px. Dashboard, Analytics, Investments, Recurring, and Accounts share the same container without horizontal page overflow.
+
 ## Compact desktop sidebar
 
 One Accounts link sits below the desktop navigation as the account-list heading, with an icon and active-page highlight. It opens the Accounts page; the duplicated desktop menu entry and Manage accounts footer link are removed. The adjacent plus button opens account creation. Mobile retains its Accounts navigation link. Each group shows every active account in converted-value order, without a top-three limit or preview controls. Counted Cash and Investments headers collapse/expand their groups independently. These collapse choices persist in `finance_sidebar_accounts` and are included in JSON exports; invalid stored preferences use expanded groups by default; legacy showAll fields are ignored. Account identities and values are never saved in that preference.
@@ -58,6 +64,10 @@ Apply migration 016 before deploying the new Workers/client. Normal root deploym
 ## Captured preview
 
 These captures use synthetic local accounts.
+
+![Wide-screen centered content](design/content-wide.jpg)
+
+![Narrow-window minimum gutters](design/content-narrow.jpg)
 
 ![Desktop Accounts page](design/accounts-desktop.jpg)
 

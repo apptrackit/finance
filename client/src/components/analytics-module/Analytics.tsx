@@ -952,7 +952,7 @@ export function Analytics({
         the top of the page. This must be a page-level sibling so it can remain
         sticky for the full analytics feed. The offsets match the app header.
       */}
-      <div className="sticky top-[76px] lg:top-0 z-40 -mx-3 sm:-mx-6 w-[calc(100%+1.5rem)] sm:w-[calc(100%+3rem)] border-b border-border/70 bg-canvas px-3 sm:px-6 py-2.5">
+      <div className="sticky top-[76px] lg:top-0 z-40 w-full border-b border-border/70 bg-canvas py-2.5">
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex gap-1 p-1 rounded-xl bg-background/80 border border-border/70 shadow-inner w-full min-[430px]:w-auto">
             {(Object.keys(periodLabels) as TimePeriod[]).map((p) => (
