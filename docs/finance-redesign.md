@@ -12,13 +12,13 @@ The user selected **Finance App.dc.html** from the **Finance Manager UI Redesign
 | Mobile page heading, New transaction and More | Responsive shell; safe-area bottom navigation, accessible More sheet, saved menu visibility |
 | Dark/light surfaces and color themes | Shared CSS tokens and `ThemeContext`; independent `finance_color_mode` preference included in JSON export |
 | Dashboard summary and ledger/review rows | Existing Dashboard/TransactionList calculations and workflows; responsive summary grid and full-width desktop ledger |
-| Accounts active/archived groups and drawers | `AccountsPage` plus shared AccountList management mode; existing adjustments, market search, native currencies, independent exclusions, locks |
+| Accounts active/archived groups and dialogs | `AccountsPage` plus shared AccountList management mode; existing adjustments, market search, native currencies, independent exclusions, locks |
 | Analytics charts/forecast and control dock | Existing live Recharts/immutable forecast consumers in the new shell and shared surfaces; sticky offsets follow the new header |
 | Holdings and investment activity | Existing portfolio calculations/history and details; archived positions omitted from active holdings |
 | Recurring schedule groups and calendar | Existing scheduler/calendar UI, active account selectors, archived-account execution guards |
 | Settings | Responsive two-column desktop cards; all existing settings retained, plus display mode and Accounts visibility |
 
-No sample values, fake synchronization times, or prototype forecast curves are used in production. Existing features absent from the prototype remain available. Account/transaction inputs retain AmountInput parsing, caret behavior, and investment precision. Dialogs use focus containment, mobile sheets, desktop account drawers, and preserve failed-save drafts. Error alerts appear above editors. Color filtering uses a viewport-sized shell so fixed navigation and dialogs retain their position when the page scrolls.
+No sample values, fake synchronization times, or prototype forecast curves are used in production. Existing features absent from the prototype remain available. Account/transaction inputs retain AmountInput parsing, caret behavior, and investment precision. Dialogs use focus containment, mobile transaction sheets and centered account dialogs, and preserve failed-save drafts. Error alerts appear above editors. Color filtering uses a viewport-sized shell so fixed navigation and dialogs retain their position when the page scrolls.
 
 ## Compact desktop sidebar
 
@@ -27,6 +27,14 @@ One Accounts link sits below the desktop navigation as the account-list heading,
 Cash rows show compact native amounts (for example, 1.06M HUF). Investments show their market/manual value in the reporting currency, using the same converted values as ordering. Hover titles show the full account name, monetary amount, and investment quantity where relevant. Privacy mode masks visible amounts and removes monetary/quantity values from those titles. Unknown investment valuations display Unavailable and stay last.
 
 Only the accounts list scrolls; the main navigation, Accounts heading, Settings, theme/privacy controls, and synchronization status stay accessible. The dedicated Accounts page retains the complete list and native balances/quantities.
+
+## Account page interactions
+
+Add/Edit Account uses a centered dialog on desktop and mobile. The row's icon, name, and balance form one real button with a pointer cursor, hover treatment, and keyboard focus. Locked/archived accounts open read-only details instead of presenting a disabled-looking fake edit action.
+
+The three-dot control opens a small anchored menu with icons, descriptions, separators, and a distinct destructive action. It stays within the viewport, flips above the trigger near the bottom and scrolls within the available space on short screens, closes on outside clicks/Escape/scroll, and supports arrow-key navigation. Cash calculation exclusions reuse the existing confirmed behavior. Archive/delete actions explain locked, archived, or nonzero-balance restrictions.
+
+The editor exposes Lock/Unlock, Archive/Restore, and typed permanent deletion. Status operations act on the saved account, retain drafts on success or failure, and disable financial fields while locked/archived. Unlock/restore re-enables editing. Cancelling deletion returns to the draft; successful deletion closes the editor. Read-only balances respect privacy. Confirmations temporarily yield editor focus and initially focus Cancel.
 
 ## Account lifecycle decisions
 
@@ -43,7 +51,7 @@ Only the accounts list scrolls; the main navigation, Accounts heading, Settings,
 
 Automated coverage includes route/deep-link/visibility behavior, the global editor's failed-save and navigation guard, manager save failure and exclusions, typed deletion, privacy masking, independent appearance preferences, and Worker/D1 archive/restore (including schema 015 upgrades, repeated requests, nonzero balances/holdings, locked accounts, pending/MCP pairs, stale proposals, schedule pausing, retained history/exports, deletion safety, and injected failure rollback).
 
-Visual checks use synthetic local data, never a production API. Compare desktop and 390px mobile layouts with the selected prototype, including light/dark and filter themes, account drawers, transaction sheets, Analytics, Investments, Recurring, Settings, empty states, and privacy. The prototype's decorative phone status bar and fixed sample synchronization timestamp are omitted. Summary cards switch to two columns at narrower desktop widths to prevent clipping.
+Visual checks use synthetic local data, never a production API. Compare desktop and 390px mobile layouts with the selected prototype, including light/dark and filter themes, centered account dialogs and anchored action menus, transaction sheets, Analytics, Investments, Recurring, Settings, empty states, and privacy. The prototype's decorative phone status bar and fixed sample synchronization timestamp are omitted. Summary cards switch to two columns at narrower desktop widths to prevent clipping.
 
 Apply migration 016 before deploying the new Workers/client. Normal root deployment handles this order. The redesign branch is for review; deployment is a separate action.
 
@@ -54,3 +62,9 @@ These captures use synthetic local accounts.
 ![Desktop Accounts page](design/accounts-desktop.jpg)
 
 ![Mobile Accounts page](design/accounts-mobile.jpg)
+
+![Anchored account actions, synthetic data](design/account-actions.jpg)
+
+![Centered account editor, synthetic data](design/account-editor.jpg)
+
+![Mobile account menu, synthetic data](design/account-actions-mobile.jpg)

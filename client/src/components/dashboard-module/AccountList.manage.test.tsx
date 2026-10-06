@@ -46,13 +46,14 @@ describe('dedicated account management', () => {
     fail = true
     open()
     fireEvent.click(screen.getByRole('button', { name: 'Actions for Everyday' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Archive account', exact: true }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Archive account', exact: true }))
     await waitFor(() => expect(alerts.showAlert).toHaveBeenCalledWith({ type: 'error', message: 'Save rejected' }))
     expect(refresh).not.toHaveBeenCalled()
-    expect(screen.getByRole('button', { name: 'Archive account', exact: true })).toBeEnabled()
+    fireEvent.click(screen.getByRole('button', { name: 'Actions for Everyday' }))
+    expect(await screen.findByRole('menuitem', { name: 'Archive account', exact: true })).toBeEnabled()
   })
 
-  it('preserves the account drawer draft and exclusions when a save fails', async () => {
+  it('preserves the centered account dialog draft and exclusions when a save fails', async () => {
     fail = true
     open()
     fireEvent.click(screen.getByRole('button', { name: 'Edit Everyday' }))
@@ -68,12 +69,78 @@ describe('dedicated account management', () => {
   it('requires a typed account name before enabling permanent deletion', async () => {
     open()
     fireEvent.click(screen.getByRole('button', { name: 'Actions for Everyday' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Delete permanently', exact: true }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Delete permanently', exact: true }))
     const dialog = screen.getByRole('dialog', { name: 'Delete account permanently?' })
     expect(dialog).toHaveTextContent('Linked transfers block deletion')
     expect(screen.getAllByRole('button', { name: 'Delete permanently', exact: true }).at(-1)).toBeDisabled()
     fireEvent.change(screen.getByLabelText('Type Everyday to confirm'), { target: { value: 'Everyday' } })
     expect(screen.getAllByRole('button', { name: 'Delete permanently', exact: true }).at(-1)).toBeEnabled()
+  })
+
+  it('keeps draft values while locking/unlocking from the editor', async () => {
+    open()
+    fireEvent.click(screen.getByRole('button', { name: 'Edit Everyday' }))
+    fireEvent.change(screen.getByLabelText('Account Name'), { target: { value: 'Kept draft' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Lock account', exact: true }))
+    expect(await screen.findByRole('button', { name: 'Unlock account', exact: true })).toBeEnabled()
+    expect(screen.getByLabelText('Account Name')).toBeDisabled()
+    expect(screen.getByLabelText('Account Name')).toHaveValue('Kept draft')
+    expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('/accounts/active/lock'), expect.objectContaining({ method: 'PATCH' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Unlock account', exact: true }))
+    await waitFor(() => expect(screen.getByLabelText('Account Name')).toBeEnabled())
+    expect(screen.getByLabelText('Account Name')).toHaveValue('Kept draft')
+    expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('/accounts/active/unlock'), expect.objectContaining({ method: 'PATCH' }))
+  })
+
+  it('archives/restores from the editor and prevents edits until restored', async () => {
+    open()
+    fireEvent.click(screen.getByRole('button', { name: 'Edit Everyday' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Archive account', exact: true }))
+    expect(await screen.findByRole('button', { name: 'Restore account', exact: true })).toBeEnabled()
+    expect(screen.getByLabelText('Account Name')).toBeDisabled()
+    fireEvent.click(screen.getByRole('button', { name: 'Restore account', exact: true }))
+    await waitFor(() => expect(screen.getByLabelText('Account Name')).toBeEnabled())
+  })
+
+  it('returns to the edit draft when typed deletion is cancelled', () => {
+    open()
+    fireEvent.click(screen.getByRole('button', { name: 'Edit Everyday' }))
+    fireEvent.change(screen.getByLabelText('Account Name'), { target: { value: 'Kept name' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Delete permanently', exact: true }))
+    expect(screen.queryByRole('dialog', { name: 'Edit Account' })).not.toBeInTheDocument()
+    fireEvent.click(within(screen.getByRole('dialog', { name: 'Delete account permanently?' })).getByRole('button', { name: 'Cancel' }))
+    expect(screen.getByLabelText('Account Name')).toHaveValue('Kept name')
+  })
+
+  it('preserves editor values on failed status changes', async () => {
+    fail = true
+    open()
+    fireEvent.click(screen.getByRole('button', { name: 'Edit Everyday' }))
+    fireEvent.change(screen.getByLabelText('Account Name'), { target: { value: 'Unsaved draft' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Lock account', exact: true }))
+    await waitFor(() => expect(alerts.showAlert).toHaveBeenCalledWith({ type: 'error', message: 'Save rejected' }))
+    expect(screen.getByLabelText('Account Name')).toHaveValue('Unsaved draft')
+    expect(screen.getByLabelText('Account Name')).toBeEnabled()
+  })
+
+  it('disables archive for nonzero saved balances in both menu and editor', async () => {
+    render(<AccountList manage accounts={[{ id: 'funded', name: 'Funded account', type: 'cash', currency: 'HUF', balance: 5000 }]} onAccountAdded={refresh} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Actions for Funded account' }))
+    expect(await screen.findByRole('menuitem', { name: 'Archive account' })).toBeDisabled()
+    fireEvent.keyDown(screen.getByRole('menu'), { key: 'Escape' })
+    fireEvent.click(screen.getByRole('button', { name: 'Edit Funded account' }))
+    expect(screen.getByRole('button', { name: 'Archive account', exact: true })).toBeDisabled()
+  })
+
+  it('closes the editor only after a confirmed permanent deletion succeeds', async () => {
+    open()
+    fireEvent.click(screen.getByRole('button', { name: 'Edit Everyday' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Delete permanently', exact: true }))
+    fireEvent.change(screen.getByLabelText('Type Everyday to confirm'), { target: { value: 'Everyday' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Delete permanently', exact: true }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('/accounts/active'), expect.objectContaining({ method: 'DELETE' }))
+    expect(refresh).toHaveBeenCalledOnce()
   })
 
   it('renders legacy numeric account flags as status, never as stray zero text', () => {
@@ -85,10 +152,10 @@ describe('dedicated account management', () => {
         is_locked: 1, exclude_from_net_worth: 1, exclude_from_cash_balance: 0 },
     ])) as ComponentProps<typeof AccountList>['accounts']
     render(<AccountList manage accounts={legacyAccounts} onAccountAdded={refresh} />)
-    expect(screen.getByRole('button', { name: 'Edit Legacy cash' })).toHaveTextContent(/^Legacy cashCash \/ bank · HUF$/)
-    const locked = screen.getByRole('button', { name: 'Edit Locked cash' })
-    expect(locked).toBeDisabled()
-    expect(locked).toHaveTextContent(/^Locked cashCash \/ bank · HUFExcluded from net worth$/)
+    expect(screen.getByRole('button', { name: 'Edit Legacy cash' })).toHaveTextContent(/^Legacy cashCash \/ bank · HUF350 Ft$/)
+    const locked = screen.getByRole('button', { name: 'View Locked cash' })
+    expect(locked).toBeEnabled()
+    expect(locked).toHaveTextContent(/^Locked cashCash \/ bank · HUFExcluded from net worth350 Ft$/)
   })
 
   it('orders management groups by converted value while displaying native balances', async () => {
@@ -122,6 +189,9 @@ describe('dedicated account management', () => {
     privacy.hidden = true
     open()
     expect(screen.queryByText('0 Ft')).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Old account, archived' })).toBeDisabled()
+    fireEvent.click(screen.getByRole('button', { name: 'Old account, archived' }))
+    expect(screen.getByRole('dialog', { name: 'Account details' })).toBeInTheDocument()
+    expect(screen.getByLabelText('Account Name')).toBeDisabled()
+    expect(screen.getByLabelText('Current Balance')).toHaveValue('••••••')
   })
 })

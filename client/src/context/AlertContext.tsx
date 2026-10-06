@@ -177,6 +177,9 @@ export function AlertProvider({ children }: { children: ReactNode }) {
                 }`}
               >
                 <div
+                  role={alert.type === 'confirm' ? 'alertdialog' : undefined}
+                  aria-modal={alert.type === 'confirm' ? true : undefined}
+                  aria-label={alert.type === 'confirm' ? alert.title || 'Confirmation' : undefined}
                   className={`rounded-lg border shadow-lg p-4 ${getAlertStyles(
                     alert.type || 'info'
                   )} backdrop-blur-sm`}
@@ -206,6 +209,7 @@ export function AlertProvider({ children }: { children: ReactNode }) {
                           <Button
                             size="sm"
                             variant="outline"
+                            autoFocus
                             onClick={() => alert.onCancel?.()}
                             className="flex-1"
                           >

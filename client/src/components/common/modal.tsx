@@ -8,7 +8,7 @@ interface ModalProps {
   title?: string
   children: React.ReactNode
   className?: string
-  placement?: 'center' | 'drawer'
+  placement?: 'center' | 'drawer' | 'centered'
 }
 
 export function Modal({ isOpen, onClose, title, children, className, placement = 'center' }: ModalProps) {
@@ -40,7 +40,7 @@ export function Modal({ isOpen, onClose, title, children, className, placement =
     if (!isOpen) return
     const previous = document.activeElement as HTMLElement | null
     const panel = panelRef.current
-    const focusable = () => [...(panel?.querySelectorAll<HTMLElement>('button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href], [tabindex="0"]') || [])].filter(element => element.getClientRects().length > 0)
+    const focusable = () => [...(panel?.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), a[href], [tabindex="0"]') || [])].filter(element => element.getClientRects().length > 0)
     ;(focusable()[0] || panel)?.focus()
     const trap = (event: KeyboardEvent) => {
       if (event.key !== 'Tab') return
@@ -51,12 +51,15 @@ export function Modal({ isOpen, onClose, title, children, className, placement =
       else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus() }
     }
     panel?.addEventListener('keydown', trap)
-    return () => { panel?.removeEventListener('keydown', trap); previous?.focus() }
+    return () => {
+      panel?.removeEventListener('keydown', trap)
+      if (document.activeElement === document.body || panel?.contains(document.activeElement)) previous?.focus()
+    }
   }, [isOpen])
   if (!isOpen) return null
 
   return (
-    <div className={`fixed inset-0 z-[70] flex items-end ${placement === 'drawer' ? 'sm:items-stretch sm:justify-end' : 'sm:items-center sm:justify-center'}`} >
+    <div className={`fixed inset-0 z-[70] flex ${placement === 'centered' ? 'items-center justify-center' : `items-end ${placement === 'drawer' ? 'sm:items-stretch sm:justify-end' : 'sm:items-center sm:justify-center'}`}`} >
       {/* Backdrop */}
       <div 
         className="absolute inset-0 bg-black/60 backdrop-blur-sm"
@@ -68,7 +71,8 @@ export function Modal({ isOpen, onClose, title, children, className, placement =
         "relative bg-card border border-border/50 rounded-xl shadow-2xl",
         "w-full max-w-[calc(100%-1rem)] sm:max-w-2xl max-h-[90vh] overflow-y-auto overflow-x-hidden",
         "mx-2 my-4 sm:m-4 animate-in fade-in-0 zoom-in-95",
-        "rounded-b-none sm:rounded-b-xl mb-0 max-h-[92dvh]",
+        "max-h-[92dvh]",
+        placement === 'centered' ? "rounded-xl my-4" : "rounded-b-none sm:rounded-b-xl mb-0",
         placement === 'drawer' && "sm:my-4 sm:mr-4 sm:max-w-[460px] sm:rounded-xl",
         className
       )}>
