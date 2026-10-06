@@ -9,7 +9,7 @@ import { Modal } from './components/common/modal'
 import { usePrivacy } from './context/PrivacyContext'
 import { useFinanceData } from './hooks/useFinanceData'
 import { FinanceDataStatus } from './components/common/FinanceDataStatus'
-import { sortAccountsByValue } from './lib/account-order'
+import { AccountShortcuts } from './components/dashboard-module/AccountShortcuts'
 import { parseDashboardFilters } from './navigation/filters'
 
 export type FinancePageContext = { finance: ReturnType<typeof useFinanceData>; masterCurrency: string }
@@ -110,44 +110,22 @@ function App() {
     aria-label={privacyMode === 'hidden' ? 'Show values' : 'Hide values'} aria-pressed={privacyMode === 'hidden'}>
     {privacyMode === 'hidden' ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
   </button>
-  const activeAccounts = finance.accounts.filter(account => account.archived_at == null)
-  const nativeBalance = (account: typeof finance.accounts[number]) => privacyMode === 'hidden' ? '••••••' :
-    `${account.balance.toLocaleString('hu-HU', { maximumFractionDigits: account.type === 'investment' && account.asset_type !== 'manual' ? 8 : 2 })} ${account.currency}`
-
   return <div className="finance-app bg-canvas">
     <a href="#main-content" className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[100] rounded-lg bg-card p-3">Skip to content</a>
-    <aside className="finance-sidebar fixed inset-y-0 left-0 z-40 hidden flex-col border-r border-border bg-card px-3.5 py-5 lg:flex overflow-y-auto">
-      <NavLink to="/dashboard" className="mb-5 flex items-center gap-2.5 px-1.5" aria-label="Finance home">
+    <aside className="finance-sidebar fixed inset-y-0 left-0 z-40 hidden flex-col border-r border-border bg-card px-3.5 py-5 lg:flex overflow-hidden">
+      <NavLink to="/dashboard" className="mb-5 flex shrink-0 items-center gap-2.5 px-1.5" aria-label="Finance home">
         <span className="flex h-8 w-8 items-center justify-center rounded-[9px] bg-primary text-white"><Wallet className="h-[17px] w-[17px]" /></span>
         <span><span className="block text-[15px] font-semibold">Finance</span><span className="block text-[11px] text-muted-foreground">Self-hosted</span></span>
       </NavLink>
-      <button type="button" onClick={newTransaction} disabled={!canCompose} aria-label="New transaction" aria-keyshortcuts="N" className="mb-5 flex h-10 items-center justify-center gap-2 rounded-[10px] bg-primary text-sm font-semibold text-primary-foreground disabled:opacity-50">
+      <button type="button" onClick={newTransaction} disabled={!canCompose} aria-label="New transaction" aria-keyshortcuts="N" className="mb-5 flex h-10 shrink-0 items-center justify-center gap-2 rounded-[10px] bg-primary text-sm font-semibold text-primary-foreground disabled:opacity-50">
         <Plus className="h-4 w-4" />New transaction<kbd aria-hidden="true" className="rounded bg-white/20 px-1.5 text-[11px] font-medium">N</kbd>
       </button>
-      <nav aria-label="Main navigation" className="space-y-0.5">
+      <nav aria-label="Main navigation" className="shrink-0 space-y-0.5">
         {availableNav.map(item => <NavLink key={item.key} to={`/${item.key}`} end className="finance-nav-item">{item.icon}<span>{item.label}</span></NavLink>)}
       </nav>
-      {visibleMenus.accounts && <section className="mt-5 flex-1 py-1" aria-label="Account shortcuts">
-        <div className="mb-1.5 flex items-center justify-between px-2.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-          <span>Accounts</span><NavLink to="/accounts" state={{ addAccount: true }} aria-label="Add account" className="flex items-center"><Plus className="h-3.5 w-3.5" /></NavLink>
-        </div>
-        {!dataStatus.accounts.loaded && <p className="px-2.5 py-2 text-xs text-muted-foreground">{dataStatus.accounts.error ? 'Accounts unavailable' : 'Loading accounts…'}</p>}
-        {(['cash', 'investment'] as const).map(type => {
-          const group = sortAccountsByValue(activeAccounts.filter(account => account.type === type), finance.accountSortValues)
-          if (!group.length) return null
-          return <section key={type} aria-label={type === 'cash' ? 'Cash account shortcuts' : 'Investment account shortcuts'} className="mt-3">
-            <h2 className="px-2.5 pb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{type === 'cash' ? 'Cash accounts' : 'Investments'}</h2>
-            {group.map(account => <NavLink key={account.id} to="/accounts" state={{ editAccountId: account.id }} className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 hover:bg-secondary">
-              <span className={`h-2 w-2 shrink-0 rounded-sm ${type === 'investment' ? 'bg-violet-400' : 'bg-primary'}`} />
-              <span className="min-w-0 flex-1 truncate text-[13px]">{account.name}</span><span className="max-w-[104px] truncate text-right text-[11px] tabular-nums text-muted-foreground">{nativeBalance(account)}</span>
-            </NavLink>)}
-          </section>
-        })}
-        {activeAccounts.some(account => finance.accountSortValues[account.id] == null) && !dataStatus.exchangeRates.loading && !dataStatus.investment.loading && <p className="px-2.5 pt-2 text-[10px] text-muted-foreground">Unavailable values sort last.</p>}
-        {dataStatus.accounts.loaded && activeAccounts.length === 0 && <p className="px-2.5 py-2 text-xs text-muted-foreground">No active accounts yet</p>}
-        <NavLink to="/accounts" className="block px-2.5 py-2 text-xs font-medium text-primary">Manage accounts →</NavLink>
-      </section>}
-      <div className="mt-auto space-y-0.5 border-t border-border pt-3">
+      {visibleMenus.accounts && <AccountShortcuts accounts={finance.accounts} values={finance.accountSortValues} reportingCurrency={masterCurrency}
+        status={dataStatus.accounts} valuationLoading={dataStatus.exchangeRates.loading || dataStatus.investment.loading} />}
+      <div className="mt-auto shrink-0 space-y-0.5 border-t border-border pt-3">
         <NavLink to="/settings" end className="finance-nav-item"><SettingsIcon className="h-4 w-4" />Settings</NavLink>
         {themeControl}
         <button type="button" onClick={togglePrivacyMode} className="finance-nav-item w-full" aria-pressed={privacyMode === 'hidden'}>

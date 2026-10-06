@@ -8,7 +8,7 @@ The user selected **Finance App.dc.html** from the **Finance Manager UI Redesign
 
 | Reference | Production implementation |
 | --- | --- |
-| 240px desktop sidebar, account shortcuts, New transaction | `App.tsx`; real account data, separate Cash/Investments groups sorted by converted value, route links, global reusable transaction editor, N shortcut |
+| 240px desktop sidebar, account shortcuts, New transaction | `App.tsx`; real account data, collapsible Cash/Investments groups sorted by converted value with top-three previews, route links, global reusable transaction editor, N shortcut |
 | Mobile page heading, New transaction and More | Responsive shell; safe-area bottom navigation, accessible More sheet, saved menu visibility |
 | Dark/light surfaces and color themes | Shared CSS tokens and `ThemeContext`; independent `finance_color_mode` preference included in JSON export |
 | Dashboard summary and ledger/review rows | Existing Dashboard/TransactionList calculations and workflows; responsive summary grid and full-width desktop ledger |
@@ -19,6 +19,14 @@ The user selected **Finance App.dc.html** from the **Finance Manager UI Redesign
 | Settings | Responsive two-column desktop cards; all existing settings retained, plus display mode and Accounts visibility |
 
 No sample values, fake synchronization times, or prototype forecast curves are used in production. Existing features absent from the prototype remain available. Account/transaction inputs retain AmountInput parsing, caret behavior, and investment precision. Dialogs use focus containment, mobile sheets, desktop account drawers, and preserve failed-save drafts. Error alerts appear above editors. Color filtering uses a viewport-sized shell so fixed navigation and dialogs retain their position when the page scrolls.
+
+## Compact desktop sidebar
+
+The sidebar starts with the three largest accounts per group. Counted Cash and Investments headers collapse/expand their groups, and Show all/Show top 3 controls reveal or limit each list independently. These browser choices persist in `finance_sidebar_accounts` and are included in JSON exports; invalid stored preferences use the compact defaults. Account identities and values are never saved in that preference.
+
+Cash rows show compact native amounts (for example, 1.06M HUF). Investments show their market/manual value in the reporting currency, using the same converted values as ordering. Hover titles show the full account name, monetary amount, and investment quantity where relevant. Privacy mode masks visible amounts and removes monetary/quantity values from those titles. Unknown investment valuations display Unavailable and stay last.
+
+Only the accounts list scrolls; the main navigation, Manage accounts link, Settings, theme/privacy controls, and synchronization status stay accessible. The dedicated Accounts page retains the complete list and native balances/quantities.
 
 ## Account lifecycle decisions
 
@@ -41,7 +49,7 @@ Apply migration 016 before deploying the new Workers/client. Normal root deploym
 
 ## Captured preview
 
-These captures use synthetic local accounts with privacy enabled.
+These captures use synthetic local accounts.
 
 ![Desktop Accounts page](design/accounts-desktop.jpg)
 

@@ -96,7 +96,7 @@ The API and MCP Worker share the deployed D1 database but have separate authenti
 
 ### Accounts and archive
 
-The Accounts page groups cash/bank accounts, investments, and archived accounts. Desktop navigation includes account shortcuts and a global New transaction action; mobile uses bottom navigation and More. The sidebar and Settings expose light/dark mode independently of the existing color themes.
+The Accounts page groups cash/bank accounts, investments, and archived accounts. Desktop navigation includes collapsible Cash/Investments shortcuts showing the top three by converted value, independent account scrolling, compact balances, and a global New transaction action; mobile uses bottom navigation and More. The sidebar and Settings expose light/dark mode independently of the existing color themes.
 
 Archive requires an unlocked account with exactly zero native balance/holding and no unresolved pending transactions (including MCP reviews and linked review pairs). Archive preserves identity, ledger, investment history, exclusions, and exports. It pauses every recurring schedule using the account as source or destination; restore makes the account available again but does not resume schedules. Archived accounts are read-only until restored and are omitted from active account selectors and current market valuations. Historical posted activity and balance reconstruction continue to include them.
 
@@ -334,7 +334,7 @@ Settings JSON uses authenticated `GET /export`, a single read-only D1 batch for 
 
 Rows preserve database values exactly: SQLite booleans remain numeric, stored JSON fields remain strings, and IDs, links, quantities, currencies, review metadata, and timestamps are retained. Audit logs and forecast snapshots are always included, even if empty; there are no silently omitted optional tables.
 
-The client adds `browserSettings` containing only known saved app preferences: reporting currency, navigation, color theme and light/dark mode, startup/legacy privacy, analytics widget visibility, and remembered transaction form account/category choices. Values are stored strings or `null` when unset (the app uses its default). Privacy cookies take precedence over local storage, matching the app. Browser preferences cover the exporting browser only and are read after the database snapshot. Applied page filters live in URLs and the retired last-page preference is not exported.
+The client adds `browserSettings` containing only known saved app preferences: reporting currency, navigation, color theme and light/dark mode, sidebar group collapse/expansion choices, startup/legacy privacy, analytics widget visibility, and remembered transaction form account/category choices. Values are stored strings or `null` when unset (the app uses its default). Privacy cookies take precedence over local storage, matching the app. Browser preferences cover the exporting browser only and are read after the database snapshot. Applied page filters live in URLs and the retired last-page preference is not exported.
 
 Expiring MCP proposal tables are explicitly excluded because their IDs authorize temporary actions; created review drafts and completed replay records are included. Migration ledger rows, SQLite infrastructure, arbitrary browser storage, authentication cookies, API keys, and environment/deployment secrets are excluded. Never store credentials in `app_settings`, which contains user app preferences and is exported in full.
 

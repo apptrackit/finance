@@ -285,6 +285,6 @@ it('groups sidebar cash/investments and sorts both by converted monetary value',
   expect(order(cashGroup)[1]).toMatch(/^Local cash/)
   expect(order(investments)[1]).toMatch(/^Many units/)
   expect(cashGroup).toHaveTextContent('100 EUR')
-  expect(investments).toHaveTextContent('2 SHARE')
+  expect(investments).toHaveTextContent('160K HUF')
   expect(screen.queryByRole('link', { name: /Archived cash/ })).not.toBeInTheDocument()
 })
