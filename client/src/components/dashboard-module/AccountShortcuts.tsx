@@ -84,9 +84,9 @@ export function AccountShortcuts({ accounts, values, reportingCurrency, status, 
                 <span className="flex items-center gap-2">
                   <span className={`h-1.5 w-1.5 shrink-0 rounded-sm ${type === 'investment' ? 'bg-violet-400' : 'bg-primary'}`} />
                   <span className="min-w-0 flex-1 truncate text-[13px]">{account.name}</span>
-                  <span className="shrink-0 whitespace-nowrap text-right text-[12px] leading-4 tabular-nums">
+                  <span className="shrink-0 whitespace-nowrap text-right text-[11px] leading-4 tabular-nums">
                     <span className={balance.currency ? 'font-medium text-foreground' : 'text-[11px] text-muted-foreground'}>{balance.amount}</span>
-                    {balance.currency && <>{' '}<span className="text-[10px] font-normal text-muted-foreground">{balance.currency}</span></>}
+                    {balance.currency && <>{' '}<span className="text-[10px] font-normal text-foreground">{balance.currency}</span></>}
                   </span>
                 </span>
                 <span aria-hidden="true" className="mt-0.5 flex items-center gap-2 pl-3.5">
