@@ -2,7 +2,7 @@ import { useId, useState } from 'react'
 import { NavLink } from 'react-router'
 import { ChevronDown, CreditCard, Plus } from 'lucide-react'
 import { usePrivacy } from '../../context/PrivacyContext'
-import { sortAccountsByValue } from '../../lib/account-order'
+import { accountBalanceShares, sortAccountsByValue } from '../../lib/account-order'
 import type { AccountSortValues, ValuedAccount } from '../../lib/account-order'
 import { readSidebarAccountPreferences, saveSidebarAccountPreferences } from './sidebar-accounts.storage'
 import type { SidebarAccountGroup, SidebarAccountPreferences } from './sidebar-accounts.storage'
@@ -55,23 +55,43 @@ export function AccountShortcuts({ accounts, values, reportingCurrency, status, 
       {(['cash', 'investment'] as const).map(type => {
         const group = sortAccountsByValue(activeAccounts.filter(account => account.type === type), values)
         if (!group.length) return null
+        const shares = accountBalanceShares(group, values)
+        const sharesUnavailable = group.some(account => shares[account.id] === null)
+        const shareBasis = `Share of all active ${type === 'cash' ? 'cash balances' : 'investment values'}, including accounts excluded from totals. Shares use positive balances; negative balances are shown separately.`
         const { collapsed } = preferences[type]
         const id = `${contentId}-${type}`
         return <section key={type} aria-label={type === 'cash' ? 'Cash account shortcuts' : 'Investment account shortcuts'} className="mb-2">
-          <h2><button type="button" aria-label={`${type === 'cash' ? 'Cash accounts' : 'Investments'} (${group.length})`} aria-expanded={!collapsed} aria-controls={id} onClick={() => updateGroup(type, { collapsed: !collapsed })}
+          <h2><button type="button" aria-label={`${type === 'cash' ? 'Cash accounts' : 'Investments'} (${group.length})`} aria-expanded={!collapsed} aria-controls={id} title={shareBasis} onClick={() => updateGroup(type, { collapsed: !collapsed })}
             className="flex w-full items-center gap-1.5 rounded-lg px-2.5 py-1 text-left text-[10px] font-semibold uppercase tracking-wider text-muted-foreground hover:bg-secondary hover:text-foreground">
             <ChevronDown aria-hidden="true" className={`h-3 w-3 shrink-0 transition-transform ${collapsed ? '-rotate-90' : ''}`} />
             <span className="flex-1">{type === 'cash' ? 'Cash accounts' : 'Investments'}</span>
             <span className="rounded bg-secondary px-1.5 py-0.5 text-[10px] tabular-nums">{group.length}</span>
           </button></h2>
           <div id={id} hidden={collapsed}>
-            {group.map(account => <NavLink key={account.id} to="/accounts" state={{ editAccountId: account.id }} aria-label={`${account.name}, ${displayBalance(account)}`} title={description(account)}
-              className="flex items-center gap-2 rounded-lg px-2.5 py-2 hover:bg-secondary">
-              <span className={`h-1.5 w-1.5 shrink-0 rounded-sm ${type === 'investment' ? 'bg-violet-400' : 'bg-primary'}`} />
-              <span className="min-w-0 flex-1 truncate text-[13px]">{account.name}</span>
-              <span className="shrink-0 text-right text-[11px] tabular-nums text-muted-foreground">{displayBalance(account)}</span>
-            </NavLink>)}
-
+            {group.map(account => {
+              const hidden = privacyMode === 'hidden'
+              const share = shares[account.id]
+              const negative = (values[account.id] ?? 0) < 0
+              const shareLabel = hidden ? '•••' : share === null ? (valuationLoading ? '…' : '—') : negative ? 'Negative' : `${share.toFixed(1)}%`
+              const shareDescription = hidden ? 'Share hidden' : share === null ? (valuationLoading ? 'Loading share' : 'Share unavailable: a value in this group is missing') : negative ? 'Negative balance; excluded from positive balance shares' : `${share.toFixed(1)}% of active ${type === 'cash' ? 'cash balances' : 'investment values'}`
+              const shareId = `${id}-share-${account.id}`
+              return <NavLink key={account.id} to="/accounts" state={{ editAccountId: account.id }} aria-label={`${account.name}, ${displayBalance(account)}`} aria-describedby={shareId} title={hidden ? account.name : `${description(account)}\n${shareDescription}`}
+                className="block rounded-lg px-2.5 py-2 hover:bg-secondary">
+                <span className="flex items-center gap-2">
+                  <span className={`h-1.5 w-1.5 shrink-0 rounded-sm ${type === 'investment' ? 'bg-violet-400' : 'bg-primary'}`} />
+                  <span className="min-w-0 flex-1 truncate text-[13px]">{account.name}</span>
+                  <span className="shrink-0 text-right text-[11px] tabular-nums text-muted-foreground">{displayBalance(account)}</span>
+                </span>
+                <span aria-hidden="true" className="mt-0.5 flex items-center gap-2 pl-3.5">
+                  <span className="h-[3px] min-w-0 flex-1 overflow-hidden rounded-full bg-secondary">
+                    {!hidden && share !== null && <span className={`block h-full rounded-full ${type === 'investment' ? 'bg-violet-400' : 'bg-primary'}`} style={{ width: `${share}%` }} />}
+                  </span>
+                  <span className="w-12 shrink-0 text-right text-[10px] leading-3 tabular-nums text-muted-foreground">{shareLabel}</span>
+                </span>
+                <span id={shareId} className="sr-only">{shareDescription}</span>
+              </NavLink>
+            })}
+            {privacyMode !== 'hidden' && sharesUnavailable && <p className="px-2.5 pb-1 text-[10px] text-muted-foreground">{valuationLoading ? 'Loading shares…' : 'Shares unavailable · missing values.'}</p>}
           </div>
         </section>
       })}
