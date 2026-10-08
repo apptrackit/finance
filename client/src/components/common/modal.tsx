@@ -80,7 +80,7 @@ export function Modal({ isOpen, onClose, title, subtitle, contentClassName, chil
       )}>
         {/* Header */}
         {title && (
-          <div className={cn("flex shrink-0 items-center justify-between gap-3 p-4 sm:p-6 border-b border-border/50", subtitle && "px-5 py-[18px] sm:px-6 sm:py-[18px]")}>
+          <div className={cn("flex shrink-0 items-center justify-between gap-3 p-4 sm:p-6 border-b border-border/50", subtitle && "px-5 py-3 sm:px-6 sm:py-3")}>
             <div className="min-w-0">
               <h2 id={titleId} className={subtitle ? "text-xs text-muted-foreground" : "text-lg sm:text-xl font-semibold text-foreground"}>{title}</h2>
               {subtitle && <p className="mt-0.5 truncate text-[17px] font-semibold tracking-tight">{subtitle}</p>}
