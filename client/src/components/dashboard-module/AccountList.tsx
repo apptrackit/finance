@@ -11,12 +11,14 @@ import { Select } from '../common/select'
 import { Card, CardContent, CardHeader, CardTitle } from '../common/card'
 import { ActionMenu } from '../common/action-menu'
 import { Modal } from '../common/modal'
-import { Archive, RotateCcw, Plus, X, Wallet, CreditCard, Pencil, Trash2, Check, Search, Lock, LockOpen, CircleCheck, CircleX, ChevronDown, Loader2 } from 'lucide-react'
+import { Archive, RotateCcw, Plus, X, Wallet, CreditCard, Pencil, Trash2, Search, Lock, LockOpen, CircleCheck, CircleX, ChevronDown, Loader2 } from 'lucide-react'
 import { API_BASE_URL, apiFetch } from '../../config'
 import { usePrivacy } from '../../context/PrivacyContext'
 import { useAlert } from '../../context/AlertContext'
 import { SplitTransactionModal } from './SplitTransactionModal'
 import type { SplitTransaction } from './SplitTransactionModal'
+import { EditAccountForm } from './EditAccountForm'
+import type { AccountFormData } from './EditAccountForm'
 import { AdjustmentChoiceModal } from './AdjustmentChoiceModal'
 import { AmountInput } from '../common/amount-input'
 import { formatAmount, parseAmount } from '../../lib/amount'
@@ -67,7 +69,8 @@ export function AccountList({ accounts, onAccountAdded, loading, manage = false,
   const isLocked = (id: string) => accounts.find(a => a.id === id)?.is_locked ?? false
   const [isAdding, setIsAdding] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
-  const [formData, setFormData] = useState({
+  const [savedFormData, setSavedFormData] = useState<AccountFormData | null>(null)
+  const [formData, setFormData] = useState<AccountFormData>({
     name: '',
     type: 'cash',
     balance: '',
@@ -113,6 +116,15 @@ export function AccountList({ accounts, onAccountAdded, loading, manage = false,
   const editingAccount = accounts.find(account => account.id === editingId)
   const editorReadOnly = Boolean(editingId && (editorStatus.locked || editorStatus.archived))
   const accountActionBusy = Boolean(lockingId || lifecycleId || deletingId)
+  const editorDirty = Boolean(savedFormData && Object.keys(savedFormData).some(key => {
+    const field = key as keyof AccountFormData
+    if (field === 'adjustWithTransaction') return false
+    if (field === 'balance') {
+      const balance = formData.balance.trim() === '' ? 0 : parseAmount(formData.balance)
+      return balance !== parseAmount(savedFormData.balance)
+    }
+    return formData[field] !== savedFormData[field]
+  }))
   useEffect(() => {
     if (editingAccount) setEditorStatus({ locked: Boolean(editingAccount.is_locked), archived: editingAccount.archived_at != null })
   }, [editingId, editingAccount?.is_locked, editingAccount?.archived_at])
@@ -276,7 +288,7 @@ export function AccountList({ accounts, onAccountAdded, loading, manage = false,
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (isSubmitting || accountActionBusy || editorReadOnly) return
+    if (isSubmitting || accountActionBusy || editorReadOnly || deleteTarget || (editingId && !editorDirty)) return
     
     setIsSubmitting(true)
     try {
@@ -352,10 +364,10 @@ export function AccountList({ accounts, onAccountAdded, loading, manage = false,
   }
 
   const handleEdit = (account: Account) => {
-    setFormData({
+    const draft: AccountFormData = {
       name: account.name,
       type: account.type,
-      balance: formatAmount(account.balance, { maximumFractionDigits: 8 }),
+      balance: formatAmount(account.balance),
       currency: account.currency,
       quote_currency: account.quote_currency || (account.symbol ? quotes[account.symbol]?.currency : undefined) || 'USD',
       symbol: account.symbol || '',
@@ -363,7 +375,9 @@ export function AccountList({ accounts, onAccountAdded, loading, manage = false,
       adjustWithTransaction: true,
       exclude_from_net_worth: Boolean(account.exclude_from_net_worth),
       exclude_from_cash_balance: Boolean(account.exclude_from_cash_balance)
-    })
+    }
+    setFormData(draft)
+    setSavedFormData(draft)
     setManualMode(account.asset_type === 'manual')
     setEditorStatus({ locked: Boolean(account.is_locked), archived: account.archived_at != null })
     setEditingId(account.id)
@@ -435,6 +449,9 @@ export function AccountList({ accounts, onAccountAdded, loading, manage = false,
   const handleCancel = () => {
     setIsAdding(false)
     setEditingId(null)
+    setSavedFormData(null)
+    setDeleteTarget(null)
+    setDeleteName('')
     resetForm()
   }
 
@@ -628,10 +645,22 @@ export function AccountList({ accounts, onAccountAdded, loading, manage = false,
           <span className="ml-1">{isAdding ? 'Cancel' : 'Add'}</span>
         </Button>
       </CardHeader>
-      <Modal isOpen={isAdding && !showSymbolSearch && !showChoiceModal && !showSingleModal && !showSplitModal && !deleteTarget && !editorConfirming} onClose={() => { if (!isSubmitting && !accountActionBusy) handleCancel() }} title={editingId ? (editorReadOnly ? 'Account details' : 'Edit Account') : 'Add Account'} placement="centered">
+      <Modal isOpen={isAdding && !showSymbolSearch && !showChoiceModal && !showSingleModal && !showSplitModal && (!deleteTarget || deleteTarget.id === editingId) && !editorConfirming} onClose={() => { if (!isSubmitting && !accountActionBusy) handleCancel() }} title={editingId ? 'Edit account' : 'Add Account'} subtitle={editingId ? formData.name || 'Untitled account' : undefined} placement="centered"
+        className={editingId ? 'flex max-w-[520px] flex-col overflow-hidden rounded-2xl sm:max-w-[520px]' : undefined}
+        contentClassName={editingId ? 'flex min-h-0 flex-1 flex-col p-0 sm:p-0' : undefined}>
+        {editingAccount ? <EditAccountForm
+          value={formData} savedBalance={editingAccount.balance} savedCurrency={editingAccount.currency} savedName={editingAccount.name}
+          onChange={setFormData} onSubmit={handleSubmit} dirty={editorDirty}
+          onRevert={() => { if (savedFormData) setFormData({ ...savedFormData }); setDeleteTarget(null); setDeleteName('') }} onCancel={handleCancel}
+          locked={editorStatus.locked} archived={editorStatus.archived} busy={isSubmitting || accountActionBusy} saving={isSubmitting} hidden={privacyMode === 'hidden'}
+          onLock={() => { void handleLockToggle(editingAccount.id, editorStatus.locked) }}
+          onArchive={() => { void handleLifecycle(editingAccount, editorStatus.archived, editorStatus.locked) }}
+          onAskDelete={() => { setDeleteTarget(editingAccount); setDeleteName('') }}
+          confirmingDelete={deleteTarget?.id === editingId} deleteName={deleteName} onDeleteName={setDeleteName}
+          onCancelDelete={() => { setDeleteTarget(null); setDeleteName('') }} onDelete={() => { void handleDelete(editingAccount.id) }} deleting={Boolean(deletingId)}
+        /> : (
         <form onSubmit={handleSubmit} className="space-y-4">
-          {editorReadOnly && <p role="status" className="rounded-lg border border-border bg-secondary/50 p-3 text-sm text-muted-foreground">{editorStatus.archived ? 'Account archived. Restore it to continue editing.' : 'Account locked. Unlock it to continue editing.'} Unsaved form values are retained.</p>}
-          <fieldset disabled={isSubmitting || accountActionBusy || editorReadOnly} className="min-w-0 space-y-4">
+          <fieldset disabled={isSubmitting || accountActionBusy} className="min-w-0 space-y-4">
             <div className="grid grid-cols-2 gap-3">
               <div className="col-span-2 space-y-2">
                 <Label htmlFor="name">Account Name</Label>
@@ -687,7 +716,6 @@ export function AccountList({ accounts, onAccountAdded, loading, manage = false,
               )}
               <div className="col-span-2 space-y-2">
                 <Label htmlFor="balance">{formData.type === 'investment' ? 'Initial Quantity (0 if tracking from transactions)' : 'Current Balance'}</Label>
-                {editorReadOnly && privacyMode === 'hidden' ? <Input id="balance" value="••••••" readOnly /> : (
                 <AmountInput
                   id="balance"
                   value={formData.balance}
@@ -695,7 +723,6 @@ export function AccountList({ accounts, onAccountAdded, loading, manage = false,
                   allowNegative
                   placeholder="0"
                 />
-                )}
               </div>
 
               {formData.type === 'investment' && formData.symbol && (
@@ -761,28 +788,6 @@ export function AccountList({ accounts, onAccountAdded, loading, manage = false,
                 </>
               )}
 
-              {/* Checkbox for adjusting with transaction - only shown when editing */}
-              {editingId && (
-                <div className="col-span-2 space-y-2">
-                  <div className="flex items-center gap-2 p-3 bg-secondary/30 rounded-lg border border-border/30">
-                    <input
-                      id="adjust-with-transaction"
-                      type="checkbox"
-                      checked={formData.adjustWithTransaction}
-                      onChange={e => setFormData({ ...formData, adjustWithTransaction: e.target.checked })}
-                      className="h-4 w-4 rounded border-border bg-background text-primary focus:ring-2 focus:ring-primary focus:ring-offset-2"
-                    />
-                    <Label htmlFor="adjust-with-transaction" className="cursor-pointer text-sm font-normal">
-                      Adjust balance with a transaction instead of direct update
-                    </Label>
-                  </div>
-                  <p className="text-xs text-muted-foreground px-1">
-                    {formData.adjustWithTransaction
-                      ? "A transaction will be created for the difference between old and new balance"
-                      : "Balance will be updated directly without creating a transaction"}
-                  </p>
-                </div>
-              )}
             </div>
             <fieldset className="rounded-xl border border-border p-4 space-y-3">
               <legend className="px-1 text-sm font-medium">Calculation exclusions</legend>
@@ -790,19 +795,12 @@ export function AccountList({ accounts, onAccountAdded, loading, manage = false,
               {formData.type === 'cash' && <label className="flex items-start gap-3 text-sm"><input type="checkbox" checked={formData.exclude_from_cash_balance} onChange={event => setFormData({ ...formData, exclude_from_cash_balance: event.target.checked })} className="mt-1" /><span>Exclude from cash balance<span className="block text-xs text-muted-foreground">Independent of net worth and archive status.</span></span></label>}
             </fieldset>
             <Button type="submit" className="w-full" disabled={isSubmitting}>
-              {editingId ? <Check className="h-4 w-4 mr-2" /> : <Plus className="h-4 w-4 mr-2" />}
-              {isSubmitting ? 'Saving...' : (editingId ? 'Save Changes' : 'Add Account')}
+              <Plus className="h-4 w-4 mr-2" />
+              {isSubmitting ? 'Saving...' : 'Add Account'}
             </Button>
           </fieldset>
-          {editingAccount && <section aria-label="Account actions" className="space-y-3 border-t border-border pt-4">
-            <div className="flex flex-wrap gap-2">
-              {!editorStatus.archived && <Button type="button" variant="outline" size="sm" disabled={isSubmitting || accountActionBusy} onClick={() => handleLockToggle(editingAccount.id, editorStatus.locked)}>{editorStatus.locked ? <LockOpen className="h-4 w-4" /> : <Lock className="h-4 w-4" />}{editorStatus.locked ? 'Unlock account' : 'Lock account'}</Button>}
-              <Button type="button" variant="outline" size="sm" disabled={isSubmitting || accountActionBusy || (!editorStatus.archived && (editorStatus.locked || editingAccount.balance !== 0))} onClick={() => handleLifecycle(editingAccount, editorStatus.archived, editorStatus.locked)}><Archive className="h-4 w-4" />{editorStatus.archived ? 'Restore account' : 'Archive account'}</Button>
-              <Button type="button" variant="ghost" size="sm" className="text-destructive" disabled={isSubmitting || accountActionBusy || editorStatus.locked || editorStatus.archived} onClick={() => { setDeleteTarget(editingAccount); setDeleteName('') }}><Trash2 className="h-4 w-4" />Delete permanently</Button>
-            </div>
-            <p className="text-xs text-muted-foreground">Actions apply to the saved account. Form changes require Save Changes. Archive requires an unlocked account with zero balance or holding and no pending items.</p>
-          </section>}
           </form>
+        )}
       </Modal>
 
       {!manage && <div className={`lg:!max-h-none lg:overflow-visible overflow-hidden transition-all duration-500 ease-in-out ${isCollapsed ? 'max-h-0' : 'max-h-[2000px]'}`}>
@@ -1306,7 +1304,7 @@ export function AccountList({ accounts, onAccountAdded, loading, manage = false,
           })}
         </>}
       </div>}
-      <Modal isOpen={deleteTarget !== null} onClose={() => { if (!deletingId) setDeleteTarget(null) }} title="Delete account permanently?" placement="centered">
+      <Modal isOpen={deleteTarget !== null && deleteTarget.id !== editingId} onClose={() => { if (!deletingId) setDeleteTarget(null) }} title="Delete account permanently?" placement="centered">
         <div className="space-y-4"><p className="text-sm text-muted-foreground">This deletes the account, its transactions, investment history, and recurring schedules. Linked transfers block deletion to protect the other account. Archive instead to retain history. Deleted data can only be recovered from a database backup.</p>
           <Label htmlFor="delete-account-name">Type {deleteTarget?.name} to confirm</Label><Input id="delete-account-name" value={deleteName} onChange={event => setDeleteName(event.target.value)} autoComplete="off" />
           <div className="flex flex-wrap justify-end gap-2"><Button variant="outline" disabled={Boolean(deletingId)} onClick={() => setDeleteTarget(null)}>Cancel</Button><Button variant="destructive" disabled={!deleteTarget || deleteName !== deleteTarget.name || Boolean(deletingId)} onClick={() => { if (deleteTarget) void handleDelete(deleteTarget.id) }}>{deletingId ? 'Deleting…' : 'Delete permanently'}</Button></div>

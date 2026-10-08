@@ -6,12 +6,14 @@ interface ModalProps {
   isOpen: boolean
   onClose: () => void
   title?: string
+  subtitle?: string
+  contentClassName?: string
   children: React.ReactNode
   className?: string
   placement?: 'center' | 'drawer' | 'centered'
 }
 
-export function Modal({ isOpen, onClose, title, children, className, placement = 'center' }: ModalProps) {
+export function Modal({ isOpen, onClose, title, subtitle, contentClassName, children, className, placement = 'center' }: ModalProps) {
   React.useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && isOpen) {
@@ -78,12 +80,15 @@ export function Modal({ isOpen, onClose, title, children, className, placement =
       )}>
         {/* Header */}
         {title && (
-          <div className="flex items-center justify-between p-4 sm:p-6 border-b border-border/50">
-            <h2 id={titleId} className="text-lg sm:text-xl font-semibold text-foreground">{title}</h2>
+          <div className={cn("flex shrink-0 items-center justify-between gap-3 p-4 sm:p-6 border-b border-border/50", subtitle && "px-5 py-[18px] sm:px-6 sm:py-[18px]")}>
+            <div className="min-w-0">
+              <h2 id={titleId} className={subtitle ? "text-xs text-muted-foreground" : "text-lg sm:text-xl font-semibold text-foreground"}>{title}</h2>
+              {subtitle && <p className="mt-0.5 truncate text-[17px] font-semibold tracking-tight">{subtitle}</p>}
+            </div>
             <button
               onClick={onClose}
               aria-label="Close"
-              className="text-muted-foreground hover:text-foreground transition-colors p-1 -mr-1"
+              className={subtitle ? "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors" : "text-muted-foreground hover:text-foreground transition-colors p-1 -mr-1"}
             >
               <X className="h-5 w-5" />
             </button>
@@ -91,7 +96,7 @@ export function Modal({ isOpen, onClose, title, children, className, placement =
         )}
         
         {/* Content */}
-        <div className="p-4 sm:p-6">
+        <div className={cn("p-4 sm:p-6", contentClassName)}>
           {children}
         </div>
       </div>
