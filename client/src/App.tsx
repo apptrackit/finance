@@ -119,16 +119,19 @@ function App() {
     {colorMode === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}<span>{colorMode === 'dark' ? 'Light mode' : 'Dark mode'}</span>
   </button>
   const privacyControl = <button type="button" onClick={togglePrivacyMode} className="finance-icon-button"
-    aria-label={privacyMode === 'hidden' ? 'Show values' : 'Hide values'} aria-pressed={privacyMode === 'hidden'}>
+    aria-label={privacyMode === 'hidden' ? 'Show values' : 'Hide values'} title={privacyMode === 'hidden' ? 'Show values' : 'Hide values'} aria-pressed={privacyMode === 'hidden'}>
     {privacyMode === 'hidden' ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
   </button>
   return <div className="finance-app bg-canvas">
     <a href="#main-content" className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[100] rounded-lg bg-card p-3">Skip to content</a>
     <aside className="finance-sidebar fixed inset-y-0 left-0 z-40 hidden flex-col border-r border-border bg-card px-3.5 py-5 lg:flex overflow-hidden">
-      <NavLink to="/dashboard" className="mb-5 flex shrink-0 items-center gap-2.5 px-1.5" aria-label="Finance home">
-        <span className="flex h-8 w-8 items-center justify-center rounded-[9px] bg-primary text-white"><Wallet className="h-[17px] w-[17px]" /></span>
-        <span><span className="block text-[15px] font-semibold">Finance</span><span className="block text-[11px] text-muted-foreground">Self-hosted</span></span>
-      </NavLink>
+      <div className="mb-5 flex shrink-0 items-center gap-2">
+        <NavLink to="/dashboard" className="flex min-w-0 flex-1 items-center gap-2.5 px-1.5" aria-label="Finance home">
+          <span className="flex h-8 w-8 items-center justify-center rounded-[9px] bg-primary text-white"><Wallet className="h-[17px] w-[17px]" /></span>
+          <span><span className="block text-[15px] font-semibold">Finance</span><span className="block text-[11px] text-muted-foreground">Self-hosted</span></span>
+        </NavLink>
+        {privacyControl}
+      </div>
       <button type="button" onClick={() => setSearchOpen(true)} aria-label="Search everything" aria-keyshortcuts="Meta+K Control+K" className="mb-5 flex h-10 shrink-0 cursor-pointer items-center gap-2 rounded-[10px] border border-border bg-background px-3 text-xs text-muted-foreground hover:bg-secondary hover:text-foreground">
         <Search className="h-4 w-4 shrink-0" /><span className="flex-1 text-left">Search everything…</span><kbd aria-hidden="true" className="rounded border border-border px-1 text-[10px]">{searchShortcut}</kbd>
       </button>
@@ -140,11 +143,10 @@ function App() {
       <div className="mt-auto shrink-0 space-y-0.5 border-t border-border pt-3">
         <NavLink to="/settings" end className="finance-nav-item"><SettingsIcon className="h-4 w-4" />Settings</NavLink>
         {themeControl}
-        <button type="button" onClick={togglePrivacyMode} className="finance-nav-item w-full" aria-pressed={privacyMode === 'hidden'}>
-          {privacyMode === 'hidden' ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}<span>{privacyMode === 'hidden' ? 'Show values' : 'Hide values'}</span>
-        </button>
-        <div className="flex items-center gap-2 px-2.5 pt-3 text-xs text-muted-foreground" role="status"><span className={`h-1.5 w-1.5 rounded-full ${syncText === 'Load error' ? 'bg-destructive' : 'bg-success'}`} />{syncText}</div>
-        <p className="pt-3 text-center text-xs text-muted-foreground">v{APP_VERSION}</p>
+        <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 px-2.5 pt-1.5 text-[11px] text-muted-foreground">
+          <div className="flex items-center gap-1.5 whitespace-nowrap" role="status"><span className={`h-1.5 w-1.5 shrink-0 rounded-full ${syncText === 'Load error' ? 'bg-destructive' : 'bg-success'}`} />{syncText}</div>
+          <p className="text-center">v{APP_VERSION}</p>
+        </div>
       </div>
     </aside>
     <div className="finance-main pb-24 lg:pb-0">
