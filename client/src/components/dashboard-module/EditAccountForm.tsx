@@ -8,18 +8,9 @@ import { Select } from '../common/select'
 import { formatAmount, parseAmount } from '../../lib/amount'
 import { cn } from '../../lib/utils'
 
-export type AccountFormData = {
-  name: string
-  type: 'cash' | 'investment'
-  balance: string
-  currency: string
-  quote_currency: string
-  symbol: string
-  asset_type: 'stock' | 'crypto' | 'manual'
-  adjustWithTransaction: boolean
-  exclude_from_net_worth: boolean
-  exclude_from_cash_balance: boolean
-}
+import type { AccountFormData } from './account-form'
+import { accountCurrencies, accountControlClass } from './account-form'
+import { AccountTotalsSwitches } from './AccountTotalsSwitches'
 
 type Props = {
   value: AccountFormData
@@ -46,9 +37,6 @@ type Props = {
   onDelete: () => void
   deleting: boolean
 }
-
-const currencies = ['HUF', 'EUR', 'USD', 'GBP', 'CHF', 'MXN']
-const controlClass = 'h-9 rounded-[10px] bg-background'
 
 function ManageAction({ icon, title, description, disabled, destructive, onClick }: {
   icon: ReactNode; title: string; description?: string; disabled?: boolean; destructive?: boolean; onClick: () => void
@@ -106,28 +94,20 @@ export function EditAccountForm(props: Props) {
           </div>}
         </div>
         <div className="space-y-2">
-          <div className="space-y-1"><Label htmlFor="edit-name" className="text-[13px]">Name</Label><Input id="edit-name" value={value.name} onChange={event => update('name', event.target.value)} required className={controlClass} /></div>
+          <div className="space-y-1"><Label htmlFor="edit-name" className="text-[13px]">Name</Label><Input id="edit-name" value={value.name} onChange={event => update('name', event.target.value)} required className={accountControlClass} /></div>
           <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1"><Label htmlFor="edit-type" className="text-[13px]">Type</Label><Select id="edit-type" value={value.type} onChange={event => update('type', event.target.value as AccountFormData['type'])} className={controlClass}><option value="cash">💵 Cash / Bank</option><option value="investment">📈 Investment</option></Select></div>
-            {(!quantity || value.asset_type === 'manual') && <div className="space-y-1"><Label htmlFor="edit-currency" className="text-[13px]">Currency</Label><Select id="edit-currency" value={value.currency} onChange={event => update('currency', event.target.value)} className={controlClass}>
-              {[...new Set([...currencies, value.currency])].map(currency => <option key={currency} value={currency}>{currency}</option>)}
+            <div className="space-y-1"><Label htmlFor="edit-type" className="text-[13px]">Type</Label><Select id="edit-type" value={value.type} onChange={event => update('type', event.target.value as AccountFormData['type'])} className={accountControlClass}><option value="cash">💵 Cash / Bank</option><option value="investment">📈 Investment</option></Select></div>
+            {(!quantity || value.asset_type === 'manual') && <div className="space-y-1"><Label htmlFor="edit-currency" className="text-[13px]">Currency</Label><Select id="edit-currency" value={value.currency} onChange={event => update('currency', event.target.value)} className={accountControlClass}>
+              {[...new Set([...accountCurrencies, value.currency])].map(currency => <option key={currency} value={currency}>{currency}</option>)}
             </Select></div>}
-            {quantity && value.asset_type !== 'manual' && <div className="space-y-1"><Label htmlFor="edit-quote-currency" className="text-[13px]">Trading currency</Label><Select id="edit-quote-currency" value={value.quote_currency} onChange={event => update('quote_currency', event.target.value)} className={controlClass}>
-              {[...new Set([...currencies, value.quote_currency])].map(currency => <option key={currency} value={currency}>{currency}</option>)}
+            {quantity && value.asset_type !== 'manual' && <div className="space-y-1"><Label htmlFor="edit-quote-currency" className="text-[13px]">Trading currency</Label><Select id="edit-quote-currency" value={value.quote_currency} onChange={event => update('quote_currency', event.target.value)} className={accountControlClass}>
+              {[...new Set([...accountCurrencies, value.quote_currency])].map(currency => <option key={currency} value={currency}>{currency}</option>)}
             </Select></div>}
           </div>
-          {quantity && value.asset_type === 'manual' && <div className="space-y-1"><Label htmlFor="edit-symbol" className="text-[13px]">Symbol (optional)</Label><Input id="edit-symbol" value={value.symbol} onChange={event => update('symbol', event.target.value.slice(0, 5))} maxLength={5} className={controlClass} /></div>}
+          {quantity && value.asset_type === 'manual' && <div className="space-y-1"><Label htmlFor="edit-symbol" className="text-[13px]">Symbol (optional)</Label><Input id="edit-symbol" value={value.symbol} onChange={event => update('symbol', event.target.value.slice(0, 5))} maxLength={5} className={accountControlClass} /></div>}
           {quantity && value.asset_type !== 'manual' && value.symbol && <div className="rounded-xl bg-secondary/50 p-3 text-sm"><span className="font-semibold">{value.symbol}</span><span className="ml-2 text-muted-foreground">Holding unit: {value.currency}</span></div>}
         </div>
-        <section aria-label="Include in totals" className="space-y-1.5">
-          <h3 className="text-[13px] font-medium">Include in totals</h3>
-          <div className="divide-y divide-border/50 overflow-hidden rounded-xl border border-border/50">
-            {[{ key: 'exclude_from_net_worth' as const, label: 'Net worth', description: 'Include this account in your total net worth.' }, ...(!quantity ? [{ key: 'exclude_from_cash_balance' as const, label: 'Cash balance', description: 'Include this account in available cash totals.' }] : [])].map(toggle => <button key={toggle.key} type="button" role="switch" aria-checked={!value[toggle.key]} aria-label={toggle.label} onClick={() => update(toggle.key, !value[toggle.key])} className="flex w-full items-center gap-3.5 px-3.5 py-2 text-left hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50">
-              <span className="min-w-0 flex-1"><span className="block text-sm font-medium">{toggle.label}</span><span className="mt-0.5 block text-xs text-muted-foreground">{toggle.description}</span></span>
-              <span aria-hidden="true" className={cn('relative h-5 w-9 shrink-0 rounded-full transition-colors', value[toggle.key] ? 'bg-border' : 'bg-primary')}><span className={cn('absolute top-0.5 h-4 w-4 rounded-full bg-white shadow-sm transition-[left]', value[toggle.key] ? 'left-0.5' : 'left-[18px]')} /></span>
-            </button>)}
-          </div>
-        </section>
+        <AccountTotalsSwitches value={value} onChange={onChange} />
       </fieldset>
       <section aria-label="Account actions" className="space-y-1.5">
         <div className="flex items-baseline justify-between gap-3"><h3 className="text-[13px] font-medium">Manage</h3><span className="text-xs text-muted-foreground">Applies immediately</span></div>

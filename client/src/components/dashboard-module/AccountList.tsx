@@ -7,7 +7,6 @@ import { useState, useEffect, useRef } from 'react'
 import { Button } from '../common/button'
 import { Input } from '../common/input'
 import { Label } from '../common/label'
-import { Select } from '../common/select'
 import { Card, CardContent, CardHeader, CardTitle } from '../common/card'
 import { ActionMenu } from '../common/action-menu'
 import { Modal } from '../common/modal'
@@ -18,9 +17,9 @@ import { useAlert } from '../../context/AlertContext'
 import { SplitTransactionModal } from './SplitTransactionModal'
 import type { SplitTransaction } from './SplitTransactionModal'
 import { EditAccountForm } from './EditAccountForm'
-import type { AccountFormData } from './EditAccountForm'
+import { AddAccountForm } from './AddAccountForm'
+import type { AccountFormData } from './account-form'
 import { AdjustmentChoiceModal } from './AdjustmentChoiceModal'
-import { AmountInput } from '../common/amount-input'
 import { formatAmount, parseAmount } from '../../lib/amount'
 
 type Account = {
@@ -88,7 +87,8 @@ export function AccountList({ accounts, onAccountAdded, loading, manage = false,
   const [searchQuery, setSearchQuery] = useState('')
   const [searchResults, setSearchResults] = useState<any[]>([])
   const [searching, setSearching] = useState(false)
-  const [manualMode, setManualMode] = useState(false)
+  const [searchError, setSearchError] = useState('')
+  const [hasSearched, setHasSearched] = useState(false)
   const [activeAccountId, setActiveAccountId] = useState<string | null>(null)
   const [exchangeRates, setExchangeRates] = useState<Record<string, number>>({})
   const [ratesRefreshKey, setRatesRefreshKey] = useState(0)
@@ -223,24 +223,34 @@ export function AccountList({ accounts, onAccountAdded, loading, manage = false,
     setShowSymbolSearch(false)
     setSearchQuery('')
     setSearchResults([])
-    setManualMode(false)
+    setSearchError('')
+    setHasSearched(false)
   }
 
-  const handleTypeChange = (newType: string) => {
-    setFormData({ ...formData, type: newType as 'cash' | 'investment' })
+  const handleTypeChange = (type: AccountFormData['type']) => {
+    setFormData(current => ({ ...current, type,
+      ...(type === 'cash' && current.type === 'investment'
+        ? { currency: 'HUF', quote_currency: 'USD', symbol: '', asset_type: 'stock' as const }
+        : {})
+    }))
   }
 
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!searchQuery) return
+    if (!searchQuery.trim() || searching) return
 
     setSearching(true)
+    setSearchResults([])
+    setSearchError('')
+    setHasSearched(true)
     try {
-      const res = await apiFetch(`${API_BASE_URL}/market/search?q=${encodeURIComponent(searchQuery)}`)
+      const res = await apiFetch(`${API_BASE_URL}/market/search?q=${encodeURIComponent(searchQuery.trim())}`, { throwOnError: true })
       const data = await res.json()
       setSearchResults(data.quotes || [])
-    } catch (error) {
-      console.error('Search failed:', error)
+    } catch {
+      const message = 'Unable to search assets. Please try again.'
+      setSearchError(message)
+      showAlert({ type: 'error', message })
     } finally {
       setSearching(false)
     }
@@ -262,6 +272,8 @@ export function AccountList({ accounts, onAccountAdded, loading, manage = false,
     setShowSymbolSearch(false)
     setSearchQuery('')
     setSearchResults([])
+    setSearchError('')
+    setHasSearched(false)
     try {
       const response = await apiFetch(`${API_BASE_URL}/market/quote?symbol=${encodeURIComponent(asset.symbol)}`)
       const quote = await response.json()
@@ -280,16 +292,18 @@ export function AccountList({ accounts, onAccountAdded, loading, manage = false,
       ...formData,
       currency: 'HUF',
       quote_currency: 'HUF',
-      asset_type: 'manual'
+      asset_type: 'manual',
+      symbol: ''
     })
     setShowSymbolSearch(false)
-    setManualMode(true)
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (isSubmitting || accountActionBusy || editorReadOnly || deleteTarget || (editingId && !editorDirty)) return
     
+    if (!editingId && (!formData.name.trim() ||
+      (formData.type === 'investment' && formData.asset_type !== 'manual' && !formData.symbol))) return
     setIsSubmitting(true)
     try {
       const wasEditing = !!editingId
@@ -298,7 +312,7 @@ export function AccountList({ accounts, onAccountAdded, loading, manage = false,
         throw new Error('Please enter a valid balance')
       }
       const payload: any = {
-        name: formData.name,
+        name: editingId ? formData.name : formData.name.trim(),
         type: formData.type,
         balance: balanceValue ?? 0,
         currency: formData.currency,
@@ -308,7 +322,7 @@ export function AccountList({ accounts, onAccountAdded, loading, manage = false,
       }
 
       if (formData.type === 'investment') {
-        payload.symbol = formData.symbol || null
+        payload.symbol = formData.symbol || (editingId ? null : undefined)
         payload.asset_type = formData.asset_type
       }
 
@@ -378,7 +392,6 @@ export function AccountList({ accounts, onAccountAdded, loading, manage = false,
     }
     setFormData(draft)
     setSavedFormData(draft)
-    setManualMode(account.asset_type === 'manual')
     setEditorStatus({ locked: Boolean(account.is_locked), archived: account.archived_at != null })
     setEditingId(account.id)
     setIsAdding(true)
@@ -645,9 +658,11 @@ export function AccountList({ accounts, onAccountAdded, loading, manage = false,
           <span className="ml-1">{isAdding ? 'Cancel' : 'Add'}</span>
         </Button>
       </CardHeader>
-      <Modal isOpen={isAdding && !showSymbolSearch && !showChoiceModal && !showSingleModal && !showSplitModal && (!deleteTarget || deleteTarget.id === editingId) && !editorConfirming} onClose={() => { if (!isSubmitting && !accountActionBusy) handleCancel() }} title={editingId ? 'Edit account' : 'Add Account'} subtitle={editingId ? formData.name || 'Untitled account' : undefined} placement="centered"
-        className={editingId ? 'flex max-w-[520px] flex-col overflow-hidden rounded-2xl sm:max-w-[520px]' : undefined}
-        contentClassName={editingId ? 'flex min-h-0 flex-1 flex-col p-0 sm:p-0' : undefined}>
+      <Modal isOpen={isAdding && !showSymbolSearch && !showChoiceModal && !showSingleModal && !showSplitModal && (!deleteTarget || deleteTarget.id === editingId) && !editorConfirming} onClose={() => { if (!isSubmitting && !accountActionBusy) handleCancel() }} title={editingId ? 'Edit account' : 'New account'} subtitle={formData.name.trim() || 'Untitled account'} placement="centered"
+        subtitleClassName={!editingId && !formData.name.trim() ? 'text-muted-foreground' : undefined}
+        initialFocus={!editingId ? '#create-account-name' : undefined}
+        className="flex max-w-[520px] flex-col overflow-hidden rounded-2xl sm:max-w-[520px]"
+        contentClassName="flex min-h-0 flex-1 flex-col p-0 sm:p-0">
         {editingAccount ? <EditAccountForm
           value={formData} savedBalance={editingAccount.balance} savedCurrency={editingAccount.currency} savedName={editingAccount.name}
           onChange={setFormData} onSubmit={handleSubmit} dirty={editorDirty}
@@ -658,149 +673,10 @@ export function AccountList({ accounts, onAccountAdded, loading, manage = false,
           onAskDelete={() => { setDeleteTarget(editingAccount); setDeleteName('') }}
           confirmingDelete={deleteTarget?.id === editingId} deleteName={deleteName} onDeleteName={setDeleteName}
           onCancelDelete={() => { setDeleteTarget(null); setDeleteName('') }} onDelete={() => { void handleDelete(editingAccount.id) }} deleting={Boolean(deletingId)}
-        /> : (
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <fieldset disabled={isSubmitting || accountActionBusy} className="min-w-0 space-y-4">
-            <div className="grid grid-cols-2 gap-3">
-              <div className="col-span-2 space-y-2">
-                <Label htmlFor="name">Account Name</Label>
-                <Input
-                  id="name"
-                  value={formData.name}
-                  onChange={e => setFormData({ ...formData, name: e.target.value })}
-                  placeholder="e.g. OTP Bank"
-                  required
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="type">Type</Label>
-                <Select
-                  id="type"
-                  value={formData.type}
-                  onChange={e => handleTypeChange(e.target.value)}
-                >
-                  <option value="cash">💵 Cash / Bank</option>
-                  <option value="investment">📈 Investment</option>
-                </Select>
-              </div>
-
-              {formData.type === 'cash' && (
-                <div className="space-y-2">
-                  <Label htmlFor="currency">Currency</Label>
-                  <Select
-                    id="currency"
-                    value={formData.currency}
-                    onChange={e => setFormData({ ...formData, currency: e.target.value })}
-                  >
-                    <option value="HUF">🇭🇺 HUF</option>
-                    <option value="EUR">🇪🇺 EUR</option>
-                    <option value="USD">🇺🇸 USD</option>
-                    <option value="GBP">🇬🇧 GBP</option>
-                    <option value="CHF">🇨🇭 CHF</option>
-                    <option value="MXN">🇲🇽 MXN</option>
-                  </Select>
-                </div>
-              )}
-
-              {formData.type === 'investment' && !formData.symbol && !editingId && (
-                <div className="space-y-2">
-                  <Label>Asset Symbol</Label>
-                  <button
-                    type="button"
-                    onClick={() => setShowSymbolSearch(true)}
-                    className="w-full p-2 border border-border rounded-lg text-left text-sm text-muted-foreground hover:bg-secondary/50 transition-colors"
-                  >
-                    Search for asset...
-                  </button>
-                </div>
-              )}
-              <div className="col-span-2 space-y-2">
-                <Label htmlFor="balance">{formData.type === 'investment' ? 'Initial Quantity (0 if tracking from transactions)' : 'Current Balance'}</Label>
-                <AmountInput
-                  id="balance"
-                  value={formData.balance}
-                  onValueChange={balance => setFormData({ ...formData, balance })}
-                  allowNegative
-                  placeholder="0"
-                />
-              </div>
-
-              {formData.type === 'investment' && formData.symbol && (
-                <>
-                  <div className="col-span-2 p-3 bg-secondary/30 rounded-lg flex justify-between items-center">
-                    <div>
-                      <div className="font-bold">{formData.symbol}</div>
-                      <div className="text-sm text-muted-foreground">{formData.name}</div>
-                    </div>
-                    {!editingId && (
-                      <button
-                        type="button"
-                        onClick={() => { setShowSymbolSearch(true); setFormData({ ...formData, symbol: '', name: '' }) }}
-                        className="text-xs text-primary hover:underline"
-                      >
-                        Change
-                      </button>
-                    )}
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="quote-currency">Trading currency</Label>
-                    <Select
-                      id="quote-currency"
-                      value={formData.quote_currency}
-                      onChange={e => setFormData({ ...formData, quote_currency: e.target.value })}
-                    >
-                      <option value="EUR">🇪🇺 EUR</option>
-                      <option value="USD">🇺🇸 USD</option>
-                      <option value="GBP">🇬🇧 GBP</option>
-                      <option value="CHF">🇨🇭 CHF</option>
-                      <option value="HUF">🇭🇺 HUF</option>
-                    </Select>
-                  </div>
-                </>
-              )}
-
-              {formData.type === 'investment' && manualMode && !formData.symbol && (
-                <>
-                  <div className="space-y-2">
-                    <Label htmlFor="manual-currency">Currency</Label>
-                    <Select
-                      id="manual-currency"
-                      value={formData.currency}
-                      onChange={e => setFormData({ ...formData, currency: e.target.value })}
-                    >
-                      <option value="HUF">🇭🇺 HUF</option>
-                      <option value="EUR">🇪🇺 EUR</option>
-                      <option value="USD">🇺🇸 USD</option>
-                      <option value="GBP">🇬🇧 GBP</option>
-                      <option value="CHF">🇨🇭 CHF</option>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="manual-symbol">Symbol (Optional)</Label>
-                    <Input
-                      id="manual-symbol"
-                      value={formData.symbol}
-                      onChange={e => setFormData({ ...formData, symbol: e.target.value.slice(0, 5) })}
-                      placeholder="e.g. MÁP+"
-                      maxLength={5}
-                    />
-                  </div>
-                </>
-              )}
-
-            </div>
-            <fieldset className="rounded-xl border border-border p-4 space-y-3">
-              <legend className="px-1 text-sm font-medium">Calculation exclusions</legend>
-              <label className="flex items-start gap-3 text-sm"><input type="checkbox" checked={formData.exclude_from_net_worth} onChange={event => setFormData({ ...formData, exclude_from_net_worth: event.target.checked })} className="mt-1" /><span>Exclude from net worth<span className="block text-xs text-muted-foreground">Keep the account's records in history.</span></span></label>
-              {formData.type === 'cash' && <label className="flex items-start gap-3 text-sm"><input type="checkbox" checked={formData.exclude_from_cash_balance} onChange={event => setFormData({ ...formData, exclude_from_cash_balance: event.target.checked })} className="mt-1" /><span>Exclude from cash balance<span className="block text-xs text-muted-foreground">Independent of net worth and archive status.</span></span></label>}
-            </fieldset>
-            <Button type="submit" className="w-full" disabled={isSubmitting}>
-              <Plus className="h-4 w-4 mr-2" />
-              {isSubmitting ? 'Saving...' : 'Add Account'}
-            </Button>
-          </fieldset>
-          </form>
-        )}
+        /> : <AddAccountForm value={formData} onChange={setFormData} onTypeChange={handleTypeChange}
+          onSubmit={handleSubmit} onCancel={handleCancel} busy={isSubmitting || accountActionBusy}
+          onSearchAsset={() => setShowSymbolSearch(true)} onManualAsset={handleManualAsset}
+        />}
       </Modal>
 
       {!manage && <div className={`lg:!max-h-none lg:overflow-visible overflow-hidden transition-all duration-500 ease-in-out ${isCollapsed ? 'max-h-0' : 'max-h-[2000px]'}`}>
@@ -1138,63 +1014,60 @@ export function AccountList({ accounts, onAccountAdded, loading, manage = false,
       </div>}
 
       {/* Symbol Search Modal */}
-      {showSymbolSearch && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[80] p-4">
-          <div className="bg-card w-full max-w-md rounded-2xl shadow-2xl border border-border overflow-hidden">
-            <div className="p-4 border-b border-border flex justify-between items-center">
-              <h3 className="font-semibold">Select Investment Asset</h3>
-              <button onClick={() => { setShowSymbolSearch(false); resetForm(); setIsAdding(false); }} className="text-muted-foreground hover:text-foreground">✕</button>
-            </div>
+      <Modal isOpen={showSymbolSearch} onClose={() => setShowSymbolSearch(false)} title="Select Investment Asset" placement="centered" className="sm:max-w-md" initialFocus="#account-asset-search">
+        <div className="space-y-4">
+          <form onSubmit={handleSearch} className="flex gap-2">
+            <Input
+              id="account-asset-search"
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search symbol (e.g. AAPL, BTC-USD)"
+              autoFocus
+            />
+            <Button
+              type="submit"
+              aria-label="Search assets"
+              disabled={searching}
+              size="icon"
+            >
+              {searching ? '...' : <Search className="h-4 w-4" />}
+            </Button>
+          </form>
 
-            <div className="p-4 space-y-4">
-              <form onSubmit={handleSearch} className="flex gap-2">
-                <Input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Search symbol (e.g. AAPL, BTC-USD)"
-                  autoFocus
-                />
-                <Button
-                  type="submit"
-                  disabled={searching}
-                  size="icon"
-                >
-                  {searching ? '...' : <Search className="h-4 w-4" />}
-                </Button>
-              </form>
+          {searching && <p role="status" className="text-sm text-muted-foreground">Searching assets…</p>}
+          {searchError && <p role="alert" className="text-sm text-destructive">{searchError}</p>}
+          {!searching && !searchError && hasSearched && searchResults.length === 0 && <p role="status" className="text-sm text-muted-foreground">No assets found. Try another symbol or enter the asset manually.</p>}
 
-              <div className="max-h-60 overflow-y-auto space-y-2">
-                {searchResults.map((result: any) => (
-                  <button
-                    key={result.symbol}
-                    onClick={() => handleSelectAsset(result)}
-                    className="w-full p-3 text-left hover:bg-secondary/50 rounded-lg transition-colors flex justify-between items-center"
-                  >
-                    <div>
-                      <div className="font-medium">{result.symbol}</div>
-                      <div className="text-xs text-muted-foreground">{result.shortname || result.longname}</div>
-                    </div>
-                    <div className="text-xs px-2 py-1 bg-secondary rounded text-muted-foreground">
-                      {result.quoteType}
-                    </div>
-                  </button>
-                ))}
-              </div>
+          <div className="max-h-60 overflow-y-auto space-y-2">
+            {searchResults.map((result: any) => (
+              <button
+                key={result.symbol}
+                onClick={() => handleSelectAsset(result)}
+                className="w-full p-3 text-left hover:bg-secondary/50 rounded-lg transition-colors flex justify-between items-center"
+              >
+                <div>
+                  <div className="font-medium">{result.symbol}</div>
+                  <div className="text-xs text-muted-foreground">{result.shortname || result.longname}</div>
+                </div>
+                <div className="text-xs px-2 py-1 bg-secondary rounded text-muted-foreground">
+                  {result.quoteType}
+                </div>
+              </button>
+            ))}
+          </div>
 
-              <div className="pt-4 border-t border-border">
-                <Button
-                  onClick={handleManualAsset}
-                  variant="outline"
-                  className="w-full"
-                >
-                  Enter Manually
-                </Button>
-              </div>
-            </div>
+          <div className="pt-4 border-t border-border">
+            <Button
+              onClick={handleManualAsset}
+              variant="outline"
+              className="w-full"
+            >
+              Enter Manually
+            </Button>
           </div>
         </div>
-      )}
+      </Modal>
 
       {/* Adjustment Choice Modal */}
       {pendingAdjustment && (

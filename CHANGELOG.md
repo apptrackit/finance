@@ -12,6 +12,7 @@ Intermediate package/UI version bumps are grouped under the next published GitHu
 
 ### Changed
 
+- Redesigned account creation with type cards, an embedded starting-balance currency selector, inclusion switches, and a compact footer; market asset search and manual investment setup remain available.
 - Redesigned the account editor with a balance-first layout, signed adjustment preview, transaction/overwrite choices, inclusion switches, grouped management actions, inline protected deletion, and an unsaved-changes footer with Revert.
 
 ## v3.2 — 2026-10-06

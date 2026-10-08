@@ -335,3 +335,176 @@ describe('dedicated account management', () => {
     expect(screen.getByLabelText('Balance')).toHaveValue('••••••')
   })
 })
+
+function openCreation() {
+  return render(<AccountList manage accounts={[]} addRequest requestKey="create-account" onAccountAdded={refresh} />)
+}
+
+function postedAccount() {
+  return JSON.parse(String(fetchMock.mock.calls.find(([, options]) => options?.method === 'POST')?.[1]?.body))
+}
+
+describe('account creation redesign', () => {
+  it('opens with focused name, cash selected, and independent inclusion defaults', () => {
+    openCreation()
+    expect(screen.getByRole('dialog', { name: 'New account' })).toBeInTheDocument()
+    expect(screen.getByText('Untitled account')).toHaveClass('text-muted-foreground')
+    expect(screen.getByLabelText('Name')).toHaveFocus()
+    expect(screen.getByRole('radio', { name: 'Cash / Bank' })).toBeChecked()
+    expect(screen.getByRole('radio', { name: 'Investment' })).not.toBeChecked()
+    expect(screen.getByRole('switch', { name: 'Net worth' })).toBeChecked()
+    expect(screen.getByRole('switch', { name: 'Cash balance' })).toBeChecked()
+    expect(screen.getByRole('button', { name: 'Create account' })).toBeDisabled()
+  })
+
+  it('blocks blank names and incomplete amounts, including direct form submission', () => {
+    openCreation()
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: '   ' } })
+    fireEvent.submit(screen.getByLabelText('Name').closest('form')!)
+    expect(fetchMock.mock.calls.some(([, options]) => options?.method === 'POST')).toBe(false)
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Cash account' } })
+    fireEvent.change(screen.getByLabelText('Starting balance'), { target: { value: '-' } })
+    expect(screen.getByRole('button', { name: 'Create account' })).toBeDisabled()
+    expect(screen.getByText('Enter a complete balance to create the account.')).toBeInTheDocument()
+  })
+
+  it('creates cash with grouped decimal input and independent exclusions', async () => {
+    openCreation()
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: '  New cash  ' } })
+    fireEvent.change(screen.getByLabelText('Starting balance'), { target: { value: '-12 345,67' } })
+    fireEvent.change(screen.getByRole('combobox', { name: 'Currency' }), { target: { value: 'EUR' } })
+    fireEvent.click(screen.getByRole('switch', { name: 'Net worth' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Create account' }))
+    await waitFor(() => expect(refresh).toHaveBeenCalledOnce())
+    expect(postedAccount()).toEqual({ name: 'New cash', type: 'cash', balance: -12345.67, currency: 'EUR', exclude_from_net_worth: true, exclude_from_cash_balance: false })
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(alerts.showAlert).toHaveBeenCalledWith({ type: 'success', message: 'Account created' })
+  })
+
+  it('creates a zero-balance account when the starting amount is left empty', async () => {
+    openCreation()
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Empty account' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Create account' }))
+    await waitFor(() => expect(refresh).toHaveBeenCalledOnce())
+    expect(postedAccount().balance).toBe(0)
+  })
+
+  it('retains name, balance, currency, and inclusion choices when creation fails', async () => {
+    fail = true
+    openCreation()
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Kept creation draft' } })
+    fireEvent.change(screen.getByLabelText('Starting balance'), { target: { value: '125,50' } })
+    fireEvent.change(screen.getByRole('combobox', { name: 'Currency' }), { target: { value: 'USD' } })
+    fireEvent.click(screen.getByRole('switch', { name: 'Cash balance' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Create account' }))
+    await waitFor(() => expect(alerts.showAlert).toHaveBeenCalledWith({ type: 'error', message: 'Save rejected' }))
+    expect(screen.getByLabelText('Name')).toHaveValue('Kept creation draft')
+    expect(screen.getByLabelText('Starting balance')).toHaveValue('125.50')
+    expect(screen.getByRole('combobox', { name: 'Currency' })).toHaveValue('USD')
+    expect(screen.getByRole('switch', { name: 'Cash balance' })).not.toBeChecked()
+    expect(screen.getByRole('button', { name: 'Create account' })).toBeEnabled()
+    expect(refresh).not.toHaveBeenCalled()
+  })
+
+  it('requires an investment asset and preserves the draft when search is cancelled', () => {
+    openCreation()
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Investment draft' } })
+    fireEvent.click(screen.getByRole('radio', { name: 'Investment' }))
+    expect(screen.getByRole('button', { name: 'Create account' })).toBeDisabled()
+    expect(screen.queryByRole('switch', { name: 'Cash balance' })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Search for asset…' }))
+    expect(screen.getByRole('dialog', { name: 'Select Investment Asset' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+    expect(screen.getByLabelText('Name')).toHaveValue('Investment draft')
+  })
+
+  it('creates a manual investment with an omitted optional symbol', async () => {
+    openCreation()
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Manual asset' } })
+    fireEvent.click(screen.getByRole('radio', { name: 'Investment' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Enter manually' }))
+    fireEvent.change(screen.getByLabelText('Starting balance'), { target: { value: '123,45' } })
+    fireEvent.change(screen.getByRole('combobox', { name: 'Currency' }), { target: { value: 'EUR' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Create account' }))
+    await waitFor(() => expect(refresh).toHaveBeenCalledOnce())
+    expect(postedAccount()).toMatchObject({ type: 'investment', asset_type: 'manual', balance: 123.45, currency: 'EUR' })
+    expect(postedAccount()).not.toHaveProperty('symbol')
+    expect(postedAccount()).not.toHaveProperty('quote_currency')
+  })
+
+  it.each([
+    { symbol: 'TEST', quoteType: 'EQUITY', asset_type: 'stock', currency: 'SHARE' },
+    { symbol: 'BTC-USD', quoteType: 'CRYPTOCURRENCY', asset_type: 'crypto', currency: 'BTC' },
+  ])('creates a $asset_type with precise quantity and separate quote currency', async asset => {
+    fetchMock.mockImplementation(async (input, options) => {
+      const url = String(input)
+      if (url.includes('/market/search')) return Response.json({ quotes: [{ ...asset, shortname: 'Test asset', currency: 'USD' }] })
+      if (url.includes('/market/quote')) return Response.json({ currency: 'EUR' })
+      if (url.includes('open.er-api')) return Response.json({ rates: { USD: 1, HUF: 360 } })
+      return options?.method ? Response.json({}) : Response.json([])
+    })
+    openCreation()
+    fireEvent.click(screen.getByRole('radio', { name: 'Investment' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Search for asset…' }))
+    fireEvent.change(screen.getByPlaceholderText('Search symbol (e.g. AAPL, BTC-USD)'), { target: { value: asset.symbol } })
+    fireEvent.submit(screen.getByPlaceholderText('Search symbol (e.g. AAPL, BTC-USD)').closest('form')!)
+    fireEvent.click(await screen.findByText(asset.symbol))
+    await waitFor(() => expect(screen.getByLabelText('Trading currency')).toHaveValue('EUR'))
+    fireEvent.change(screen.getByLabelText('Starting quantity'), { target: { value: '0,123456789' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Create account' }))
+    await waitFor(() => expect(refresh).toHaveBeenCalledOnce())
+    expect(postedAccount()).toMatchObject({ type: 'investment', asset_type: asset.asset_type, symbol: asset.symbol, balance: 0.123456789, currency: asset.currency, quote_currency: 'EUR' })
+  })
+
+  it('shows asset search failures and empty results without discarding the name', async () => {
+    let searchFailed = true
+    fetchMock.mockImplementation(async input => String(input).includes('/market/search')
+      ? searchFailed ? Response.json({ error: 'Unavailable' }, { status: 503 }) : Response.json({ quotes: [] }) : Response.json([]))
+    openCreation()
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Kept draft' } })
+    fireEvent.click(screen.getByRole('radio', { name: 'Investment' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Search for asset…' }))
+    const search = screen.getByPlaceholderText('Search symbol (e.g. AAPL, BTC-USD)')
+    fireEvent.change(search, { target: { value: 'TEST' } })
+    fireEvent.submit(search.closest('form')!)
+    expect(await screen.findByText('Unable to search assets. Please try again.')).toBeInTheDocument()
+    searchFailed = false
+    fireEvent.submit(search.closest('form')!)
+    expect(await screen.findByText(/No assets found/)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+    expect(screen.getByLabelText('Name')).toHaveValue('Kept draft')
+  })
+
+  it('resets investment units when switching back to cash', () => {
+    openCreation()
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Cash draft' } })
+    fireEvent.click(screen.getByRole('radio', { name: 'Investment' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Enter manually' }))
+    fireEvent.change(screen.getByLabelText('Symbol (optional)'), { target: { value: 'TEST' } })
+    fireEvent.change(screen.getByRole('combobox', { name: 'Currency' }), { target: { value: 'EUR' } })
+    fireEvent.click(screen.getByRole('radio', { name: 'Cash / Bank' }))
+    expect(screen.getByRole('combobox', { name: 'Currency' })).toHaveValue('HUF')
+    expect(screen.queryByLabelText('Symbol (optional)')).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Name')).toHaveValue('Cash draft')
+    expect(screen.getByRole('switch', { name: 'Cash balance' })).toBeChecked()
+  })
+
+  it('blocks duplicate creation and cancellation until the request completes', async () => {
+    let finish: (response: Response) => void = () => {}
+    const pending = new Promise<Response>(resolve => { finish = resolve })
+    fetchMock.mockImplementation(async (input, options) => options?.method === 'POST' ? pending
+      : String(input).includes('open.er-api') ? Response.json({ rates: { USD: 1, HUF: 360 } }) : Response.json([]))
+    openCreation()
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'New account' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Create account' }))
+    expect(screen.getByRole('button', { name: 'Creating…' })).toBeDisabled()
+    expect(screen.getByLabelText('Name')).toBeDisabled()
+    expect(screen.getByRole('radio', { name: 'Investment' })).toBeDisabled()
+    expect(within(screen.getByRole('dialog', { name: 'New account' })).getByRole('button', { name: 'Cancel' })).toBeDisabled()
+    fireEvent.submit(screen.getByLabelText('Name').closest('form')!)
+    expect(fetchMock.mock.calls.filter(([, options]) => options?.method === 'POST')).toHaveLength(1)
+    finish(Response.json({}))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(refresh).toHaveBeenCalledOnce()
+  })
+})
