@@ -6,6 +6,9 @@ interface ModalProps {
   isOpen: boolean
   onClose: () => void
   title?: string
+  subtitle?: string
+  subtitleClassName?: string
+  initialFocus?: string
   headerClassName?: string
   contentClassName?: string
   children: React.ReactNode
@@ -13,7 +16,7 @@ interface ModalProps {
   placement?: 'center' | 'drawer' | 'centered'
 }
 
-export function Modal({ isOpen, onClose, title, headerClassName, contentClassName, children, className, placement = 'center' }: ModalProps) {
+export function Modal({ isOpen, onClose, title, subtitle, subtitleClassName, initialFocus, headerClassName, contentClassName, children, className, placement = 'center' }: ModalProps) {
   React.useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && isOpen) {
@@ -43,7 +46,7 @@ export function Modal({ isOpen, onClose, title, headerClassName, contentClassNam
     const previous = document.activeElement as HTMLElement | null
     const panel = panelRef.current
     const focusable = () => [...(panel?.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), a[href], [tabindex="0"]') || [])].filter(element => element.tabIndex >= 0 && element.getClientRects().length > 0)
-    ;(focusable()[0] || panel)?.focus()
+    ;((initialFocus ? panel?.querySelector<HTMLElement>(initialFocus) : null) || focusable()[0] || panel)?.focus()
     const trap = (event: KeyboardEvent) => {
       if (event.key !== 'Tab') return
       const elements = focusable()
@@ -57,7 +60,7 @@ export function Modal({ isOpen, onClose, title, headerClassName, contentClassNam
       panel?.removeEventListener('keydown', trap)
       if (document.activeElement === document.body || panel?.contains(document.activeElement)) previous?.focus()
     }
-  }, [isOpen])
+  }, [isOpen, initialFocus])
   if (!isOpen) return null
 
   return (
@@ -80,12 +83,15 @@ export function Modal({ isOpen, onClose, title, headerClassName, contentClassNam
       )}>
         {/* Header */}
         {title && (
-          <div className={cn("flex items-center justify-between p-4 sm:p-6 border-b border-border/50", headerClassName)}>
-            <h2 id={titleId} className="text-lg sm:text-xl font-semibold text-foreground">{title}</h2>
+          <div className={cn("flex shrink-0 items-center justify-between gap-3 p-4 sm:p-6 border-b border-border/50", subtitle && "px-5 py-3 sm:px-6 sm:py-3", headerClassName)}>
+            <div className="min-w-0">
+              <h2 id={titleId} className={subtitle ? "text-xs text-muted-foreground" : "text-lg sm:text-xl font-semibold text-foreground"}>{title}</h2>
+              {subtitle && <p className={cn("mt-0.5 truncate text-[17px] font-semibold tracking-tight", subtitleClassName)}>{subtitle}</p>}
+            </div>
             <button
               onClick={onClose}
               aria-label="Close"
-              className="text-muted-foreground hover:text-foreground transition-colors p-1 -mr-1"
+              className={subtitle ? "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors" : "text-muted-foreground hover:text-foreground transition-colors p-1 -mr-1"}
             >
               <X className="h-5 w-5" />
             </button>
