@@ -20,6 +20,8 @@ import { formatAmount, formatCalculatedAmount, parseAmount } from '../../lib/amo
 import type { PendingKind } from '../../lib/transaction-review'
 import { getMcpReviewBalanceDeltas, getMcpReviewItems, hasPossibleDuplicateFlag, isMcpReviewTransaction } from '../../lib/transaction-review'
 import { TransactionCalendar } from './TransactionCalendar'
+import { TransferForm, type TransferAccount } from './TransferForm'
+import { cn } from '../../lib/utils'
 
 type Transaction = {
   id: string
@@ -165,6 +167,8 @@ export function TransactionList({
     manual_price: '', // For investment accounts - manual price override
     exclude_from_estimate: false
   })
+  const originalTransferRef = useRef<{ data: typeof formData; rate: number | null; rateDraft: string } | null>(null)
+  const [transferSaveError, setTransferSaveError] = useState<string | null>(null)
   const [exchangeRate, setExchangeRate] = useState<number | null>(null)
   const [exchangeRateDraft, setExchangeRateDraft] = useState('')
   const [suggestedRate, setSuggestedRate] = useState<number | null>(null)
@@ -368,7 +372,7 @@ export function TransactionList({
 
         const preserveEditedRate = shouldKeepCurrentRate()
 
-        if (rate > 0) {
+        if (Number.isFinite(rate) && rate > 0) {
           setSuggestedRate(rate)
           if (!preserveEditedRate) {
             setExchangeRate(rate)
@@ -431,6 +435,7 @@ export function TransactionList({
 
   // Auto-fetch price for investment accounts when date or account changes
   useEffect(() => {
+    let cancelled = false
     const fetchHistoricalPrice = async () => {
       // Never overwrite a price that the user has edited, including a deliberate
       // empty value. This also protects against a pending fetch resolving late.
@@ -490,17 +495,17 @@ export function TransactionList({
             const daysDiff = Math.abs(minDiff) / (1000 * 60 * 60 * 24)
             if (daysDiff <= 3) {
               const price = chartData.quotes[closestIdx].close
-              if (!manuallyEditedTransferFieldsRef.current.manual_price) {
+              if (!cancelled && !manuallyEditedTransferFieldsRef.current.manual_price) {
                 setFormData(prev => ({ ...prev, manual_price: price.toFixed(2) }))
               }
             } else {
-              if (!manuallyEditedTransferFieldsRef.current.manual_price) {
+              if (!cancelled && !manuallyEditedTransferFieldsRef.current.manual_price) {
                 setFormData(prev => ({ ...prev, manual_price: '' }))
               }
             }
           } else {
             // No chart data, clear manual_price
-            if (!manuallyEditedTransferFieldsRef.current.manual_price) {
+            if (!cancelled && !manuallyEditedTransferFieldsRef.current.manual_price) {
               setFormData(prev => ({ ...prev, manual_price: '' }))
             }
           }
@@ -512,6 +517,7 @@ export function TransactionList({
     }
     
     fetchHistoricalPrice()
+    return () => { cancelled = true }
   }, [formData.date, formData.account_id, formData.to_account_id, formData.type, accounts])
 
   // Load saved defaults when opening the form
@@ -546,7 +552,9 @@ export function TransactionList({
     }
   }
 
-  const resetTransferRateState = () => {
+  const resetTransferRateState = (clearOriginal = true) => {
+    if (clearOriginal) originalTransferRef.current = null
+    setTransferSaveError(null)
     manualRateOverrideRef.current = false
     manuallyEditedTransferFieldsRef.current = { amount_to: false, manual_price: false }
     editedTransferPairRef.current = null
@@ -618,13 +626,14 @@ export function TransactionList({
     field: 'account_id' | 'to_account_id',
     accountId: string,
   ) => {
-    resetTransferRateState()
-    setFormData(prev => ({ ...prev, [field]: accountId, amount_to: '' }))
+    resetTransferRateState(false)
+    setFormData(prev => ({ ...prev, [field]: accountId, amount_to: '', manual_price: '' }))
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (isSubmitting) return
+    setTransferSaveError(null)
 
     const amount = parseAmount(formData.amount)
     if (amount === null || amount <= 0) {
@@ -642,6 +651,12 @@ export function TransactionList({
         // Handle transfer
         const sourceAccount = accounts.find(a => a.id === formData.account_id)
         const toAccount = accounts.find(a => a.id === formData.to_account_id)
+        if (!sourceAccount || !toAccount || sourceAccount.id === toAccount.id) {
+          throw new Error('Choose two different accounts for the transfer')
+        }
+        if (isLocked(sourceAccount.id) || isLocked(toAccount.id)) {
+          throw new Error('Unlock or restore both accounts before transferring')
+        }
         const isSameCurrency = sourceAccount && toAccount
           && sourceAccount.currency === toAccount.currency
         const receivedDraft = parseAmount(formData.amount_to)
@@ -755,6 +770,7 @@ export function TransactionList({
               : 'Transaction created'
       })
     } catch (error) {
+      if (formData.type === 'transfer') setTransferSaveError(error instanceof Error ? error.message : 'Failed to save transfer. Please try again.')
       console.error('Failed to save transaction')
       showAlert({
         type: 'error',
@@ -806,7 +822,7 @@ export function TransactionList({
         ? incomingValue / Math.abs(outgoing.amount)
         : null
 
-      setFormData({
+      const transferData = {
         account_id: outgoing.account_id,
         to_account_id: incoming.account_id,
         category_id: '',
@@ -814,10 +830,11 @@ export function TransactionList({
         amount_to: formatNumber(incomingValue),
         description: transferNote,
         date: outgoing.date,
-        type: 'transfer',
+        type: 'transfer' as const,
         manual_price: investmentPrice,
         exclude_from_estimate: false
-      })
+      }
+      setFormData(transferData)
       const isDifferentCurrency = outgoingAccount && incomingAccount
         && outgoingAccount.currency !== incomingAccount.currency
       const historicalRate = isDifferentCurrency ? existingRate : null
@@ -830,6 +847,11 @@ export function TransactionList({
         ? ''
         : formatCalculatedAmount(historicalRate, { maximumFractionDigits: 12 })
       )
+      originalTransferRef.current = {
+        data: transferData,
+        rate: historicalRate,
+        rateDraft: historicalRate === null ? '' : formatCalculatedAmount(historicalRate, { maximumFractionDigits: 12 }),
+      }
       setEditingId(outgoing.id)
       setIsAccountOpen(false)
       setIsAdding(true)
@@ -1013,6 +1035,7 @@ export function TransactionList({
   }
 
   const handleCancel = () => {
+    if (isSubmitting) return
     setIsAdding(false)
     setEditingId(null)
     resetForm()
@@ -1083,10 +1106,109 @@ export function TransactionList({
   // For transfer preview
   const fromAccount = accounts.find(a => a.id === formData.account_id)
   const toAccount = accounts.find(a => a.id === formData.to_account_id)
-  const transferAmount = parseAmount(formData.amount) || 0
-  const transferAmountTo = parseAmount(formData.amount_to) || (editingReviewTransfer ? 0 : transferAmount)
   const isEditingTransfer = !!editingId && formData.type === 'transfer'
   const isEditingStandardTransaction = !!editingId && formData.type !== 'transfer'
+
+  const originalTransfer = originalTransferRef.current
+  const transferDirty = !!originalTransfer && (
+    (['account_id', 'to_account_id', 'date', 'description'] as const).some(key => formData[key] !== originalTransfer.data[key])
+    || (['amount', 'amount_to', 'manual_price'] as const).some(key => parseAmount(formData[key]) !== parseAmount(originalTransfer.data[key]))
+    || parseAmount(exchangeRateDraft) !== parseAmount(originalTransfer.rateDraft)
+  )
+  // Posted balances already include the old legs. Undo them before previewing
+  // the replacement, including when either selected account has changed.
+  const availableTransferBalance = (account: TransferAccount) => {
+    let balance = account.balance
+    const originalRow = allKnownTransactions.find(tx => tx.id === editingId)
+    if (originalTransfer && originalRow && (originalRow.status ?? 'posted') === 'posted') {
+      if (account.id === originalTransfer.data.account_id) balance += parseAmount(originalTransfer.data.amount) || 0
+      if (account.id === originalTransfer.data.to_account_id) balance -= parseAmount(originalTransfer.data.amount_to) || 0
+    }
+    return balance
+  }
+  const handleTransferAmountChange = (amount: string) => {
+    setFormData(prev => ({ ...prev, amount }))
+    // Keep explicitly entered received amounts, while displaying their current
+    // effective rate when the sent amount changes.
+    if (manuallyEditedTransferFieldsRef.current.amount_to && fromAccount && toAccount && fromAccount.currency !== toAccount.currency) {
+      const sent = parseAmount(amount)
+      const received = parseAmount(formData.amount_to)
+      const rate = sent !== null && sent > 0 && received !== null && received > 0 ? received / sent : null
+      setExchangeRate(rate)
+      setExchangeRateDraft(rate === null ? '' : formatCalculatedAmount(rate, { maximumFractionDigits: 12 }))
+    }
+  }
+  const handleTransferReceivedChange = (amountTo: string) => {
+    manuallyEditedTransferFieldsRef.current.amount_to = true
+    manualRateOverrideRef.current = true
+    setFormData(prev => ({ ...prev, amount_to: amountTo }))
+    const sent = parseAmount(formData.amount)
+    const received = parseAmount(amountTo)
+    const rate = sent !== null && sent > 0 && received !== null && received > 0 ? received / sent : null
+    if (fromAccount && toAccount && fromAccount.currency !== toAccount.currency) {
+      setExchangeRate(rate)
+      setExchangeRateDraft(rate === null ? '' : formatCalculatedAmount(rate, { maximumFractionDigits: 12 }))
+    }
+  }
+  const handleTransferRateChange = (draft: string) => {
+    manualRateOverrideRef.current = true
+    manuallyEditedTransferFieldsRef.current.amount_to = false
+    setExchangeRateDraft(draft)
+    const rate = parseAmount(draft)
+    setExchangeRate(rate !== null && rate > 0 ? rate : null)
+    // Clearing the rate clears its calculated amount, so an invalid draft
+    // cannot silently submit the previous conversion.
+    if (rate === null || rate <= 0) setFormData(prev => ({ ...prev, amount_to: '' }))
+  }
+  const handleSwapTransfer = () => {
+    if (!fromAccount || !toAccount || isSubmitting) return
+    const sameCurrency = fromAccount.currency === toAccount.currency
+    const sent = sameCurrency ? formData.amount : formData.amount_to
+    const received = formData.amount
+    const sentValue = parseAmount(sent)
+    const receivedValue = parseAmount(received)
+    const rate = !sameCurrency && sentValue && receivedValue ? receivedValue / sentValue : null
+    rateRequestSequenceRef.current += 1
+    manualRateOverrideRef.current = true
+    manuallyEditedTransferFieldsRef.current.amount_to = !sameCurrency
+    // A price belongs to the receiving holding and cannot follow a swap.
+    manuallyEditedTransferFieldsRef.current.manual_price = false
+    setSuggestedRate(null)
+    setTransferSaveError(null)
+    setExchangeRate(rate)
+    setExchangeRateDraft(rate === null ? '' : formatCalculatedAmount(rate, { maximumFractionDigits: 12 }))
+    setFormData(prev => ({ ...prev, account_id: prev.to_account_id, to_account_id: prev.account_id,
+      amount: sent, amount_to: received, manual_price: '' }))
+  }
+  const handleRevertTransfer = () => {
+    if (!originalTransfer || isSubmitting) return
+    manualRateOverrideRef.current = true
+    if (formData.account_id !== originalTransfer.data.account_id || formData.to_account_id !== originalTransfer.data.to_account_id) setSuggestedRate(null)
+    manuallyEditedTransferFieldsRef.current = { amount_to: true, manual_price: !!originalTransfer.data.manual_price }
+    editedTransferPairRef.current = getTransferPairKey(originalTransfer.data.account_id, originalTransfer.data.to_account_id)
+    setFormData({ ...originalTransfer.data })
+    setExchangeRate(originalTransfer.rate)
+    setExchangeRateDraft(originalTransfer.rateDraft)
+    setIsLoadingRate(false)
+    setTransferSaveError(null)
+  }
+  const typeSelector = !isEditingTransfer && (
+    <div className={cn('grid grid-cols-3', formData.type === 'transfer' ? 'gap-0.5 rounded-[10px] border border-border/50 bg-background p-[3px]' : 'gap-2')}>
+      {([['expense', 'Expense', ArrowUpRight], ['income', 'Income', ArrowDownLeft], ['transfer', 'Transfer', ArrowRightLeft]] as const).map(([type, label, Icon]) => (
+        <button key={type} type="button" disabled={isSubmitting || (isEditingStandardTransaction && type === 'transfer')}
+          onClick={() => handleTypeChange(type)} aria-pressed={formData.type === type}
+          className={cn('flex items-center justify-center gap-1.5 rounded-lg text-[13px] font-medium transition-colors disabled:opacity-50',
+            formData.type === 'transfer' ? 'h-8' : 'border border-border p-3 text-sm',
+            formData.type === 'transfer'
+              ? formData.type === type ? 'bg-secondary text-foreground' : 'text-muted-foreground hover:bg-secondary/50 hover:text-foreground'
+              : formData.type === type
+                ? type === 'expense' ? 'border-destructive/50 bg-destructive/10 text-destructive' : 'border-success/50 bg-success/10 text-success'
+                : 'bg-background/50 text-muted-foreground hover:bg-background')}>
+          <Icon className={formData.type === 'transfer' ? 'h-3.5 w-3.5' : 'h-4 w-4'} />{label}
+        </button>
+      ))}
+    </div>
+  )
 
   // Group transactions by date
   const groupedTransactions = transactions.reduce((groups, tx) => {
@@ -1679,247 +1801,45 @@ export function TransactionList({
       <Modal 
         isOpen={isAdding} 
         onClose={handleCancel} 
-        title={editingId ? (formData.type === 'transfer' ? 'Edit Transfer' : 'Edit Transaction') : (formData.type === 'transfer' ? 'Add Transfer' : formData.type === 'income' ? 'Add Income' : 'Add Transaction')}
+        placement={formData.type === 'transfer' ? 'centered' : 'center'}
+        className={formData.type === 'transfer' ? 'sm:max-w-[480px] rounded-2xl' : undefined}
+        headerClassName={formData.type === 'transfer' ? 'px-5 py-4 sm:px-6 sm:py-4 [&_h2]:text-[17px] [&_h2]:tracking-tight' : undefined}
+        contentClassName={formData.type === 'transfer' ? 'p-0 sm:p-0' : undefined}
+        title={editingId ? (formData.type === 'transfer' ? 'Edit Transfer' : 'Edit Transaction') : (formData.type === 'transfer' ? 'New transaction' : formData.type === 'income' ? 'Add Income' : 'Add Transaction')}
       >
-        <form onSubmit={handleSubmit} className="space-y-4">
-            {/* Transaction Type Selector - 3 options now */}
-            <div className="grid grid-cols-3 gap-2">
-              <button
-                type="button"
-                disabled={isEditingTransfer}
-                onClick={() => handleTypeChange('expense')}
-                aria-pressed={formData.type === 'expense'}
-                className={`p-3 rounded-lg border transition-all duration-200 flex items-center justify-center gap-2 ${
-                  formData.type === 'expense' 
-                    ? 'border-destructive/50 bg-destructive/10 text-destructive' 
-                    : 'border-border bg-background/50 text-muted-foreground hover:bg-background'
-                } ${isEditingTransfer ? 'opacity-50 cursor-not-allowed' : ''}`}
-              >
-                <ArrowUpRight className="h-4 w-4" />
-                <span className="text-sm font-medium">Expense</span>
-              </button>
-              <button
-                type="button"
-                disabled={isEditingTransfer}
-                onClick={() => handleTypeChange('income')}
-                aria-pressed={formData.type === 'income'}
-                className={`p-3 rounded-lg border transition-all duration-200 flex items-center justify-center gap-2 ${
-                  formData.type === 'income' 
-                    ? 'border-success/50 bg-success/10 text-success' 
-                    : 'border-border bg-background/50 text-muted-foreground hover:bg-background'
-                } ${isEditingTransfer ? 'opacity-50 cursor-not-allowed' : ''}`}
-              >
-                <ArrowDownLeft className="h-4 w-4" />
-                <span className="text-sm font-medium">Income</span>
-              </button>
-              <button
-                type="button"
-                disabled={isEditingStandardTransaction}
-                onClick={() => handleTypeChange('transfer')}
-                aria-pressed={formData.type === 'transfer'}
-                className={`p-3 rounded-lg border transition-all duration-200 flex items-center justify-center gap-2 ${
-                  formData.type === 'transfer' 
-                    ? 'border-primary/50 bg-primary/10 text-primary' 
-                    : 'border-border bg-background/50 text-muted-foreground hover:bg-background'
-                } ${isEditingStandardTransaction ? 'opacity-50 cursor-not-allowed' : ''}`}
-              >
-                <ArrowRightLeft className="h-4 w-4" />
-                <span className="text-sm font-medium">Transfer</span>
-              </button>
-            </div>
+        <form onSubmit={handleSubmit} className={formData.type === 'transfer' ? '' : 'space-y-4'}>
+            {formData.type !== 'transfer' && typeSelector}
 
             {/* Transfer Form */}
             {formData.type === 'transfer' ? (
-              <div className="space-y-4">
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-2">
-                    <Label htmlFor="from_account">From Account</Label>
-                    <Select 
-                      id="from_account" 
-                      value={formData.account_id} 
-                      onChange={e => handleTransferAccountChange('account_id', e.target.value)}
-                      required
-                    >
-                      <option value="">Select Account</option>
-                      {accounts.filter(acc => !isLocked(acc.id) && (!editingReviewTransfer || acc.type !== 'investment')).map(acc => (
-                        <option key={acc.id} value={acc.id}>{acc.name} ({acc.balance.toLocaleString('hu-HU')} {acc.currency})</option>
-                      ))}
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="to_account">To Account</Label>
-                    <Select 
-                      id="to_account" 
-                      value={formData.to_account_id} 
-                      onChange={e => handleTransferAccountChange('to_account_id', e.target.value)}
-                      required
-                    >
-                      <option value="">Select Account</option>
-                      {accounts
-                        .filter(acc => acc.id !== formData.account_id && !isLocked(acc.id) && (!editingReviewTransfer || acc.type !== 'investment'))
-                        .map(acc => (
-                        <option key={acc.id} value={acc.id}>{acc.name} ({acc.balance.toLocaleString('hu-HU')} {acc.currency})</option>
-                      ))}
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="transfer_amount">
-                      Amount to Send {fromAccount && `(${fromAccount.currency})`}
-                    </Label>
-                    <AmountInput
-                      id="transfer_amount" 
-                      value={formData.amount} 
-                      onValueChange={amount => {
-                        setFormData(prev => ({ ...prev, amount }))
-                      }}
-                      placeholder="0.00" 
-                      required 
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="transfer_amount_to">
-                      {toAccount?.type === 'investment' ? 'Shares to Receive' : `Amount to Receive ${toAccount ? `(${toAccount.currency})` : ''}`}
-                    </Label>
-                    <AmountInput
-                      id="transfer_amount_to" 
-                      value={formData.amount_to} 
-                      onValueChange={amountTo => {
-                        manuallyEditedTransferFieldsRef.current.amount_to = true
-                        manualRateOverrideRef.current = true
-                        setFormData(prev => ({ ...prev, amount_to: amountTo }))
-                        
-                        // Recalculate exchange rate if different currencies
-                        if (fromAccount && toAccount && formData.amount && amountTo) {
-                          const amountFrom = parseAmount(formData.amount) || 0
-                          const receivedAmount = parseAmount(amountTo) || 0
-                          
-                          if (fromAccount.currency !== toAccount.currency && amountFrom > 0 && receivedAmount > 0) {
-                            // Different currency: recalculate exchange rate
-                            // Formula: amount_to = amount_from × rate
-                            // So: rate = amount_to / amount_from
-                            const newRate = receivedAmount / amountFrom
-                            setExchangeRate(newRate)
-                            setExchangeRateDraft(formatCalculatedAmount(newRate, { maximumFractionDigits: 12 }))
-                          }
-                        }
-                      }}
-                      placeholder="0.00" 
-                      required
-                      disabled={!!fromAccount && !!toAccount && fromAccount.currency === toAccount.currency}
-                    />
-                  </div>
-                </div>
-
-                {/* Exchange Rate Section */}
-                {fromAccount && toAccount && fromAccount.currency !== toAccount.currency && (editingReviewTransfer ? (
-                  <div className="rounded-lg border border-border bg-background/50 p-3 text-xs text-muted-foreground">
-                    Enter both amounts explicitly. The effective rate is {transferAmount > 0 && transferAmountTo > 0
-                      ? formatCalculatedAmount(transferAmountTo / transferAmount, { maximumFractionDigits: 10 })
-                      : 'shown after both amounts are entered'} {transferAmount > 0 && transferAmountTo > 0 ? `${toAccount.currency} per ${fromAccount.currency}` : ''}.
-                  </div>
-                ) : (
-                  <div className="p-3 rounded-lg bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 space-y-2">
-                    <Label htmlFor="exchange_rate" className="text-xs font-medium text-blue-900 dark:text-blue-100">
-                      Exchange Rate
-                    </Label>
-                    {isLoadingRate ? (
-                      <p className="text-sm text-muted-foreground">Loading exchange rate...</p>
-                    ) : (
-                      <>
-                        {suggestedRate && (
-                          <p className="text-xs text-muted-foreground">
-                            Suggested: 1 {fromAccount.currency} = {suggestedRate} {toAccount.currency}
-                          </p>
-                        )}
-                        <AmountInput
-                          id="exchange_rate"
-                          value={exchangeRateDraft}
-                          onValueChange={value => {
-                            manualRateOverrideRef.current = true
-                            setExchangeRateDraft(value)
-                            const rate = parseAmount(value, { allowNegative: false })
-                            setExchangeRate(rate !== null && rate > 0 ? rate : null)
-                          }}
-                          placeholder="Enter custom rate"
-                          className="bg-background"
-                        />
-                        {exchangeRate && formData.amount && (
-                          <p className="text-xs text-muted-foreground">
-                            {formData.amount} {fromAccount.currency} = {formatCalculatedAmount((parseAmount(formData.amount) || 0) * exchangeRate, { maximumFractionDigits: toAccount.type === 'investment' ? 8 : 2 })} {toAccount.currency}
-                          </p>
-                        )}
-                      </>
-                    )}
-                  </div>
-                ))}
-
-                {/* Manual Price field for transfers to investment accounts */}
-                {toAccount?.type === 'investment' && (
-                  <div className="space-y-2">
-                    <Label htmlFor="transfer_price">Price per Share in {toAccount.quote_currency || 'trading currency'} (optional - leave blank to auto-fetch)</Label>
-                    <AmountInput
-                      id="transfer_price" 
-                      value={formData.manual_price} 
-                      onValueChange={manualPrice => {
-                        manuallyEditedTransferFieldsRef.current.manual_price = true
-                        setFormData(prev => ({ ...prev, manual_price: manualPrice }))
-                      }}
-                      placeholder="Auto-fetch from market data" 
-                    />
-                    <p className="text-xs text-gray-500">For old dates (before 2020), enter the price manually for accuracy</p>
-                  </div>
-                )}
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-2">
-                    <Label htmlFor="transfer_date">Date</Label>
-                    <Input 
-                      id="transfer_date" 
-                      type="date" 
-                      value={formData.date} 
-                      onChange={e => setFormData({...formData, date: e.target.value})} 
-                      required 
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="transfer_description">Note (optional)</Label>
-                    <Input 
-                      id="transfer_description" 
-                      value={formData.description} 
-                      onChange={e => setFormData({...formData, description: e.target.value})} 
-                      placeholder="e.g. Monthly savings" 
-                    />
-                  </div>
-                </div>
-
-                {/* Transfer Preview */}
-                {fromAccount && toAccount && transferAmount > 0 && (!editingReviewTransfer || transferAmountTo > 0) && (
-                  <div className="p-3 rounded-lg bg-background/50 border border-border space-y-2">
-                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Preview</p>
-                    <div className="flex items-center justify-between text-sm">
-                      <span>{fromAccount.name}</span>
-                      <span className="text-destructive font-medium">-{formatAmount(transferAmount)} {fromAccount.currency}</span>
-                    </div>
-                    <div className="flex items-center justify-between text-sm">
-                      <span>{toAccount.name}</span>
-                      <span className="text-success font-medium">
-                        +{editingReviewTransfer ? formatAmount(transferAmountTo) : formatAmount(transferAmountTo, { maximumFractionDigits: 8 })} {toAccount.type === 'investment' ? 'shares' : toAccount.currency}
-                      </span>
-                    </div>
-                    {toAccount.type === 'investment' && formData.manual_price && (
-                      <div className="flex items-center justify-between text-xs text-muted-foreground pt-1 border-t border-border/50">
-                        <span>@ {toAccount.quote_currency || 'trading currency'} {formData.manual_price}/share</span>
-                        <span>{formatCalculatedAmount(transferAmountTo * (parseAmount(formData.manual_price) || 0), { maximumFractionDigits: 2 })} {toAccount.quote_currency || 'trading currency'} value</span>
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                <Button type="submit" className="w-full" disabled={isSubmitting}>
-                  <ArrowRightLeft className="h-4 w-4 mr-2" />
-                  {isSubmitting ? 'Processing...' : (editingId ? 'Save Transfer' : 'Transfer Funds')}
-                </Button>
-              </div>
+              <TransferForm
+                accounts={accounts}
+                data={formData}
+                editing={!!editingId}
+                reviewDraft={editingReviewTransfer}
+                dirty={transferDirty}
+                submitting={isSubmitting}
+                hideBalance={account => privacyMode === 'hidden' || (account.type === 'investment' && shouldHideInvestment())}
+                availableBalance={availableTransferBalance}
+                exchangeRate={exchangeRateDraft}
+                suggestedRate={suggestedRate}
+                loadingRate={isLoadingRate}
+                error={transferSaveError}
+                typeSelector={typeSelector}
+                onAccountChange={handleTransferAccountChange}
+                onAmountChange={handleTransferAmountChange}
+                onReceivedChange={handleTransferReceivedChange}
+                onRateChange={handleTransferRateChange}
+                onUseMarket={() => suggestedRate && handleTransferRateChange(formatCalculatedAmount(suggestedRate, { maximumFractionDigits: 12 }))}
+                onSwap={handleSwapTransfer}
+                onChange={patch => setFormData(prev => ({ ...prev, ...patch }))}
+                onPriceChange={manualPrice => {
+                  manuallyEditedTransferFieldsRef.current.manual_price = true
+                  setFormData(prev => ({ ...prev, manual_price: manualPrice }))
+                }}
+                onRevert={handleRevertTransfer}
+                onCancel={handleCancel}
+              />
             ) : (
               /* Expense/Income Form */
               <>
@@ -2282,6 +2202,7 @@ export function TransactionList({
                                 size="icon" 
                                 variant="ghost" 
                                 className="h-7 w-7 sm:h-8 sm:w-8"
+                                aria-label={isTransfer ? 'Edit transfer' : 'Edit transaction'}
                                 onClick={(e) => {
                                   e.stopPropagation()
                                   handleEdit(tx)
@@ -2436,6 +2357,7 @@ export function TransactionList({
                               size="icon" 
                               variant="ghost" 
                               className="h-7 w-7 sm:h-8 sm:w-8"
+                              aria-label={isTransfer ? 'Edit transfer' : 'Edit transaction'}
                               onClick={(e) => {
                                 e.stopPropagation()
                                 handleEdit(tx)
