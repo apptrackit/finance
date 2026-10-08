@@ -6,12 +6,14 @@ interface ModalProps {
   isOpen: boolean
   onClose: () => void
   title?: string
+  headerClassName?: string
+  contentClassName?: string
   children: React.ReactNode
   className?: string
   placement?: 'center' | 'drawer' | 'centered'
 }
 
-export function Modal({ isOpen, onClose, title, children, className, placement = 'center' }: ModalProps) {
+export function Modal({ isOpen, onClose, title, headerClassName, contentClassName, children, className, placement = 'center' }: ModalProps) {
   React.useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && isOpen) {
@@ -78,7 +80,7 @@ export function Modal({ isOpen, onClose, title, children, className, placement =
       )}>
         {/* Header */}
         {title && (
-          <div className="flex items-center justify-between p-4 sm:p-6 border-b border-border/50">
+          <div className={cn("flex items-center justify-between p-4 sm:p-6 border-b border-border/50", headerClassName)}>
             <h2 id={titleId} className="text-lg sm:text-xl font-semibold text-foreground">{title}</h2>
             <button
               onClick={onClose}
@@ -91,7 +93,7 @@ export function Modal({ isOpen, onClose, title, children, className, placement =
         )}
         
         {/* Content */}
-        <div className="p-4 sm:p-6">
+        <div className={cn("p-4 sm:p-6", contentClassName)}>
           {children}
         </div>
       </div>

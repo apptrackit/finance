@@ -224,6 +224,9 @@
 button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
 :focus-visible { outline:2px solid hsl(var(--primary)); outline-offset:3px; }
 .finance-search-input:focus-visible { outline:none; }
+.finance-transfer-inline-input:focus-visible { outline:none; }
+.finance-transfer-form { color-scheme:dark; }
+:root[data-color-mode='light'] .finance-transfer-form { color-scheme:light; }
 @media (min-width: 1024px) {
   .finance-main { margin-left:240px; }
   .finance-mobile-header { display:none; }

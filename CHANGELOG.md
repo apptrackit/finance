@@ -10,6 +10,10 @@ Intermediate package/UI version bumps are grouped under the next published GitHu
 
 - Compact sidebar account shares pair thin bars with percentages, comparing active cash and investment groups independently using converted values. Shares follow the Accounts page's positive-balance rules, include accounts excluded from totals, and respect privacy and unavailable valuations.
 
+### Changed
+
+- Add and edit transfers use compact account-and-amount cards with account swapping, conversion controls, privacy-aware balance previews, and edit revert feedback. Posted edit previews undo the original transfer before applying the replacement; MCP review drafts retain explicit native amounts and confirmation-only previews.
+
 ## v3.2 — 2026-10-06
 
 [GitHub release](https://github.com/apptrackit/finance/releases/tag/v3.2) · [Compare v3.1…v3.2](https://github.com/apptrackit/finance/compare/v3.1...v3.2)
