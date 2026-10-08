@@ -13,6 +13,7 @@ import { AccountShortcuts } from './components/dashboard-module/AccountShortcuts
 import { parseDashboardFilters } from './navigation/filters'
 import { SearchPalette } from './components/search-module/SearchPalette'
 import { useHasUnsavedChanges } from './navigation/UnsavedChanges'
+import { version as APP_VERSION } from '../../package.json'
 
 export type FinancePageContext = { finance: ReturnType<typeof useFinanceData>; masterCurrency: string }
 
@@ -143,6 +144,7 @@ function App() {
           {privacyMode === 'hidden' ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}<span>{privacyMode === 'hidden' ? 'Show values' : 'Hide values'}</span>
         </button>
         <div className="flex items-center gap-2 px-2.5 pt-3 text-xs text-muted-foreground" role="status"><span className={`h-1.5 w-1.5 rounded-full ${syncText === 'Load error' ? 'bg-destructive' : 'bg-success'}`} />{syncText}</div>
+        <p className="pt-3 text-center text-xs text-muted-foreground">v{APP_VERSION}</p>
       </div>
     </aside>
     <div className="finance-main pb-24 lg:pb-0">
