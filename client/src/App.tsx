@@ -80,7 +80,6 @@ function App() {
   const visibleData = view === 'dashboard' ? [...transactionData, dataset('categories', 'Categories'), dataset('netWorth', 'Net worth'),
     dataset('investment', 'Investment value'), dataset('exchangeRates', 'Exchange rates')]
     : view === 'accounts' ? accountData : view === 'analytics' ? analyticsData : view === 'recurring' ? [...accountData, dataset('categories', 'Categories')] : []
-  const syncText = visibleData.some(({ status }) => status.error) ? 'Load error' : visibleData.some(({ status }) => status.loading) ? 'Updating…' : 'Synced'
 
   const navItems: { key: MenuKey; icon: React.ReactNode; label: string }[] = [
     { key: 'dashboard', icon: <LayoutDashboard className="h-4 w-4" />, label: 'Dashboard' },
@@ -143,10 +142,7 @@ function App() {
       <div className="mt-auto shrink-0 space-y-0.5 border-t border-border pt-3">
         <NavLink to="/settings" end className="finance-nav-item"><SettingsIcon className="h-4 w-4" />Settings</NavLink>
         {themeControl}
-        <div className="space-y-1 px-2.5 pt-1.5 text-[11px] text-muted-foreground">
-          <div className="flex items-center gap-1.5 whitespace-nowrap" role="status"><span className={`h-1.5 w-1.5 shrink-0 rounded-full ${syncText === 'Load error' ? 'bg-destructive' : 'bg-success'}`} />{syncText}</div>
-          <p className="text-center">v{APP_VERSION}</p>
-        </div>
+        <p className="pt-1.5 text-center text-[11px] text-muted-foreground">v{APP_VERSION}</p>
       </div>
     </aside>
     <div className="finance-main pb-24 lg:pb-0">
