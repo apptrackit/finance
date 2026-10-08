@@ -6,7 +6,6 @@ import { ScheduledTasksCard } from './components/ScheduledTasksCard'
 import { CacheManagementCard } from './components/CacheManagementCard'
 import { DataExportCard } from './components/DataExportCard'
 import { ThemeCard } from './components/ThemeCard'
-import { version as APP_VERSION } from '../../../../package.json'
 export default function Settings() {
   return (
     <div className="grid grid-cols-1 gap-5 xl:grid-cols-2 items-start">
@@ -18,7 +17,6 @@ export default function Settings() {
       <ScheduledTasksCard />
       <CacheManagementCard />
       <DataExportCard />
-      <p className="xl:col-span-2 text-center text-xs text-muted-foreground pb-2">v{APP_VERSION}</p>
     </div>
   )
 }
