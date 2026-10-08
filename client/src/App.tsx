@@ -143,7 +143,7 @@ function App() {
       <div className="mt-auto shrink-0 space-y-0.5 border-t border-border pt-3">
         <NavLink to="/settings" end className="finance-nav-item"><SettingsIcon className="h-4 w-4" />Settings</NavLink>
         {themeControl}
-        <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 px-2.5 pt-1.5 text-[11px] text-muted-foreground">
+        <div className="space-y-1 px-2.5 pt-1.5 text-[11px] text-muted-foreground">
           <div className="flex items-center gap-1.5 whitespace-nowrap" role="status"><span className={`h-1.5 w-1.5 shrink-0 rounded-full ${syncText === 'Load error' ? 'bg-destructive' : 'bg-success'}`} />{syncText}</div>
           <p className="text-center">v{APP_VERSION}</p>
         </div>
