@@ -26,8 +26,10 @@ type CashPathPoint = { day: number; low: number; expected: number; high: number 
 type HistoryRange = '30d' | '90d' | '12m' | 'all'
 
 const HISTORY_RANGES: { value: HistoryRange; label: string }[] = [
-  { value: '12m', label: '12 months + 90 days' },
-  { value: 'all', label: 'All time + 90 days' },
+  { value: '30d', label: '30 days' },
+  { value: '90d', label: '90 days' },
+  { value: '12m', label: '1 year' },
+  { value: 'all', label: 'All time' },
 ]
 
 function dailyPath(points: CashPathPoint[]) {
@@ -193,14 +195,14 @@ export function AICashOutlookChart({ snapshot, transactions, accounts, convertTo
           <span className="flex items-center gap-1.5"><span aria-hidden="true" className="w-3.5 border-t-2 border-dashed border-forecast" />AI forecast</span>
           <span className="flex items-center gap-1.5"><span aria-hidden="true" className="h-2.5 w-3.5 rounded-sm bg-forecast/20" />Possible range</span>
         </div>
-        <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
-          <div role="group" aria-label="Quick history ranges" className="flex rounded-lg border border-border p-0.5 text-xs font-medium">
-            {(['30d', '90d'] as const).map(range => <button key={range} type="button" aria-pressed={historyRange === range} onClick={() => setHistoryRange(range)} className={`whitespace-nowrap rounded-md px-2.5 py-1.5 ${historyRange === range ? 'bg-secondary text-foreground' : 'text-muted-foreground hover:text-foreground'}`}>{range} history</button>)}
+        <div className="w-full sm:w-auto">
+          <p className="mb-1.5 text-xs text-muted-foreground">History</p>
+          <div role="radiogroup" aria-label="Cash history range" className="grid grid-cols-4 rounded-lg border border-border bg-background p-1 text-xs font-medium">
+            {HISTORY_RANGES.map(range => <label key={range.value} className="relative min-w-0 cursor-pointer">
+              <input type="radio" name={`${gradientId}-history`} value={range.value} checked={historyRange === range.value} onChange={() => setHistoryRange(range.value)} className="peer sr-only" />
+              <span className="block whitespace-nowrap rounded-md px-2 py-2 text-center text-muted-foreground transition-colors hover:text-foreground peer-checked:bg-secondary peer-checked:text-foreground peer-focus-visible:ring-2 peer-focus-visible:ring-ring sm:px-3">{range.label}</span>
+            </label>)}
           </div>
-          <select aria-label="Cash history range" value={historyRange === '30d' || historyRange === '90d' ? '' : historyRange} onChange={event => setHistoryRange(event.target.value as HistoryRange)} className="max-w-36 rounded-lg border border-border bg-card px-2 py-1.5 text-xs text-foreground">
-            <option value="" disabled>More history</option>
-            {HISTORY_RANGES.map(range => <option key={range.value} value={range.value}>{range.label}</option>)}
-          </select>
         </div>
       </div>
       {usesReconstruction && <p className="mt-1 text-xs text-muted-foreground">Earlier history is reconstructed using current transactions, account settings, and exchange rates, so it may change.</p>}
@@ -231,7 +233,7 @@ export function AICashOutlookChart({ snapshot, transactions, accounts, convertTo
                 </div>
               )
             }} />
-            {generationTimestamp !== null && <ReferenceLine x={generationTimestamp} stroke="hsl(var(--muted-foreground))" strokeDasharray="4 4" label={{ value: format(new Date(generationTimestamp), 'yyyy-MM-dd') === format(new Date(), 'yyyy-MM-dd') ? 'Today' : 'Generated', position: 'insideTop', fill: 'hsl(var(--foreground))', fontSize: 11 }} />}
+            {generationTimestamp !== null && <ReferenceLine x={generationTimestamp} stroke="hsl(var(--muted-foreground))" strokeDasharray="4 4" label={{ value: format(new Date(generationTimestamp), 'yyyy-MM-dd') === format(new Date(), 'yyyy-MM-dd') ? 'Today' : 'Generated', position: historyRange === 'all' ? 'insideTopRight' : 'insideTop', fill: 'hsl(var(--foreground))', fontSize: 11 }} />}
             <Area type="linear" dataKey="actual" name="Actual cash" stroke="hsl(var(--primary))" strokeWidth={2} fill={`url(#${gradientId})`} connectNulls={false} dot={false} isAnimationActive={false} />
             <Area type="linear" dataKey="range" name="Possible range" stroke="none" fill="hsl(var(--forecast))" fillOpacity={0.16} connectNulls={false} isAnimationActive={false} />
             <Line type="linear" dataKey="expected" name="AI forecast" stroke="hsl(var(--forecast))" strokeWidth={2} strokeDasharray="5 4" dot={false} connectNulls={false} isAnimationActive={false} />

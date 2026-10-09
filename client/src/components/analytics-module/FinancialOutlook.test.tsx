@@ -33,6 +33,7 @@ describe('FinancialOutlook redesign', () => {
     privacy.mode = 'visible'
     render(<FinancialOutlook {...props()} />)
     expect(screen.getByText('At generation · Sep 25')).toBeInTheDocument()
+    expect(screen.queryByText(/checked/i)).not.toBeInTheDocument()
     expect(screen.getByText('In 7 days · Oct 2 · expired')).toBeInTheDocument()
     expect(screen.getByText('−200', { exact: false })).toBeInTheDocument()
     expect(screen.getByText('+200', { exact: false })).toBeInTheDocument()

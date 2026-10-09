@@ -40,14 +40,14 @@ describe('AICashOutlookChart history ranges', () => {
     report.cash_balance_path[7] = { day: 7, low: -100, expected: 200, high: 500 }
     const saved = JSON.stringify(report)
     render(<AICashOutlookChart snapshot={report} {...props} />)
-    fireEvent.click(screen.getByRole('button', { name: '30d history' }))
-    expect(screen.getByRole('button', { name: '30d history' })).toHaveAttribute('aria-pressed', 'true')
+    fireEvent.click(screen.getByRole('radio', { name: '30 days' }))
+    expect(screen.getByRole('radio', { name: '30 days' })).toBeChecked()
     expect(screen.getByTestId('forecast-chart')).toHaveAttribute('data-first-date', 'Aug 27, 2026')
     expect(screen.getByTestId('forecast-chart')).toHaveAttribute('data-last-date', 'Dec 24, 2026')
     const data = JSON.parse(screen.getByTestId('forecast-chart').getAttribute('data-points')!)
     expect(data.find((point: { label: string }) => point.label === 'Oct 2, 2026').range).toEqual([-100, 500])
     expect(JSON.stringify(report)).toBe(saved)
-    fireEvent.click(screen.getByRole('button', { name: '90d history' }))
+    fireEvent.click(screen.getByRole('radio', { name: '90 days' }))
     expect(screen.getByTestId('forecast-chart')).toHaveAttribute('data-first-date', 'Jun 28, 2026')
   })
 
@@ -82,10 +82,9 @@ describe('AICashOutlookChart history ranges', () => {
     ]
     const saved = JSON.stringify(report)
     render(<AICashOutlookChart snapshot={report} {...props} />)
-    const selector = screen.getByRole('combobox', { name: 'Cash history range' })
-    fireEvent.change(selector, { target: { value: '12m' } })
+    fireEvent.click(screen.getByRole('radio', { name: '1 year' }))
     const year = JSON.parse(screen.getByTestId('forecast-chart').getAttribute('data-points')!)
-    fireEvent.change(selector, { target: { value: 'all' } })
+    fireEvent.click(screen.getByRole('radio', { name: 'All time' }))
     const all = JSON.parse(screen.getByTestId('forecast-chart').getAttribute('data-points')!)
     expect(all.filter((point: { timestamp: number }) => point.timestamp >= year[0].timestamp)).toEqual(year)
     expect(all.find((point: { label: string }) => point.label === 'Apr 10, 2026').actual).toBe(3000)
@@ -99,7 +98,7 @@ describe('AICashOutlookChart history ranges', () => {
     report.cash_balance_history_alltime = [{ date: '2026-06-30', balance: 900 }, { date: '2026-09-25', balance: 1000 }]
     report.cash_balance_history_year = report.cash_balance_history
     render(<AICashOutlookChart snapshot={report} {...props} />)
-    fireEvent.change(screen.getByRole('combobox', { name: 'Cash history range' }), { target: { value: 'all' } })
+    fireEvent.click(screen.getByRole('radio', { name: 'All time' }))
     expect(screen.queryByText(/uses saved monthly balances/)).not.toBeInTheDocument()
     const all = JSON.parse(screen.getByTestId('forecast-chart').getAttribute('data-points')!)
     expect(all.filter((point: { actual?: number }) => point.actual !== undefined)).toHaveLength(88)
@@ -109,11 +108,10 @@ describe('AICashOutlookChart history ranges', () => {
 
   it('switches history ranges and anchors the projection to the selected forecast', () => {
     const { rerender } = render(<AICashOutlookChart snapshot={snapshot('2026-09-25')} {...props} />)
-    const selector = screen.getByRole('combobox', { name: 'Cash history range' })
     expect(screen.getByTestId('forecast-chart')).toHaveAttribute('data-first-date', 'Jun 28, 2026')
-    fireEvent.change(selector, { target: { value: '12m' } })
+    fireEvent.click(screen.getByRole('radio', { name: '1 year' }))
     expect(screen.getByTestId('forecast-chart')).toHaveAttribute('data-first-date', 'Sep 25, 2025')
-    fireEvent.change(selector, { target: { value: 'all' } })
+    fireEvent.click(screen.getByRole('radio', { name: 'All time' }))
     expect(screen.getByTestId('forecast-chart')).toHaveAttribute('data-first-date', 'Jan 1, 2020')
     rerender(<AICashOutlookChart snapshot={snapshot('2026-08-20')} {...props} />)
     expect(screen.getByTestId('forecast-chart')).toHaveAttribute('data-last-date', 'Nov 18, 2026')
@@ -128,14 +126,13 @@ describe('AICashOutlookChart history ranges', () => {
       { id: 'missing-fx', account_id: 'eur', date: '2025-01-01', amount: 300, status: 'posted' as const },
     ]
     render(<AICashOutlookChart snapshot={snapshot('2026-09-25', false)} transactions={transactions} accounts={[{ id: 'cash', name: 'Cash', type: 'checking', balance: 1300, currency: 'HUF' }, { id: 'eur', name: 'EUR cash', type: 'checking', balance: 300, currency: 'EUR' }]} convertToHuf={(value, id) => id === 'cash' ? value : null} />)
-    const selector = screen.getByRole('combobox', { name: 'Cash history range' })
-    fireEvent.change(selector, { target: { value: '12m' } })
+    fireEvent.click(screen.getByRole('radio', { name: '1 year' }))
     expect(screen.getByTestId('forecast-chart')).toHaveAttribute('data-first-date', 'Oct 20, 2025')
     expect(screen.getByTestId('forecast-chart')).toHaveAttribute('data-first-balance', '800')
     expect(screen.getByTestId('forecast-chart')).toHaveAttribute('data-anchor-balance', '1000')
     expect(screen.getByText(/reconstructed using current transactions/)).toBeInTheDocument()
     expect(screen.getByText(/no exchange rate/)).toBeInTheDocument()
-    fireEvent.change(selector, { target: { value: 'all' } })
+    fireEvent.click(screen.getByRole('radio', { name: 'All time' }))
     expect(screen.getByTestId('forecast-chart')).toHaveAttribute('data-first-date', 'Oct 20, 2025')
   })
 
@@ -146,7 +143,7 @@ describe('AICashOutlookChart history ranges', () => {
       { id: 'income', account_id: 'cash', date: '2025-10-20', amount: 200, status: 'posted' },
       { id: 'later', account_id: 'cash', date: '2026-10-01', amount: 500, status: 'posted' },
     ]} accounts={[{ id: 'cash', name: 'Cash', type: 'checking', balance: 1700, currency: 'HUF' }]} convertToHuf={value => value} />)
-    fireEvent.change(screen.getByRole('combobox', { name: 'Cash history range' }), { target: { value: 'all' } })
+    fireEvent.click(screen.getByRole('radio', { name: 'All time' }))
     expect(screen.getByTestId('forecast-chart')).toHaveAttribute('data-first-date', 'Oct 20, 2025')
     expect(screen.getByTestId('forecast-chart')).toHaveAttribute('data-first-balance', '1000')
   })

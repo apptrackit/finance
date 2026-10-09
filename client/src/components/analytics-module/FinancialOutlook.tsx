@@ -80,7 +80,6 @@ export function FinancialOutlook({ snapshot, history, selectedId, loading = fals
   const status = STATUS_COPY[snapshot.freshness.status]
   // The saved forecast uses the source query's UTC calendar day, as does its chart.
   const generationDay = startOfDay(new Date(`${snapshot.source_queried_at.slice(0, 10)}T12:00:00`))
-  const checkedAt = new Date(snapshot.source_queried_at)
   const baseline = snapshot.cash_balance_path.find(point => point.day === 0)?.expected
   const values = snapshot.horizons.flatMap(horizon => [horizon.cash_balance.low, horizon.cash_balance.high])
   const domain: [number, number] = [Math.min(...values), Math.max(...values)]
@@ -100,7 +99,6 @@ export function FinancialOutlook({ snapshot, history, selectedId, loading = fals
           <div className="flex flex-wrap items-center gap-x-4 gap-y-3">
             <p className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
               <span aria-hidden="true" className={`h-1.5 w-1.5 rounded-full ${status.className}`} /><span className="font-medium text-foreground">{status.label}</span>
-              <span title={checkedAt.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}>· checked {checkedAt.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}</span>
             </p>
             <label className="flex items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-xs">
               <span className="text-muted-foreground">Generated</span>
