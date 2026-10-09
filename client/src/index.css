@@ -32,6 +32,7 @@
 
   --color-success: hsl(var(--success));
   --color-success-foreground: hsl(var(--success-foreground));
+  --color-forecast: hsl(var(--forecast));
 
   --radius-lg: var(--radius);
   --radius-md: calc(var(--radius) - 2px);
@@ -90,6 +91,7 @@
   
   --success: 142 76% 46%;
   --success-foreground: 144 80% 10%;
+  --forecast: 256 80% 80%;
   
   --border: 213.75 80% 11.765%;
   --input: 215.625 94.118% 6.667%;
@@ -208,6 +210,7 @@
   --ring: 216 53% 49%;
   --destructive: 0 57% 50%;
   --success: 146 65% 32%;
+  --forecast: 262 65% 50%;
 }
 .finance-app { position:relative; height:100dvh; overflow:hidden; filter:var(--app-color-filter, none); }
 .finance-main { min-width:0; height:100dvh; overflow-y:auto; overscroll-behavior-y:contain; }
