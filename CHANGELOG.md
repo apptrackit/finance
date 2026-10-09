@@ -12,6 +12,7 @@ Intermediate package/UI version bumps are grouped under the next published GitHu
 
 ### Changed
 
+- Redesigned AI Financial Forecast with a prominent headline, cash-at-generation summary, projection deltas and range bars, a bounded forecast band, 30-day history controls, visible risks and suggestions, and expandable methodology. Saved report selection, longer history views, freshness warnings, themes, and privacy masking remain available.
 - Redesigned account creation with type cards, an embedded starting-balance currency selector, inclusion switches, and a compact footer; market asset search and manual investment setup remain available.
 - Redesigned the account editor with a balance-first layout, signed adjustment preview, transaction/overwrite choices, inclusion switches, grouped management actions, inline protected deletion, and an unsaved-changes footer with Revert.
 - Add and edit transfers use compact account-and-amount cards with account swapping, conversion controls, privacy-aware balance previews, and edit revert feedback. Posted edit previews undo the original transfer before applying the replacement; MCP review drafts retain explicit native amounts and confirmation-only previews.

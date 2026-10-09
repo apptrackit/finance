@@ -3,14 +3,17 @@ import { describe, expect, it, vi } from 'vitest'
 import { AICashOutlookChart } from './AICashOutlookChart'
 import type { FinancialOutlookSnapshot } from './types'
 
-vi.mock('../../context/PrivacyContext', () => ({ usePrivacy: () => ({ privacyMode: 'visible' }) }))
+const privacy = vi.hoisted(() => ({ mode: 'visible', tooltip: false }))
+vi.mock('../../context/PrivacyContext', () => ({ usePrivacy: () => ({ privacyMode: privacy.mode }) }))
 vi.mock('recharts', () => ({
   ResponsiveContainer: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
   ComposedChart: ({ data, children }: { data: Array<{ label: string; actual?: number }>; children: React.ReactNode }) => (
     <div data-testid="forecast-chart" data-points={JSON.stringify(data)} data-first-date={data[0]?.label} data-first-balance={data[0]?.actual} data-last-date={data.at(-1)?.label} data-anchor-balance={data.find(point => point.label === 'Jun 28, 2026')?.actual}>{children}</div>
   ),
   Area: () => null, Line: () => null, ReferenceLine: () => null,
-  CartesianGrid: () => null, Tooltip: () => null, XAxis: () => null, YAxis: () => null,
+  CartesianGrid: () => null, XAxis: () => null,
+  YAxis: ({ tickFormatter }: { tickFormatter: (value: number) => string }) => <span data-testid="cash-axis">{tickFormatter(-1_200_000)}</span>,
+  Tooltip: ({ content }: { content: (props: { active: boolean; payload: Array<{ payload: object }> }) => React.ReactNode }) => privacy.tooltip ? content({ active: true, payload: [{ payload: { label: 'Oct 2, 2026', isForecast: true, expected: 12345, low: 11234, high: 14567 } }] }) : null,
 }))
 
 function snapshot(generationDate: string, extended = true): FinancialOutlookSnapshot {
@@ -32,6 +35,37 @@ function snapshot(generationDate: string, extended = true): FinancialOutlookSnap
 const props = { transactions: [], accounts: [], convertToHuf: (value: number) => value }
 
 describe('AICashOutlookChart history ranges', () => {
+  it('switches to 30-day history while preserving the full forecast and bounded ranges', () => {
+    const report = snapshot('2026-09-25')
+    report.cash_balance_path[7] = { day: 7, low: -100, expected: 200, high: 500 }
+    const saved = JSON.stringify(report)
+    render(<AICashOutlookChart snapshot={report} {...props} />)
+    fireEvent.click(screen.getByRole('button', { name: '30d history' }))
+    expect(screen.getByRole('button', { name: '30d history' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByTestId('forecast-chart')).toHaveAttribute('data-first-date', 'Aug 27, 2026')
+    expect(screen.getByTestId('forecast-chart')).toHaveAttribute('data-last-date', 'Dec 24, 2026')
+    const data = JSON.parse(screen.getByTestId('forecast-chart').getAttribute('data-points')!)
+    expect(data.find((point: { label: string }) => point.label === 'Oct 2, 2026').range).toEqual([-100, 500])
+    expect(JSON.stringify(report)).toBe(saved)
+    fireEvent.click(screen.getByRole('button', { name: '90d history' }))
+    expect(screen.getByTestId('forecast-chart')).toHaveAttribute('data-first-date', 'Jun 28, 2026')
+  })
+
+  it('masks forecast tooltip amounts and chart axes in hidden privacy mode', () => {
+    privacy.tooltip = true
+    const { rerender } = render(<AICashOutlookChart snapshot={snapshot('2026-09-25')} {...props} />)
+    expect(screen.getByText(/12\s345 HUF/)).toBeInTheDocument()
+    expect(screen.getByTestId('cash-axis')).toHaveTextContent('-1.2M')
+    privacy.mode = 'hidden'
+    rerender(<AICashOutlookChart snapshot={snapshot('2026-09-25')} {...props} />)
+    expect(screen.queryByText(/12\s345 HUF/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/11\s234/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/14\s567/)).not.toBeInTheDocument()
+    expect(screen.getByTestId('cash-axis')).toHaveTextContent('••••')
+    privacy.mode = 'visible'
+    privacy.tooltip = false
+  })
+
   it('retains daily spikes in all-time history and prefers saved daily values to monthly samples', () => {
     const report = snapshot('2026-09-25')
     report.cash_balance_history_year = [

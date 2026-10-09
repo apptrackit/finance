@@ -1,6 +1,5 @@
-import { useMemo, useState } from 'react'
+import { useId, useMemo, useState } from 'react'
 import { Area, CartesianGrid, ComposedChart, Line, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
-import { BrainCircuit } from 'lucide-react'
 import { addDays, format, isLastDayOfMonth, startOfDay, subMonths } from 'date-fns'
 import { usePrivacy } from '../../context/PrivacyContext'
 import type { Account, FinancialOutlookHistoricalCashPoint, FinancialOutlookSnapshot, Transaction } from './types'
@@ -19,14 +18,14 @@ type ChartPoint = {
   low?: number
   expected?: number
   high?: number
+  range?: [number, number]
   isForecast: boolean
 }
 
 type CashPathPoint = { day: number; low: number; expected: number; high: number }
-type HistoryRange = '90d' | '12m' | 'all'
+type HistoryRange = '30d' | '90d' | '12m' | 'all'
 
 const HISTORY_RANGES: { value: HistoryRange; label: string }[] = [
-  { value: '90d', label: '90 days + 90 days' },
   { value: '12m', label: '12 months + 90 days' },
   { value: 'all', label: 'All time + 90 days' },
 ]
@@ -81,11 +80,13 @@ function reconstructHistory(snapshot: FinancialOutlookSnapshot, transactions: Tr
     if (transaction.date < firstAvailableDate) firstAvailableDate = transaction.date
   }
   const yearStart = format(subMonths(endDate, 12), 'yyyy-MM-dd')
-  const start = range === '90d'
-    ? format(addDays(endDate, -89), 'yyyy-MM-dd')
-    : range === '12m'
-      ? (firstAvailableDate > yearStart ? firstAvailableDate : yearStart)
-      : firstAvailableDate
+  const start = range === '30d'
+    ? format(addDays(endDate, -29), 'yyyy-MM-dd')
+    : range === '90d'
+      ? format(addDays(endDate, -89), 'yyyy-MM-dd')
+      : range === '12m'
+        ? (firstAvailableDate > yearStart ? firstAvailableDate : yearStart)
+        : firstAvailableDate
   const older: Array<{ date: string; balance: number }> = []
   let cursor = dateFromHistory(anchor.date)
   let balance = anchor.balance
@@ -101,9 +102,10 @@ function reconstructHistory(snapshot: FinancialOutlookSnapshot, transactions: Tr
 export function AICashOutlookChart({ snapshot, transactions, accounts, convertToHuf }: AICashOutlookChartProps) {
   const { privacyMode } = usePrivacy()
   const hidden = privacyMode === 'hidden'
+  const gradientId = useId()
   const [historyRange, setHistoryRange] = useState<HistoryRange>('90d')
   const hasExtendedHistory = Boolean(snapshot?.cash_balance_history_year?.length && snapshot?.cash_balance_history_alltime?.length)
-  const usesReconstruction = !hasExtendedHistory && (historyRange !== '90d' || snapshot?.cash_balance_history?.length !== 90)
+  const usesReconstruction = !hasExtendedHistory && (!['30d', '90d'].includes(historyRange) || snapshot?.cash_balance_history?.length !== 90)
   const hasMissingFx = usesReconstruction && accounts.some(account => account.type !== 'investment' && !account.exclude_from_cash_balance && convertToHuf(1, account.id) === null)
   const dailyHistoryStart = snapshot?.cash_balance_history_year?.[0]?.date
   const hasMonthlyHistory = historyRange === 'all' && hasExtendedHistory && Boolean(dailyHistoryStart && snapshot?.cash_balance_history_alltime.some(point => point.date < dailyHistoryStart))
@@ -130,10 +132,11 @@ export function AICashOutlookChart({ snapshot, transactions, accounts, convertTo
         : historyRange === '12m'
           ? snapshot.cash_balance_history_year
           : snapshot.cash_balance_history
-      : historyRange === '90d' && snapshot.cash_balance_history?.length === 90
+      : ['30d', '90d'].includes(historyRange) && snapshot.cash_balance_history?.length === 90
         ? snapshot.cash_balance_history
         : reconstructHistory(snapshot, transactions, accounts, convertToHuf, forecastStart, historyRange)
     for (const historical of storedHistory) {
+      if (historyRange === '30d' && historical.date < format(addDays(forecastStart, -29), 'yyyy-MM-dd')) continue
       if (!Number.isFinite(historical.balance) || historical.date > format(forecastStart, 'yyyy-MM-dd')) continue
       const date = dateFromHistory(historical.date)
       if (Number.isNaN(date.getTime())) continue
@@ -156,6 +159,7 @@ export function AICashOutlookChart({ snapshot, transactions, accounts, convertTo
         low: projection.low,
         expected: projection.expected,
         high: projection.high,
+        range: [projection.low, projection.high],
         // Older immutable snapshots did not persist history, so retain a
         // usable forecast-only view for them instead of showing an empty
         // "actual" tooltip at day zero.
@@ -176,70 +180,65 @@ export function AICashOutlookChart({ snapshot, transactions, accounts, convertTo
   }, [chartData])
 
   if (!snapshot || chartData.length < 8) return null
+  const firstTimestamp = chartData[0].timestamp
+  const lastTimestamp = chartData.at(-1)!.timestamp
+  const xTicks = Array.from({ length: 8 }, (_, index) => startOfDay(new Date(firstTimestamp + (lastTimestamp - firstTimestamp) * index / 7)).getTime())
 
   return (
-    <section className="border-t border-border/60 pt-5">
-      <div className="flex flex-wrap items-center gap-2">
-        <BrainCircuit className="h-4 w-4 text-primary" />
-        <p className="text-sm font-medium">Cash history & AI forecast</p>
-        <select
-          aria-label="Cash history range"
-          value={historyRange}
-          onChange={event => setHistoryRange(event.target.value as HistoryRange)}
-          className="rounded-md border border-border/70 bg-background px-2 py-1 text-xs text-foreground"
-        >
-          {HISTORY_RANGES.map(range => <option key={range.value} value={range.value}>{range.label}</option>)}
-        </select>
-        <span className="text-xs text-muted-foreground">Actual history through generation date · AI projection</span>
+    <section className="px-5 pb-5 pt-6 sm:px-7">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h3 className="w-full text-sm font-semibold sm:w-auto">Cash history &amp; forecast</h3>
+        <div className="flex flex-1 flex-wrap items-center gap-3 text-xs text-muted-foreground sm:ml-2">
+          <span className="flex items-center gap-1.5"><span aria-hidden="true" className="h-0.5 w-3.5 bg-primary" />Actual</span>
+          <span className="flex items-center gap-1.5"><span aria-hidden="true" className="w-3.5 border-t-2 border-dashed border-forecast" />AI forecast</span>
+          <span className="flex items-center gap-1.5"><span aria-hidden="true" className="h-2.5 w-3.5 rounded-sm bg-forecast/20" />Possible range</span>
+        </div>
+        <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
+          <div role="group" aria-label="Quick history ranges" className="flex rounded-lg border border-border p-0.5 text-xs font-medium">
+            {(['30d', '90d'] as const).map(range => <button key={range} type="button" aria-pressed={historyRange === range} onClick={() => setHistoryRange(range)} className={`whitespace-nowrap rounded-md px-2.5 py-1.5 ${historyRange === range ? 'bg-secondary text-foreground' : 'text-muted-foreground hover:text-foreground'}`}>{range} history</button>)}
+          </div>
+          <select aria-label="Cash history range" value={historyRange === '30d' || historyRange === '90d' ? '' : historyRange} onChange={event => setHistoryRange(event.target.value as HistoryRange)} className="max-w-36 rounded-lg border border-border bg-card px-2 py-1.5 text-xs text-foreground">
+            <option value="" disabled>More history</option>
+            {HISTORY_RANGES.map(range => <option key={range.value} value={range.value}>{range.label}</option>)}
+          </select>
+        </div>
       </div>
       {usesReconstruction && <p className="mt-1 text-xs text-muted-foreground">Earlier history is reconstructed using current transactions, account settings, and exchange rates, so it may change.</p>}
       {hasMissingFx && <p className="mt-1 text-xs text-muted-foreground">Some account currencies have no exchange rate; their earlier movements are excluded.</p>}
       {hasMonthlyHistory && <p className="mt-1 text-xs text-muted-foreground">History before {format(dateFromHistory(dailyHistoryStart!), 'MMM d, yyyy')} uses saved monthly balances; the past year uses daily balances.</p>}
-      <p className="mt-1 text-xs text-muted-foreground">Cash balances in HUF through generation day. The main cash chart uses current data and your selected currency.</p>
-      <div className="mt-3 h-56 sm:h-72">
+      <div className="mt-5 h-64 sm:h-80">
         <ResponsiveContainer width="100%" height="100%">
-          <ComposedChart data={chartData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
+          <ComposedChart data={chartData} margin={{ top: 24, right: 10, left: -10, bottom: 0 }}>
             <defs>
-              <linearGradient id="aiOutlookActualGradient" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.3} />
-                <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0} />
-              </linearGradient>
-              <linearGradient id="aiOutlookFutureGradient" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="hsl(var(--chart-4, 280 65% 60%))" stopOpacity={0.22} />
-                <stop offset="95%" stopColor="hsl(var(--chart-4, 280 65% 60%))" stopOpacity={0.03} />
+              <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.14} />
+                <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0.02} />
               </linearGradient>
             </defs>
-            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.5} />
-            <XAxis dataKey="timestamp" type="number" scale="time" domain={['dataMin', 'dataMax']} tickCount={8} interval="preserveStartEnd" minTickGap={24} tickFormatter={value => format(new Date(value), historyRange === 'all' ? 'MMM d, yy' : 'MMM d')} stroke="hsl(var(--muted-foreground))" fontSize={10} tickLine={false} axisLine={false} />
-            <YAxis stroke="hsl(var(--muted-foreground))" fontSize={10} tickLine={false} axisLine={false} domain={yDomain} width={50} tickFormatter={value => hidden ? '••••' : value >= 1_000_000 ? `${(value / 1_000_000).toFixed(1)}M` : `${Math.round(value / 1_000)}K`} />
+            <CartesianGrid vertical={false} stroke="hsl(var(--border))" />
+            <XAxis dataKey="timestamp" type="number" scale="time" domain={['dataMin', 'dataMax']} ticks={xTicks} interval="preserveStartEnd" minTickGap={24} tickFormatter={value => format(new Date(value), historyRange === 'all' ? 'MMM d, yy' : 'MMM d')} stroke="hsl(var(--muted-foreground))" fontSize={10} tickLine={false} axisLine={false} />
+            <YAxis stroke="hsl(var(--muted-foreground))" fontSize={10} tickLine={false} axisLine={false} domain={yDomain} width={50} tickFormatter={value => hidden ? '••••' : Math.abs(value) >= 1_000_000 ? `${(value / 1_000_000).toFixed(1)}M` : `${Math.round(value / 1_000)}K`} />
             <Tooltip content={({ active, payload }) => {
               const point = payload?.[0]?.payload as ChartPoint | undefined
               if (!active || !point) return null
               return (
-                <div className="rounded-lg border border-border bg-card p-2 shadow-lg">
+                <div className="rounded-xl border border-border bg-popover px-3 py-2.5 shadow-xl">
                   <p className="mb-1 text-xs text-muted-foreground">{point.label} · {point.isForecast ? 'AI forecast' : 'Actual balance'}</p>
                   {point.isForecast ? <>
-                    <p className={`text-sm font-bold text-purple-400 ${hidden ? 'select-none' : ''}`}>{amount(point.expected!, hidden)}</p>
+                    <p className={`text-sm font-bold text-forecast ${hidden ? 'select-none' : ''}`}>{amount(point.expected!, hidden)}</p>
                     <p className={`text-xs text-muted-foreground ${hidden ? 'select-none' : ''}`}>{amount(point.low!, hidden)} – {amount(point.high!, hidden)}</p>
                   </> : <p className={`text-sm font-bold text-primary ${hidden ? 'select-none' : ''}`}>{amount(point.actual!, hidden)}</p>}
                 </div>
               )
             }} />
-            {generationTimestamp && <ReferenceLine x={generationTimestamp} stroke="hsl(var(--foreground))" strokeWidth={1.5} strokeDasharray="4 4" />}
-            <Area type="linear" dataKey="actual" stroke="hsl(var(--primary))" strokeWidth={2.25} fill="url(#aiOutlookActualGradient)" connectNulls={false} dot={false} />
-            <Area type="linear" dataKey="high" stroke="transparent" fill="url(#aiOutlookFutureGradient)" connectNulls={false} />
-            <Area type="linear" dataKey="low" stroke="transparent" fill="hsl(var(--card))" fillOpacity={1} connectNulls={false} />
-            <Line type="linear" dataKey="low" stroke="hsl(var(--chart-4, 280 65% 60%))" strokeOpacity={0.55} strokeWidth={1} strokeDasharray="4 4" dot={false} connectNulls={false} />
-            <Line type="linear" dataKey="high" stroke="hsl(var(--chart-4, 280 65% 60%))" strokeOpacity={0.55} strokeWidth={1} strokeDasharray="4 4" dot={false} connectNulls={false} />
-            <Line type="linear" dataKey="expected" stroke="hsl(var(--chart-4, 280 65% 60%))" strokeWidth={2.5} strokeDasharray="6 3" dot={false} connectNulls={false} />
+            {generationTimestamp !== null && <ReferenceLine x={generationTimestamp} stroke="hsl(var(--muted-foreground))" strokeDasharray="4 4" label={{ value: format(new Date(generationTimestamp), 'yyyy-MM-dd') === format(new Date(), 'yyyy-MM-dd') ? 'Today' : 'Generated', position: 'insideTop', fill: 'hsl(var(--foreground))', fontSize: 11 }} />}
+            <Area type="linear" dataKey="actual" name="Actual cash" stroke="hsl(var(--primary))" strokeWidth={2} fill={`url(#${gradientId})`} connectNulls={false} dot={false} isAnimationActive={false} />
+            <Area type="linear" dataKey="range" name="Possible range" stroke="none" fill="hsl(var(--forecast))" fillOpacity={0.16} connectNulls={false} isAnimationActive={false} />
+            <Line type="linear" dataKey="expected" name="AI forecast" stroke="hsl(var(--forecast))" strokeWidth={2} strokeDasharray="5 4" dot={false} connectNulls={false} isAnimationActive={false} />
           </ComposedChart>
         </ResponsiveContainer>
       </div>
-      <div className="mt-2 flex flex-wrap items-center justify-center gap-4 text-[10px] text-muted-foreground">
-        <span className="flex items-center gap-1"><span className="inline-block h-0.5 w-3 rounded-full bg-primary" /> Actual</span>
-        <span className="flex items-center gap-1"><span className="inline-block h-0.5 w-3 rounded-full bg-purple-400" /> AI forecast</span>
-        <span className="flex items-center gap-1"><span className="inline-block w-3 border-t border-dashed border-purple-400/70" /> Possible range</span>
-      </div>
+      <p className="mt-3 text-xs leading-relaxed text-muted-foreground">Cash balances in HUF through generation day. The main cash chart uses current data and your selected currency.</p>
     </section>
   )
 }
