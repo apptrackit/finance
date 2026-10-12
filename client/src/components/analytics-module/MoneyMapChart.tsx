@@ -1,5 +1,5 @@
 import { memo, useMemo, useState } from 'react'
-import { GitFork } from 'lucide-react'
+import { GitFork, X } from 'lucide-react'
 import { ResponsiveContainer, Sankey } from 'recharts'
 import type { LinkProps as RechartsSankeyLinkProps, NodeProps as RechartsSankeyNodeProps } from 'recharts/types/chart/Sankey'
 import { Card, CardContent, CardHeader, CardTitle } from '../common/card'
@@ -90,6 +90,8 @@ export const MoneyMapChart = memo(function MoneyMapChart({
 }: MoneyMapChartProps) {
   const { privacyMode } = usePrivacy()
   const [hovered, setHovered] = useState<HoveredEntry | null>(null)
+  const [chartWidth, setChartWidth] = useState(0)
+  const [selected, setSelected] = useState<{ entry: HoveredEntry; nodes: MoneyMapNode[] } | null>(null)
 
   const moneyMap = useMemo(() => {
     const income = consolidateCategories(incomeData.filter(item => item.value > 0), 6)
@@ -139,26 +141,54 @@ export const MoneyMapChart = memo(function MoneyMapChart({
     return { nodes, links }
   }, [expenseData, incomeData, totalExpenses, totalIncome])
 
-  const formatAmount = (value: number) => {
+  const compact = chartWidth < 640
+  const sideMargin = compact ? 12 : 110
+  // Keep narrow-chart labels inside the gaps between the three node columns.
+  const labelWidth = Math.max(40, (chartWidth - sideMargin * 2 - 30) / 2 - 14)
+  const inspected = selected?.nodes === moneyMap.nodes ? selected.entry : hovered
+
+  const selectEntry = (entry: HoveredEntry) => {
+    setSelected(previous => previous?.nodes === moneyMap.nodes && previous.entry.key === entry.key
+      ? null
+      : { entry, nodes: moneyMap.nodes })
+    setHovered(null)
+  }
+
+  const formatAmount = (value: number, full = false) => {
     if (privacyMode === 'hidden') return '••••••'
-    return `${value.toLocaleString('hu-HU', { notation: 'compact', maximumFractionDigits: 1 })} ${masterCurrency}`
+    return `${value.toLocaleString('hu-HU', { notation: full ? 'standard' : 'compact', maximumFractionDigits: full ? 2 : 1 })} ${masterCurrency}`
   }
 
   const renderNode = (rawProps: RechartsSankeyNodeProps) => {
     const props = rawProps as unknown as SankeyNodeProps
     const { x, y, width, height, index, payload } = props
-    const isActive = hovered?.key === `node-${index}`
+    const entry = { key: `node-${index}`, label: payload.label, value: payload.amount, kind: payload.kind }
+    const isActive = inspected?.key === entry.key
     const isTarget = payload.kind === 'expense' || payload.kind === 'surplus'
     const isCashFlow = payload.kind === 'cash-flow'
     const labelX = isCashFlow ? x + width / 2 : isTarget ? x - 7 : x + width + 7
     // The center node carries the widest flows, so reserve space above it for
     // its label instead of letting the value sit on top of the ribbon.
-    const labelY = isCashFlow ? Math.max(18, y - 26) : y + height / 2 - 2
+    const labelY = isCashFlow ? (compact ? 24 : Math.max(18, y - 26)) : y + height / 2 - 2
     const anchor = isCashFlow ? 'middle' : isTarget ? 'end' : 'start'
     const canShowLabel = height >= 13
 
     return (
-      <g>
+      <g
+        role="button"
+        tabIndex={0}
+        aria-label={`${payload.label}: ${formatAmount(payload.amount, true)}`}
+        className="cursor-pointer focus:outline-none"
+        onClick={() => selectEntry(entry)}
+        onFocus={() => setHovered(entry)}
+        onBlur={() => setHovered(null)}
+        onKeyDown={event => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault()
+            selectEntry(entry)
+          }
+        }}
+      >
         <rect
           x={x}
           y={y}
@@ -170,8 +200,21 @@ export const MoneyMapChart = memo(function MoneyMapChart({
           stroke={isActive ? 'hsl(var(--foreground))' : 'transparent'}
           strokeWidth={isActive ? 1 : 0}
         />
-        {canShowLabel && (
-          <text x={labelX} y={labelY} textAnchor={anchor} fill="hsl(var(--foreground))" fontSize={11} fontWeight={600} pointerEvents="none">
+        {canShowLabel && compact && (
+          <foreignObject
+            x={isCashFlow ? x + width / 2 - labelWidth / 2 : isTarget ? labelX - labelWidth : labelX}
+            y={isCashFlow ? labelY - 12 : y + height / 2 - 12}
+            width={labelWidth}
+            height={28}
+          >
+            <div className={isCashFlow ? 'text-center' : isTarget ? 'text-right' : 'text-left'}>
+              <p className="truncate text-[11px] leading-3 font-semibold text-foreground">{payload.label}</p>
+              <p className="truncate text-[10px] leading-3 text-muted-foreground">{formatAmount(payload.amount)}</p>
+            </div>
+          </foreignObject>
+        )}
+        {canShowLabel && !compact && (
+          <text x={labelX} y={labelY} textAnchor={anchor} fill="hsl(var(--foreground))" fontSize={11} fontWeight={600}>
             <tspan x={labelX}>{payload.label}</tspan>
             <tspan x={labelX} dy={12} fill="hsl(var(--muted-foreground))" fontSize={10} fontWeight={500}>{formatAmount(payload.amount)}</tspan>
           </text>
@@ -183,7 +226,8 @@ export const MoneyMapChart = memo(function MoneyMapChart({
   const renderLink = (rawProps: RechartsSankeyLinkProps) => {
     const props = rawProps as unknown as SankeyLinkProps
     const { sourceX, sourceY, sourceControlX, targetX, targetY, targetControlX, linkWidth, index, payload } = props
-    const isActive = hovered?.key === `link-${index}`
+    const entry = { key: `link-${index}`, label: `${payload.source.label} → ${payload.target.label}`, value: payload.value, kind: payload.target.kind }
+    const isActive = inspected?.key === entry.key
     const color = payload.target.kind === 'expense'
       ? COLORS.expense
       : payload.source.kind === 'deficit'
@@ -191,7 +235,19 @@ export const MoneyMapChart = memo(function MoneyMapChart({
         : COLORS.income
     const path = `M${sourceX},${sourceY} C${sourceControlX},${sourceY} ${targetControlX},${targetY} ${targetX},${targetY}`
 
-    return <path d={path} fill="none" stroke={color} strokeWidth={linkWidth} strokeOpacity={isActive ? 0.58 : 0.2} className="transition-opacity duration-150" />
+    return <path
+      d={path} fill="none" stroke={color} strokeWidth={linkWidth} strokeOpacity={isActive ? 0.58 : 0.2}
+      className="cursor-pointer transition-opacity duration-150 focus:outline-none"
+      role="button" tabIndex={0} aria-label={`${entry.label}: ${formatAmount(entry.value, true)}`}
+      onClick={() => selectEntry(entry)}
+      onFocus={() => setHovered(entry)} onBlur={() => setHovered(null)}
+      onKeyDown={event => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault()
+          selectEntry(entry)
+        }
+      }}
+    />
   }
 
   if (!moneyMap.links.length) {
@@ -204,7 +260,7 @@ export const MoneyMapChart = memo(function MoneyMapChart({
   }
 
   return (
-    <Card className="border-[0.5px] border-border/70 hover:border-primary/40">
+    <Card className="min-w-0 border-[0.5px] border-border/70 hover:border-primary/40">
       <CardHeader className="gap-3 pb-2 px-4 sm:px-6 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-2">
           <GitFork className="h-4 w-4 text-primary" />
@@ -218,21 +274,22 @@ export const MoneyMapChart = memo(function MoneyMapChart({
         </div>
       </CardHeader>
       <CardContent className="px-2 pb-3 sm:px-4 sm:pb-4">
-        <div className="relative h-[330px] sm:h-[420px]" aria-label="Money Map cash flow diagram. Hover a category or flow for its amount.">
-          {hovered && (
-            <div className="pointer-events-none absolute left-1/2 top-2 z-10 -translate-x-1/2 rounded-lg border border-border bg-card/95 px-2.5 py-1.5 text-center shadow-lg backdrop-blur">
-              <p className="text-[10px] font-semibold text-foreground">{hovered.label}</p>
-              <p className="text-[10px] text-muted-foreground">{formatAmount(hovered.value)}</p>
+        <div className="relative h-[330px] sm:h-[420px]" aria-label="Money Map cash flow diagram. Tap or hover a category or flow for its amount.">
+          {inspected && (
+            <div className="absolute left-1/2 top-2 z-10 w-max max-w-[calc(100%-1rem)] -translate-x-1/2 rounded-lg border border-border bg-card/95 py-1.5 pl-2.5 pr-9 text-center shadow-lg backdrop-blur" role="status">
+              <p className="break-words text-xs font-semibold text-foreground">{inspected.label}</p>
+              <p className="text-xs text-muted-foreground">{formatAmount(inspected.value, true)}</p>
+              <button type="button" className="absolute right-0 top-0 flex h-8 w-8 items-center justify-center text-muted-foreground" aria-label="Close cash flow details" onClick={() => { setSelected(null); setHovered(null) }}><X className="h-3.5 w-3.5" /></button>
             </div>
           )}
-          <ResponsiveContainer width="100%" height="100%">
+          <ResponsiveContainer width="100%" height="100%" onResize={width => setChartWidth(width)}>
             <Sankey
               data={moneyMap}
               nodeWidth={10}
               nodePadding={12}
               linkCurvature={0.52}
               iterations={48}
-              margin={{ top: 52, right: 110, bottom: 12, left: 110 }}
+              margin={{ top: 52, right: sideMargin, bottom: 12, left: sideMargin }}
               node={renderNode as never}
               link={renderLink as never}
               onMouseEnter={((item: unknown, type: 'node' | 'link') => {
@@ -249,7 +306,7 @@ export const MoneyMapChart = memo(function MoneyMapChart({
             />
           </ResponsiveContainer>
         </div>
-        <p className="px-2 text-center text-[10px] text-muted-foreground">Hover any category or flow to inspect its value.</p>
+        <p className="px-2 text-center text-[10px] text-muted-foreground">Tap or hover any category or flow to inspect its value.</p>
       </CardContent>
     </Card>
   )
