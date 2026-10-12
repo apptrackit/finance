@@ -6,6 +6,10 @@ Intermediate package/UI version bumps are grouped under the next published GitHu
 
 ## Unreleased
 
+### Fixed
+
+- Analytics Money Map retains its Sankey chart on phones and uses smaller side margins to spread flows across the available width. Narrow-chart labels stay within their flow columns; tap and keyboard inspection show full category names and amounts with privacy masking.
+
 ### Added
 
 - Compact sidebar account shares pair thin bars with percentages, comparing active cash and investment groups independently using converted values. Shares follow the Accounts page's positive-balance rules, include accounts excluded from totals, and respect privacy and unavailable valuations.
