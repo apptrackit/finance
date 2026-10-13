@@ -6,7 +6,7 @@ comparison in Month / Actual. Year and All Time keep their existing charts.
 Desktop:
 
 ```text
-Cash Balance Trend                    [Compare previous month]
+Cash Balance Trend                    [Hide comparison]
 ● October 2026    ○ September 2026
 +30,000 HUF (+7.7%) · October 13 vs September 13
 
@@ -22,6 +22,9 @@ Mobile stacks the title, control, wrapping legend and summary. The chart stays
 full width; both dates and the difference appear in the chart tooltip. Keep the
 chart's native touch and keyboard interaction; there is no inspection section
 below the plot.
+
+The button describes the next action: “Compare previous month” while off and
+“Hide comparison” while on. Its active state uses the primary button style.
 
 - Selected month: strong solid line with fill. Previous month: thinner solid
   muted line with hollow markers, no fill. Explicit month/year labels and marker

@@ -31,7 +31,7 @@ const comparison = () => buildCashBalanceMonthComparison({
   selectedMonth: '2026-10-01', today: '2026-10-13', masterCurrency: 'HUF', exchangeRates: {},
 })
 const renderChart = () => render(<NetWorthTrendChart data={data} masterCurrency="HUF" comparison={comparison()} />)
-const toggle = () => fireEvent.click(screen.getByRole('button', { name: 'Compare previous month' }))
+const toggle = () => fireEvent.click(screen.getByRole('button', { name: /^(Compare previous month|Hide comparison)$/ }))
 
 describe('Cash Balance Trend comparison', () => {
   beforeEach(() => { state.privacyMode = 'visible'; state.tooltipDay = 2; state.points = [] })
@@ -41,7 +41,7 @@ describe('Cash Balance Trend comparison', () => {
     expect(screen.getByTestId('series-smoothed')).toHaveAttribute('data-dashes', '6 3')
     expect(screen.queryByTestId('series-previous')).not.toBeInTheDocument()
     toggle()
-    expect(screen.getByRole('button', { name: 'Compare previous month' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('button', { name: 'Hide comparison' })).toHaveAttribute('aria-pressed', 'true')
     expect(screen.queryByTestId('series-smoothed')).not.toBeInTheDocument()
     expect(screen.getByTestId('series-previous')).not.toHaveAttribute('data-dashes')
     expect(screen.getByText('October 2026')).toBeInTheDocument()
@@ -51,6 +51,7 @@ describe('Cash Balance Trend comparison', () => {
     expect(screen.queryByRole('slider')).not.toBeInTheDocument()
     expect(screen.queryByText(/Inspect day/)).not.toBeInTheDocument()
     toggle()
+    expect(screen.getByRole('button', { name: 'Compare previous month' })).toHaveAttribute('aria-pressed', 'false')
     expect(screen.getByTestId('series-smoothed')).toBeInTheDocument()
     expect(screen.queryByRole('slider')).not.toBeInTheDocument()
   })
