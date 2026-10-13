@@ -13,6 +13,7 @@ export function AnalyticsPage() {
   const parseFilters = useCallback((params: URLSearchParams) => parseAnalyticsFilters(params, new Date(), categoriesReady ? finance.categories : undefined), [categoriesReady, finance.categories])
   const [filters, updateFilters] = useUrlFilters(parseFilters, analyticsSearch)
   const projectionReady = dataStatus.upcoming.loaded && !dataStatus.upcoming.loading && !dataStatus.upcoming.error
+  const comparisonReady = [dataStatus.accounts, dataStatus.history].every(status => status.loaded && !status.loading && !status.error)
   const datasets = [
     { label: 'Accounts', status: dataStatus.accounts }, { label: 'Transaction history', status: dataStatus.history },
     { label: 'Upcoming transactions', status: dataStatus.upcoming }, { label: 'Categories', status: dataStatus.categories },
@@ -22,6 +23,6 @@ export function AnalyticsPage() {
       categories={finance.categories} accounts={finance.accounts} masterCurrency={masterCurrency}
       exchangeRates={finance.usableExchangeRates} onRetryRates={() => { void finance.handleDataChange() }}
       loading={(!dataStatus.history.loaded && finance.allTransactionsLoading) || (!dataStatus.exchangeRates.loaded && finance.exchangeRatesLoading)}
-      filters={filters} onFiltersChange={updateFilters} projectionReady={projectionReady} />
+      filters={filters} onFiltersChange={updateFilters} projectionReady={projectionReady} comparisonReady={comparisonReady} />
   </FinanceDataBoundary>
 }

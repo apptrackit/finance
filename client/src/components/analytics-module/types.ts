@@ -31,6 +31,7 @@ export type Account = {
   icon?: string
   exclude_from_net_worth?: boolean
   exclude_from_cash_balance?: boolean
+  archived_at?: number | null
 }
 
 export type TimePeriod = 'allTime' | 'month' | 'year'
