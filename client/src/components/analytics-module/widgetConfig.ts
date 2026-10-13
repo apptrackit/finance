@@ -29,7 +29,7 @@ export const WIDGET_DEFS: WidgetDef[] = [
   {
     id: 'cash-balance-trend',
     label: 'Cash Balance Trend',
-    description: 'Historical cash balance over time with a smoothed trend line',
+    description: 'Historical cash balances with a trend line or previous-month comparison',
     defaultVisible: true,
   },
   {

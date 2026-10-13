@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Analytics } from './Analytics'
 import { WIDGET_DEFS } from './widgetConfig'
 import type { Account, Transaction } from './types'
+import type { CashBalanceComparison } from './cash-balance-comparison'
 
 vi.mock('../../config', () => ({
   API_BASE_URL: '/api',
@@ -17,8 +18,8 @@ vi.mock('./IncomeExpensesTrendChart', () => ({
   ),
 }))
 vi.mock('./NetWorthTrendChart', () => ({
-  NetWorthTrendChart: ({ data }: { data: Array<{ date: string; balance: number }> }) => (
-    <div data-testid="cash-trend" data-points={JSON.stringify(data)} />
+  NetWorthTrendChart: ({ data, comparison, comparisonDisabledReason }: { data: Array<{ date: string; balance: number }>; comparison?: CashBalanceComparison; comparisonDisabledReason?: string }) => (
+    <div data-testid="cash-trend" data-points={JSON.stringify(data)} data-comparison={JSON.stringify(comparison)} data-disabled-reason={comparisonDisabledReason} />
   ),
 }))
 
@@ -191,6 +192,29 @@ describe('Analytics Projected mode', () => {
       { id: 'eur', name: 'Cash', type: 'checking', balance: 100, currency: 'EUR', exclude_from_net_worth: true },
     ]} />)
     expect(screen.getByRole('alert')).toHaveTextContent('Missing or invalid exchange rates: EUR')
+  })
+
+  it('provides posted monthly comparison only, disables it in Projected, and preserves quiet-month history', () => {
+    localStorage.setItem('analytics-widget-visibility', JSON.stringify(Object.fromEntries(
+      WIDGET_DEFS.map(widget => [widget.id, widget.id === 'cash-balance-trend'])
+    )))
+    const props = { transactions: [{ ...posted, date: '2026-08-01' }], accounts, categories: [] }
+    const { rerender } = render(<Analytics {...props} upcomingTransactions={[upcoming('future', '2026-09-20', 5000)]} />)
+    expect(screen.getByText('No transactions for september')).toBeInTheDocument()
+    const comparison = () => JSON.parse(screen.getByTestId('cash-trend').getAttribute('data-comparison')!)
+    expect(comparison().unavailableReason).toBeNull()
+    expect(comparison().points[0]).toMatchObject({ selected: 100, previous: 100 })
+    expect(screen.getByTestId('cash-trend')).not.toHaveAttribute('data-disabled-reason')
+    fireEvent.click(screen.getByRole('button', { name: 'Projected (1)' }))
+    expect(screen.getByTestId('cash-trend')).toHaveAttribute('data-disabled-reason', 'Switch to Actual to compare previous-month balances.')
+    expect(comparison().points[0]).toMatchObject({ selected: 100, previous: 100 })
+    fireEvent.click(screen.getByRole('button', { name: 'Year' }))
+    expect(screen.getByTestId('cash-trend')).not.toHaveAttribute('data-comparison')
+    fireEvent.click(screen.getByRole('button', { name: 'All Time' }))
+    expect(screen.getByTestId('cash-trend')).not.toHaveAttribute('data-comparison')
+    fireEvent.click(screen.getByRole('button', { name: 'Month' }))
+    rerender(<Analytics {...props} comparisonReady={false} />)
+    expect(screen.getByTestId('cash-trend')).toHaveAttribute('data-disabled-reason', 'Comparison is unavailable until account and transaction history refresh succeeds.')
   })
 
 })

@@ -28,6 +28,7 @@ import { MoneyMapChart } from './MoneyMapChart'
 import { TopExpensesList } from './TopExpensesList'
 import type { Transaction, Category, Account, TimePeriod, FinancialOutlookSnapshot, ChartDataPoint, TrendDataPoint } from './types'
 import { isUpcomingProjectionTransaction } from '../../lib/transaction-review'
+import { buildCashBalanceMonthComparison } from './cash-balance-comparison'
 
 type AnalyticsProps = {
   transactions: Transaction[]
@@ -41,6 +42,7 @@ type AnalyticsProps = {
   filters?: AnalyticsFilters
   onFiltersChange?: FilterChange<AnalyticsFilters>
   projectionReady?: boolean
+  comparisonReady?: boolean
 }
 
 function AnalyticsSkeleton() {
@@ -89,6 +91,7 @@ export function Analytics({
   filters,
   onFiltersChange,
   projectionReady = true,
+  comparisonReady = true,
 }: AnalyticsProps) {
   const [localFilters, setLocalFilters] = useState<AnalyticsFilters>(() => ({
     period: 'month', date: format(startOfMonth(new Date()), 'yyyy-MM-dd'), pinned: false,
@@ -392,6 +395,20 @@ export function Analytics({
       return { ...point, smoothed: ema }
     })
   }, [conversionsAvailable, transactionsForAnalytics, accounts, period, exchangeRates, masterCurrency, customDateRange])
+
+  const today = format(new Date(), 'yyyy-MM-dd')
+  const cashBalanceComparison = useMemo(() => period === 'month' ? buildCashBalanceMonthComparison({
+    accounts, transactions, selectedMonth: customDateRange.startDate, today, masterCurrency, exchangeRates,
+  }) : undefined, [period, accounts, transactions, customDateRange.startDate, today, masterCurrency, exchangeRates])
+  const cashComparisonDisabledReason = isProjected ? 'Switch to Actual to compare previous-month balances.'
+    : !comparisonReady ? 'Comparison is unavailable until account and transaction history refresh succeeds.' : undefined
+
+  // A month with no movements still has a balance history. The existing sparse
+  // chart can be empty or have only today's point in those months.
+  const quietMonthBalanceData = cashBalanceComparison?.points.flatMap(point => point.selected !== null && point.selectedDate
+    ? [{ date: point.selectedDate, formattedDate: format(parseISO(point.selectedDate), 'MMM d'), balance: point.selected, smoothed: point.selected }] : []) ?? []
+  const displayedCashBalanceData = !isProjected && cashBalanceTrendData.length < 2 && quietMonthBalanceData.length > 1
+    ? quietMonthBalanceData : cashBalanceTrendData
 
   // Per-account trends remain in each account's native currency (exclude investment accounts).
   const perAccountTrendData = useMemo(() => {
@@ -908,7 +925,7 @@ export function Analytics({
 
   const widgetHasData: Record<WidgetId, boolean> = {
     'summary-cards':          hasData,
-    'cash-balance-trend':     cashBalanceTrendData.length > 0,
+    'cash-balance-trend':     displayedCashBalanceData.length > 0,
     'income-chart':           incomeChartData.some(d => d.amount > 0),
     'expenses-chart':         expensesChartData.some(d => d.amount > 0),
     'income-expenses-trend':  incomeExpensesTrendData.some(d => d.income > 0 || d.expenses > 0),
@@ -921,6 +938,11 @@ export function Analytics({
   }
 
   if (loading) return <AnalyticsSkeleton />
+
+  const cashTrendChart = show('cash-balance-trend') && accounts.some(account => account.type !== 'investment' && !account.exclude_from_cash_balance) ? (
+    <NetWorthTrendChart data={displayedCashBalanceData} masterCurrency={masterCurrency}
+      title="Cash Balance Trend" comparison={cashBalanceComparison} comparisonDisabledReason={cashComparisonDisabledReason} />
+  ) : null
 
   return (
     <div className="space-y-6">
@@ -1031,17 +1053,20 @@ export function Analytics({
 
       <MissingExchangeRates currencies={requiredConversions.missingCurrencies} targetCurrency={masterCurrency} onRetry={onRetryRates} />
       {!hasData ? (
-        <Card>
-          <CardContent className="py-12">
-            <div className="text-center">
-              <div className="h-12 w-12 rounded-full bg-secondary/50 flex items-center justify-center mx-auto mb-3">
-                <Calendar className="h-6 w-6 text-muted-foreground" />
+        <>
+          {cashTrendChart && <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">{cashTrendChart}</div>}
+          <Card>
+            <CardContent className="py-12">
+              <div className="text-center">
+                <div className="h-12 w-12 rounded-full bg-secondary/50 flex items-center justify-center mx-auto mb-3">
+                  <Calendar className="h-6 w-6 text-muted-foreground" />
+                </div>
+                <p className="text-sm text-muted-foreground">No transactions for {period === 'allTime' ? 'all time' : periodDisplayLabel.toLowerCase()}</p>
+                <p className="text-xs text-muted-foreground/70 mt-1">Add some transactions to see analytics</p>
               </div>
-              <p className="text-sm text-muted-foreground">No transactions for {period === 'allTime' ? 'all time' : periodDisplayLabel.toLowerCase()}</p>
-              <p className="text-xs text-muted-foreground/70 mt-1">Add some transactions to see analytics</p>
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        </>
       ) : (
         <>
           {!conversionsAvailable && <p role="status" className="text-sm text-muted-foreground">Summary, converted charts, and projections unavailable until exchange rates recover.</p>}
@@ -1055,13 +1080,7 @@ export function Analytics({
           )}
 
           <div className="grid gap-4 sm:gap-6 grid-cols-1 lg:grid-cols-2">
-            {show('cash-balance-trend') && (
-              <NetWorthTrendChart
-                data={cashBalanceTrendData}
-                masterCurrency={masterCurrency}
-                title="Cash Balance Trend"
-              />
-            )}
+            {cashTrendChart}
 
             {show('income-chart') && (
               <IncomeChart
