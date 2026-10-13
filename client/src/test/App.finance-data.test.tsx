@@ -33,6 +33,7 @@ const fetchMock = vi.fn<typeof fetch>()
 const browserStorage = window.localStorage
 
 beforeEach(() => {
+  fetchMock.mockClear()
   vi.stubGlobal('localStorage', browserStorage)
   localStorage.clear()
   vi.stubGlobal('scrollTo', vi.fn())
@@ -45,16 +46,20 @@ beforeEach(() => {
     '/v6/latest/HUF': { rates: { HUF: 1 } },
   })
   fetchMock.mockImplementation(async input => {
-    const path = new URL(String(input), 'http://localhost').pathname.replace(/^\/api/, '')
+    const url = new URL(String(input), 'http://localhost')
+    const requestPath = url.pathname.replace(/^\/api/, '')
+    const path = requestPath === '/transactions/history'
+      ? (url.searchParams.has('startDate') ? '/transactions/date-range' : '/transactions') : requestPath
     if (failures.has(path)) return Response.json({ error: 'Private account balance 98765' }, { status: 403 })
-    return Response.json(payloads[path] ?? [])
+    return Response.json(requestPath === '/transactions/history'
+      ? { transactions: payloads[path], investments: [], revision: 1, nextCursor: null } : payloads[path] ?? [])
   })
   vi.stubGlobal('fetch', fetchMock)
 })
 afterEach(() => vi.unstubAllGlobals())
 
-function renderApp() {
-  const router = createMemoryRouter(appRoutes, { initialEntries: ['/dashboard'] })
+function renderApp(path = '/dashboard') {
+  const router = createMemoryRouter(appRoutes, { initialEntries: [path] })
   return render(<ThemeProvider><AlertProvider><RouterProvider router={router} /></AlertProvider></ThemeProvider>)
 }
 
@@ -67,6 +72,29 @@ async function retry() {
 }
 
 describe('finance read errors in App', () => {
+  it('requests complete history only after Analytics or global search opens', async () => {
+    renderApp()
+    expect(await screen.findByText('Loaded ledger')).toBeInTheDocument()
+    const fullReads = () => fetchMock.mock.calls.filter(([input]) => String(input) === '/api/transactions/history?limit=500')
+    expect(fullReads()).toHaveLength(0)
+    navigate('Analytics')
+    expect(await screen.findByText('Loaded analytics')).toBeInTheDocument()
+    expect(fullReads()).toHaveLength(1)
+    navigate('Dashboard')
+    expect(await screen.findByText('Loaded ledger')).toBeInTheDocument()
+    fireEvent.click(screen.getAllByRole('button', { name: 'Search everything' })[0])
+    await waitFor(() => expect(fullReads()).toHaveLength(2))
+    expect(await screen.findByRole('combobox', { name: 'Search everything' })).toBeInTheDocument()
+  })
+
+  it('loads Analytics directly without also downloading the Dashboard period', async () => {
+    renderApp('/analytics?period=allTime')
+    expect(await screen.findByText('Loaded analytics')).toBeInTheDocument()
+    const urls = fetchMock.mock.calls.map(([url]) => String(url))
+    expect(urls).toContain('/api/transactions/history?limit=500')
+    expect(urls.some(url => url.includes('/transactions/history?') && url.includes('startDate='))).toBe(false)
+  })
+
   it('shows a private, accessible initial load error and enables Retry after dependent loads fail', async () => {
     failures.add('/accounts')
     renderApp()

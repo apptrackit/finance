@@ -32,15 +32,27 @@ beforeEach(() => {
     '/v6/latest/HUF': { rates: { HUF: 1, USD: 0.0026, EUR: 0.0025 } },
   })
   fetchMock.mockImplementation(async input => {
-    const path = new URL(String(input), 'http://localhost').pathname.replace(/^\/api/, '')
+    const url = new URL(String(input), 'http://localhost')
+    const requestPath = url.pathname.replace(/^\/api/, '')
+    const path = requestPath === '/transactions/history'
+      ? (url.searchParams.has('startDate') ? '/transactions/date-range' : '/transactions') : requestPath
     if (failures.has(path)) return failures.get(path)!()
+    if (requestPath === '/transactions/history') {
+      if (!Array.isArray(payloads[path])) return Response.json(payloads[path])
+      const hasInvestments = Array.isArray(payloads['/accounts']) && payloads['/accounts'].some(account => account.type === 'investment')
+      if (hasInvestments && failures.has('/investment-transactions')) return failures.get('/investment-transactions')!()
+      const investments = hasInvestments ? payloads['/investment-transactions'] : []
+      return Response.json({ transactions: payloads[path], investments: Array.isArray(investments)
+        ? investments.filter(row => !url.searchParams.has('startDate') || (row.date >= url.searchParams.get('startDate')! && row.date <= url.searchParams.get('endDate')!)) : investments,
+        revision: 1, nextCursor: null })
+    }
     return Response.json(payloads[path] ?? [])
   })
   vi.stubGlobal('fetch', fetchMock)
 })
 afterEach(() => vi.unstubAllGlobals())
 
-function setup() { return renderHook(() => useFinanceData(dateRange, 'HUF')) }
+function setup() { return renderHook(() => useFinanceData(dateRange, 'HUF', { historyEnabled: true })) }
 async function settled(result: ReturnType<typeof setup>['result']) {
   await waitFor(() => expect(result.current.transactionsLoading).toBe(false))
   await waitFor(() => expect(result.current.allTransactionsLoading).toBe(false))
@@ -58,6 +70,106 @@ const failureCases = [
 ] as const
 
 describe('useFinanceData', () => {
+  it('loads only the selected period on Dashboard and fetches complete history when requested', async () => {
+    const { result, rerender } = renderHook(({ enabled, range }) => useFinanceData(range, 'HUF', { historyEnabled: enabled }),
+      { initialProps: { enabled: false, range: dateRange } })
+    await waitFor(() => expect(result.current.dataStatus.transactions.loaded).toBe(true))
+    const historyRequests = () => fetchMock.mock.calls.map(([url]) => String(url)).filter(url => url.includes('/transactions/history?'))
+    expect(historyRequests()).toHaveLength(1)
+    expect(historyRequests()[0]).toContain('startDate=2026-04-01')
+    expect(result.current.dataStatus.history.loaded).toBe(false)
+    rerender({ enabled: true, range: dateRange })
+    await waitFor(() => expect(result.current.dataStatus.history.loaded).toBe(true))
+    expect(historyRequests()).toHaveLength(2)
+    fetchMock.mockClear()
+    rerender({ enabled: true, range: { startDate: '2026-05-01', endDate: '2026-05-31' } })
+    await waitFor(() => expect(historyRequests()).toHaveLength(1))
+    expect(historyRequests()[0]).toContain('startDate=2026-05-01')
+    expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/accounts'))).toBe(false)
+  })
+
+  it('invalidates dormant history after a mutation and refreshes it on the next Analytics visit', async () => {
+    const { result, rerender } = renderHook(({ enabled }) => useFinanceData(dateRange, 'HUF', { historyEnabled: enabled }),
+      { initialProps: { enabled: true } })
+    await settled(result)
+    rerender({ enabled: false })
+    fetchMock.mockClear()
+    payloads['/transactions'] = [{ ...mockTransaction, id: 'saved' }]
+    await act(async () => { await result.current.handleDataChange() })
+    expect(fetchMock.mock.calls.some(([url]) => String(url) === '/api/transactions/history?limit=500')).toBe(false)
+    expect(result.current.dataStatus.history.stale).toBe(true)
+    rerender({ enabled: true })
+    await waitFor(() => expect(result.current.allTransactions[0]?.id).toBe('saved'))
+    expect(result.current.dataStatus.history.stale).toBe(false)
+  })
+
+  it('publishes every page together, including transfer legs and investment buys/sells beyond the first page', async () => {
+    const baseFetch = fetchMock.getMockImplementation()!
+    const rows = Array.from({ length: 500 }, (_, index) => ({ ...mockTransaction, id: `page-${index}`, linked_transaction_id: undefined as string | undefined }))
+    rows[499] = { ...rows[499], id: 'debit', linked_transaction_id: 'credit' }
+    let release: (response: Response) => void = () => {}
+    fetchMock.mockImplementation(async (input, options) => {
+      const url = new URL(String(input), 'http://localhost')
+      if (!url.pathname.endsWith('/transactions/history') || url.searchParams.has('startDate')) return baseFetch(input, options)
+      if (url.searchParams.has('cursor')) return new Promise(resolve => { release = resolve })
+      return Response.json({ transactions: rows, investments: [], revision: 1, nextCursor: 'next-page' })
+    })
+    const { result } = setup()
+    await waitFor(() => expect(fetchMock.mock.calls.some(([url]) => String(url).includes('cursor=next-page'))).toBe(true))
+    expect(result.current.allTransactions).toEqual([])
+    expect(result.current.dataStatus.history.loaded).toBe(false)
+    await act(async () => { release(Response.json({ transactions: [{ ...mockTransaction, id: 'credit', amount: 5000, linked_transaction_id: 'debit' }],
+      investments: [investmentTransaction, { ...investmentTransaction, id: 'sell', type: 'sell', quantity: 0.1234567 }], revision: 1, nextCursor: null })) })
+    expect(result.current.allTransactions).toHaveLength(503)
+    expect(result.current.allTransactions.find(row => row.id === 'credit')?.linked_transaction_id).toBe('debit')
+    expect(result.current.allTransactions.find(row => row.id === 'sell')).toMatchObject({ amount: -1000, quantity: -0.1234567 })
+  })
+
+  it('does not let a dormant in-flight history overwrite a mutation refresh', async () => {
+    const baseFetch = fetchMock.getMockImplementation()!
+    let hold = true
+    let release: (response: Response) => void = () => {}
+    fetchMock.mockImplementation(async (input, options) => {
+      const url = new URL(String(input), 'http://localhost')
+      if (!hold || !url.pathname.endsWith('/transactions/history') || url.searchParams.has('startDate')) return baseFetch(input, options)
+      if (url.searchParams.has('cursor')) return new Promise(resolve => { release = resolve })
+      return Response.json({ transactions: [mockTransaction], investments: [], revision: 1, nextCursor: 'delayed' })
+    })
+    const { result, rerender } = renderHook(({ enabled }) => useFinanceData(dateRange, 'HUF', { historyEnabled: enabled }),
+      { initialProps: { enabled: true } })
+    await waitFor(() => expect(fetchMock.mock.calls.some(([url]) => String(url).includes('cursor=delayed'))).toBe(true))
+    rerender({ enabled: false })
+    payloads['/transactions'] = [{ ...mockTransaction, id: 'saved' }]
+    await act(async () => { await result.current.handleDataChange() })
+    await act(async () => { release(Response.json({ transactions: [{ ...mockTransaction, id: 'old' }], investments: [], revision: 1, nextCursor: null })) })
+    expect(result.current.allTransactions).toEqual([])
+    expect(result.current.dataStatus.history.loaded).toBe(false)
+    hold = false
+    rerender({ enabled: true })
+    await waitFor(() => expect(result.current.allTransactions.map(row => row.id)).toEqual(['saved']))
+  })
+
+  it.each(['failure', 'changed revision', 'repeated cursor', 'duplicate row', 'empty continuation', 'oversized page'])('retains the previous complete snapshot after a later-page %s', async reason => {
+    const { result } = setup()
+    await settled(result)
+    const original = result.current.allTransactions
+    const baseFetch = fetchMock.getMockImplementation()!
+    fetchMock.mockImplementation(async (input, options) => {
+      const url = new URL(String(input), 'http://localhost')
+      if (!url.pathname.endsWith('/transactions/history') || url.searchParams.has('startDate')) return baseFetch(input, options)
+      if (!url.searchParams.has('cursor')) return Response.json({ transactions: [mockTransaction], investments: [], revision: 1, nextCursor: 'next' })
+      if (reason === 'failure') return Response.json({ code: 'HISTORY_CHANGED' }, { status: 409 })
+      return Response.json({ transactions: reason === 'empty continuation' ? [] : reason === 'oversized page'
+        ? Array.from({ length: 501 }, (_, index) => ({ ...mockTransaction, id: `new-${index}` }))
+        : [{ ...mockTransaction, id: reason === 'duplicate row' ? mockTransaction.id : 'new' }], investments: [],
+        revision: reason === 'changed revision' ? 2 : 1,
+        nextCursor: reason === 'repeated cursor' ? 'next' : reason === 'empty continuation' ? 'another' : null })
+    })
+    await act(async () => { await result.current.handleDataChange() })
+    expect(result.current.allTransactions).toEqual(original)
+    expect(result.current.dataStatus.history).toMatchObject({ loaded: true, error: true, stale: true })
+  })
+
   it('distinguishes initial loading from a genuine loaded-empty response', async () => {
     for (const path of ['/accounts', '/transactions', '/transactions/date-range', '/transactions/upcoming', '/categories']) payloads[path] = []
     const { result } = setup()
@@ -142,8 +254,8 @@ describe('useFinanceData', () => {
     expect(result.current.allTransactions).toEqual([mockTransaction])
     expect(result.current.dataStatus.accounts.error).toBe(false)
     const urls = fetchMock.mock.calls.map(([url]) => String(url))
-    expect(urls.some(url => url.includes('/transactions/date-range'))).toBe(true)
-    expect(urls).toContain('/api/transactions')
+    expect(urls.some(url => url.includes('/transactions/history?') && url.includes('startDate='))).toBe(true)
+    expect(urls).toContain('/api/transactions/history?limit=500')
     expect(urls).toContain('/api/accounts')
   })
 
@@ -182,7 +294,10 @@ describe('useFinanceData', () => {
     await waitFor(() => expect(result.current.dataStatus.investment.loaded).toBe(true))
     expect(result.current.investmentValue).toBe(40)
     fetchMock.mockImplementation(async input => {
-      const path = new URL(String(input), 'http://localhost').pathname.replace(/^\/api/, '')
+      const url = new URL(String(input), 'http://localhost')
+    const requestPath = url.pathname.replace(/^\/api/, '')
+    const path = requestPath === '/transactions/history'
+      ? (url.searchParams.has('startDate') ? '/transactions/date-range' : '/transactions') : requestPath
       if (String(input).includes('symbol=TWO')) return Response.json({ error: 'Private account details' }, { status: 403 })
       return Response.json(payloads[path] ?? [])
     })
@@ -196,7 +311,7 @@ describe('useFinanceData', () => {
     let resolveOld: (response: Response) => void = () => {}
     failures.set('/transactions/date-range', () => new Promise(resolve => { resolveOld = resolve }))
     const { result, rerender } = renderHook(({ range }) => useFinanceData(range, 'HUF'), { initialProps: { range: dateRange } })
-    await waitFor(() => expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/transactions/date-range'))).toBe(true))
+    await waitFor(() => expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/transactions/history?') && String(url).includes('startDate='))).toBe(true))
     failures.clear()
     payloads['/transactions/date-range'] = [{ ...mockTransaction, id: 'newer', date: '2026-05-01' }]
     rerender({ range: { startDate: '2026-05-01', endDate: '2026-05-31' } })

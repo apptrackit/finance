@@ -43,7 +43,7 @@ beforeEach(() => {
     if (options?.method === 'POST' && failSave) return Response.json({ error: 'Save failed' }, { status: 400 })
     const payloads: Record<string, unknown> = {
       '/accounts': [{ id: 'cash', name: 'Cash', type: 'cash', balance: 100, currency: 'HUF', updated_at: 1 }],
-      '/transactions': [posted], '/transactions/date-range': [posted], '/transactions/upcoming': upcoming,
+      '/transactions/history': { transactions: [posted], investments: [], revision: 1, nextCursor: null }, '/transactions': [posted], '/transactions/date-range': [posted], '/transactions/upcoming': upcoming,
       '/categories': categories, '/dashboard/net-worth': { net_worth: 100 }, '/v6/latest/HUF': { rates: { HUF: 1 } },
       '/settings/navigation': { visible_menus: { dashboard: false, analytics: true, investments: true, recurring: true }, updated_at: 1 },
       '/financial-outlook/latest': { snapshot: null }, '/financial-outlook-snapshots': { snapshots: [], next_cursor: null },
@@ -98,7 +98,7 @@ it('searches older history and carries the query into the all-time transaction w
     const url = new URL(String(input), 'http://localhost')
     const path = url.pathname.replace(/^\/api/, '')
     if (path === '/transactions') return Response.json([old])
-    if (path === '/transactions/date-range') return Response.json(url.searchParams.get('startDate') === '1900-01-01' ? [old] : [])
+    if (path === '/transactions/history') return Response.json({ transactions: !url.searchParams.has('startDate') || url.searchParams.get('startDate') === '1900-01-01' ? [old] : [], investments: [], revision: 1, nextCursor: null })
     if (path === '/recurring-schedules') return Response.json([])
     return baseFetch(input, options)
   })

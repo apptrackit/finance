@@ -35,7 +35,10 @@ function App() {
     const filters = parseDashboardFilters(new URLSearchParams(view === 'dashboard' ? search : ''))
     return { startDate: filters.startDate, endDate: filters.endDate }
   }, [view, search])
-  const finance = useFinanceData(dateRange, masterCurrency)
+  const finance = useFinanceData(dateRange, masterCurrency, {
+    dashboardEnabled: view === 'dashboard',
+    historyEnabled: searchOpen || (view === 'analytics' && navigationReady && visibleMenus.analytics),
+  })
   const { dataStatus } = finance
 
   useEffect(() => {

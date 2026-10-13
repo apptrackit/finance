@@ -1,8 +1,8 @@
 import { convertCurrency, sumConversions, validRates, isValidRate } from '../../../shared/currency'
 import type { ConversionResult } from '../../../shared/currency'
 import { accountValueForOrdering } from '../lib/account-order'
-import { useEffect, useState, useCallback } from 'react'
-import { API_BASE_URL, apiFetch } from '../config'
+import { useEffect, useState, useCallback, useRef } from 'react'
+import { API_BASE_URL, apiFetch, ApiRequestError } from '../config'
 import { useLoadableData } from './useLoadableData'
 import type { PendingKind, ReviewSource } from '../lib/transaction-review'
 
@@ -144,29 +144,59 @@ const readExchangeRates = async (currency: string): Promise<Record<string, numbe
   return validRates(data.rates)
 }
 
-// A history snapshot is complete only when both cash and investment reads
-// succeed. Never publish a ledger with a failed account's history omitted.
-const readHistory = async (accountsPromise: Promise<Account[]>, range?: { startDate: string; endDate: string }) => {
-  const regularPromise = readArray(
-    range ? `${API_BASE_URL}/transactions/date-range?startDate=${range.startDate}&endDate=${range.endDate}`
-      : `${API_BASE_URL}/transactions`, isTransaction)
-  const investmentPromise = accountsPromise.then(accounts => Promise.all(accounts
-    .filter(account => account.type === 'investment')
-    .map(account => readArray(`${API_BASE_URL}/investment-transactions?account_id=${account.id}`, isInvestmentTransaction))))
-  const [regular, investment] = await Promise.all([regularPromise, investmentPromise])
-  const investmentRows = investment.flat()
-    .filter(transaction => !range || (transaction.date >= range.startDate && transaction.date <= range.endDate))
-    .map(mapInvestmentTransaction)
-  return [...regular, ...investmentRows].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+// Publish only complete snapshots. A mutation between pages invalidates the
+// cursor; the normal retry refreshes accounts and history together.
+const readHistory = async (accountsPromise: Promise<Account[]>, range?: { startDate: string; endDate: string }, signal?: AbortSignal) => {
+  await accountsPromise
+  const transactions: Transaction[] = []
+  const seenCursors = new Set<string>()
+  const seenRows = new Set<string>()
+  let cursor: string | null = null
+  let revision: number | undefined
+  do {
+    signal?.throwIfAborted()
+    const params = new URLSearchParams({ limit: '500', ...(range ?? {}) })
+    if (cursor) params.set('cursor', cursor)
+    const response = await apiFetch(`${API_BASE_URL}/transactions/history?${params}`, { throwOnError: true, signal })
+    const page: unknown = await response.json()
+    if (!isRecord(page) || !Array.isArray(page.transactions) || !page.transactions.every(isTransaction)
+      || !Array.isArray(page.investments) || !page.investments.every(isInvestmentTransaction)
+      || page.transactions.length + page.investments.length > 500
+      || !isNumber(page.revision) || !Number.isSafeInteger(page.revision) || page.revision < 0
+      || !(page.nextCursor === null || (typeof page.nextCursor === 'string' && page.nextCursor.length > 0))) {
+      throw new Error('Invalid history page')
+    }
+    if (revision !== undefined && revision !== page.revision) {
+      throw new ApiRequestError('History changed', 409, 'HISTORY_CHANGED')
+    }
+    revision = page.revision
+    for (const [kind, rows] of [['cash', page.transactions], ['investment', page.investments]] as const) {
+      for (const row of rows) {
+        const key = `${kind}:${row.id}`
+        if (seenRows.has(key)) throw new Error('Duplicate history row')
+        seenRows.add(key)
+      }
+    }
+    transactions.push(...page.transactions, ...page.investments.map(mapInvestmentTransaction))
+    cursor = page.nextCursor as string | null
+    if (cursor) {
+      if (seenCursors.has(cursor) || page.transactions.length + page.investments.length === 0) {
+        throw new Error('Invalid history cursor')
+      }
+      seenCursors.add(cursor)
+    }
+  } while (cursor)
+  return transactions.sort((a, b) => b.date.localeCompare(a.date))
 }
 
 export function useFinanceData(
   dateRange: { startDate: string; endDate: string },
-  masterCurrency: string
+  masterCurrency: string,
+  { historyEnabled = false, dashboardEnabled = true }: { historyEnabled?: boolean; dashboardEnabled?: boolean } = {}
 ) {
   const { data: accounts, status: accountsStatus, load: loadAccounts } = useLoadableData<Account[]>([])
-  const { data: transactions, status: transactionsStatus, load: loadTransactions } = useLoadableData<Transaction[]>([])
-  const { data: allTransactions, status: historyStatus, load: loadHistory } = useLoadableData<Transaction[]>([])
+  const { data: transactions, status: transactionsStatus, load: loadTransactions, invalidate: invalidateTransactions } = useLoadableData<Transaction[]>([])
+  const { data: allTransactions, status: historyStatus, load: loadHistory, invalidate: invalidateHistory } = useLoadableData<Transaction[]>([])
   const { data: upcomingTransactions, status: upcomingStatus, load: loadUpcoming } = useLoadableData<Transaction[]>([])
   const { data: categories, status: categoriesStatus, load: loadCategories } = useLoadableData<Category[]>([])
   const { data: netWorthResult, status: netWorthStatus, load: loadNetWorth } = useLoadableData<{ value: number | null; currency: string; missingCurrencies: string[] } | null>(null)
@@ -174,13 +204,16 @@ export function useFinanceData(
   const { data: ratesResult, status: ratesStatus, load: loadRates } = useLoadableData<{ rates: Record<string, number>; currency: string }>({ rates: {}, currency: masterCurrency })
   const [investmentRefreshKey, setInvestmentRefreshKey] = useState(0)
 
-  const fetchData = useCallback(async () => {
+  const accountsRequest = useRef<Promise<Account[]>>(Promise.resolve([]))
+  const periodAbort = useRef<AbortController | null>(null)
+  const historyAbort = useRef<AbortController | null>(null)
+
+  const fetchCore = useCallback(async () => {
     setInvestmentRefreshKey(previous => previous + 1)
     const accountsPromise = readArray(`${API_BASE_URL}/accounts`, isAccount)
+    accountsRequest.current = accountsPromise
     await Promise.all([
       loadAccounts(() => accountsPromise),
-      loadTransactions(() => readHistory(accountsPromise, dateRange)),
-      loadHistory(() => readHistory(accountsPromise)),
       loadUpcoming(() => readArray(`${API_BASE_URL}/transactions/upcoming`, isTransaction)),
       loadCategories(() => readArray(`${API_BASE_URL}/categories`, isCategory)),
       loadNetWorth(async () => {
@@ -191,8 +224,31 @@ export function useFinanceData(
       }),
       loadRates(async () => ({ rates: await readExchangeRates(masterCurrency), currency: masterCurrency })),
     ])
-  }, [dateRange.startDate, dateRange.endDate, masterCurrency, loadAccounts, loadTransactions,
-    loadHistory, loadUpcoming, loadCategories, loadNetWorth, loadRates])
+  }, [masterCurrency, loadAccounts, loadUpcoming, loadCategories, loadNetWorth, loadRates])
+
+  const fetchPeriod = useCallback(async () => {
+    periodAbort.current?.abort()
+    const controller = new AbortController()
+    periodAbort.current = controller
+    await loadTransactions(() => readHistory(accountsRequest.current, dateRange, controller.signal))
+  }, [dateRange.startDate, dateRange.endDate, masterCurrency, loadTransactions])
+
+  const fetchHistory = useCallback(async () => {
+    historyAbort.current?.abort()
+    const controller = new AbortController()
+    historyAbort.current = controller
+    await loadHistory(() => readHistory(accountsRequest.current, undefined, controller.signal))
+  }, [masterCurrency, loadHistory])
+
+  const fetchData = useCallback(async () => {
+    // Hidden snapshots become stale without triggering background downloads.
+    periodAbort.current?.abort()
+    historyAbort.current?.abort()
+    invalidateTransactions()
+    invalidateHistory()
+    await Promise.all([fetchCore(), dashboardEnabled ? fetchPeriod() : undefined,
+      historyEnabled ? fetchHistory() : undefined])
+  }, [fetchCore, fetchPeriod, fetchHistory, dashboardEnabled, historyEnabled, invalidateTransactions, invalidateHistory])
 
   const fetchInvestmentValue = useCallback(async () => {
     await loadInvestmentValue(async () => {
@@ -228,7 +284,10 @@ export function useFinanceData(
     })
   }, [accounts, masterCurrency, loadInvestmentValue])
 
-  useEffect(() => { void fetchData() }, [fetchData])
+  useEffect(() => { void fetchCore() }, [fetchCore])
+  useEffect(() => { if (dashboardEnabled) void fetchPeriod() }, [dashboardEnabled, fetchPeriod])
+  useEffect(() => { if (historyEnabled) void fetchHistory() }, [historyEnabled, fetchHistory])
+  useEffect(() => () => { periodAbort.current?.abort(); historyAbort.current?.abort() }, [])
   useEffect(() => {
     if (accountsStatus.loaded) void fetchInvestmentValue()
   }, [accountsStatus.loaded, fetchInvestmentValue])

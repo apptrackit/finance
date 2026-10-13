@@ -6,7 +6,8 @@ export type NamedDataStatus = { label: string; status: DataLoadStatus }
 
 export function FinanceDataStatus({ datasets, onRetry }: { datasets: NamedDataStatus[]; onRetry: () => void }) {
   const failures = datasets.filter(({ status }) => status.error)
-  if (failures.length === 0) return null
+  if (failures.length === 0) return datasets.some(({ status }) => status.loaded && (status.loading || status.stale))
+    ? <p role="status" className="mb-4 text-sm text-muted-foreground">Refreshing financial data…</p> : null
   const retrying = failures.some(({ status }) => status.loading)
 
   return (
