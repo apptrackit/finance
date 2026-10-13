@@ -5,19 +5,22 @@ import { NetWorthTrendChart } from './NetWorthTrendChart'
 import { buildCashBalanceMonthComparison } from './cash-balance-comparison'
 import type { CashBalanceComparisonPoint } from './cash-balance-comparison'
 
-const state = vi.hoisted(() => ({ privacyMode: 'visible', tooltipDay: 2 }))
+const state = vi.hoisted(() => ({ privacyMode: 'visible', tooltipDay: 2, points: [] as CashBalanceComparisonPoint[] }))
 vi.mock('../../context/PrivacyContext', () => ({ usePrivacy: () => ({ privacyMode: state.privacyMode }) }))
 vi.mock('recharts', () => ({
   ResponsiveContainer: ({ children }: { children: ReactNode }) => <div>{children}</div>,
   AreaChart: ({ children }: { children: ReactNode }) => <div>{children}</div>,
-  ComposedChart: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  ComposedChart: ({ children, data }: { children: ReactNode; data: CashBalanceComparisonPoint[] }) => {
+    state.points = data
+    return <div>{children}</div>
+  },
   Area: ({ dataKey, strokeDasharray }: { dataKey: string; strokeDasharray?: string }) => <div data-testid={`series-${dataKey}`} data-dashes={strokeDasharray} />,
   Line: ({ dataKey, strokeDasharray }: { dataKey: string; strokeDasharray?: string }) => <div data-testid={`series-${dataKey}`} data-dashes={strokeDasharray} />,
   XAxis: () => null,
   YAxis: ({ tickFormatter }: { tickFormatter: (value: number) => string }) => <div data-testid="axis-value">{tickFormatter(1000)}</div>,
   CartesianGrid: () => null,
   Tooltip: ({ content }: { content: (props: unknown) => ReactNode }) => <div data-testid="tooltip">{content({
-    active: true, payload: [{ dataKey: 'previous', value: 1000, payload: comparison().points[state.tooltipDay - 1] }], label: state.tooltipDay,
+    active: true, payload: [{ dataKey: 'previous', value: 1000, payload: state.points[state.tooltipDay - 1] }], label: state.tooltipDay,
   })}</div>,
 }))
 
@@ -31,7 +34,7 @@ const renderChart = () => render(<NetWorthTrendChart data={data} masterCurrency=
 const toggle = () => fireEvent.click(screen.getByRole('button', { name: 'Compare previous month' }))
 
 describe('Cash Balance Trend comparison', () => {
-  beforeEach(() => { state.privacyMode = 'visible'; state.tooltipDay = 2 })
+  beforeEach(() => { state.privacyMode = 'visible'; state.tooltipDay = 2; state.points = [] })
 
   it('is opt-in, labels both months, and replaces the EMA only while comparing', () => {
     renderChart()
@@ -45,12 +48,14 @@ describe('Cash Balance Trend comparison', () => {
     expect(screen.getByText('September 2026')).toBeInTheDocument()
     expect(screen.getByText('Oct 13, 2026 vs Sep 13, 2026 · latest shared day')).toBeInTheDocument()
     expect(within(screen.getByTestId('tooltip')).getByText('+200 HUF (+20.0%)')).toBeInTheDocument()
+    expect(screen.queryByRole('slider')).not.toBeInTheDocument()
+    expect(screen.queryByText(/Inspect day/)).not.toBeInTheDocument()
     toggle()
     expect(screen.getByTestId('series-smoothed')).toBeInTheDocument()
     expect(screen.queryByRole('slider')).not.toBeInTheDocument()
   })
 
-  it('shows only the prior actual value on current-month future days in tooltip and touch/keyboard inspection', () => {
+  it('shows only the prior actual value on current-month future days in the tooltip', () => {
     state.tooltipDay = 14
     renderChart()
     toggle()
@@ -58,11 +63,7 @@ describe('Cash Balance Trend comparison', () => {
     expect(tooltip.getByText('Sep 14, 2026')).toBeInTheDocument()
     expect(tooltip.queryByText('Oct 14, 2026')).not.toBeInTheDocument()
     expect(tooltip.queryByText('Difference:')).not.toBeInTheDocument()
-    const slider = screen.getByRole('slider', { name: 'Inspect calendar day' })
-    expect(slider).toHaveValue('13')
-    fireEvent.change(slider, { target: { value: '14' } })
-    expect(screen.getByText('Inspect day 14')).toBeInTheDocument()
-    expect(screen.getAllByText('Sep 14, 2026')).toHaveLength(2)
+    expect(tooltip.getByText('Only the previous month has an actual balance on this day.')).toBeInTheDocument()
   })
 
   it('masks amounts, deltas, percentages and axes throughout comparison', () => {
@@ -90,6 +91,7 @@ describe('Cash Balance Trend comparison', () => {
   })
 
   it('uses the last common day for short months and omits percentages for zero/negative previous balances', () => {
+    state.tooltipDay = 31
     const result = comparison()
     result.points = result.points.map((point): CashBalanceComparisonPoint => ({ ...point, previous: point.day <= 28 ? 0 : null, previousDate: point.day <= 28 ? `2026-02-${String(point.day).padStart(2, '0')}` : null, selected: -100, selectedDate: `2026-03-${String(point.day).padStart(2, '0')}` }))
     result.selectedMonth = '2026-03-01'
@@ -97,9 +99,8 @@ describe('Cash Balance Trend comparison', () => {
     render(<NetWorthTrendChart data={data} masterCurrency="HUF" comparison={result} />)
     toggle()
     expect(screen.getByText('Mar 28, 2026 vs Feb 28, 2026 · latest shared day')).toBeInTheDocument()
-    expect(screen.getByRole('slider')).toHaveValue('28')
     expect(screen.getAllByText('-100 HUF').length).toBeGreaterThan(0)
-    fireEvent.change(screen.getByRole('slider'), { target: { value: '31' } })
     expect(screen.getByText('The previous month has no matching calendar day.')).toBeInTheDocument()
+    expect(screen.getByTestId('tooltip')).not.toHaveTextContent('%')
   })
 })

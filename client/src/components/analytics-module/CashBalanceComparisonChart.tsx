@@ -1,4 +1,4 @@
-import { useId, useState } from 'react'
+import { useId } from 'react'
 import { format, parseISO } from 'date-fns'
 import { Area, CartesianGrid, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { usePrivacy } from '../../context/PrivacyContext'
@@ -38,11 +38,8 @@ function ComparisonReadout({ point, currency }: { point: CashBalanceComparisonPo
 export function CashBalanceComparisonChart({ comparison, currency }: { comparison: CashBalanceComparison; currency: string }) {
   const { privacyMode } = usePrivacy()
   const gradientId = useId()
-  const inspectId = useId()
   const common = comparison.points.filter(point => point.selected !== null && point.previous !== null)
   const latestCommon = common[common.length - 1]
-  const [inspectionDay, setInspectionDay] = useState(latestCommon?.day ?? 1)
-  const point = comparison.points[Math.min(inspectionDay, comparison.points.length) - 1]
   const values = comparison.points.flatMap(item => [item.selected, item.previous]).filter((value): value is number => value !== null)
   const min = Math.min(...values)
   const max = Math.max(...values)
@@ -78,16 +75,10 @@ export function CashBalanceComparisonChart({ comparison, currency }: { compariso
               const activePoint = payload?.[0]?.payload as CashBalanceComparisonPoint | undefined
               return active && activePoint ? <div className="min-w-48 rounded-lg border border-border bg-card p-3 shadow-lg"><ComparisonReadout point={activePoint} currency={currency} /></div> : null
             }} />
-            <Area type="stepAfter" dataKey="selected" name={selectedLabel} stroke="hsl(var(--primary))" strokeWidth={2.5} fill={`url(#${gradientId})`} dot={{ r: 2, fill: 'hsl(var(--primary))', strokeWidth: 0 }} connectNulls={false} isAnimationActive={false} />
-            <Line type="stepAfter" dataKey="previous" name={previousLabel} stroke="hsl(var(--muted-foreground))" strokeWidth={1.5} dot={{ r: 2, fill: 'hsl(var(--card))', strokeWidth: 1.5 }} connectNulls={false} isAnimationActive={false} />
+            <Area type="monotone" dataKey="selected" name={selectedLabel} stroke="hsl(var(--primary))" strokeWidth={2.5} fill={`url(#${gradientId})`} dot={{ r: 2, fill: 'hsl(var(--primary))', strokeWidth: 0 }} connectNulls={false} isAnimationActive={false} />
+            <Line type="monotone" dataKey="previous" name={previousLabel} stroke="hsl(var(--muted-foreground))" strokeWidth={1.5} dot={{ r: 2, fill: 'hsl(var(--card))', strokeWidth: 1.5 }} connectNulls={false} isAnimationActive={false} />
           </ComposedChart>
         </ResponsiveContainer>
-      </div>
-      <div className="rounded-lg border border-border/60 bg-background/50 p-3 mx-2 sm:mx-0">
-        <label htmlFor={inspectId} className="text-xs font-medium">Inspect day {point.day}</label>
-        <input id={inspectId} type="range" min={1} max={comparison.points.length} value={point.day} onChange={event => setInspectionDay(Number(event.target.value))}
-          className="my-2 block min-h-6 w-full accent-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring" aria-label="Inspect calendar day" />
-        <div aria-live="polite" aria-atomic="true"><ComparisonReadout point={point} currency={currency} /></div>
       </div>
     </div>
   )

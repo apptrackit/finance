@@ -13,20 +13,21 @@ Cash Balance Trend                    [Compare previous month]
                daily balance chart
           calendar day: 1 … 13 … 31
 
-Inspect day  [────────●────────────────────]
-October 13, 2026: 420,000 HUF | September 13, 2026: 390,000 HUF
-Difference: +30,000 HUF (+7.7%)
+Hover tooltip: October 13, 2026: 420,000 HUF
+               September 13, 2026: 390,000 HUF
+               Difference: +30,000 HUF (+7.7%)
 ```
 
 Mobile stacks the title, control, wrapping legend and summary. The chart stays
-full width; the inspection readout stacks its two dates. Hover shows the same
-readout in a tooltip. A labeled day slider supports touch and keyboard inspection
-without requiring a precise chart hit target.
+full width; both dates and the difference appear in the chart tooltip. Keep the
+chart's native touch and keyboard interaction; there is no inspection section
+below the plot.
 
 - Selected month: strong solid line with fill. Previous month: thinner solid
   muted line with hollow markers, no fill. Explicit month/year labels and marker
   shapes distinguish the series beyond color. Hide the moving average only
-  while comparison is active.
+  while comparison is active. Both series use smooth monotone curves through
+  the daily balances; tooltip values remain the exact daily ledger balances.
 - Use end-of-day posted balances, including linked transfer legs, and carry
   balances across days without transactions. Pending upcoming and MCP review
   rows, cancelled rows and investments never enter the comparison.
@@ -46,7 +47,7 @@ without requiring a precise chart hit target.
   Inspection after that date shows only the longer month's available value.
 - Show signed absolute differences; show percentages only when the previous
   balance is positive. Zero/negative prior balances omit percentage comparisons.
-- Mask axis, summary, tooltip and inspection amounts/deltas in privacy mode.
+- Mask axis, summary and tooltip amounts/deltas in privacy mode.
   Missing required FX withholds converted charts via the existing Analytics
   warning/retry flow. Missing history disables comparison with an explanation.
 - Comparison is local to the card and initially off. It introduces no stored
