@@ -33,7 +33,7 @@ export const NetWorthTrendChart = memo(function NetWorthTrendChart({ data, maste
             <TrendingUp className="h-4 w-4 text-muted-foreground" />
             <CardTitle className="text-sm sm:text-base">{title}</CardTitle>
           </div>
-          {comparison && <Button type="button" size="sm" variant={comparing ? 'default' : 'outline'} className="self-start sm:self-auto"
+          {comparison && <Button type="button" size="sm" variant={comparing ? 'default' : 'outline'} className="self-start enabled:cursor-pointer sm:self-auto"
             aria-pressed={comparing} disabled={Boolean(unavailableReason)} aria-describedby={unavailableReason ? reasonId : undefined} onClick={() => setCompare(previous => !previous)}>
             {comparing ? 'Hide comparison' : 'Compare previous month'}
           </Button>}
