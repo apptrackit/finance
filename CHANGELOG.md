@@ -8,6 +8,7 @@ Intermediate package/UI version bumps are grouped under the next published GitHu
 
 ### Fixed
 
+- Background refreshes use a compact spinner above mobile navigation or in the desktop corner, keeping page content stationary when the indicator appears and disappears. The indicator respects reduced motion and retains screen-reader feedback.
 - Analytics Money Map retains its Sankey chart on phones and uses smaller side margins to spread flows across the available width. Narrow-chart labels stay within their flow columns; tap and keyboard inspection show full category names and amounts with privacy masking.
 
 ### Added

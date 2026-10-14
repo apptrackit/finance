@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { LoaderCircle } from 'lucide-react'
 import type { DataLoadStatus } from '../../hooks/useLoadableData'
 import { Button } from './button'
 
@@ -7,7 +8,13 @@ export type NamedDataStatus = { label: string; status: DataLoadStatus }
 export function FinanceDataStatus({ datasets, onRetry }: { datasets: NamedDataStatus[]; onRetry: () => void }) {
   const failures = datasets.filter(({ status }) => status.error)
   if (failures.length === 0) return datasets.some(({ status }) => status.loaded && (status.loading || status.stale))
-    ? <p role="status" className="mb-4 text-sm text-muted-foreground">Refreshing financial data…</p> : null
+    ? (
+      <div role="status" className="pointer-events-none fixed bottom-[calc(5rem+env(safe-area-inset-bottom))] right-4 z-40 flex items-center gap-2 rounded-full border border-border bg-card/95 px-3 py-2 text-xs text-muted-foreground shadow-sm lg:bottom-5 lg:right-6">
+        <LoaderCircle aria-hidden="true" className="h-3.5 w-3.5 animate-spin motion-reduce:animate-none" />
+        <span aria-hidden="true">Refreshing</span>
+        <span className="sr-only">Refreshing financial data…</span>
+      </div>
+    ) : null
   const retrying = failures.some(({ status }) => status.loading)
 
   return (
