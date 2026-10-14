@@ -42,6 +42,7 @@ beforeEach(() => {
     '/accounts': [{ id: 'cash', name: 'Private account', type: 'cash', balance: 98765, currency: 'HUF', updated_at: 1 }],
     '/transactions': [{ id: 'transaction', account_id: 'cash', amount: -54321, date: '2026-09-01' }],
     '/transactions/date-range': [{ id: 'transaction', account_id: 'cash', amount: -54321, date: '2026-09-01' }],
+    '/financial-outlook/latest': { snapshot: null }, '/financial-outlook-snapshots': { snapshots: [], next_cursor: null },
     '/transactions/upcoming': [], '/categories': [], '/dashboard/net-worth': { net_worth: 98765 },
     '/v6/latest/HUF': { rates: { HUF: 1 } },
   })
@@ -72,6 +73,46 @@ async function retry() {
 }
 
 describe('finance read errors in App', () => {
+  it('keeps the Analytics initial loader until saved forecasts settle too', async () => {
+    const baseFetch = fetchMock.getMockImplementation()!
+    let release: (response: Response) => void = () => {}
+    fetchMock.mockImplementation(async (input, options) => String(input).includes('/financial-outlook/latest')
+      ? new Promise(resolve => { release = resolve }) : baseFetch(input, options))
+    renderApp('/analytics')
+    await waitFor(() => expect(screen.getByText('Loaded analytics')).not.toBeVisible())
+    expect(screen.getAllByRole('status', { name: 'Loading your finances' })).toHaveLength(1)
+    await waitFor(() => expect(fetchMock.mock.calls.some(([input]) => String(input).includes('/financial-outlook/latest'))).toBe(true))
+    release(Response.json({ snapshot: null }))
+    await waitFor(() => expect(screen.getByText('Loaded analytics')).toBeVisible())
+    expect(screen.queryByRole('status', { name: 'Loading your finances' })).not.toBeInTheDocument()
+  })
+
+  it('releases the initial loader after a forecast failure and offers Retry with available Analytics intact', async () => {
+    failures.add('/financial-outlook/latest')
+    renderApp('/analytics')
+    expect(await screen.findByRole('alert')).toHaveTextContent('Financial forecasts: Unavailable.')
+    await waitFor(() => expect(screen.getByText('Loaded analytics')).toBeVisible())
+    expect(screen.queryByRole('status', { name: 'Loading your finances' })).not.toBeInTheDocument()
+    expect(screen.queryByText(/Private account balance/)).not.toBeInTheDocument()
+    failures.clear()
+    await retry()
+    await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument())
+  })
+
+  it.each(['/dashboard', '/analytics'])('shows one initial loading screen for %s while the page data is incomplete', async path => {
+    const baseFetch = fetchMock.getMockImplementation()!
+    let release: (response: Response) => void = () => {}
+    fetchMock.mockImplementation(async (input, options) => String(input).includes('/transactions/history')
+      ? new Promise(resolve => { release = resolve }) : baseFetch(input, options))
+    renderApp(path)
+    expect(screen.getAllByRole('status', { name: 'Loading your finances' })).toHaveLength(1)
+    expect(screen.queryByText('Loaded ledger')).not.toBeInTheDocument()
+    await waitFor(() => expect(fetchMock.mock.calls.some(([input]) => String(input).includes('/transactions/history'))).toBe(true))
+    release(Response.json({ transactions: payloads['/transactions'], investments: [], revision: 1, nextCursor: null }))
+    await waitFor(() => expect(screen.queryByRole('status', { name: 'Loading your finances' })).not.toBeInTheDocument())
+    expect(screen.getByText(path === '/dashboard' ? 'Loaded ledger' : 'Loaded analytics')).toBeVisible()
+  })
+
   it('requests complete history only after Analytics or global search opens', async () => {
     renderApp()
     expect(await screen.findByText('Loaded ledger')).toBeInTheDocument()

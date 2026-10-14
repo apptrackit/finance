@@ -1,113 +1,28 @@
-import { sumAvailable, validRates, convertCurrency } from '../../../../shared/currency'
+import { sumAvailable, convertCurrency } from '../../../../shared/currency'
 import { MissingExchangeRates } from '../common/MissingExchangeRates'
-import { useState, useEffect } from 'react'
-import { API_BASE_URL, apiFetch } from '../../config'
+import { useState } from 'react'
+import { useOutletContext } from 'react-router'
+import type { FinancePageContext } from '../../App'
+import { FinanceDataBoundary } from '../common/FinanceDataStatus'
 import { usePrivacy } from '../../context/PrivacyContext'
-import type { Account, Transaction, MarketQuote, Category, PortfolioStats } from './types'
+import type { PortfolioStats } from './types'
 import { calculatePosition, convertToDisplayCurrency } from './utils'
 import { PortfolioSummary } from './PortfolioSummary'
 import { HoldingsList } from './HoldingsList'
 import { InvestmentDetailModal } from './InvestmentDetailModal'
 
-const formatInvestmentTransactionDescription = (transaction: any, quoteCurrency: string) => {
-  const price = Number(transaction.price)
-  const notes = transaction.notes as string | undefined
-  if (notes?.startsWith('Transfer from ') && Number.isFinite(price) && price > 0) {
-    const source = notes.replace(/\s*\([^)]*\)/, '')
-    const noteSuffix = source.match(/\s-\s.*$/)?.[0] || ''
-    const sourceName = source.replace(/\s-\s.*$/, '').trim()
-    return `${sourceName} (${transaction.quantity} shares @ ${quoteCurrency} ${price.toFixed(2)}/share)${noteSuffix}`
-  }
-  return notes || `${transaction.quantity} shares @ ${quoteCurrency} ${price}`
-}
-
 export function Investments() {
-  const [investmentAccounts, setInvestmentAccounts] = useState<Account[]>([])
-  const [allTransactions, setAllTransactions] = useState<Transaction[]>([])
-  const [categories, setCategories] = useState<Category[]>([])
-  const [quotes, setQuotes] = useState<Record<string, MarketQuote>>({})
-  const [exchangeRates, setExchangeRates] = useState<Record<string, number>>({})
-  const [refreshing, setRefreshing] = useState(false)
-  const [loading, setLoading] = useState(true)
-  const [selectedAccount, setSelectedAccount] = useState<Account | null>(null)
-  const [currencyDisplay, setCurrencyDisplay] = useState<'HUF' | 'USD'>('HUF')
-  
+  const { investments } = useOutletContext<FinancePageContext>()
+  const { data, status, refresh: fetchData, currencyDisplay, setCurrencyDisplay } = investments
+  const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null)
   const { privacyMode } = usePrivacy()
-
-
-  const fetchData = async () => {
-    setRefreshing(true)
-    if (investmentAccounts.length === 0) setLoading(true)
-    
-    // Fetch accounts
-    const accountsRes = await apiFetch(`${API_BASE_URL}/accounts`)
-    const allAccounts = await accountsRes.json()
-    const investments = allAccounts.filter((acc: Account) => acc.type === 'investment' && acc.archived_at == null)
-    setInvestmentAccounts(investments)
-    
-    // Fetch investment transactions for all investment accounts
-    const allInvestmentTxs: Transaction[] = []
-    for (const acc of investments) {
-      const txRes = await apiFetch(`${API_BASE_URL}/investment-transactions?account_id=${acc.id}`)
-      const txData = await txRes.json()
-      // Convert investment transactions to regular transaction format for display
-      txData.forEach((itx: any) => {
-        allInvestmentTxs.push({
-          id: itx.id,
-          account_id: itx.account_id,
-          amount: itx.type === 'buy' ? itx.total_amount : -itx.total_amount,
-          quantity: itx.type === 'buy' ? itx.quantity : -itx.quantity,
-          price: itx.price,
-          description: formatInvestmentTransactionDescription(itx, acc.quote_currency || 'trading currency'),
-          date: itx.date,
-          is_recurring: false
-        })
-      })
-    }
-    setAllTransactions(allInvestmentTxs)
-    
-    // Fetch categories
-    const catRes = await apiFetch(`${API_BASE_URL}/categories`)
-    const catData = await catRes.json()
-    setCategories(catData)
-    
-    // Fetch market quotes for the newly fetched investment accounts
-    const symbolsToFetch = investments
-      .filter((acc: Account) => acc.asset_type !== 'manual' && acc.symbol)
-      .map((acc: Account) => acc.symbol!)
-    const uniqueSymbols = [...new Set(symbolsToFetch)] as string[]
-    
-    const newQuotes: Record<string, MarketQuote> = {}
-    await Promise.all(uniqueSymbols.map(async (symbol: string) => {
-      try {
-        const res = await apiFetch(`${API_BASE_URL}/market/quote?symbol=${encodeURIComponent(symbol)}`)
-        if (res.ok) {
-          const data = await res.json()
-          newQuotes[symbol] = data
-        }
-      } catch {
-        console.error('Failed to fetch market quote')
-      }
-    }))
-    setQuotes(newQuotes)
-    
-    // Fetch exchange rates for manual assets (USD base)
-    try {
-      const ratesRes = await fetch('https://open.er-api.com/v6/latest/USD')
-      if (!ratesRes.ok) throw new Error('Rates unavailable')
-      const ratesData = await ratesRes.json()
-      setExchangeRates(validRates(ratesData.rates))
-    } catch {
-      setExchangeRates({})
-    }
-    
-    setRefreshing(false)
-    setLoading(false)
-  }
-
-  useEffect(() => {
-    fetchData()
-  }, [])
+  const investmentAccounts = data?.accounts ?? []
+  const selectedAccount = investmentAccounts.find(account => account.id === selectedAccountId) ?? null
+  const allTransactions = data?.transactions ?? []
+  const categories = data?.categories ?? []
+  const quotes = data?.quotes ?? {}
+  const exchangeRates = data?.exchangeRates ?? {}
+  const refreshing = status.loading
 
   const getAccountTransactions = (accountId: string) => {
     return allTransactions.filter(tx => tx.account_id === accountId)
@@ -140,9 +55,10 @@ export function Investments() {
   ])].sort()
 
   return (
+    <FinanceDataBoundary label="Investments" datasets={[{ label: 'Investment portfolio', status }]}>
     <div className="space-y-6">
-      {!loading && <MissingExchangeRates currencies={missingCurrencies} targetCurrency={currencyDisplay}
-        onRetry={() => { void fetchData() }} retrying={refreshing} />}
+      <MissingExchangeRates currencies={missingCurrencies} targetCurrency={currencyDisplay}
+        onRetry={() => { void fetchData() }} retrying={refreshing} />
       {/* Currency Toggle */}
       <div className="flex justify-end gap-2">
         <button
@@ -170,7 +86,7 @@ export function Investments() {
       {/* Portfolio Summary */}
       <PortfolioSummary
         stats={stats}
-        loading={loading}
+        loading={false}
         privacyMode={privacyMode}
         displayCurrency={currencyDisplay}
         convertToDisplayCurrency={convertDisplayCurrency}
@@ -181,11 +97,11 @@ export function Investments() {
       <HoldingsList
         positions={stats.positions}
         quotes={quotes}
-        loading={loading}
+        loading={false}
         refreshing={refreshing}
         privacyMode={privacyMode}
         onRefresh={fetchData}
-        onOpenDetail={setSelectedAccount}
+        onOpenDetail={account => setSelectedAccountId(account.id)}
       />
 
       {/* Investment Detail Modal */}
@@ -196,8 +112,9 @@ export function Investments() {
         quotes={quotes}
         exchangeRates={exchangeRates}
         privacyMode={privacyMode}
-        onClose={() => setSelectedAccount(null)}
+        onClose={() => setSelectedAccountId(null)}
       />
     </div>
+    </FinanceDataBoundary>
   )
 }
