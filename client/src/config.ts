@@ -15,8 +15,15 @@ export const API_BASE_URL = isDev
   ? '/api'  // Proxied through Vite in development
   : `${protocol}://${API_DOMAIN}`
 
-// API Key for authentication
-const API_KEY = import.meta.env.VITE_API_KEY || ''
+// Public is an explicit deployment choice, never an authentication fallback.
+export const API_AUTH_MODE = import.meta.env.VITE_API_AUTH_MODE || 'private'
+export const AUTH_REQUIRED_EVENT = 'finance-auth-required'
+
+export const getApiLoginUrl = () => {
+  const url = new URL(`${API_BASE_URL}/auth/login`, window.location.origin)
+  url.searchParams.set('returnTo', window.location.href)
+  return url.href
+}
 
 const getLocalDateString = () => {
   const now = new Date()
@@ -60,7 +67,6 @@ const MUTATING_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE'])
 
 const buildHeaders = (headers?: HeadersInit) => {
   const next = new Headers({
-    'X-API-Key': API_KEY,
     'X-Client-Date': getLocalDateString(),
   })
 
@@ -101,11 +107,26 @@ const createApiRequestError = async (response: Response) => {
 export const apiFetch = async (url: string, options: ApiFetchOptions = {}) => {
   const { throwOnError, headers, ...fetchOptions } = options
   const method = (fetchOptions.method || 'GET').toUpperCase()
-  const response = await fetch(url, {
-    ...fetchOptions,
-    // No credentials needed since we use API key authentication
-    headers: buildHeaders(headers),
-  })
+  let response: Response
+  try {
+    response = await fetch(url, {
+      ...fetchOptions,
+      credentials: 'include',
+      redirect: 'error',
+      headers: buildHeaders(headers),
+    })
+  } catch (error) {
+    // Access may block a cross-origin request before the Worker can return JSON.
+    // Do not retry writes or navigate away from unsaved financial forms.
+    if (API_AUTH_MODE === 'private' && !fetchOptions.signal?.aborted &&
+        !(error instanceof DOMException && error.name === 'AbortError')) {
+      window.dispatchEvent(new Event(AUTH_REQUIRED_EVENT))
+    }
+    throw error
+  }
+  if (API_AUTH_MODE === 'private' && (response.status === 401 || response.status === 403)) {
+    window.dispatchEvent(new Event(AUTH_REQUIRED_EVENT))
+  }
 
   if (!response.ok && (throwOnError ?? MUTATING_METHODS.has(method))) {
     throw await createApiRequestError(response)
@@ -113,34 +134,3 @@ export const apiFetch = async (url: string, options: ApiFetchOptions = {}) => {
 
   return response
 }
-
-// ===========================================
-// HOW SECURITY WORKS (Client Side)
-// ===========================================
-//
-// 1. CLOUDFLARE ACCESS (First Layer)
-//    - When you visit finance.yourdomain.com, Cloudflare Access
-//      intercepts the request BEFORE it reaches the app
-//    - You must authenticate with your email (one-time code)
-//    - Only allowed emails can access the frontend
-//    - Session lasts 24 hours (configurable)
-//
-// 2. API KEY (Second Layer)
-//    - Every API request includes X-API-Key header
-//    - The API rejects requests without valid key
-//    - Key is loaded from environment variable (not hardcoded)
-//    - Even if someone bypasses Cloudflare Access, they need the key
-//
-// 3. CORS (Third Layer)
-//    - API only accepts requests from your domain
-//    - Browsers block cross-origin requests from other websites
-//    - Someone can't make a website that calls your API
-//
-// 4. HTTPS (Fourth Layer)
-//    - All traffic is encrypted
-//    - Cloudflare provides free SSL certificates
-//
-// FLOW:
-// User → Cloudflare Access (email auth) → Frontend → API (with key) → Database
-//
-// ===========================================

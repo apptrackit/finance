@@ -4,17 +4,26 @@
 
 # Client (also used by a full release)
 PROJECT_NAME=finance
-API_URL=https://finance-api.example.workers.dev
-API_SECRET=your-browser-api-key
+API_URL=https://api.finance.example.com
+
+# Exactly two modes: private (default) or public (demo data only).
+# Client and API must be deployed with the same mode. No browser API key.
+API_AUTH_MODE=private
+API_ACCESS_TEAM_DOMAIN=https://your-team.cloudflareaccess.com
+API_ACCESS_AUD=your-api-access-application-audience
+API_ACCESS_ALLOWED_EMAIL=you@example.com
 
 # Shared D1 binding for API, MCP, and migrations
 DATABASE_NAME=finance-db
 DATABASE_ID=your-d1-database-id
 
-# API (API_SECRET above is also required)
+# API
 API_WORKER_NAME=finance-api
 ALLOWED_ORIGINS=https://finance.example.com
-# A full release discovers API_URL after the first API deployment if unset.
+# Public mode can discover a workers.dev API_URL after the first deployment.
+# Private mode requires API_URL to be a custom domain, preferably on the same
+# site as the frontend (for example finance.example.com and api.finance.example.com).
+# Configure Cloudflare Access before deploying; see docs/api-access.md.
 # An explicitly configured API_URL (including a custom domain) is preserved.
 
 # Full releases ask once and remember this choice. Change it with

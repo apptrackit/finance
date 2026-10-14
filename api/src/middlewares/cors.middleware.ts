@@ -1,29 +1,30 @@
-import { Context, Next } from 'hono'
-import { Bindings } from '../types/environment.types'
+import type { Context, Next } from 'hono'
+import type { Bindings } from '../types/environment.types'
+
+export function allowedOrigins(env: Bindings): string[] {
+  // Credentialed browser access and login redirects require exact origins.
+  return (env.ALLOWED_ORIGINS || '').split(',').map(value => value.trim()).filter(value => {
+    try {
+      const url = new URL(value)
+      return ['http:', 'https:'].includes(url.protocol) && url.origin === value && !url.username && !url.password
+    } catch { return false }
+  })
+}
 
 export async function corsMiddleware(c: Context<{ Bindings: Bindings }>, next: Next) {
+  c.header('Cache-Control', 'no-store')
+  c.header('Vary', 'Origin')
   const origin = c.req.header('Origin')
-  const allowedOriginsStr = c.env.ALLOWED_ORIGINS || ''
-  const allowedOrigins = allowedOriginsStr.split(',').map(o => o.trim()).filter(o => o)
 
-  // Reject requests without Origin header (non-browser requests)
+  // Only this authenticated navigation endpoint accepts a missing Origin.
+  // Its handler independently validates the return URL's exact origin.
+  if (!origin && c.req.method === 'GET' && c.req.path === '/auth/login') return next()
   if (!origin) {
     return c.json({ error: 'Origin header required' }, 403)
   }
 
   // Check if origin is allowed
-  let isAllowed = false
-  for (const allowed of allowedOrigins) {
-    if (origin === allowed) {
-      isAllowed = true
-      break
-    }
-    // Allow subdomains if configured with wildcard
-    if (allowed.startsWith('*.') && origin.endsWith(allowed.substring(1))) {
-      isAllowed = true
-      break
-    }
-  }
+  const isAllowed = allowedOrigins(c.env).includes(origin)
 
   // Reject requests from unauthorized origins
   if (!isAllowed) {
@@ -32,10 +33,11 @@ export async function corsMiddleware(c: Context<{ Bindings: Bindings }>, next: N
 
   // Set CORS headers for allowed origins
   c.header('Access-Control-Allow-Origin', origin)
-  c.header('Access-Control-Allow-Headers', 'Content-Type, X-API-Key, X-Client-Date')
+  c.header('Access-Control-Allow-Credentials', 'true')
+  c.header('Access-Control-Allow-Headers', 'Content-Type, X-Client-Date')
   c.header('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS')
 
-  // Handle preflight requests - return early without API key check
+  // Preflight returns no financial data and needs no identity.
   if (c.req.method === 'OPTIONS') {
     return c.body(null, 204)
   }

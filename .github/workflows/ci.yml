@@ -17,7 +17,7 @@ concurrency:
 
 env:
   CI: true
-  VITE_API_KEY: ci-placeholder
+  VITE_API_AUTH_MODE: public
   VITE_API_DOMAIN: localhost:8787
   WRANGLER_SEND_METRICS: 'false'
   # Exercise local-calendar dates across the UTC boundary.

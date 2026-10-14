@@ -3,8 +3,9 @@ compatibility_date = "2024-09-23"
 compatibility_flags = ["nodejs_compat"]
 main = "src/index.ts"
 
-# Enable workers.dev subdomain
-workers_dev = true
+# Local development works with this disabled. Private production uses a custom domain.
+workers_dev = false
+preview_urls = false
 
 # Custom domain route (optional - comment out if not using custom domain)
 # routes = [
@@ -22,7 +23,11 @@ database_id = "YOUR-DATABASE-ID-HERE"  # Replace with your D1 database ID
 [triggers]
 crons = ["0 0 * * *"] # Run daily at midnight to process recurring schedules
 
-# Local development environment variables
+# Authentication defaults to private. api/.dev.vars.example explicitly enables
+# public mode for local development; never use that setting for private finances.
 [vars]
-API_SECRET = "your-api-secret-here"
+API_AUTH_MODE = "private"
+API_ACCESS_TEAM_DOMAIN = "https://your-team.cloudflareaccess.com"
+API_ACCESS_AUD = "your-api-access-application-audience"
+API_ACCESS_ALLOWED_EMAIL = "you@example.com"
 ALLOWED_ORIGINS = "https://your-frontend-domain.com"

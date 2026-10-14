@@ -10,6 +10,8 @@ import { apiOrigin, createDeploymentReporter, d1Rows, deploy, deploymentPlan, mi
 const script = fileURLToPath(new URL('./deploy.mjs', import.meta.url))
 const fixtureConfig = {
   PROJECT_NAME: 'test-client', DATABASE_ID: '00000000-0000-4000-8000-000000000001', DATABASE_NAME: 'test-db',
+  API_AUTH_MODE: 'private', API_ACCESS_TEAM_DOMAIN: 'https://test-team.cloudflareaccess.com',
+  API_ACCESS_AUD: 'test-api-audience', API_ACCESS_ALLOWED_EMAIL: 'tester@example.com',
   API_WORKER_NAME: 'test-api', API_SECRET: 'test-only-key=$with\\special#chars',
   ALLOWED_ORIGINS: 'https://finance.test', API_URL: 'https://api.finance.test', DEPLOY_MCP: 'false',
   MCP_WORKER_NAME: 'test-mcp', MCP_ACCESS_TEAM_DOMAIN: 'test-team.cloudflareaccess.com',
@@ -124,30 +126,69 @@ test('deployment output has readable sections and limits ANSI colors to color mo
 })
 
 test('client-only needs no database/MCP config and deploys only the client to main', async t => {
-  const f = await fixture(t, { config: { PROJECT_NAME: 'test-client', API_URL: 'https://api.finance.test', API_SECRET: fixtureConfig.API_SECRET } })
+  const f = await fixture(t, { config: { PROJECT_NAME: 'test-client', API_URL: 'https://api.finance.test', API_AUTH_MODE: 'private' } })
   await f.execute(['client'])
   assert.equal(f.mutations().length, 1)
   assert.equal(f.mutations()[0].argv[0], 'pages')
   assert.deepEqual(f.mutations()[0].argv.slice(-2), ['--branch', 'main'])
   assert.equal(f.calls.filter(call => call.argv[0] === 'd1').length, 0)
   const build = f.calls.find(call => call.kind === 'npm' && call.argv.includes('build'))
-  assert.deepEqual(build.options.env, { VITE_API_DOMAIN: 'api.finance.test', VITE_API_KEY: fixtureConfig.API_SECRET })
+  assert.deepEqual(build.options.env, { VITE_API_DOMAIN: 'api.finance.test', VITE_API_AUTH_MODE: 'private' })
   assert.ok((await readFile(join(f.root, 'client/dist/_headers'), 'utf8')).includes('https://api.finance.test'))
   assert.ok(f.logs.includes('Cloudflare checks'))
   assert.ok(!f.logs.includes('Cloudflare and database'))
   await f.assertClean()
 })
 
+test('public mode is explicit and removes legacy keys from deployment and client configuration', async t => {
+  const f = await fixture(t, { config: { ...fixtureConfig, API_AUTH_MODE: 'public' } })
+  await f.execute(['--no-mcp'])
+  const worker = f.mutations().find(call => call.argv[0] === 'deploy').config
+  assert.equal(worker.vars.API_AUTH_MODE, 'public')
+  assert.deepEqual(worker.routes, [{ pattern: 'api.finance.test', custom_domain: true }])
+  assert.equal(worker.vars.API_ACCESS_AUD, undefined)
+  assert.equal(worker.vars.API_SECRET, undefined)
+  const build = f.calls.find(call => call.kind === 'npm' && call.argv.includes('build'))
+  assert.equal(build.options.env.VITE_API_AUTH_MODE, 'public')
+  assert.equal(build.options.env.VITE_API_KEY, undefined)
+  assert.equal(parseConfig(await readFile(join(f.root, '.deploy-config'), 'utf8')).API_SECRET, undefined)
+  await f.assertClean()
+})
+
+test('private is the default and invalid modes/domains stop before remote writes', async t => {
+  const config = { ...fixtureConfig }
+  delete config.API_AUTH_MODE
+  const defaults = await fixture(t, { config })
+  await defaults.execute(['api'])
+  assert.equal(defaults.mutations()[0].config.vars.API_AUTH_MODE, 'private')
+  for (const override of [
+    { API_AUTH_MODE: 'legacy' }, { API_AUTH_MODE: 'PUBLIC' },
+    { API_URL: 'https://test.workers.dev' }, { API_ACCESS_TEAM_DOMAIN: 'https://evil.test' },
+    { ALLOWED_ORIGINS: 'https://*.finance.test' },
+  ]) {
+    const f = await fixture(t, { config: { ...fixtureConfig, ...override } })
+    await assert.rejects(f.execute(['api']))
+    assert.equal(f.mutations().length, 0)
+    await f.assertClean()
+  }
+})
+
 for (const target of ['api', 'mcp']) {
   test(`${target}-only checks schema and deploys just its Worker`, async t => {
-    const keys = target === 'api' ? ['DATABASE_ID', 'API_SECRET', 'ALLOWED_ORIGINS'] : ['DATABASE_ID', 'MCP_ACCESS_TEAM_DOMAIN', 'MCP_ACCESS_AUD', 'MCP_ALLOWED_EMAIL']
+    const keys = target === 'api' ? ['DATABASE_ID', 'ALLOWED_ORIGINS', 'API_AUTH_MODE', 'API_URL', 'API_ACCESS_TEAM_DOMAIN', 'API_ACCESS_AUD', 'API_ACCESS_ALLOWED_EMAIL'] : ['DATABASE_ID', 'MCP_ACCESS_TEAM_DOMAIN', 'MCP_ACCESS_AUD', 'MCP_ALLOWED_EMAIL']
     const f = await fixture(t, { config: Object.fromEntries(keys.map(key => [key, fixtureConfig[key]])) })
     await f.execute([target])
     assert.equal(f.mutations().length, 1)
     assert.equal(f.mutations()[0].config.name, `finance-${target}`)
     assert.equal(f.mutations()[0].argv[f.mutations()[0].argv.indexOf('--tsconfig') + 1], join(f.root, target, 'tsconfig.json'))
     assert.ok(!f.calls.some(call => call.kind === 'npm' && call.argv.includes('client')))
-    if (target === 'api') assert.deepEqual(f.mutations()[0].secrets, { API_SECRET: fixtureConfig.API_SECRET, ALLOWED_ORIGINS: fixtureConfig.ALLOWED_ORIGINS })
+    if (target === 'api') {
+      assert.equal(f.mutations()[0].secrets, undefined)
+      assert.equal(f.mutations()[0].config.workers_dev, false)
+      assert.deepEqual(f.mutations()[0].config.routes, [{ pattern: 'api.finance.test', custom_domain: true }])
+      assert.equal(f.mutations()[0].config.vars.API_AUTH_MODE, 'private')
+      assert.equal(f.mutations()[0].config.vars.API_SECRET, undefined)
+    }
     else {
       assert.equal(f.mutations()[0].config.workers_dev, false)
       assert.equal(f.mutations()[0].config.vars.DISABLE_ACCESS_AUTH, undefined)
@@ -225,7 +266,7 @@ test('full release preserves MCP preference and completes checks before any remo
 })
 
 test('first full release discovers the API URL and rebuilds client with it, skipping MCP when requested', async t => {
-  const config = { ...fixtureConfig, DEPLOY_MCP: 'true' }
+  const config = { ...fixtureConfig, API_AUTH_MODE: 'public', DEPLOY_MCP: 'true' }
   delete config.API_URL
   const f = await fixture(t, { config })
   await f.execute(['--no-mcp'])

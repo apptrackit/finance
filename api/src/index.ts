@@ -42,7 +42,7 @@ import { FinancialOutlookController } from './controllers/financial-outlook.cont
 import { DataExportController } from './controllers/data-export.controller'
 
 // Middleware
-import { corsMiddleware } from './middlewares/cors.middleware'
+import { allowedOrigins, corsMiddleware } from './middlewares/cors.middleware'
 import { authMiddleware } from './middlewares/auth.middleware'
 import { rateLimitMiddleware } from './middlewares/rate-limit.middleware'
 
@@ -142,11 +142,28 @@ app.onError((err, c) => {
 // Apply CORS middleware globally.
 app.use('/*', corsMiddleware)
 
-// Apply authentication middleware globally (except OPTIONS which is handled by CORS)
+// Apply identity checks globally (OPTIONS is handled by CORS).
 app.use('*', authMiddleware)
 
 // Rate limit: 300 requests per 60 seconds per IP
 app.use('*', rateLimitMiddleware(300, 60))
+
+// Cloudflare establishes the API cookie during this top-level navigation.
+app.get('/auth/login', (c) => {
+  let destination: URL
+  try {
+    destination = new URL(c.req.query('returnTo') || '')
+    if (destination.username || destination.password || !allowedOrigins(c.env).includes(destination.origin)) {
+      throw new Error('Invalid return destination')
+    }
+  } catch {
+    return c.json({ error: 'Return URL must belong to an allowed frontend origin' }, 400)
+  }
+  c.header('Referrer-Policy', 'no-referrer')
+  return c.redirect(destination.href, 302)
+})
+
+app.get('/auth/session', (c) => c.json({ mode: c.env.API_AUTH_MODE ?? 'private' }))
 
 // Health check
 app.get('/', (c) => c.text('Finance API is running!'))

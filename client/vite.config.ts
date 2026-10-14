@@ -64,23 +64,10 @@ export default defineConfig(({ mode }) => {
           clientsClaim: true,
           navigateFallback: '/index.html',
           navigateFallbackDenylist: [/^\/api(?:[/?]|$)/, /^\/assets(?:[/?]|$)/, /^\/[^?]*\.[^/?]+(?:\?|$)/],
-          runtimeCaching: [
-            {
-              urlPattern: /^https:\/\/api\..*/i,
-              handler: 'NetworkFirst',
-              options: {
-                cacheName: 'api-cache',
-                expiration: {
-                  maxEntries: 100,
-                  maxAgeSeconds: 60 * 60 * 24 // 24 hours
-                },
-                cacheableResponse: {
-                  statuses: [0, 200]
-                },
-                networkTimeoutSeconds: 10
-              }
-            }
-          ]
+          // Financial responses and Access sessions must always reach the API.
+          // Delete the old API cache during upgrades; never serve ledger data
+          // from a persistent cache after an authentication/network failure.
+          runtimeCaching: []
         },
         devOptions: {
           enabled: false

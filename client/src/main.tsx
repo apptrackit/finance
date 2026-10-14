@@ -7,6 +7,10 @@ import { PrivacyProvider } from './context/PrivacyContext.tsx'
 import { AlertProvider } from './context/AlertContext.tsx'
 import { ThemeProvider } from './context/ThemeContext.tsx'
 import { registerSW } from 'virtual:pwa-register'
+import { ApiSession } from './components/ApiSession'
+
+// Retire the former persistent financial-response cache on existing installs.
+if ('caches' in window) void caches.delete('api-cache').catch(() => undefined)
 
 // Register service worker with update handling
 const updateSW = registerSW({
@@ -27,7 +31,7 @@ createRoot(document.getElementById('root')!).render(
     <ThemeProvider>
       <PrivacyProvider>
         <AlertProvider>
-          <RouterProvider router={router} />
+          <ApiSession><RouterProvider router={router} /></ApiSession>
         </AlertProvider>
       </PrivacyProvider>
     </ThemeProvider>

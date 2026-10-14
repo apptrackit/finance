@@ -10,16 +10,18 @@ describe('finance API request contract', () => {
     // in the Europe/Budapest CI timezone.
     vi.setSystemTime(new Date(2026, 0, 15, 0, 15))
   })
-  afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers(); fetchMock.mockReset() })
+  afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); vi.useRealTimers(); fetchMock.mockReset() })
 
-  it('sends the local calendar date and API key while preserving caller headers and cancellation', async () => {
+  it('sends the local calendar date and session credentials without a browser API key', async () => {
     fetchMock.mockResolvedValue(new Response('{}'))
     const controller = new AbortController()
     await apiFetch('/transactions', { headers: new Headers({ 'Content-Type': 'application/json' }), signal: controller.signal })
     const [, options] = fetchMock.mock.calls[0]
     const headers = new Headers(options?.headers)
     expect(headers.get('X-Client-Date')).toBe('2026-01-15')
-    expect(headers.get('X-API-Key')).toBe(import.meta.env.VITE_API_KEY || '')
+    expect(headers.has('X-API-Key')).toBe(false)
+    expect(options?.credentials).toBe('include')
+    expect(options?.redirect).toBe('error')
     expect(headers.get('Content-Type')).toBe('application/json')
     expect(options?.signal).toBe(controller.signal)
   })
@@ -59,5 +61,23 @@ describe('finance API request contract', () => {
     fetchMock.mockRejectedValue(error)
     await expect(apiFetch('/transactions', { method: 'POST' })).rejects.toBe(error)
     expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('signals private-session expiry while failing a save once without retrying it', async () => {
+    vi.resetModules()
+    vi.stubEnv('VITE_API_AUTH_MODE', 'private')
+    const { apiFetch: privateFetch, AUTH_REQUIRED_EVENT } = await import('./config')
+    const listener = vi.fn()
+    window.addEventListener(AUTH_REQUIRED_EVENT, listener)
+    try {
+      fetchMock.mockResolvedValueOnce(Response.json({ error: 'Expired', code: 'AUTH_REQUIRED' }, { status: 401 }))
+      await expect(privateFetch('/transactions', { method: 'POST' })).rejects.toMatchObject({ status: 401 })
+      expect(listener).toHaveBeenCalledTimes(1)
+      expect(fetchMock).toHaveBeenCalledTimes(1)
+      fetchMock.mockRejectedValueOnce(new TypeError('Access redirect blocked'))
+      await expect(privateFetch('/transactions', { method: 'POST' })).rejects.toThrow('Access redirect blocked')
+      expect(listener).toHaveBeenCalledTimes(2)
+      expect(fetchMock).toHaveBeenCalledTimes(2)
+    } finally { window.removeEventListener(AUTH_REQUIRED_EVENT, listener) }
   })
 })
