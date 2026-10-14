@@ -180,7 +180,8 @@ function App() {
       <main id="main-content" className="mx-auto w-full max-w-[1280px] px-4 py-4 sm:px-6 lg:px-8 lg:py-6">
         <div className="mb-5 hidden items-center justify-between lg:flex"><h1 className="text-2xl font-semibold tracking-tight">{title}</h1></div>
         <FinanceDataStatus datasets={visibleData} onRetry={() => { void finance.handleDataChange() }} />
-        {initialLoading && <FinancePageLoader />}
+        {initialLoading && <FinancePageLoader view={view} accounts={dataStatus.accounts.loaded ? finance.accounts : undefined}
+          calendar={view === 'dashboard' && parseDashboardFilters(new URLSearchParams(search)).view === 'calendar'} />}
         <div hidden={initialLoading}>
           <Outlet context={{ finance, masterCurrency, investments, outlook } satisfies FinancePageContext} />
         </div>

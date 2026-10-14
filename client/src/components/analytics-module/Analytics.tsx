@@ -919,7 +919,7 @@ export function Analytics({
     'ai-financial-forecast':  Boolean(selectedOutlook),
   }
 
-  if (loading) return <FinancePageLoader />
+  if (loading) return <FinancePageLoader view="analytics" accounts={accounts} />
 
   const cashTrendChart = show('cash-balance-trend') && accounts.some(account => account.type !== 'investment' && !account.exclude_from_cash_balance) ? (
     <NetWorthTrendChart data={displayedCashBalanceData} masterCurrency={masterCurrency}
