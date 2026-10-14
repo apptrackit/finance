@@ -1,6 +1,26 @@
 @import "tailwindcss";
 @custom-variant dark (&:where(.dark, .dark *));
 
+/* One quiet left-to-right highlight across each decorative widget placeholder. */
+.finance-skeleton {
+  overflow: hidden;
+  background-color: hsl(var(--foreground) / 0.07);
+}
+.finance-skeleton::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, hsl(var(--foreground) / 0.08), transparent);
+  transform: translateX(-100%);
+  animation: finance-skeleton-shimmer 1.8s ease-in-out infinite;
+}
+@keyframes finance-skeleton-shimmer {
+  to { transform: translateX(100%); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .finance-skeleton::after { animation: none; display: none; }
+}
+
 @theme {
   --color-border: hsl(var(--border));
   --color-input: hsl(var(--input));

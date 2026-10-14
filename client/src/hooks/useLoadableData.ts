@@ -37,5 +37,12 @@ export function useLoadableData<T>(initialData: T, initialLoading = true) {
     }
   }, [])
 
-  return { ...snapshot, load }
+  const invalidate = useCallback(() => {
+    requestId.current++
+    setSnapshot(previous => ({ ...previous,
+      status: { ...previous.status, loading: false, stale: previous.status.loaded },
+    }))
+  }, [])
+
+  return { ...snapshot, load, invalidate }
 }

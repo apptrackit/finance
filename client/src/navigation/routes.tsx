@@ -24,8 +24,7 @@ function RecurringPage() {
 }
 
 function InvestmentsPage() {
-  const { finance } = useOutletContext<FinancePageContext>()
-  return <Investments key={finance.investmentRefreshKey} />
+  return <Investments />
 }
 
 function NotFoundPage() {

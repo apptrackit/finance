@@ -8,6 +8,9 @@ import { TransactionList } from './components/dashboard-module/TransactionList'
 import { Modal } from './components/common/modal'
 import { usePrivacy } from './context/PrivacyContext'
 import { useFinanceData } from './hooks/useFinanceData'
+import { useInvestmentData } from './hooks/useInvestmentData'
+import { useFinancialOutlookData } from './hooks/useFinancialOutlookData'
+import { FinancePageLoader } from './components/common/FinancePageLoader'
 import { FinanceDataStatus } from './components/common/FinanceDataStatus'
 import { AccountShortcuts } from './components/dashboard-module/AccountShortcuts'
 import { parseDashboardFilters } from './navigation/filters'
@@ -15,7 +18,12 @@ import { SearchPalette } from './components/search-module/SearchPalette'
 import { useHasUnsavedChanges } from './navigation/UnsavedChanges'
 import { version as APP_VERSION } from '../../package.json'
 
-export type FinancePageContext = { finance: ReturnType<typeof useFinanceData>; masterCurrency: string }
+export type FinancePageContext = {
+  finance: ReturnType<typeof useFinanceData>
+  masterCurrency: string
+  investments: ReturnType<typeof useInvestmentData>
+  outlook: ReturnType<typeof useFinancialOutlookData>
+}
 
 function App() {
   const { pathname, search } = useLocation()
@@ -35,8 +43,15 @@ function App() {
     const filters = parseDashboardFilters(new URLSearchParams(view === 'dashboard' ? search : ''))
     return { startDate: filters.startDate, endDate: filters.endDate }
   }, [view, search])
-  const finance = useFinanceData(dateRange, masterCurrency)
+  const finance = useFinanceData(dateRange, masterCurrency, {
+    dashboardEnabled: view === 'dashboard',
+    historyEnabled: searchOpen || (view === 'analytics' && navigationReady && visibleMenus.analytics),
+  })
   const { dataStatus } = finance
+  const investments = useInvestmentData(view === 'investments' && navigationReady && visibleMenus.investments
+    && (dataStatus.accounts.loaded || dataStatus.accounts.error), finance.investmentRefreshKey)
+  const outlook = useFinancialOutlookData(view === 'analytics' && navigationReady && visibleMenus.analytics
+    && (dataStatus.accounts.loaded || dataStatus.accounts.error), finance.investmentRefreshKey)
 
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: 'instant' })
@@ -76,10 +91,17 @@ function App() {
   const dataset = (key: keyof typeof dataStatus, label: string) => ({ label, status: dataStatus[key] })
   const accountData = [dataset('accounts', 'Accounts')]
   const transactionData = [...accountData, dataset('transactions', 'Period transactions'), dataset('upcoming', 'Upcoming transactions')]
-  const analyticsData = [...accountData, dataset('history', 'Transaction history'), dataset('upcoming', 'Upcoming transactions'), dataset('categories', 'Categories')]
+  const analyticsData = [...accountData, dataset('history', 'Transaction history'), dataset('upcoming', 'Upcoming transactions'), dataset('categories', 'Categories'), dataset('exchangeRates', 'Exchange rates'),
+    { label: 'Financial forecasts', status: outlook.status }]
   const visibleData = view === 'dashboard' ? [...transactionData, dataset('categories', 'Categories'), dataset('netWorth', 'Net worth'),
     dataset('investment', 'Investment value'), dataset('exchangeRates', 'Exchange rates')]
+    : view === 'investments' ? [{ label: 'Investment portfolio', status: investments.status }]
     : view === 'accounts' ? accountData : view === 'analytics' ? analyticsData : view === 'recurring' ? [...accountData, dataset('categories', 'Categories')] : []
+
+  // Investment valuation cannot begin after a failed account read. Let the
+  // existing error/retry boundaries handle that dependency instead of waiting.
+  const initialLoading = visibleData.some(({ status }) => !status.loaded && !status.error
+    && !(status === dataStatus.investment && dataStatus.accounts.error))
 
   const navItems: { key: MenuKey; icon: React.ReactNode; label: string }[] = [
     { key: 'dashboard', icon: <LayoutDashboard className="h-4 w-4" />, label: 'Dashboard' },
@@ -158,7 +180,11 @@ function App() {
       <main id="main-content" className="mx-auto w-full max-w-[1280px] px-4 py-4 sm:px-6 lg:px-8 lg:py-6">
         <div className="mb-5 hidden items-center justify-between lg:flex"><h1 className="text-2xl font-semibold tracking-tight">{title}</h1></div>
         <FinanceDataStatus datasets={visibleData} onRetry={() => { void finance.handleDataChange() }} />
-        <Outlet context={{ finance, masterCurrency } satisfies FinancePageContext} />
+        {initialLoading && <FinancePageLoader view={view} accounts={dataStatus.accounts.loaded ? finance.accounts : undefined}
+          calendar={view === 'dashboard' && parseDashboardFilters(new URLSearchParams(search)).view === 'calendar'} />}
+        <div hidden={initialLoading}>
+          <Outlet context={{ finance, masterCurrency, investments, outlook } satisfies FinancePageContext} />
+        </div>
       </main>
     </div>
     <nav aria-label="Mobile navigation" className="fixed inset-x-0 bottom-0 z-50 border-t border-border bg-card/95 px-2 pt-2 backdrop-blur-xl lg:hidden" style={{ paddingBottom: 'max(8px, env(safe-area-inset-bottom))' }}>

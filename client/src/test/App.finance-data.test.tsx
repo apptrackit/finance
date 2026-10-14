@@ -33,6 +33,7 @@ const fetchMock = vi.fn<typeof fetch>()
 const browserStorage = window.localStorage
 
 beforeEach(() => {
+  fetchMock.mockClear()
   vi.stubGlobal('localStorage', browserStorage)
   localStorage.clear()
   vi.stubGlobal('scrollTo', vi.fn())
@@ -41,20 +42,25 @@ beforeEach(() => {
     '/accounts': [{ id: 'cash', name: 'Private account', type: 'cash', balance: 98765, currency: 'HUF', updated_at: 1 }],
     '/transactions': [{ id: 'transaction', account_id: 'cash', amount: -54321, date: '2026-09-01' }],
     '/transactions/date-range': [{ id: 'transaction', account_id: 'cash', amount: -54321, date: '2026-09-01' }],
+    '/financial-outlook/latest': { snapshot: null }, '/financial-outlook-snapshots': { snapshots: [], next_cursor: null },
     '/transactions/upcoming': [], '/categories': [], '/dashboard/net-worth': { net_worth: 98765 },
     '/v6/latest/HUF': { rates: { HUF: 1 } },
   })
   fetchMock.mockImplementation(async input => {
-    const path = new URL(String(input), 'http://localhost').pathname.replace(/^\/api/, '')
+    const url = new URL(String(input), 'http://localhost')
+    const requestPath = url.pathname.replace(/^\/api/, '')
+    const path = requestPath === '/transactions/history'
+      ? (url.searchParams.has('startDate') ? '/transactions/date-range' : '/transactions') : requestPath
     if (failures.has(path)) return Response.json({ error: 'Private account balance 98765' }, { status: 403 })
-    return Response.json(payloads[path] ?? [])
+    return Response.json(requestPath === '/transactions/history'
+      ? { transactions: payloads[path], investments: [], revision: 1, nextCursor: null } : payloads[path] ?? [])
   })
   vi.stubGlobal('fetch', fetchMock)
 })
 afterEach(() => vi.unstubAllGlobals())
 
-function renderApp() {
-  const router = createMemoryRouter(appRoutes, { initialEntries: ['/dashboard'] })
+function renderApp(path = '/dashboard') {
+  const router = createMemoryRouter(appRoutes, { initialEntries: [path] })
   return render(<ThemeProvider><AlertProvider><RouterProvider router={router} /></AlertProvider></ThemeProvider>)
 }
 
@@ -67,6 +73,69 @@ async function retry() {
 }
 
 describe('finance read errors in App', () => {
+  it('keeps the Analytics initial loader until saved forecasts settle too', async () => {
+    const baseFetch = fetchMock.getMockImplementation()!
+    let release: (response: Response) => void = () => {}
+    fetchMock.mockImplementation(async (input, options) => String(input).includes('/financial-outlook/latest')
+      ? new Promise(resolve => { release = resolve }) : baseFetch(input, options))
+    renderApp('/analytics')
+    await waitFor(() => expect(screen.getByText('Loaded analytics')).not.toBeVisible())
+    expect(screen.getAllByRole('status', { name: 'Loading your finances' })).toHaveLength(1)
+    await waitFor(() => expect(fetchMock.mock.calls.some(([input]) => String(input).includes('/financial-outlook/latest'))).toBe(true))
+    release(Response.json({ snapshot: null }))
+    await waitFor(() => expect(screen.getByText('Loaded analytics')).toBeVisible())
+    expect(screen.queryByRole('status', { name: 'Loading your finances' })).not.toBeInTheDocument()
+  })
+
+  it('releases the initial loader after a forecast failure and offers Retry with available Analytics intact', async () => {
+    failures.add('/financial-outlook/latest')
+    renderApp('/analytics')
+    expect(await screen.findByRole('alert')).toHaveTextContent('Financial forecasts: Unavailable.')
+    await waitFor(() => expect(screen.getByText('Loaded analytics')).toBeVisible())
+    expect(screen.queryByRole('status', { name: 'Loading your finances' })).not.toBeInTheDocument()
+    expect(screen.queryByText(/Private account balance/)).not.toBeInTheDocument()
+    failures.clear()
+    await retry()
+    await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument())
+  })
+
+  it.each(['/dashboard', '/analytics'])('shows one initial loading screen for %s while the page data is incomplete', async path => {
+    const baseFetch = fetchMock.getMockImplementation()!
+    let release: (response: Response) => void = () => {}
+    fetchMock.mockImplementation(async (input, options) => String(input).includes('/transactions/history')
+      ? new Promise(resolve => { release = resolve }) : baseFetch(input, options))
+    renderApp(path)
+    expect(screen.getAllByRole('status', { name: 'Loading your finances' })).toHaveLength(1)
+    expect(screen.queryByText('Loaded ledger')).not.toBeInTheDocument()
+    await waitFor(() => expect(fetchMock.mock.calls.some(([input]) => String(input).includes('/transactions/history'))).toBe(true))
+    release(Response.json({ transactions: payloads['/transactions'], investments: [], revision: 1, nextCursor: null }))
+    await waitFor(() => expect(screen.queryByRole('status', { name: 'Loading your finances' })).not.toBeInTheDocument())
+    expect(screen.getByText(path === '/dashboard' ? 'Loaded ledger' : 'Loaded analytics')).toBeVisible()
+  })
+
+  it('requests complete history only after Analytics or global search opens', async () => {
+    renderApp()
+    expect(await screen.findByText('Loaded ledger')).toBeInTheDocument()
+    const fullReads = () => fetchMock.mock.calls.filter(([input]) => String(input) === '/api/transactions/history?limit=500')
+    expect(fullReads()).toHaveLength(0)
+    navigate('Analytics')
+    expect(await screen.findByText('Loaded analytics')).toBeInTheDocument()
+    expect(fullReads()).toHaveLength(1)
+    navigate('Dashboard')
+    expect(await screen.findByText('Loaded ledger')).toBeInTheDocument()
+    fireEvent.click(screen.getAllByRole('button', { name: 'Search everything' })[0])
+    await waitFor(() => expect(fullReads()).toHaveLength(2))
+    expect(await screen.findByRole('combobox', { name: 'Search everything' })).toBeInTheDocument()
+  })
+
+  it('loads Analytics directly without also downloading the Dashboard period', async () => {
+    renderApp('/analytics?period=allTime')
+    expect(await screen.findByText('Loaded analytics')).toBeInTheDocument()
+    const urls = fetchMock.mock.calls.map(([url]) => String(url))
+    expect(urls).toContain('/api/transactions/history?limit=500')
+    expect(urls.some(url => url.includes('/transactions/history?') && url.includes('startDate='))).toBe(false)
+  })
+
   it('shows a private, accessible initial load error and enables Retry after dependent loads fail', async () => {
     failures.add('/accounts')
     renderApp()

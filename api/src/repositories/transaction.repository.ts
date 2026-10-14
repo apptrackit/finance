@@ -5,7 +5,7 @@ import {
   TransactionStatus,
 } from '../models/Transaction'
 
-type RawTransactionRow = Omit<Transaction, 'exclude_from_estimate' | 'pending_kind' | 'review_source' | 'review_flags'> & {
+export type RawTransactionRow = Omit<Transaction, 'exclude_from_estimate' | 'pending_kind' | 'review_source' | 'review_flags'> & {
   exclude_from_estimate: number
   status?: TransactionStatus | null
   pending_kind?: TransactionPendingKind | null
@@ -18,7 +18,7 @@ type D1Value = string | number | null
 export class TransactionRepository {
   constructor(private db: D1Database) {}
 
-  private parseReviewFlags(value?: string | null): string[] {
+  private static parseReviewFlags(value?: string | null): string[] {
     if (!value) return []
 
     try {
@@ -30,7 +30,7 @@ export class TransactionRepository {
     }
   }
 
-  private mapTransaction(raw: RawTransactionRow): Transaction {
+  static mapRow(raw: RawTransactionRow): Transaction {
     return {
       ...raw,
       exclude_from_estimate: raw.exclude_from_estimate === 1,
@@ -43,12 +43,12 @@ export class TransactionRepository {
 
   async findAll(): Promise<Transaction[]> {
     const { results } = await this.db.prepare("SELECT * FROM transactions WHERE status = 'posted' ORDER BY date DESC, rowid DESC").all<RawTransactionRow>()
-    return results.map(r => this.mapTransaction(r))
+    return results.map(r => TransactionRepository.mapRow(r))
   }
 
   async findById(id: string): Promise<Transaction | null> {
     const result = await this.db.prepare('SELECT * FROM transactions WHERE id = ?').bind(id).first<RawTransactionRow>()
-    return result ? this.mapTransaction(result) : null
+    return result ? TransactionRepository.mapRow(result) : null
   }
 
   async create(transaction: Transaction): Promise<void> {
@@ -186,7 +186,7 @@ export class TransactionRepository {
     const { results } = await this.db.prepare(
       `SELECT * FROM transactions WHERE status = 'posted' ORDER BY ${field} ${order}, rowid DESC LIMIT ? OFFSET ?`
     ).bind(limit, offset).all<RawTransactionRow>()
-    return results.map(r => this.mapTransaction(r))
+    return results.map(r => TransactionRepository.mapRow(r))
   }
 
   async count(): Promise<number> {
@@ -211,7 +211,7 @@ export class TransactionRepository {
     query += ' ORDER BY date DESC, rowid DESC'
 
     const { results } = await this.db.prepare(query).bind(...params).all<RawTransactionRow>()
-    return results.map(r => this.mapTransaction(r))
+    return results.map(r => TransactionRepository.mapRow(r))
   }
 
   async findFromDate(startDate: string, accountId?: string, categoryId?: string): Promise<Transaction[]> {
@@ -231,26 +231,26 @@ export class TransactionRepository {
     query += ' ORDER BY date DESC, rowid DESC'
 
     const { results } = await this.db.prepare(query).bind(...params).all<RawTransactionRow>()
-    return results.map(r => this.mapTransaction(r))
+    return results.map(r => TransactionRepository.mapRow(r))
   }
 
   async findRecurring(): Promise<Transaction[]> {
     const { results } = await this.db.prepare("SELECT * FROM transactions WHERE status = 'posted' AND is_recurring = 1").all<RawTransactionRow>()
-    return results.map(r => this.mapTransaction(r))
+    return results.map(r => TransactionRepository.mapRow(r))
   }
 
   async findByAccountAndDatePattern(accountId: string, amount: number, description: string, datePattern: string): Promise<Transaction | null> {
     const result = await this.db.prepare(
       "SELECT * FROM transactions WHERE status = 'posted' AND account_id = ? AND amount = ? AND description = ? AND date LIKE ?"
     ).bind(accountId, amount, description, datePattern).first<RawTransactionRow>()
-    return result ? this.mapTransaction(result) : null
+    return result ? TransactionRepository.mapRow(result) : null
   }
 
   async findUpcoming(): Promise<Transaction[]> {
     const { results } = await this.db.prepare(
       "SELECT * FROM transactions WHERE status = 'pending' ORDER BY date ASC, rowid DESC"
     ).all<RawTransactionRow>()
-    return results.map(r => this.mapTransaction(r))
+    return results.map(r => TransactionRepository.mapRow(r))
   }
 
   async confirmPendingAndApplyBalance(transaction: Transaction, now: number, today: string): Promise<boolean> {

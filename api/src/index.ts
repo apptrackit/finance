@@ -11,8 +11,10 @@ import { RecurringScheduleRepository } from './repositories/recurring-schedule.r
 import { SettingsRepository } from './repositories/settings.repository'
 import { FinancialOutlookRepository } from './repositories/financial-outlook.repository'
 import { DataExportRepository } from './repositories/data-export.repository'
+import { TransactionHistoryRepository } from './repositories/transaction-history.repository'
 
 // Services
+import { TransactionHistoryService } from './services/transaction-history.service'
 import { AccountService } from './services/account.service'
 import { CategoryService } from './services/category.service'
 import { TransactionService } from './services/transaction.service'
@@ -26,6 +28,7 @@ import { FinancialOutlookService } from './services/financial-outlook.service'
 import { DataExportService } from './services/data-export.service'
 
 // Controllers
+import { TransactionHistoryController } from './controllers/transaction-history.controller'
 import { AccountController } from './controllers/account.controller'
 import { CategoryController } from './controllers/category.controller'
 import { TransactionController } from './controllers/transaction.controller'
@@ -69,6 +72,7 @@ function createDependencies(db: D1Database) {
   const settingsRepo = new SettingsRepository(db)
   const financialOutlookRepo = new FinancialOutlookRepository(db)
   const dataExportRepo = new DataExportRepository(db)
+  const transactionHistoryRepo = new TransactionHistoryRepository(db)
 
   // Initialize services
   const accountService = new AccountService(accountRepo, transactionRepo)
@@ -82,6 +86,7 @@ function createDependencies(db: D1Database) {
   const settingsService = new SettingsService(settingsRepo)
   const financialOutlookService = new FinancialOutlookService(financialOutlookRepo)
   const dataExportService = new DataExportService(dataExportRepo)
+  const transactionHistoryService = new TransactionHistoryService(transactionHistoryRepo)
 
   // Initialize controllers
   const accountController = new AccountController(accountService)
@@ -95,6 +100,7 @@ function createDependencies(db: D1Database) {
   const settingsController = new SettingsController(settingsService)
   const financialOutlookController = new FinancialOutlookController(financialOutlookService)
   const dataExportController = new DataExportController(dataExportService)
+  const transactionHistoryController = new TransactionHistoryController(transactionHistoryService)
 
   return {
     accountController,
@@ -107,7 +113,8 @@ function createDependencies(db: D1Database) {
     recurringScheduleController,
     settingsController,
     financialOutlookController,
-    dataExportController
+    dataExportController,
+    transactionHistoryController
   }
 }
 
@@ -185,6 +192,7 @@ app.delete('/transactions/:id', (c) => getControllers(c).transactionController.d
 
 // Transaction Pagination
 app.get('/transactions/paginated', (c) => getControllers(c).transactionController.getPaginated(c))
+app.get('/transactions/history', (c) => getControllers(c).transactionHistoryController.getPage(c))
 app.get('/transactions/date-range', (c) => getControllers(c).transactionController.getByDateRange(c))
 app.get('/transactions/from-date', (c) => getControllers(c).transactionController.getFromDate(c))
 

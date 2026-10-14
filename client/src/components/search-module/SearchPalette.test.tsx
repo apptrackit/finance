@@ -34,6 +34,16 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.unstubAllGlobals() })
 
 describe('Search everything palette', () => {
+  it('waits for complete refreshed history before offering transaction matches', async () => {
+    const data = finance()
+    data.dataStatus.history = { ...ready, loading: true, stale: true }
+    open(data)
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: 'Netflix' } })
+    expect(screen.getByText('Loading search data…')).toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: /View all matching transactions/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: /Netflix.*2020/ })).not.toBeInTheDocument()
+  })
+
   it('keeps Tab focus inside the dialog when result options use roving keyboard selection', () => {
     const rectangles = vi.spyOn(HTMLElement.prototype, 'getClientRects').mockReturnValue([new DOMRect(0, 0, 10, 10)] as unknown as DOMRectList)
     try {

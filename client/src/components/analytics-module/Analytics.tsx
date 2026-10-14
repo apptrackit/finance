@@ -1,6 +1,9 @@
 import type { AnalyticsFilters, FilterChange } from '../../navigation/filters'
 import { convertCurrency, sumConversions } from '../../../../shared/currency'
 import { MissingExchangeRates } from '../common/MissingExchangeRates'
+import { FinancePageLoader } from '../common/FinancePageLoader'
+import { FinanceDataBoundary } from '../common/FinanceDataStatus'
+import type { useFinancialOutlookData } from '../../hooks/useFinancialOutlookData'
 import { useState, useMemo, useEffect, useCallback } from 'react'
 import { Card, CardContent } from '../common/card'
 import { Button } from '../common/button'
@@ -43,40 +46,7 @@ type AnalyticsProps = {
   onFiltersChange?: FilterChange<AnalyticsFilters>
   projectionReady?: boolean
   comparisonReady?: boolean
-}
-
-function AnalyticsSkeleton() {
-  return (
-    <div className="space-y-6 animate-pulse">
-      {/* Header */}
-      <div className="flex flex-col items-start gap-3">
-        <div className="flex items-center gap-2">
-          <div className="h-5 w-5 rounded bg-muted" />
-          <div className="h-5 w-24 rounded bg-muted" />
-        </div>
-        <div className="flex gap-1 p-1 rounded-xl bg-muted/40 border border-border/40 w-full sm:w-64 h-9" />
-      </div>
-      {/* Summary cards */}
-      <div className="grid grid-cols-3 gap-3 sm:gap-4">
-        {[0,1,2].map(i => (
-          <div key={i} className="rounded-xl border bg-card p-4 space-y-2">
-            <div className="h-3 w-16 rounded bg-muted" />
-            <div className="h-7 w-24 rounded bg-muted" />
-            <div className="h-3 w-12 rounded bg-muted" />
-          </div>
-        ))}
-      </div>
-      {/* Chart grid */}
-      <div className="grid gap-4 sm:gap-6 grid-cols-1 lg:grid-cols-2">
-        {[0,1,2,3].map(i => (
-          <div key={i} className="rounded-xl border bg-card p-4 space-y-3">
-            <div className="h-4 w-32 rounded bg-muted" />
-            <div className="h-48 w-full rounded-lg bg-muted/60" />
-          </div>
-        ))}
-      </div>
-    </div>
-  )
+  outlook?: ReturnType<typeof useFinancialOutlookData>
 }
 
 export function Analytics({
@@ -92,6 +62,7 @@ export function Analytics({
   onFiltersChange,
   projectionReady = true,
   comparisonReady = true,
+  outlook,
 }: AnalyticsProps) {
   const [localFilters, setLocalFilters] = useState<AnalyticsFilters>(() => ({
     period: 'month', date: format(startOfMonth(new Date()), 'yyyy-MM-dd'), pinned: false,
@@ -173,13 +144,24 @@ export function Analytics({
   ])
   const conversionsAvailable = requiredConversions.value !== null
 
-  const [outlookHistory, setOutlookHistory] = useState<FinancialOutlookSnapshot[]>([])
-  const [selectedOutlookId, setSelectedOutlookId] = useState<string | null>(null)
-  const [outlookNextCursor, setOutlookNextCursor] = useState<string | null>(null)
+  const [outlookHistory, setOutlookHistory] = useState<FinancialOutlookSnapshot[]>(outlook?.data?.snapshots ?? [])
+  const [selectedOutlookId, setSelectedOutlookId] = useState<string | null>(outlook?.data?.latestId ?? null)
+  const [outlookNextCursor, setOutlookNextCursor] = useState<string | null>(outlook?.data?.nextCursor ?? null)
   const [outlookLoading, setOutlookLoading] = useState(true)
 
-  // Fetch the latest persisted AI forecast plus the first page of immutable history.
+  const usesSharedOutlook = outlook !== undefined
   useEffect(() => {
+    if (!outlook?.data) return
+    const snapshot = outlook.data
+    setOutlookHistory(snapshot.snapshots)
+    setOutlookNextCursor(snapshot.nextCursor)
+    setSelectedOutlookId(previous => snapshot.snapshots.some(item => item.id === previous) ? previous : snapshot.latestId)
+  }, [outlook?.data])
+
+  // Standalone Analytics consumers retain their existing fetch contract.
+  // Routed pages use the snapshot held by App, including its initial-load gate.
+  useEffect(() => {
+    if (usesSharedOutlook) return
     const fetchOutlooks = async () => {
       try {
         const [latestRes, historyRes] = await Promise.all([
@@ -204,7 +186,7 @@ export function Analytics({
       }
     }
     fetchOutlooks()
-  }, [])
+  }, [usesSharedOutlook])
 
   const loadMoreOutlooks = async () => {
     if (!outlookNextCursor) return
@@ -937,7 +919,7 @@ export function Analytics({
     'ai-financial-forecast':  Boolean(selectedOutlook),
   }
 
-  if (loading) return <AnalyticsSkeleton />
+  if (loading) return <FinancePageLoader view="analytics" accounts={accounts} />
 
   const cashTrendChart = show('cash-balance-trend') && accounts.some(account => account.type !== 'investment' && !account.exclude_from_cash_balance) ? (
     <NetWorthTrendChart data={displayedCashBalanceData} masterCurrency={masterCurrency}
@@ -1159,11 +1141,12 @@ export function Analytics({
       )}
 
       {show('ai-financial-forecast') && (
+        <FinanceDataBoundary label="AI Financial Forecast" datasets={outlook ? [{ label: 'Financial forecasts', status: outlook.status }] : []}>
         <FinancialOutlook
           snapshot={selectedOutlook}
           history={outlookHistory}
           selectedId={selectedOutlookId}
-          loading={outlookLoading}
+          loading={outlook ? !outlook.status.loaded && outlook.status.loading : outlookLoading}
           onSelect={setSelectedOutlookId}
           onLoadMore={loadMoreOutlooks}
           hasMore={Boolean(outlookNextCursor)}
@@ -1171,6 +1154,7 @@ export function Analytics({
           accounts={accounts}
           convertToHuf={convertToHuf}
         />
+        </FinanceDataBoundary>
       )}
     </div>
   )

@@ -43,7 +43,8 @@ export function SearchPalette({ isOpen, onClose, finance, canCompose, hasUnfinis
   const ready = (key: keyof typeof finance.dataStatus) => finance.dataStatus[key].loaded && !finance.dataStatus[key].error
   const accounts = ready('accounts') ? finance.accounts : []
   const categories = ready('categories') ? finance.categories : []
-  const historyReady = ready('history') && ready('accounts') && ready('categories')
+  const historyReady = ready('history') && !finance.dataStatus.history.stale && !finance.dataStatus.history.loading
+    && ready('accounts') && ready('categories')
   const history = historyReady ? finance.allTransactions : []
   const pending = historyReady && ready('upcoming') ? finance.upcomingTransactions : []
   const matches = isOpen && query.trim() ? [...new Map([...history, ...pending].map(tx => [tx.id, tx])).values()]

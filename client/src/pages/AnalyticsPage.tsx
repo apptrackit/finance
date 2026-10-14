@@ -7,7 +7,7 @@ import { analyticsSearch, parseAnalyticsFilters } from '../navigation/filters'
 import { useUrlFilters } from '../navigation/useUrlFilters'
 
 export function AnalyticsPage() {
-  const { finance, masterCurrency } = useOutletContext<FinancePageContext>()
+  const { finance, masterCurrency, outlook } = useOutletContext<FinancePageContext>()
   const { dataStatus } = finance
   const categoriesReady = dataStatus.categories.loaded && !dataStatus.categories.loading && !dataStatus.categories.error
   const parseFilters = useCallback((params: URLSearchParams) => parseAnalyticsFilters(params, new Date(), categoriesReady ? finance.categories : undefined), [categoriesReady, finance.categories])
@@ -19,7 +19,7 @@ export function AnalyticsPage() {
     { label: 'Upcoming transactions', status: dataStatus.upcoming }, { label: 'Categories', status: dataStatus.categories },
   ]
   return <FinanceDataBoundary label="Analytics" datasets={datasets}>
-    <Analytics transactions={finance.allTransactions} upcomingTransactions={finance.upcomingTransactions}
+    <Analytics outlook={outlook} transactions={finance.allTransactions} upcomingTransactions={finance.upcomingTransactions}
       categories={finance.categories} accounts={finance.accounts} masterCurrency={masterCurrency}
       exchangeRates={finance.usableExchangeRates} onRetryRates={() => { void finance.handleDataChange() }}
       loading={(!dataStatus.history.loaded && finance.allTransactionsLoading) || (!dataStatus.exchangeRates.loaded && finance.exchangeRatesLoading)}

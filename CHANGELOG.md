@@ -8,6 +8,7 @@ Intermediate package/UI version bumps are grouped under the next published GitHu
 
 ### Fixed
 
+- Background refreshes use a compact spinner above mobile navigation or in the desktop corner, keeping page content stationary when the indicator appears and disappears. The indicator respects reduced motion and retains screen-reader feedback.
 - Analytics Money Map retains its Sankey chart on phones and uses smaller side margins to spread flows across the available width. Narrow-chart labels stay within their flow columns; tap and keyboard inspection show full category names and amounts with privacy masking.
 
 ### Added
@@ -16,6 +17,10 @@ Intermediate package/UI version bumps are grouped under the next published GitHu
 - Compact sidebar account shares pair thin bars with percentages, comparing active cash and investment groups independently using converted values. Shares follow the Accounts page's positive-balance rules, include accounts excluded from totals, and respect privacy and unavailable valuations.
 
 ### Changed
+
+- Finance pages use text-free widget-shaped skeletons with a left-to-right gradient shimmer during initial loading, respecting Analytics widget visibility and reduced-motion preferences. Investments and saved forecast reads retain complete snapshots across navigation, refresh in the background, and keep the last complete data after failed refreshes. Portfolio display currency survives navigation within the session.
+
+- Dashboard loads only its selected cash and investment dates through bounded combined history pages. Complete history loads when Analytics or global search opens; date changes avoid hidden-history refreshes, and failed page sequences keep the last complete snapshot with retry feedback.
 
 - Redesigned AI Financial Forecast with a prominent headline, cash-at-generation summary, projection deltas and range bars, a bounded forecast band, a unified 30-day/90-day/year/all-time history switcher, visible risks and suggestions, and expandable methodology. Saved report selection, longer history views, freshness warnings, themes, and privacy masking remain available.
 - Redesigned account creation with type cards, an embedded starting-balance currency selector, inclusion switches, and a compact footer; market asset search and manual investment setup remain available.
