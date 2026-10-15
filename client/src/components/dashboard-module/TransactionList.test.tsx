@@ -268,7 +268,7 @@ it('retains a manual conversion when a late market-rate request completes', asyn
 })
 
 describe('dashboard transaction presentation', () => {
-  it('combines due items and assistant drafts, keeps future drafts unconfirmable, and resolves both transfer legs once', async () => {
+  it('combines due items and MCP drafts, keeps future drafts unconfirmable, and resolves both transfer legs once', async () => {
     const user = userEvent.setup()
     vi.mocked(apiFetch).mockReset()
     vi.mocked(apiFetch).mockResolvedValue({ ok: true, json: async () => ({}) } as Response)
@@ -283,7 +283,7 @@ describe('dashboard transaction presentation', () => {
     expect(within(queue).getAllByText('Draft transfer')).toHaveLength(1)
     expect(within(queue).getByText('Due bill')).toBeInTheDocument()
     expect(within(queue).getByText('Future draft')).toBeInTheDocument()
-    expect(within(queue).queryByRole('button', { name: 'Confirm assistant draft' })).not.toBeInTheDocument()
+    expect(within(queue).queryByRole('button', { name: 'Confirm MCP draft' })).not.toBeInTheDocument()
     await user.click(within(queue).getByRole('button', { name: 'Confirm transfer review draft' }))
     await waitFor(() => expect(within(queue).queryByText('Draft transfer')).not.toBeInTheDocument())
     expect(apiFetch).toHaveBeenCalledExactlyOnceWith('/api/transactions/debit/confirm', { method: 'POST' })

@@ -965,7 +965,7 @@ export function TransactionList({
       onTransactionAdded()
       showAlert({
         type: 'success',
-        message: tx.linked_transaction_id ? 'Transfer review pair confirmed' : isMcpReview ? 'assistant draft confirmed' : 'Upcoming transaction confirmed'
+        message: tx.linked_transaction_id ? 'Transfer review pair confirmed' : isMcpReview ? 'MCP draft confirmed' : 'Upcoming transaction confirmed'
       })
     } catch (error) {
       console.error('Failed to confirm upcoming transaction')
@@ -988,7 +988,7 @@ export function TransactionList({
       message: tx.linked_transaction_id
         ? 'Decline both sides of this transfer review draft? Neither balance will change.'
         : isMcpReview
-        ? 'Decline this assistant draft? It will not affect your balance.'
+        ? 'Decline this MCP draft? It will not affect your balance.'
         : 'Decline this upcoming transaction? It will not affect your balance.',
       confirmText: 'Decline',
       cancelText: 'Cancel'
@@ -1015,7 +1015,7 @@ export function TransactionList({
       onTransactionAdded()
       showAlert({
         type: 'success',
-        message: tx.linked_transaction_id ? 'Transfer review pair declined' : isMcpReview ? 'assistant draft declined' : 'Upcoming transaction declined'
+        message: tx.linked_transaction_id ? 'Transfer review pair declined' : isMcpReview ? 'MCP draft declined' : 'Upcoming transaction declined'
       })
     } catch (error) {
       console.error('Failed to decline upcoming transaction')
@@ -1321,8 +1321,8 @@ export function TransactionList({
     const locked = isLocked(tx.account_id) || !!(linked && isLocked(linked.account_id))
     const daysLate = differenceInCalendarDays(parseISO(today), parseISO(tx.date))
     const dateLabel = format(parseISO(tx.date), 'MMM d, yyyy')
-    const statusLabel = isReview ? 'Assistant draft' : ready ? daysLate > 0 ? `${daysLate} day${daysLate === 1 ? '' : 's'} late` : 'Due today' : `Expected ${dateLabel}`
-    const actionName = linked ? 'transfer review draft' : isReview ? 'assistant draft' : 'transaction'
+    const statusLabel = isReview ? 'MCP draft' : ready ? daysLate > 0 ? `${daysLate} day${daysLate === 1 ? '' : 's'} late` : 'Due today' : `Expected ${dateLabel}`
+    const actionName = linked ? 'transfer review draft' : isReview ? 'MCP draft' : 'transaction'
     const busy = pendingActionId === tx.id
     return <div key={tx.id} className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-2 border-t border-border px-3 py-3 sm:flex sm:flex-wrap sm:gap-3 sm:px-4">
       <div aria-hidden="true" className={cn('hidden h-9 w-9 shrink-0 items-center justify-center rounded-[10px] sm:flex', tx.linked_transaction_id ? 'bg-primary/10 text-primary' : 'bg-secondary')}>
@@ -1338,7 +1338,7 @@ export function TransactionList({
         {linked ? <><div><span className="sr-only">Sent </span>{nativeAmount(outgoing.amount, outgoing.account_id, false)}</div><div className="text-xs font-medium text-muted-foreground"><span className="sr-only">Received </span>→ {nativeAmount(incoming!.amount, incoming!.account_id, false)}</div></> : <span className={tx.amount > 0 ? 'text-success' : 'text-foreground'}>{nativeAmount(tx.amount, tx.account_id)}</span>}
       </div>
       {!locked && <div className="ml-auto flex items-center gap-1 sm:ml-0">
-        {(!tx.linked_transaction_id || isReview) && <Button size="icon" variant="ghost" className={cn("h-11 w-11 sm:h-9 sm:w-9", pendingDetails === tx.id ? "" : "hidden sm:inline-flex")} disabled={pendingActionId !== null} aria-label={linked ? 'Edit transfer review draft' : isReview ? 'Edit assistant draft' : 'Edit upcoming transaction'} onClick={() => handleEdit(outgoing)}><Pencil className="h-3.5 w-3.5" /></Button>}
+        {(!tx.linked_transaction_id || isReview) && <Button size="icon" variant="ghost" className={cn("h-11 w-11 sm:h-9 sm:w-9", pendingDetails === tx.id ? "" : "hidden sm:inline-flex")} disabled={pendingActionId !== null} aria-label={linked ? 'Edit transfer review draft' : isReview ? 'Edit MCP draft' : 'Edit upcoming transaction'} onClick={() => handleEdit(outgoing)}><Pencil className="h-3.5 w-3.5" /></Button>}
         {ready && (!tx.linked_transaction_id || isReview) && <Button size="sm" variant="ghost" className="h-11 w-11 bg-success/10 p-0 text-success sm:h-9 sm:w-auto sm:px-3" disabled={pendingActionId !== null} aria-label={`Confirm ${actionName}`} onClick={() => handleConfirmUpcoming(outgoing)}>{busy ? <Loader2 className="h-4 w-4 animate-spin sm:mr-1" /> : <Check className="h-4 w-4 sm:mr-1" />}<span className="sr-only sm:not-sr-only">Confirm</span></Button>}
         {(ready || isReview) && (!tx.linked_transaction_id || isReview) ? <Button size="sm" variant="ghost" className={cn("h-11 px-3 text-muted-foreground sm:h-9", pendingDetails === tx.id ? "" : "hidden sm:inline-flex")} disabled={pendingActionId !== null} aria-label={`Decline ${actionName}`} onClick={() => handleDeclineUpcoming(outgoing)}>Decline</Button>
           : !tx.linked_transaction_id && <Button size="icon" variant="ghost" className="h-11 w-11 sm:h-9 sm:w-9" aria-label="Delete upcoming transaction" disabled={deletingId === tx.id} onClick={event => { event.stopPropagation(); handleDelete(tx.id) }}><Trash2 className="h-4 w-4" /></Button>}
@@ -1378,7 +1378,7 @@ export function TransactionList({
     <Card className={composerOnly ? "contents" : undefined}>
       {!composerOnly && <CardHeader className="space-y-0 p-0 sm:p-0">
         <div className="flex flex-wrap items-center gap-2 border-b border-border px-4 py-3 sm:px-5">
-          <div className="min-w-0 flex-1"><CardTitle className="text-[15px]">Transactions</CardTitle><p className="mt-1 text-xs text-muted-foreground">{processTransactions(transactions).length} posted{standardPendingCount > 0 ? ` · ${standardPendingCount} upcoming` : ''}{mcpReviewCount > 0 ? ` · ${mcpReviewCount} assistant drafts` : ''}</p></div>
+          <div className="min-w-0 flex-1"><CardTitle className="text-[15px]">Transactions</CardTitle><p className="mt-1 text-xs text-muted-foreground">{processTransactions(transactions).length} posted{standardPendingCount > 0 ? ` · ${standardPendingCount} upcoming` : ''}{mcpReviewCount > 0 ? ` · ${mcpReviewCount} MCP drafts` : ''}</p></div>
           <div className="hidden rounded-lg border border-border p-0.5 sm:inline-flex" role="group" aria-label="Transaction view">
             <button type="button" onClick={() => setTransactionView('list')} aria-pressed={transactionView === 'list'} className={cn('min-h-9 rounded-md px-2 text-xs sm:px-3', transactionView === 'list' ? 'bg-secondary font-medium' : 'text-muted-foreground')}>List</button>
             <button type="button" onClick={openCalendar} aria-pressed={transactionView === 'calendar'} className={cn('min-h-9 rounded-md px-2 text-xs sm:px-3', transactionView === 'calendar' ? 'bg-secondary font-medium' : 'text-muted-foreground')}>Calendar</button>
@@ -1597,7 +1597,7 @@ export function TransactionList({
           {reviewTransactions.length > 0 && <section aria-labelledby="review-heading" className="overflow-hidden rounded-xl border border-border">
             <div className="flex items-center gap-2 px-4 py-3"><h3 id="review-heading" className="text-sm font-semibold">Needs review</h3><span className="rounded-full bg-secondary px-2 py-0.5 text-xs">{reviewTransactions.length}</span><span className="ml-auto hidden text-xs text-muted-foreground sm:block">Balances change only after confirmation</span></div>
             {reviewTransactions.map(tx => renderPendingTransaction(tx, tx.date <= today))}
-            {mcpBalancePreviews.length > 0 && <div className="border-t border-border bg-background/40 px-4 py-3 text-xs text-muted-foreground"><p className="mb-1 font-medium">If all assistant drafts are confirmed</p><div className="flex flex-wrap gap-x-4 gap-y-1">{mcpBalancePreviews.map(({ account, acceptedBalance }) => <span key={account.id}>{account.name}: {nativeAmount(account.balance, account.id, false)} → {nativeAmount(acceptedBalance, account.id, false)}</span>)}</div></div>}
+            {mcpBalancePreviews.length > 0 && <div className="border-t border-border bg-background/40 px-4 py-3 text-xs text-muted-foreground"><p className="mb-1 font-medium">If all MCP drafts are confirmed</p><div className="flex flex-wrap gap-x-4 gap-y-1">{mcpBalancePreviews.map(({ account, acceptedBalance }) => <span key={account.id}>{account.name}: {nativeAmount(account.balance, account.id, false)} → {nativeAmount(acceptedBalance, account.id, false)}</span>)}</div></div>}
           </section>}
           {futureTransactions.length > 0 && <section className="overflow-hidden rounded-xl border border-border">
             <button type="button" aria-expanded={upcomingOpen} aria-controls="future-transactions" onClick={() => setUpcomingOpen(!upcomingOpen)} className="flex min-h-14 w-full flex-wrap items-center gap-2 px-4 py-3 text-left text-sm">
