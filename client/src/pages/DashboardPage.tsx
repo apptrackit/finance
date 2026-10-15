@@ -155,7 +155,7 @@ export function DashboardPage() {
             <div className="min-w-0 p-4 text-xs text-muted-foreground lg:hidden">
               <FinanceDataBoundary label="Period activity" datasets={summaryData}>
                 <p className="mb-2">Left over · {filters.range === 'allTime' ? 'All time' : wholeMonth ? format(currentMonth, 'MMMM') : 'Selected period'}</p>
-                <p className="text-lg font-semibold tabular-nums text-foreground">{amount(leftover)} <span className="text-xs font-normal text-muted-foreground">{masterCurrency}</span></p>
+                <p className="text-sm font-medium tabular-nums">{amount(leftover)} <span className="text-xs font-normal text-muted-foreground">{masterCurrency}</span></p>
                 <p className="mt-2">{hidden ? '••%' : ratio === null ? 'Ratio unavailable' : `${Math.round(ratio)}% of income spent`}</p>
               </FinanceDataBoundary>
             </div>
@@ -166,7 +166,10 @@ export function DashboardPage() {
                   <span className="text-muted-foreground">Income</span><span className={`text-right font-semibold ${totalIncome === null ? 'text-muted-foreground' : 'text-success'}`}>{signed(totalIncome)} <span className="text-xs font-normal text-muted-foreground">{masterCurrency}</span></span><span className="text-right text-xs text-muted-foreground">{!dataStatus.upcoming.loaded || pendingIncome === null ? 'Upcoming unavailable' : pendingIncome > 0 ? `${signed(pendingIncome)} upcoming` : null}</span>
                   <span className="text-muted-foreground">Expense</span><span className={`text-right font-semibold ${totalExpenses === null ? 'text-muted-foreground' : 'text-destructive'}`}>{signed(totalExpenses === null ? null : -totalExpenses)} <span className="text-xs font-normal text-muted-foreground">{masterCurrency}</span></span><span className="text-right text-xs text-muted-foreground">{!dataStatus.upcoming.loaded || pendingExpenses === null ? 'Upcoming unavailable' : pendingExpenses > 0 ? `${signed(-pendingExpenses)} upcoming` : null}</span>
                 </div>
-                <div className="flex flex-wrap justify-between gap-3 text-xs text-muted-foreground lg:hidden"><span>Expense <span className={totalExpenses === null ? '' : 'text-destructive'}>{signed(totalExpenses === null ? null : -totalExpenses)}</span> {masterCurrency}</span><span>Income <span className={totalIncome === null ? '' : 'text-success'}>{signed(totalIncome)}</span> {masterCurrency}</span></div>
+                <div className="grid grid-cols-2 gap-4 lg:hidden">
+                  <div className="min-w-0"><p className="mb-1 text-xs text-muted-foreground">Income</p><p className={`break-words text-lg font-semibold tabular-nums ${totalIncome === null ? 'text-muted-foreground' : 'text-success'}`}>{signed(totalIncome)} <span className="text-xs font-normal text-muted-foreground">{masterCurrency}</span></p></div>
+                  <div className="min-w-0"><p className="mb-1 text-xs text-muted-foreground">Expense</p><p className={`break-words text-lg font-semibold tabular-nums ${totalExpenses === null ? 'text-muted-foreground' : 'text-destructive'}`}>{signed(totalExpenses === null ? null : -totalExpenses)} <span className="text-xs font-normal text-muted-foreground">{masterCurrency}</span></p></div>
+                </div>
                 <div aria-hidden="true" className="mt-3 flex h-1.5 overflow-hidden rounded-full bg-secondary"><div className="bg-primary" style={{ width: `${barSpent}%` }} /><div className="bg-primary/35" style={{ width: `${barUpcoming}%` }} /></div>
                 <div className="mt-2 hidden flex-wrap justify-between gap-2 text-xs text-muted-foreground lg:flex"><span>{hidden ? '••%' : ratio === null ? 'Ratio unavailable' : `${Math.round(ratio)}% of income spent`}</span><span><span className="font-semibold text-foreground">{amount(leftover)} {masterCurrency}</span> left over</span></div>
               </FinanceDataBoundary>
