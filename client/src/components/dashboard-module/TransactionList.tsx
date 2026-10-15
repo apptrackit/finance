@@ -1641,7 +1641,10 @@ export function TransactionList({
                 if (!items.length) return null
                 const dailyCashFlow = cashFlowTransactions(groupedTransactions[date].filter(applyFilters))
                 return <section key={date} aria-label={format(parseISO(date), 'EEEE, MMM d, yyyy')}>
-                  <div className="mb-1 flex flex-wrap items-center justify-between gap-2 border-b border-border/60 px-1 pb-2 text-xs text-muted-foreground"><h3>{format(parseISO(date), 'EEE, MMM d, yyyy')}</h3>{dailyCashFlow.length > 0 && <span className="tabular-nums" aria-label="Daily total" title="Income less spending; transfers and investment trades excluded">{convertedAmount(sumCash(dailyCashFlow))}</span>}</div>
+                  <div className="mb-1 flex flex-wrap items-baseline gap-x-4 gap-y-1 border-b border-border/60 px-1 pb-2 text-xs text-muted-foreground">
+                    <h3>{format(parseISO(date), 'EEE, MMM d, yyyy')}</h3>
+                    {dailyCashFlow.length > 0 && <span className="whitespace-nowrap text-[11px] tabular-nums" aria-label="Daily total" title="Income less spending; transfers and investment trades excluded">{convertedAmount(sumCash(dailyCashFlow))}</span>}
+                  </div>
                   {items.map(renderPostedTransaction)}
                 </section>
               }) : shown.map(renderPostedTransaction)}
