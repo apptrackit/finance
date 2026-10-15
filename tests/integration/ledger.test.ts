@@ -22,7 +22,7 @@ describe('compiled API and MCP Workers sharing D1', () => {
     return { proposal_id }
   }
 
-  it('enforces API origin/key checks, preflight, and body validation before writes', async () => {
+  it('enforces API origin/identity checks, preflight, and body validation before writes', async () => {
     expect((await f.api.fetch('/accounts')).status).toBe(403)
     expect((await f.api.fetch('/accounts', { headers: { Origin: 'https://wrong.test', 'X-API-Key': 'integration-test-key' } })).status).toBe(403)
     expect((await f.api.fetch('/accounts', { headers: { Origin: 'https://finance.test' } })).status).toBe(401)

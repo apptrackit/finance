@@ -1,13 +1,9 @@
-# Development Environment Variables
-# Copy this file to .dev.vars and fill in your values
-
-# API Secret Key - Must match VITE_API_KEY in client/.env.local
-# Generate with: openssl rand -base64 32
-API_SECRET=your-secret-key-here
-
-# Allowed Origins for CORS (comma-separated)
-# For development: include localhost
-# For production: only include your domain
-# Examples:
-#   Development: http://localhost:5173,http://localhost:3000
+# Local development only. Do not use public mode with private financial data.
+API_AUTH_MODE=public
 ALLOWED_ORIGINS=http://localhost:5173
+
+# Private production requires Cloudflare Access on the API custom hostname.
+# Configure these in .deploy-config, not in the frontend.
+# API_ACCESS_TEAM_DOMAIN=https://your-team.cloudflareaccess.com
+# API_ACCESS_AUD=your-api-access-application-audience
+# API_ACCESS_ALLOWED_EMAIL=you@example.com

@@ -21,6 +21,9 @@ export default defineConfig(({ mode }) => {
   return {
     test: {
       globals: true,
+      // Unit suites use synthetic local configuration, independent of a
+      // developer's .env.local pointing at a private production API.
+      env: { VITE_API_DOMAIN: 'localhost:8787', VITE_API_AUTH_MODE: 'public' },
       environment: 'jsdom',
       setupFiles: ['./src/test/setup.ts'],
       include: ['src/**/*.{test,spec}.{ts,tsx}'],
@@ -64,23 +67,10 @@ export default defineConfig(({ mode }) => {
           clientsClaim: true,
           navigateFallback: '/index.html',
           navigateFallbackDenylist: [/^\/api(?:[/?]|$)/, /^\/assets(?:[/?]|$)/, /^\/[^?]*\.[^/?]+(?:\?|$)/],
-          runtimeCaching: [
-            {
-              urlPattern: /^https:\/\/api\..*/i,
-              handler: 'NetworkFirst',
-              options: {
-                cacheName: 'api-cache',
-                expiration: {
-                  maxEntries: 100,
-                  maxAgeSeconds: 60 * 60 * 24 // 24 hours
-                },
-                cacheableResponse: {
-                  statuses: [0, 200]
-                },
-                networkTimeoutSeconds: 10
-              }
-            }
-          ]
+          // Financial responses and Access sessions must always reach the API.
+          // Delete the old API cache during upgrades; never serve ledger data
+          // from a persistent cache after an authentication/network failure.
+          runtimeCaching: []
         },
         devOptions: {
           enabled: false

@@ -103,7 +103,7 @@ Run the full checks from `AGENTS.md` on the pinned Node 22 runtime:
 ```bash
 npm test
 npm run typecheck
-VITE_API_KEY=ci-placeholder VITE_API_DOMAIN=localhost:8787 npm run build
+VITE_API_AUTH_MODE=public VITE_API_DOMAIN=localhost:8787 npm run build
 npm run lint -w client -- --max-warnings=0
 git diff --check
 ```

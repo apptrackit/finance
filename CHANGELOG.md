@@ -18,6 +18,7 @@ Intermediate package/UI version bumps are grouped under the next published GitHu
 
 ### Changed
 
+- API deployments now use verified Cloudflare Access identity in private mode or explicit unauthenticated public demo mode. Removed shared browser API keys, added API session sign-in/recovery, credentialed CORS, and deployment guidance. Private deployments disable previews and support explicit Access-protected workers.dev URLs or preferred same-site custom domains. Deployment URL validation identifies the affected setting. Local frontends can explicitly use the private production API with allowed HTTP loopback origins and direct requests that retain API session cookies.
 - Finance pages use text-free widget-shaped skeletons with a left-to-right gradient shimmer during initial loading, respecting Analytics widget visibility and reduced-motion preferences. Investments and saved forecast reads retain complete snapshots across navigation, refresh in the background, and keep the last complete data after failed refreshes. Portfolio display currency survives navigation within the session.
 
 - Dashboard loads only its selected cash and investment dates through bounded combined history pages. Complete history loads when Analytics or global search opens; date changes avoid hidden-history refreshes, and failed page sequences keep the last complete snapshot with retry feedback.

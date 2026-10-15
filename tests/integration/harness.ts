@@ -31,7 +31,9 @@ export async function migrate(db: D1Database, through = Infinity) {
   }
 }
 
-export function useFinanceWorkers({ migrateBeforeEach = true } = {}) {
+export function useFinanceWorkers({ migrateBeforeEach = true, apiVars = {} }: {
+  migrateBeforeEach?: boolean; apiVars?: Record<string, string>
+} = {}) {
   // Inline configs cannot pick up a developer's private Wrangler configs or secrets.
   // Keep runtime flags/dates aligned with the tracked wrangler.toml.example files.
   const database = { binding: 'DB', database_name: 'finance-test', database_id: '00000000-0000-4000-8000-000000000001' }
@@ -40,7 +42,9 @@ export function useFinanceWorkers({ migrateBeforeEach = true } = {}) {
       name: 'finance-api-test', main: resolve('api/src/index.ts'),
       compatibility_date: '2024-09-23', compatibility_flags: ['nodejs_compat'],
       define: { __dirname: "'/'" }, d1_databases: [database],
-      vars: { API_SECRET: 'integration-test-key', ALLOWED_ORIGINS: origin },
+      vars: { API_AUTH_MODE: 'private', ALLOWED_ORIGINS: origin,
+        API_ACCESS_TEAM_DOMAIN: issuer, API_ACCESS_AUD: 'finance-api-audience',
+        API_ACCESS_ALLOWED_EMAIL: 'tester@example.com', ...apiVars },
     } },
     { config: {
       name: 'finance-mcp-test', main: resolve('mcp/src/index.ts'),
@@ -61,7 +65,7 @@ export function useFinanceWorkers({ migrateBeforeEach = true } = {}) {
     const now = Math.floor(Date.now() / 1000)
     const header = Buffer.from(JSON.stringify({ alg: 'RS256', kid: 'integration-key' })).toString('base64url')
     const payload = Buffer.from(JSON.stringify({
-      iss: issuer, aud: [audience], email: 'tester@example.com', exp: now + 3600, ...claims,
+      iss: issuer, aud: [audience], sub: 'test-user', email: 'tester@example.com', exp: now + 3600, ...claims,
     })).toString('base64url')
     const signature = await crypto.subtle.sign('RSASSA-PKCS1-v1_5', key, new TextEncoder().encode(`${header}.${payload}`))
     return `${header}.${payload}.${Buffer.from(signature).toString('base64url')}`
@@ -104,9 +108,9 @@ export function useFinanceWorkers({ migrateBeforeEach = true } = {}) {
   return {
     get db() { return db },
     api, mcp, accessToken,
-    request(path: string, method = 'GET', body?: unknown, date = '2026-01-15') {
+    async request(path: string, method = 'GET', body?: unknown, date = '2026-01-15') {
       return api.fetch(path, { method, headers: {
-        Origin: origin, 'X-API-Key': 'integration-test-key', 'X-Client-Date': date,
+        Origin: origin, 'Cf-Access-Jwt-Assertion': await accessToken({ aud: ['finance-api-audience'] }), 'X-Client-Date': date,
         'Content-Type': 'application/json',
       }, body: body === undefined ? undefined : JSON.stringify(body) })
     },

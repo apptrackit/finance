@@ -35,7 +35,7 @@ To prepare or publish a release, read and follow `.github/RELEASE_GUIDE.md`. It 
 
 ## Local development
 
-Create missing local files from `api/wrangler.toml.example`, `api/.dev.vars.example`, `client/.env.example`, and, if needed, `mcp/wrangler.toml.example`. Do not overwrite existing configuration. API secrets belong in `api/.dev.vars`; client settings belong in `client/.env.local`. Set the same local value for `API_SECRET` and `VITE_API_KEY`, allow `http://localhost:5173` in `ALLOWED_ORIGINS`, and use `VITE_API_DOMAIN=localhost:8787` for a local API.
+Create missing local files from `api/wrangler.toml.example`, `api/.dev.vars.example`, `client/.env.example`, and, if needed, `mcp/wrangler.toml.example`. Do not overwrite existing configuration. API secrets belong in `api/.dev.vars`; client settings belong in `client/.env.local`. Set `API_AUTH_MODE=public` and `VITE_API_AUTH_MODE=public` explicitly for local development, allow `http://localhost:5173` in `ALLOWED_ORIGINS`, and use `VITE_API_DOMAIN=localhost:8787` for a local API.
 
 **The normal API development script deletes `api/.wrangler/state`.** `npm run dev -w api` runs `setup-local-db.sh`, which removes local D1 state, runs `npm install`, and reapplies every migration. Root `npm run dev` invokes this too. Use it only when a fresh local database is intended; never use it merely to inspect or restart an existing local database.
 
@@ -55,7 +55,7 @@ npm run dev -w client
 npm run dev -w mcp
 ```
 
-The API defaults to port 8787. Vite proxies `/api` to `VITE_API_DOMAIN` and strips the `/api` prefix. Check the configured target before making development mutations: it can point at a remote API. Use a bare hostname with optional port for `VITE_API_DOMAIN`; production `client/src/config.ts` adds the protocol. `VITE_*` values are public build-time bundle contents.
+The API defaults to port 8787. Vite proxies `/api` to `VITE_API_DOMAIN` and strips the `/api` prefix for local API targets and public mode. Private remote API targets use direct credentialed HTTPS requests so Access cookies stay on the API hostname. A local frontend using the private production API needs its exact loopback origin in production `ALLOWED_ORIGINS`; deployment permits HTTP only for localhost/loopback origins. Check the configured target before making development mutations: it can point at a remote API. Use a bare hostname with optional port for `VITE_API_DOMAIN`; production `client/src/config.ts` adds the protocol. `VITE_*` values are public build-time bundle contents.
 
 Local Wrangler state is workspace-specific by default. Separate API and MCP dev processes do not automatically share a local database just because their bindings have the same name. Configure shared persistence deliberately if testing them together. Keep `DISABLE_ACCESS_AUTH=true` restricted to local MCP testing.
 
@@ -80,7 +80,7 @@ npx tsc --noEmit -p api/tsconfig.json
 npm run typecheck
 
 # Client typecheck + production build; placeholders avoid needing real credentials
-VITE_API_KEY=ci-placeholder VITE_API_DOMAIN=localhost:8787 npm run build
+VITE_API_AUTH_MODE=public VITE_API_DOMAIN=localhost:8787 npm run build
 
 # MCP build is a TypeScript check, not a bundled deployment
 npm run build:mcp
@@ -116,7 +116,7 @@ middleware → controller → service → repository → D1
 - Trace new fields through migrations, repository insert/update/select logic, models, DTOs, validators, mappers, client types, and MCP consumers. A field present in TypeScript or a validator is not proof that it is persisted or returned. New durable tables must also update the JSON export coverage in `shared/data-export.ts`; new saved browser preferences must update the allowlist in `client/src/components/settings-module/data-export.ts`. Keep credentials outside exported app settings.
 - Preserve relevant audit records on mutations. Do not replace multi-statement D1 batches with independent writes where state and balances must change together.
 
-The API requires an allowed `Origin` header and `X-API-Key` on all non-preflight routes, including `/` and `/version`. Allowed OPTIONS requests bypass the API-key check. CLI/API probes need both headers. CORS is an origin policy, not caller identity; the API itself does not verify Cloudflare Access JWTs. Its rate limiter is in memory per Worker instance.
+The API defaults to private mode, verifying Cloudflare Access JWT signature, issuer, API audience, expiry/not-before, subject and configured email. Only explicit `API_AUTH_MODE=public` permits unauthenticated demo/local access. There is no shared browser API key or private-to-public fallback. Ordinary requests require an exact allowed `Origin`; credentialed CORS preflight bypasses identity checks. Only authenticated GET `/auth/login` navigation can omit Origin, with an exact allowed-origin return URL. Use separate API Workers/D1 databases for public demos. Private deployment requires an explicit API URL protected by Access and disables previews. Custom API domains disable workers.dev; an explicit workers.dev API URL keeps that endpoint enabled with the same JWT checks, subject to cross-site cookie restrictions. Prefer a same-site custom domain; follow `docs/api-access.md`. Its rate limiter is in memory per Worker instance.
 
 ## Financial rules to preserve
 
@@ -137,7 +137,7 @@ The API requires an allowed `Origin` header and `X-API-Key` on all non-preflight
 - `navigation/filters.ts` defines validated Dashboard/Analytics URL filters; `pages/` binds applied filters to the URL. Apply related filter changes in one patch/history entry, use replacement for canonicalization, and preserve deep-link category/projection choices until successful data loading can validate them. Search text and financial form drafts stay local; saved theme/privacy/widget preferences remain independent of URLs. Do not reintroduce `finance_last_view` persistence.
 - `hooks/useFinanceData.ts` owns the main dashboard/analytics data loading, refresh callbacks, and investment refresh key. Feature components also own fetches and mutations; it is not the only data-access layer. Keep date-filtered dashboard transactions distinct from complete history, loaded on demand for Analytics and global search. Both use the bounded `/transactions/history` endpoint; publish only complete page sequences, invalidate hidden snapshots after mutations, and preserve revision-conflict retries.
 - `App.tsx` uses the shared `FinancePageLoader` with page-specific widget skeletons for initial active-page reads while keeping the routed page mounted for URL canonicalization. `useInvestmentData` and `useFinancialOutlookData` hold complete session-memory snapshots across route changes, revalidate active views, and invalidate hidden snapshots when `investmentRefreshKey` changes. Keep portfolio/forecast refreshes atomic, preserve prior data on failure, and never persist these financial snapshots in browser storage.
-- Use `API_BASE_URL` and `apiFetch` from `config.ts` for finance API calls. The wrapper injects `X-API-Key` and `X-Client-Date`. Mutations throw `ApiRequestError` on failure by default; reads need an explicit `response.ok` check or `{ throwOnError: true }`.
+- Use `API_BASE_URL` and `apiFetch` from `config.ts` for finance API calls. The wrapper includes session cookies and `X-Client-Date`, rejects login redirects, and never retries writes. `ApiSession` checks private sessions before loading data and keeps the app mounted on expiry so drafts survive sign-in in another tab. Mutations throw `ApiRequestError` on failure by default; reads need an explicit `response.ok` check or `{ throwOnError: true }`.
 - Reuse `components/common/` controls and `lib/utils.ts`'s `cn`. For financial input use `AmountInput` and `lib/amount.ts`; preserve string drafts, decimal-comma/grouping support, caret behavior, and invalid/incomplete-input handling. Avoid replacing parsing with `parseFloat` or rounding investment quantities as cash.
 - Keep feature code in `dashboard-module/`, `analytics-module/`, `investments-module/`, and `settings-module/`. Match nearby TypeScript/React conventions; prefer explicit types and type-only imports where appropriate.
 - Tailwind 4 styling is CSS-first in `src/index.css` (`@theme`, CSS variables) via `@tailwindcss/postcss`. `tailwind.config.js.bak` is not active configuration. Reuse existing theme tokens and responsive patterns.
@@ -166,12 +166,12 @@ Read `mcp/README.md` for the complete tool/workflow contract. `src/index.ts` han
 - Keep `.deploy-config`, actual Wrangler configs, `.dev.vars`, `.env` credentials, local database state, and database backups out of commits and tool output. Use tracked example files for documentation. Never hardcode real account IDs, secrets, personal financial data, or deployment identifiers in tests.
 - Root deployment commands change remote resources; run them when deployment is part of the task, not as verification:
   - `npm run deploy`: remote migrations, API, client, and optional MCP according to saved `.deploy-config`.
-  - `npm run deploy:client`: client only, using saved API URL/key.
+  - `npm run deploy:client`: client only, using saved API URL/authentication mode.
   - `npm run deploy:api` / `npm run deploy:mcp`: only that Worker, with a read-only migration-history check. Pending migrations block deployment; apply them separately or add `-- --migrations`.
   - `npm run deploy:migrations`: pending migrations only.
   - `npm run deploy -- --with-mcp`: full release including MCP and saves that preference.
   - `npm run deploy -- --no-mcp`: full API/client deployment and saves the preference to skip MCP.
 - Deployment is centralized in `scripts/deploy.mjs`; root shell wrappers are removed. Workspace `deploy` scripts delegate to the same CLI. Use `npm run deploy:<target>` or `npm run deploy -- <target>`; npm consumes flags without the `--` separator. `--plan` is read-only and does not build, prompt, contact Cloudflare, or save configuration. Tests in `scripts/deploy.test.mjs` use synthetic config and a fake command runner, with real Wrangler dry-run bundle checks only; run them via `npm run test:deploy`.
-- The CLI preserves existing local Wrangler and `.env` files, creates temporary Worker/secret configs, and injects client build variables through the process environment. It completes selected local checks before remote mutations, fails on migration-history errors, and submits each migration with its history insert. Project name comes from `.deploy-config`; Pages always targets **main**, including confirmed non-main branch deploys. `--yes` bypasses only that branch confirmation.
+- The CLI preserves existing local Wrangler and `.env` files, creates temporary Worker configs, and injects client build variables through the process environment. It completes selected local checks before remote mutations, fails on migration-history errors, and submits each migration with its history insert. Project name comes from `.deploy-config`; Pages always targets **main**, including confirmed non-main branch deploys. `--yes` bypasses only that branch confirmation.
 
 Keep this guide aligned when commands, entry points, schema ownership, or financial invariants change. Avoid copying transient version numbers, test totals, or exhaustive endpoint lists into it.

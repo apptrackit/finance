@@ -9,7 +9,7 @@ npm run test:integration        # compiled Workers and disposable shared D1
 npm run test:deploy             # deployment scope/failure cases and local bundles
 npm run typecheck              # API, client, MCP, and integration harness
 npm run lint -w client -- --max-warnings=0
-VITE_API_KEY=ci-placeholder VITE_API_DOMAIN=localhost:8787 npm run build
+VITE_API_AUTH_MODE=public VITE_API_DOMAIN=localhost:8787 npm run build
 
 # Run one integration scenario while developing
 npm run test:integration -- -t 'rolls back'
@@ -36,7 +36,7 @@ Require **CI passed** in GitHub branch protection or a ruleset to make these che
 
 [`integration/harness.ts`](integration/harness.ts) uses Cloudflare's [Wrangler test harness](https://developers.cloudflare.com/workers/testing/test-harness/get-started/) to build and run the real API and MCP entry points in `workerd`. Both bind to one local D1 database, as they do in production. Each test gets fresh storage. Inline configs use synthetic values, and the harness never invokes deployment scripts or the development database reset script.
 
-The MCP authentication bypass is **not enabled**: tests sign real RSA JWTs and intercept the public-key request. They exercise valid tokens, invalid claims and tampered signatures. FX responses are deterministic; any unexpected Worker network request fails the test, even if application code catches it.
+Private API and MCP tests sign real RSA JWTs and intercept the public-key request. They use separate audiences and exercise valid tokens, invalid claims and tampered signatures. Explicit public API tests never disable MCP authentication. FX responses are deterministic; any unexpected Worker network request fails the test, even if application code catches it.
 
 Migrations run in order using Wrangler's SQL parser so trigger bodies remain intact. The helper mirrors the repository's filename-based `migration_history` convention, including names without `.sql`. Tests cover both an empty database and populated legacy data upgraded through the preceding schema to the latest one. Deployment orchestration is tested separately in `scripts/deploy.test.mjs`: all remote commands use a fake runner, while Wrangler dry-run checks compile both generated Worker configurations. Those tests never deploy or query a real database.
 

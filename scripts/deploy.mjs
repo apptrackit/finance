@@ -71,11 +71,12 @@ async function optionalFile(path) {
   catch (error) { if (error.code === 'ENOENT') return ''; throw error }
 }
 
-async function saveConfig(path, config) {
+async function saveConfig(path, config, removedKeys = []) {
   const original = await optionalFile(path)
   const written = new Set()
   const lines = (original ? original.split(/\r?\n/) : []).filter(line => {
     const key = line.match(/^([A-Z][A-Z0-9_]*)=/)?.[1]
+    if (removedKeys.includes(key)) return false
     if (!key || !(key in config)) return true
     if (written.has(key)) return false
     written.add(key)
@@ -112,13 +113,22 @@ export function deploymentPlan(options, deployMcp = false) {
   }
 }
 
-export function apiOrigin(value) {
+export function apiOrigin(value, field = 'API_URL') {
   let url
-  try { url = new URL(value) } catch { throw new Error('API_URL must be a valid HTTPS origin.') }
+  try { url = new URL(value) } catch { throw new Error(`${field} must be a valid HTTPS origin.`) }
   if (url.protocol !== 'https:' || url.username || url.password || url.search || url.hash || url.pathname !== '/') {
-    throw new Error('API_URL must be an HTTPS origin without credentials, a path, query, or fragment.')
+    throw new Error(`${field} must be an HTTPS origin without credentials, a path, query, or fragment.`)
   }
   return url.origin
+}
+
+function browserOrigin(value) {
+  try {
+    const url = new URL(value)
+    const httpLoopback = url.protocol === 'http:' && ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname)
+    if ((url.protocol === 'https:' || httpLoopback) && url.origin === value && !value.includes('*')) return url.origin
+  } catch { /* Report the setting rather than the URL or parser internals. */ }
+  throw new Error('ALLOWED_ORIGINS must contain exact HTTPS origins or HTTP localhost/loopback origins, without credentials, paths, or trailing slashes.')
 }
 
 export function d1Rows(output) {
@@ -195,11 +205,12 @@ export function createDeploymentReporter(log, { color = false } = {}) {
 export async function deploy(options, { root = repositoryRoot, run = runCommand, ask = prompt, log = console.log, signal } = {}) {
   const configPath = join(root, '.deploy-config')
   const config = parseConfig(await optionalFile(configPath))
+  const legacySecret = config.API_SECRET
   const report = createDeploymentReporter(log, {
     color: log === console.log && Boolean(process.stdout.isTTY && process.env.NO_COLOR === undefined && process.env.TERM !== 'dumb'),
   })
   let temporary
-  const redact = text => config.API_SECRET ? String(text).replaceAll(config.API_SECRET, '[redacted]') : String(text)
+  const redact = text => legacySecret ? String(text).replaceAll(legacySecret, '[redacted]') : String(text)
   const command = async (label, executable, args, extra = {}) => {
     report.start(label)
     const started = Date.now()
@@ -253,13 +264,32 @@ export async function deploy(options, { root = repositoryRoot, run = runCommand,
     }
     if (plan.api) {
       await need('API_WORKER_NAME', 'finance-api')
-      await need('API_SECRET', undefined, true)
       await need('ALLOWED_ORIGINS')
+      const origins = config.ALLOWED_ORIGINS.split(',').map(value => value.trim())
+      origins.forEach(browserOrigin)
     }
     if (plan.client) {
       await need('PROJECT_NAME')
-      await need('API_SECRET', undefined, true)
       if (!plan.api) await need('API_URL')
+    }
+    if (plan.api || plan.client) {
+      await need('API_AUTH_MODE', 'private')
+      if (!['private', 'public'].includes(config.API_AUTH_MODE)) throw new Error('API_AUTH_MODE must be private or public.')
+      report.detail('API access', config.API_AUTH_MODE === 'private' ? 'Cloudflare Access required' : 'Public — demo data only')
+      delete config.API_SECRET
+      if (config.API_AUTH_MODE === 'private') {
+        await need('API_URL')
+        config.API_URL = apiOrigin(config.API_URL)
+        if (plan.api) {
+          await need('API_ACCESS_TEAM_DOMAIN')
+          await need('API_ACCESS_AUD')
+          await need('API_ACCESS_ALLOWED_EMAIL')
+          config.API_ACCESS_TEAM_DOMAIN = apiOrigin(config.API_ACCESS_TEAM_DOMAIN, 'API_ACCESS_TEAM_DOMAIN')
+          if (!new URL(config.API_ACCESS_TEAM_DOMAIN).hostname.endsWith('.cloudflareaccess.com') || new URL(config.API_ACCESS_TEAM_DOMAIN).port) {
+            throw new Error('API_ACCESS_TEAM_DOMAIN must be your HTTPS cloudflareaccess.com team origin.')
+          }
+        }
+      }
     }
     if (plan.mcp) {
       const legacy = await optionalFile(join(root, 'mcp/wrangler.toml'))
@@ -269,10 +299,10 @@ export async function deploy(options, { root = repositoryRoot, run = runCommand,
       await need('MCP_ACCESS_AUD', legacyValue('CF_ACCESS_AUD'))
       await need('MCP_ALLOWED_EMAIL', legacyValue('ALLOWED_EMAIL'))
       const team = config.MCP_ACCESS_TEAM_DOMAIN
-      config.MCP_ACCESS_TEAM_DOMAIN = apiOrigin(team.includes('://') ? team : `https://${team}`)
+      config.MCP_ACCESS_TEAM_DOMAIN = apiOrigin(team.includes('://') ? team : `https://${team}`, 'MCP_ACCESS_TEAM_DOMAIN')
     }
     if (config.API_URL && (plan.api || plan.client)) config.API_URL = apiOrigin(config.API_URL)
-    await saveConfig(configPath, config)
+    await saveConfig(configPath, config, plan.api || plan.client ? ['API_SECRET'] : [])
 
     temporary = await mkdtemp(join(tmpdir(), 'finance-deploy-'))
     const writeJson = async (name, value) => {
@@ -284,7 +314,19 @@ export async function deploy(options, { root = repositoryRoot, run = runCommand,
     const apiConfig = (plan.api || plan.mcp || plan.migrations) ? await writeJson('api.json', {
       name: config.API_WORKER_NAME || 'finance-api', main: join(root, 'api/src/index.ts'),
       compatibility_date: '2024-09-23', compatibility_flags: ['nodejs_compat'],
-      define: { __dirname: "'/'" }, workers_dev: true,
+      define: { __dirname: "'/'" },
+      workers_dev: config.API_AUTH_MODE !== 'private' || Boolean(config.API_URL && new URL(config.API_URL).hostname.endsWith('.workers.dev')),
+      preview_urls: false,
+      ...(plan.api && config.API_URL && !new URL(config.API_URL).hostname.endsWith('.workers.dev')
+        ? { routes: [{ pattern: new URL(config.API_URL).hostname, custom_domain: true }] } : {}),
+      vars: plan.api ? {
+        API_AUTH_MODE: config.API_AUTH_MODE, ALLOWED_ORIGINS: config.ALLOWED_ORIGINS,
+        ...(config.API_AUTH_MODE === 'private' ? {
+          API_ACCESS_TEAM_DOMAIN: config.API_ACCESS_TEAM_DOMAIN,
+          API_ACCESS_AUD: config.API_ACCESS_AUD,
+          API_ACCESS_ALLOWED_EMAIL: config.API_ACCESS_ALLOWED_EMAIL,
+        } : {}),
+      } : undefined,
       d1_databases: [database], triggers: { crons: ['0 0 * * *'] },
     }) : undefined
     const mcpConfig = plan.mcp ? await writeJson('mcp.json', {
@@ -295,7 +337,7 @@ export async function deploy(options, { root = repositoryRoot, run = runCommand,
     }) : undefined
 
     const buildClient = async origin => {
-      await npm('Client build', ['run', 'build', '-w', 'client'], { env: { VITE_API_DOMAIN: new URL(origin).host, VITE_API_KEY: config.API_SECRET } })
+      await npm('Client build', ['run', 'build', '-w', 'client'], { env: { VITE_API_DOMAIN: new URL(origin).host, VITE_API_AUTH_MODE: config.API_AUTH_MODE } })
       const assets = join(root, 'client/dist/assets')
       const bundled = await Promise.all((await readdir(assets)).filter(file => file.endsWith('.js')).map(file => readFile(join(assets, file), 'utf8')))
       if (!bundled.some(contents => contents.includes(new URL(origin).host))) throw new Error('API domain was not included in the client build.')
@@ -354,8 +396,7 @@ export async function deploy(options, { root = repositoryRoot, run = runCommand,
 
     if (plan.api || plan.mcp || plan.client) report.section('Deployment')
     if (plan.api) {
-      const secrets = await writeJson('api-secrets.json', { API_SECRET: config.API_SECRET, ALLOWED_ORIGINS: config.ALLOWED_ORIGINS })
-      const result = await wrangler('Deploying API', ['deploy', '--minify', '--no-autoconfig', '--config', apiConfig, '--tsconfig', join(root, 'api/tsconfig.json'), '--secrets-file', secrets])
+      const result = await wrangler('Deploying API', ['deploy', '--minify', '--no-autoconfig', '--config', apiConfig, '--tsconfig', join(root, 'api/tsconfig.json')])
       if (!config.API_URL) {
         const reported = result.match(/https:\/\/[a-z0-9.-]+\.workers\.dev\b/i)?.[0]
         if (reported) config.API_URL = apiOrigin(reported)
