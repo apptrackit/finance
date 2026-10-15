@@ -8,12 +8,11 @@ import { Label } from '../common/label'
 import { Select } from '../common/select'
 import { Card, CardContent, CardHeader, CardTitle } from '../common/card'
 import { Modal } from '../common/modal'
-import { Plus, X, ArrowDownLeft, ArrowUpRight, Receipt, Pencil, Trash2, Check, ArrowRight, ArrowRightLeft, ChevronLeft, ChevronRight, ChevronDown, Calendar, Layers, Search, Clock, CircleCheck, CircleX, AlertCircle, Bot, Loader2 } from 'lucide-react'
-import { format, addMonths, subMonths, startOfMonth, endOfMonth, addDays, differenceInDays } from 'date-fns'
+import { Plus, ArrowDownLeft, ArrowUpRight, Receipt, Pencil, Trash2, Check, ArrowRightLeft, ChevronDown, MoreHorizontal, SlidersHorizontal, Layers, Search, Clock, AlertCircle, Loader2 } from 'lucide-react'
+import { format, startOfMonth, endOfMonth, differenceInCalendarDays, parseISO } from 'date-fns'
 import { API_BASE_URL, apiFetch } from '../../config'
 import { usePrivacy } from '../../context/PrivacyContext'
 import { useAlert } from '../../context/AlertContext'
-import { DateRangePicker } from '../common/DateRangePicker'
 import { BulkTransactionModal, type BulkTransaction } from './BulkTransactionModal'
 import { AmountInput } from '../common/amount-input'
 import { formatAmount, formatCalculatedAmount, parseAmount } from '../../lib/amount'
@@ -153,8 +152,10 @@ export function TransactionList({
   const [showBulkModal, setShowBulkModal] = useState(false)
   const [fetchedCategories, setCategories] = useState<Category[]>([])
   const categories = availableCategories ?? fetchedCategories
-  const [showDatePicker, setShowDatePicker] = useState(false)
-  const [customRange, setCustomRange] = useState({ startDate: dateRange.startDate, endDate: dateRange.endDate })
+  const [upcomingOpen, setUpcomingOpen] = useState(false)
+  const [filtersOpen, setFiltersOpen] = useState(false)
+  const [activeTxId, setActiveTxId] = useState<string | null>(null)
+  const [pendingDetails, setPendingDetails] = useState<string | null>(null)
   const [formData, setFormData] = useState({
     account_id: '',
     to_account_id: '',
@@ -180,7 +181,6 @@ export function TransactionList({
     manual_price: false,
   })
   const editedTransferPairRef = useRef<string | null>(null)
-  const [activeTxId, setActiveTxId] = useState<string | null>(null)
   const [localCategoryFilter, setCategoryFilterLocal] = useState<string>('all')
   const categoryFilter = filters?.category ?? localCategoryFilter
   const setCategoryFilter = (value: string) => onFiltersChange ? onFiltersChange({ category: value }) : setCategoryFilterLocal(value)
@@ -222,10 +222,6 @@ export function TransactionList({
     tx.id === editingId && !!tx.linked_transaction_id && isMcpReviewTransaction(tx)
   )
   const refreshRecentBadges = () => setBadgeNow(Date.now())
-
-  useEffect(() => {
-    setCustomRange({ startDate: dateRange.startDate, endDate: dateRange.endDate })
-  }, [dateRange.startDate, dateRange.endDate])
 
   // Reset showAllTransactions when filter, sort, search, or date range changes
   useEffect(() => {
@@ -966,11 +962,10 @@ export function TransactionList({
         if (tx.linked_transaction_id) next.add(tx.linked_transaction_id)
         return next
       })
-      setActiveTxId(activeId => activeId === tx.id ? null : activeId)
       onTransactionAdded()
       showAlert({
         type: 'success',
-        message: tx.linked_transaction_id ? 'Transfer review pair confirmed' : isMcpReview ? 'MCP review draft confirmed' : 'Upcoming transaction confirmed'
+        message: tx.linked_transaction_id ? 'Transfer review pair confirmed' : isMcpReview ? 'assistant draft confirmed' : 'Upcoming transaction confirmed'
       })
     } catch (error) {
       console.error('Failed to confirm upcoming transaction')
@@ -993,7 +988,7 @@ export function TransactionList({
       message: tx.linked_transaction_id
         ? 'Decline both sides of this transfer review draft? Neither balance will change.'
         : isMcpReview
-        ? 'Decline this MCP review draft? It will not affect your balance.'
+        ? 'Decline this assistant draft? It will not affect your balance.'
         : 'Decline this upcoming transaction? It will not affect your balance.',
       confirmText: 'Decline',
       cancelText: 'Cancel'
@@ -1017,11 +1012,10 @@ export function TransactionList({
         if (tx.linked_transaction_id) next.add(tx.linked_transaction_id)
         return next
       })
-      setActiveTxId(activeId => activeId === tx.id ? null : activeId)
       onTransactionAdded()
       showAlert({
         type: 'success',
-        message: tx.linked_transaction_id ? 'Transfer review pair declined' : isMcpReview ? 'MCP review draft declined' : 'Upcoming transaction declined'
+        message: tx.linked_transaction_id ? 'Transfer review pair declined' : isMcpReview ? 'assistant draft declined' : 'Upcoming transaction declined'
       })
     } catch (error) {
       console.error('Failed to decline upcoming transaction')
@@ -1232,8 +1226,7 @@ export function TransactionList({
   }
 
   const visibleUpcomingTransactions = upcomingTransactions.filter(tx => !resolvedPendingIds.has(tx.id))
-  const mcpReviewLegCount = visibleUpcomingTransactions.filter(isMcpReviewTransaction).length
-  const standardPendingCount = visibleUpcomingTransactions.length - mcpReviewLegCount
+  const standardPendingCount = visibleUpcomingTransactions.filter(tx => !isMcpReviewTransaction(tx)).length
   const mcpReviewBalanceDeltas = getMcpReviewBalanceDeltas(visibleUpcomingTransactions)
   const mcpBalancePreviews = accounts.flatMap(account => {
     const delta = mcpReviewBalanceDeltas.get(account.id)
@@ -1243,19 +1236,6 @@ export function TransactionList({
   const mcpReviewTransactions = getMcpReviewItems(visibleUpcomingTransactions, applyFilters)
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
   const mcpReviewCount = mcpReviewTransactions.length
-
-  // MCP drafts keep their original transaction date, so group them by that
-  // date just like posted transactions. This gives each review item a clear
-  // calendar context instead of making the user work it out from "N days ago".
-  const groupedMcpReviewTransactions = mcpReviewTransactions.reduce((groups, tx) => {
-    if (!groups[tx.date]) groups[tx.date] = []
-    groups[tx.date].push(tx)
-    return groups
-  }, {} as Record<string, Transaction[]>)
-
-  const sortedMcpReviewDates = Object.keys(groupedMcpReviewTransactions).sort((a, b) =>
-    new Date(b).getTime() - new Date(a).getTime()
-  )
 
   // Keep legacy pending rows visible as upcoming while the migration rolls out.
   // Projection calculations are stricter and require pending_kind === 'upcoming'.
@@ -1280,6 +1260,7 @@ export function TransactionList({
 
       if (tx.linked_transaction_id) {
         const related = txs.find(t => t.id === tx.linked_transaction_id)
+          ?? transactions.find(t => t.id === tx.linked_transaction_id)
         if (related) {
           // Found the pair.
           // We prefer to show the outgoing one (negative) as the main one
@@ -1314,250 +1295,77 @@ export function TransactionList({
     )
   }
 
-  const renderPendingTransaction = (tx: Transaction, ready: boolean) => {
-    const daysFromToday = differenceInDays(new Date(tx.date), new Date(today))
+  const nativeAmount = (value: number, accountId: string, signed = true) => {
+    const account = accounts.find(a => a.id === accountId)
+    if (privacyMode === 'hidden' || (account?.type === 'investment' && shouldHideInvestment())) return '••••••'
+    const digits = account?.type === 'investment' ? 8 : account?.currency === 'HUF' ? 0 : 2
+    return `${signed ? value > 0 ? '+' : value < 0 ? '−' : '' : ''}${formatCalculatedAmount(Math.abs(value), { minimumFractionDigits: digits === 2 ? 2 : 0, maximumFractionDigits: digits }).replace('.', ',')} ${getAccountCurrency(accountId)}`
+  }
+  const convertedAmount = (value: number | null) => value === null ? 'Total unavailable' : privacyMode === 'hidden' ? '••••••' : `${value > 0 ? '+' : value < 0 ? '−' : ''}${formatCalculatedAmount(Math.abs(value), { maximumFractionDigits: masterCurrency === 'HUF' ? 0 : 2 }).replace('.', ',')} ${masterCurrency}`
+  const convertCash = (tx: Transaction) => {
     const account = accounts.find(a => a.id === tx.account_id)
-    const isInvestmentTx = account?.type === 'investment'
-    const shouldHide = privacyMode === 'hidden' || (isInvestmentTx && shouldHideInvestment())
+    if (!account || account.type === 'investment') return null
+    return convertToMasterCurrency ? convertToMasterCurrency(tx.amount, tx.account_id) : account.currency === masterCurrency ? tx.amount : null
+  }
+  const sumCash = (items: Transaction[]) => {
+    const values = items.filter(tx => !tx.linked_transaction_id && accounts.find(a => a.id === tx.account_id)?.type !== 'investment').map(convertCash)
+    return values.some(value => value === null) ? null : values.reduce<number>((sum, value) => sum + value!, 0)
+  }
+  const reviewTransactions = [...readyTransactions, ...mcpReviewTransactions].sort((a, b) => a.date.localeCompare(b.date))
+
+  const renderPendingTransaction = (tx: Transaction, ready: boolean) => {
     const linked = tx.linked_transaction_id ? visibleUpcomingTransactions.find(other => other.id === tx.linked_transaction_id) : undefined
-    const locked = isLocked(tx.account_id) || (linked ? isLocked(linked.account_id) : false)
-    const isMcpReview = isMcpReviewTransaction(tx)
-    const isPendingAction = pendingActionId === tx.id
-    const actionsDisabled = pendingActionId !== null
-    const possibleDuplicate = isMcpReview && hasPossibleDuplicateFlag(tx.review_flags)
-    const formattedDate = format(
-      new Date(tx.date),
-      new Date(tx.date).getFullYear() === new Date().getFullYear() ? 'MMM d' : 'MMM d, yyyy'
-    )
-
-    const statusLabel = isMcpReview
-      ? ready
-        ? 'Ready to confirm'
-        : `Confirm on ${formattedDate}`
-      : ready
-        ? daysFromToday < 0
-          ? `${Math.abs(daysFromToday)} day${Math.abs(daysFromToday) === 1 ? '' : 's'} late`
-          : 'Ready today'
-        : `Expected ${formattedDate}`
-
-    if (isMcpReview && linked) {
-      const outgoing = tx.amount < 0 ? tx : linked
-      const incoming = tx.amount < 0 ? linked : tx
-      const hideAmounts = privacyMode === 'hidden'
-
-      return (
-        <div
-          key={outgoing.id}
-          className="group space-y-2 rounded-lg border border-violet-500/20 bg-violet-500/5 p-2 transition-all duration-200 hover:bg-violet-500/10 sm:rounded-xl sm:p-3"
-          onClick={() => setActiveTxId(activeTxId === outgoing.id ? null : outgoing.id)}
-        >
-          <div className="flex items-start gap-2 sm:gap-3">
-            <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-violet-500/10 text-violet-500 sm:h-10 sm:w-10 sm:rounded-xl">
-              <ArrowRightLeft className="h-4 w-4 sm:h-5 sm:w-5" aria-hidden="true" />
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="flex min-w-0 items-center gap-1.5 text-xs font-medium sm:text-sm">
-                <span className="truncate">{tx.description || 'Transfer'}</span>
-                {renderRecentBadge(tx)}
-              </p>
-              <p className="text-[10px] text-muted-foreground sm:text-xs">
-                {getAccountName(outgoing.account_id)} → {getAccountName(incoming.account_id)}
-              </p>
-              <p className={`text-[10px] font-medium sm:text-xs ${ready ? 'text-success' : 'text-violet-500'}`}>
-                {statusLabel} · No balances changed yet
-              </p>
-            </div>
-            <div className="flex flex-shrink-0 items-center gap-1">
-              {!locked && (
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  className="h-7 w-7 sm:h-8 sm:w-8"
-                  disabled={actionsDisabled}
-                  onClick={(event) => { event.stopPropagation(); handleEdit(outgoing) }}
-                  title="Edit transfer review draft"
-                  aria-label="Edit transfer review draft"
-                >
-                  <Pencil className="h-3.5 w-3.5" />
-                </Button>
-              )}
-              {!locked && ready && (
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  className="h-7 w-7 text-success hover:text-success sm:h-8 sm:w-8"
-                  disabled={actionsDisabled}
-                  onClick={(event) => { event.stopPropagation(); handleConfirmUpcoming(outgoing) }}
-                  title="Confirm transfer review draft"
-                  aria-label="Confirm transfer review draft"
-                >
-                  {isPendingAction ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CircleCheck className="h-3.5 w-3.5" />}
-                </Button>
-              )}
-              {!locked && (
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  className="h-7 w-7 text-destructive hover:text-destructive sm:h-8 sm:w-8"
-                  disabled={actionsDisabled}
-                  onClick={(event) => { event.stopPropagation(); handleDeclineUpcoming(outgoing) }}
-                  title="Decline transfer review draft"
-                  aria-label="Decline transfer review draft"
-                >
-                  {isPendingAction ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CircleX className="h-3.5 w-3.5" />}
-                </Button>
-              )}
-            </div>
-          </div>
-          <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 rounded-lg bg-background/50 px-2 py-1.5 text-[10px] sm:ml-11 sm:px-3 sm:text-xs">
-            <div className="min-w-0">
-              <span className="block text-muted-foreground">Sent</span>
-              <span className={`block break-words font-semibold text-destructive ${hideAmounts ? 'select-none' : ''}`}>
-                {hideAmounts ? '••••••' : `${formatAmount(Math.abs(outgoing.amount))} ${getAccountCurrency(outgoing.account_id)}`}
-              </span>
-            </div>
-            <ArrowRight className="h-3 w-3 flex-shrink-0 text-violet-500" aria-hidden="true" />
-            <div className="min-w-0">
-              <span className="block text-muted-foreground">Received</span>
-              <span className={`block break-words font-semibold text-success ${hideAmounts ? 'select-none' : ''}`}>
-                {hideAmounts ? '••••••' : `${formatAmount(Math.abs(incoming.amount))} ${getAccountCurrency(incoming.account_id)}`}
-              </span>
-            </div>
-          </div>
-          {possibleDuplicate && (
-            <span className="inline-flex items-center gap-1 rounded-full border border-amber-500/25 bg-amber-500/10 px-1.5 py-0.5 text-[9px] font-medium text-amber-700 dark:text-amber-300 sm:ml-11 sm:text-[10px]">
-              <AlertCircle className="h-2.5 w-2.5" /> Possible duplicate
-            </span>
-          )}
-        </div>
-      )
-    }
-
-    return (
-      <div
-        key={tx.id}
-        className={`group flex items-center justify-between p-2 sm:p-3 rounded-lg sm:rounded-xl border transition-all duration-200 ${
-          isMcpReview
-            ? 'border-violet-500/20 bg-violet-500/5 hover:bg-violet-500/10'
-            : ready
-            ? 'border-success/20 bg-success/5 hover:bg-success/10'
-            : 'border-primary/15 bg-primary/5 hover:bg-primary/10'
-        }`}
-        onClick={() => setActiveTxId(activeTxId === tx.id ? null : tx.id)}
-      >
-        <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-          <div className={`h-8 w-8 sm:h-10 sm:w-10 rounded-lg sm:rounded-xl flex items-center justify-center flex-shrink-0 text-base sm:text-lg ${
-            isMcpReview
-              ? tx.amount >= 0 ? 'bg-success/10' : 'bg-secondary'
-              : ready ? 'bg-success/10 text-success' : 'bg-primary/10 text-primary'
-          }`}>
-            {isMcpReview
-              ? getCategoryIcon(tx.category_id)
-              : ready
-                ? <AlertCircle className="h-4 w-4 sm:h-5 sm:w-5" />
-                : <Clock className="h-4 w-4 sm:h-5 sm:w-5" />}
-          </div>
-          <div className="min-w-0">
-            <p className="font-medium text-xs sm:text-sm flex items-center gap-1.5 min-w-0">
-              <span className="truncate">{linked ? `Transfer ${getAccountName(tx.amount < 0 ? tx.account_id : linked.account_id)} → ${getAccountName(tx.amount > 0 ? tx.account_id : linked.account_id)}` : tx.description || getCategoryName(tx.category_id)}</span>
-              {renderRecentBadge(tx)}
-            </p>
-            <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 sm:gap-x-2 text-[10px] sm:text-xs text-muted-foreground">
-              <span className={ready ? 'text-success font-medium' : isMcpReview ? 'text-violet-500 font-medium' : 'text-primary font-medium'}>{statusLabel}</span>
-              <span>•</span>
-              <span className="truncate">{linked ? 'No balances changed yet' : getAccountName(tx.account_id)}</span>
-            </div>
-            {linked && tx.description && <p className="truncate text-[10px] sm:text-xs text-muted-foreground">{tx.description}</p>}
-            {possibleDuplicate && (
-              <div className="mt-1 flex flex-wrap items-center gap-1.5">
-                <span className="inline-flex items-center gap-1 rounded-full border border-amber-500/25 bg-amber-500/10 px-1.5 py-0.5 text-[9px] sm:text-[10px] font-medium text-amber-700 dark:text-amber-300">
-                  <AlertCircle className="h-2.5 w-2.5" />
-                  Possible duplicate
-                </span>
-              </div>
-            )}
-          </div>
-        </div>
-
-        <div className="flex flex-col items-end gap-0.5 flex-shrink-0">
-          <div className={`font-bold text-xs sm:text-sm ${tx.amount >= 0 ? 'text-success' : 'text-destructive'} ${shouldHide ? 'select-none' : ''}`}>
-            {shouldHide ? '••••••' : (
-              <>
-                {linked ? '−' : tx.amount >= 0 ? '+' : '-'}{linked ? formatAmount(Math.abs(tx.amount)) : Math.abs(tx.amount).toLocaleString('hu-HU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {getAccountCurrency(tx.account_id)}
-                {linked && <> → +{formatAmount(Math.abs(linked.amount))} {getAccountCurrency(linked.account_id)}</>}
-              </>
-            )}
-          </div>
-          <div className={`flex gap-1 transition-opacity ${isMcpReview || activeTxId === tx.id ? 'opacity-100' : 'opacity-0 md:group-hover:opacity-100'}`}>
-            {!locked && (
-              <>
-                {ready && (
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    className="h-7 w-7 sm:h-8 sm:w-8 text-success hover:text-success"
-                    disabled={actionsDisabled}
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      handleConfirmUpcoming(tx)
-                    }}
-                    title={isMcpReview ? 'Confirm MCP review draft' : 'Confirm transaction'}
-                  >
-                    {isPendingAction
-                      ? <Loader2 className="h-3 w-3 sm:h-3.5 sm:w-3.5 animate-spin" />
-                      : <CircleCheck className="h-3 w-3 sm:h-3.5 sm:w-3.5" />}
-                  </Button>
-                )}
-                {!linked && <Button
-                  size="icon"
-                  variant="ghost"
-                  className="h-7 w-7 sm:h-8 sm:w-8"
-                  disabled={actionsDisabled}
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    handleEdit(tx)
-                  }}
-                  title={isMcpReview ? 'Edit MCP review draft' : 'Edit upcoming transaction'}
-                >
-                  <Pencil className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
-                </Button>}
-                {(ready || isMcpReview) ? (
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    className="h-7 w-7 sm:h-8 sm:w-8 text-destructive hover:text-destructive"
-                    disabled={actionsDisabled}
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      handleDeclineUpcoming(tx)
-                    }}
-                    title={isMcpReview ? 'Decline MCP review draft' : 'Decline transaction'}
-                  >
-                    {isPendingAction
-                      ? <Loader2 className="h-3 w-3 sm:h-3.5 sm:w-3.5 animate-spin" />
-                      : <CircleX className="h-3 w-3 sm:h-3.5 sm:w-3.5" />}
-                  </Button>
-                ) : (
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    className="h-7 w-7 sm:h-8 sm:w-8 text-destructive hover:text-destructive"
-                    disabled={deletingId === tx.id}
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      handleDelete(tx.id)
-                    }}
-                    title="Delete upcoming transaction"
-                  >
-                    <Trash2 className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
-                  </Button>
-                )}
-              </>
-            )}
-          </div>
-        </div>
+    const outgoing = linked && tx.amount > 0 ? linked : tx
+    const incoming = linked && tx.amount > 0 ? tx : linked
+    const isReview = isMcpReviewTransaction(tx)
+    const locked = isLocked(tx.account_id) || !!(linked && isLocked(linked.account_id))
+    const daysLate = differenceInCalendarDays(parseISO(today), parseISO(tx.date))
+    const dateLabel = format(parseISO(tx.date), 'MMM d, yyyy')
+    const statusLabel = isReview ? 'Assistant draft' : ready ? daysLate > 0 ? `${daysLate} day${daysLate === 1 ? '' : 's'} late` : 'Due today' : `Expected ${dateLabel}`
+    const actionName = linked ? 'transfer review draft' : isReview ? 'assistant draft' : 'transaction'
+    const busy = pendingActionId === tx.id
+    return <div key={tx.id} className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-2 border-t border-border px-3 py-3 sm:flex sm:flex-wrap sm:gap-3 sm:px-4">
+      <div aria-hidden="true" className={cn('hidden h-9 w-9 shrink-0 items-center justify-center rounded-[10px] sm:flex', tx.linked_transaction_id ? 'bg-primary/10 text-primary' : 'bg-secondary')}>
+        {tx.linked_transaction_id ? <ArrowRightLeft className="h-4 w-4" /> : getCategoryIcon(tx.category_id)}
       </div>
-    )
+      <div className="min-w-0 flex-1">
+        <p className="flex items-center gap-2 text-sm font-medium"><button type="button" disabled={locked} aria-expanded={pendingDetails === tx.id} aria-label={`More actions for ${tx.description || getCategoryName(tx.category_id)}`} onClick={() => setPendingDetails(pendingDetails === tx.id ? null : tx.id)} className="flex min-w-0 items-center gap-1 text-left"><span className="truncate">{tx.description || (linked ? 'Transfer' : getCategoryName(tx.category_id))}</span><MoreHorizontal className="h-3 w-3 shrink-0 text-muted-foreground sm:hidden" /></button>{renderRecentBadge(tx)}</p>
+        <p className="mt-0.5 truncate text-xs text-muted-foreground"><span className={cn('font-medium', isReview ? 'text-violet-600 dark:text-violet-300' : ready ? 'text-amber-700 dark:text-amber-300' : '')}>{statusLabel}</span> · {linked ? `${getAccountName(outgoing.account_id)} → ${getAccountName(incoming!.account_id)}` : `${getCategoryName(tx.category_id)} · ${getAccountName(tx.account_id)}`} · {dateLabel}</p>
+        {isReview && !ready && <p className="mt-1 text-xs text-muted-foreground">Confirm on {dateLabel}</p>}
+        {hasPossibleDuplicateFlag(tx.review_flags) && <span className="mt-1 inline-flex items-center gap-1 text-xs text-amber-700 dark:text-amber-300"><AlertCircle className="h-3 w-3" />Possible duplicate</span>}
+      </div>
+      <div className="max-w-full text-right text-sm font-semibold tabular-nums">
+        {linked ? <><div><span className="sr-only">Sent </span>{nativeAmount(outgoing.amount, outgoing.account_id, false)}</div><div className="text-xs font-medium text-muted-foreground"><span className="sr-only">Received </span>→ {nativeAmount(incoming!.amount, incoming!.account_id, false)}</div></> : <span className={tx.amount > 0 ? 'text-success' : 'text-foreground'}>{nativeAmount(tx.amount, tx.account_id)}</span>}
+      </div>
+      {!locked && <div className="ml-auto flex items-center gap-1 sm:ml-0">
+        {(!tx.linked_transaction_id || isReview) && <Button size="icon" variant="ghost" className={cn("h-11 w-11 sm:h-9 sm:w-9", pendingDetails === tx.id ? "" : "hidden sm:inline-flex")} disabled={pendingActionId !== null} aria-label={linked ? 'Edit transfer review draft' : isReview ? 'Edit assistant draft' : 'Edit upcoming transaction'} onClick={() => handleEdit(outgoing)}><Pencil className="h-3.5 w-3.5" /></Button>}
+        {ready && (!tx.linked_transaction_id || isReview) && <Button size="sm" variant="ghost" className="h-11 w-11 bg-success/10 p-0 text-success sm:h-9 sm:w-auto sm:px-3" disabled={pendingActionId !== null} aria-label={`Confirm ${actionName}`} onClick={() => handleConfirmUpcoming(outgoing)}>{busy ? <Loader2 className="h-4 w-4 animate-spin sm:mr-1" /> : <Check className="h-4 w-4 sm:mr-1" />}<span className="sr-only sm:not-sr-only">Confirm</span></Button>}
+        {(ready || isReview) && (!tx.linked_transaction_id || isReview) ? <Button size="sm" variant="ghost" className={cn("h-11 px-3 text-muted-foreground sm:h-9", pendingDetails === tx.id ? "" : "hidden sm:inline-flex")} disabled={pendingActionId !== null} aria-label={`Decline ${actionName}`} onClick={() => handleDeclineUpcoming(outgoing)}>Decline</Button>
+          : !tx.linked_transaction_id && <Button size="icon" variant="ghost" className="h-11 w-11 sm:h-9 sm:w-9" aria-label="Delete upcoming transaction" disabled={deletingId === tx.id} onClick={event => { event.stopPropagation(); handleDelete(tx.id) }}><Trash2 className="h-4 w-4" /></Button>}
+      </div>}
+    </div>
+  }
+
+  const renderPostedTransaction = (tx: Transaction & { relatedTx?: Transaction }) => {
+    const related = tx.relatedTx
+    const transfer = !!tx.linked_transaction_id
+    const account = accounts.find(a => a.id === tx.account_id)
+    const converted = !transfer && account?.currency !== masterCurrency ? convertCash(tx) : null
+    return <div key={tx.id} className="group flex flex-wrap items-center gap-3 rounded-lg px-1 py-2 hover:bg-secondary/40 sm:px-2" onClick={() => setActiveTxId(activeTxId === tx.id ? null : tx.id)}>
+      <div aria-hidden="true" className={cn('flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px]', transfer ? 'bg-primary/10 text-primary' : 'bg-secondary')}>{transfer ? <ArrowRightLeft className="h-4 w-4" /> : getCategoryIcon(tx.category_id)}</div>
+      <div className="min-w-0 flex-1">
+        <p className="flex items-center gap-2 text-sm font-medium"><button type="button" aria-label={`Actions for ${tx.description || 'transaction'}`} aria-expanded={activeTxId === tx.id} className="min-w-0 truncate text-left">{transfer ? related ? `${getAccountName(tx.account_id)} → ${getAccountName(related.account_id)}` : tx.description || 'Transfer' : tx.description || getCategoryName(tx.category_id)}</button>{renderRecentBadge(tx)}</p>
+        <p className="mt-0.5 truncate text-xs text-muted-foreground">{sortOrder !== 'date' && `${format(parseISO(tx.date), 'MMM d, yyyy')} · `}{transfer ? 'Transfer' : `${getCategoryName(tx.category_id)} · ${getAccountName(tx.account_id)}`}</p>
+      </div>
+      <div className="max-w-full text-right tabular-nums">
+        <p className={cn('text-sm font-semibold', !transfer && tx.amount > 0 ? 'text-success' : 'text-foreground')}>{nativeAmount(account?.type === 'investment' && tx.quantity !== undefined ? tx.quantity : tx.amount, tx.account_id, !transfer)}</p>
+        {related ? <p className="text-xs text-muted-foreground">→ {nativeAmount(related.quantity ?? related.amount, related.account_id, false)}</p> : !transfer && account?.type === 'cash' && account.currency !== masterCurrency && <p className="text-xs text-muted-foreground">{privacyMode === 'hidden' ? '••••••' : converted === null ? 'Conversion unavailable' : `≈ ${convertedAmount(Math.abs(converted)).replace(/^\+/, '')}`}</p>}
+      </div>
+      {!isLocked(tx.account_id) && !(related && isLocked(related.account_id)) && <div className={cn("items-center sm:flex sm:opacity-0 sm:group-hover:opacity-100 sm:focus-within:opacity-100", activeTxId === tx.id ? "flex" : "hidden")}>
+        <Button size="icon" variant="ghost" className="h-11 w-9 sm:h-8 sm:w-8" aria-label={transfer ? 'Edit transfer' : 'Edit transaction'} onClick={event => { event.stopPropagation(); handleEdit(tx) }}><Pencil className="h-3.5 w-3.5" /></Button>
+        <Button size="icon" variant="ghost" className="h-11 w-9 text-muted-foreground hover:text-destructive sm:h-8 sm:w-8" aria-label={transfer ? 'Delete transfer' : 'Delete transaction'} disabled={deletingId === tx.id} onClick={event => { event.stopPropagation(); handleDelete(tx.id) }}><Trash2 className="h-3.5 w-3.5" /></Button>
+      </div>}
+    </div>
   }
 
   useEffect(() => {
@@ -1568,236 +1376,36 @@ export function TransactionList({
 
   return (
     <Card className={composerOnly ? "contents" : undefined}>
-      {!composerOnly && <CardHeader className="pb-3 sm:pb-4">
-        <div className="flex flex-col gap-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2 sm:gap-3">
-              <div className="h-7 w-7 sm:h-8 sm:w-8 rounded-lg bg-secondary flex items-center justify-center">
-                <Layers className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-muted-foreground" />
-              </div>
-              <div>
-                <CardTitle className="text-sm sm:text-base">Transactions</CardTitle>
-                <p className="text-[10px] sm:text-xs text-muted-foreground">
-                  {transactions.length} posted
-                  {standardPendingCount > 0 ? ` • ${standardPendingCount} pending` : ''}
-                  {mcpReviewCount > 0 ? ` • ${mcpReviewCount} MCP review` : ''}
-                </p>
-              </div>
-            </div>
-            
-            <div className="flex items-center gap-1.5">
-              <div className="hidden sm:inline-flex h-8 rounded-lg border border-border/60 bg-background/50 p-0.5" role="group" aria-label="Transaction view">
-                <button
-                  onClick={() => setTransactionView('list')}
-                  className={`h-7 rounded-md px-3 text-xs font-medium transition-colors ${transactionView === 'list' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
-                  aria-pressed={transactionView === 'list'}
-                >
-                  List
-                </button>
-                <button
-                  onClick={openCalendar}
-                  className={`h-7 rounded-md px-3 text-xs font-medium transition-colors ${transactionView === 'calendar' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
-                  aria-pressed={transactionView === 'calendar'}
-                >
-                  Calendar
-                </button>
-              </div>
-              <Button 
-                onClick={() => setShowBulkModal(true)} 
-                size="sm" 
-                variant="outline"
-                className="h-7 sm:h-8 text-xs flex-shrink-0"
-                title="Bulk add transactions"
-              >
-                <Layers className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                <span className="ml-1 hidden sm:inline">Bulk</span>
-              </Button>
-              <Button 
-                onClick={() => isAdding ? handleCancel() : handleOpenForm()} 
-                size="sm" 
-                variant={isAdding ? "ghost" : "outline"}
-                className="h-7 sm:h-8 text-xs flex-shrink-0"
-              >
-                {isAdding ? <X className="h-3.5 w-3.5 sm:h-4 sm:w-4" /> : <Plus className="h-3.5 w-3.5 sm:h-4 sm:w-4" />}
-                <span className="ml-1">{isAdding ? 'Cancel' : 'Add'}</span>
-              </Button>
-            </div>
+      {!composerOnly && <CardHeader className="space-y-0 p-0 sm:p-0">
+        <div className="flex flex-wrap items-center gap-2 border-b border-border px-4 py-3 sm:px-5">
+          <div className="min-w-0 flex-1"><CardTitle className="text-[15px]">Transactions</CardTitle><p className="mt-1 text-xs text-muted-foreground">{processTransactions(transactions).length} posted{standardPendingCount > 0 ? ` · ${standardPendingCount} upcoming` : ''}{mcpReviewCount > 0 ? ` · ${mcpReviewCount} assistant drafts` : ''}</p></div>
+          <div className="hidden rounded-lg border border-border p-0.5 sm:inline-flex" role="group" aria-label="Transaction view">
+            <button type="button" onClick={() => setTransactionView('list')} aria-pressed={transactionView === 'list'} className={cn('min-h-9 rounded-md px-2 text-xs sm:px-3', transactionView === 'list' ? 'bg-secondary font-medium' : 'text-muted-foreground')}>List</button>
+            <button type="button" onClick={openCalendar} aria-pressed={transactionView === 'calendar'} className={cn('min-h-9 rounded-md px-2 text-xs sm:px-3', transactionView === 'calendar' ? 'bg-secondary font-medium' : 'text-muted-foreground')}>Calendar</button>
           </div>
-          
-          {/* Search Bar */}
-          <div className="relative">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={e => setSearchQuery(e.target.value)}
-              placeholder="Search transactions..."
-              className="w-full pl-8 pr-3 py-1.5 text-xs sm:text-sm rounded-lg border border-border/60 bg-background/50 focus:outline-none focus:ring-1 focus:ring-primary/40 placeholder:text-muted-foreground/60"
-            />
-            {searchQuery && (
-              <button
-                onClick={() => setSearchQuery('')}
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-              >
-                <X className="h-3.5 w-3.5" />
-              </button>
-            )}
+          <Button onClick={() => setShowBulkModal(true)} size="sm" variant="outline" className="h-10 px-2 sm:px-3" aria-label="Bulk add transactions"><Layers className="h-4 w-4" /><span className="ml-1 hidden sm:inline">Bulk add</span></Button>
+          <Button onClick={() => isAdding ? handleCancel() : handleOpenForm()} size="sm" className="hidden h-10 px-3 sm:inline-flex"><Plus className="mr-1 h-4 w-4" />New</Button>
+        </div>
+        <div className="flex items-center justify-between border-b border-border px-4 py-2 sm:hidden"><button type="button" aria-expanded={filtersOpen} onClick={() => setFiltersOpen(!filtersOpen)} className="flex min-h-10 items-center gap-2 text-[13px] text-muted-foreground"><SlidersHorizontal className="h-4 w-4" />Filters{categoryFilter !== 'all' || searchQuery ? ' · active' : ''}</button><button type="button" onClick={() => transactionView === 'calendar' ? setTransactionView('list') : openCalendar()} className="min-h-10 px-2 text-[13px] text-muted-foreground">{transactionView === 'calendar' ? 'List view' : 'Calendar view'}</button></div>
+        <div className={cn("flex-wrap items-center gap-2 border-b border-border px-4 py-3 sm:flex sm:px-5", filtersOpen ? "flex" : "hidden")}>
+          <div className="relative min-w-0 flex-[1_1_180px] xl:max-w-[220px]">
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <input type="search" aria-label="Filter transactions" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Search transactions..." className="h-10 w-full rounded-lg border border-border bg-background pl-8 pr-3 text-[13px] outline-none focus:ring-1 focus:ring-primary" />
           </div>
-
-          <div className="flex sm:hidden rounded-lg border border-border/60 bg-background/50 p-0.5" role="group" aria-label="Transaction view">
-            <button
-              onClick={() => setTransactionView('list')}
-              className={`flex-1 rounded-md px-2 py-1.5 text-[10px] font-medium transition-colors ${transactionView === 'list' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
-              aria-pressed={transactionView === 'list'}
-            >
-              List view
-            </button>
-            <button
-              onClick={openCalendar}
-              className={`flex-1 rounded-md px-2 py-1.5 text-[10px] font-medium transition-colors ${transactionView === 'calendar' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
-              aria-pressed={transactionView === 'calendar'}
-            >
-              Calendar view
-            </button>
+          <div className="flex items-center gap-0.5" role="group" aria-label="Transaction type">
+            {([['all', 'All'], ['all-expenses', 'Expenses'], ['all-income', 'Income'], ['transfer', 'Transfers']] as const).map(([value, label]) => <button key={value} type="button" aria-pressed={categoryFilter === value} onClick={() => setCategoryFilter(value)} className={cn('min-h-10 rounded-lg border px-2 text-[13px] sm:px-3', categoryFilter === value ? 'border-border bg-secondary font-medium' : 'border-transparent text-muted-foreground hover:bg-secondary')}>{label}</button>)}
           </div>
-
-          <div className="flex items-center justify-center gap-2 sm:gap-3 flex-wrap">
-            {/* Month Navigation */}
-            <div className="flex items-center gap-1 sm:gap-2 relative">
-            {!isAllTimeRange(dateRange) && (
-              <Button
-                onClick={() => {
-                  const monthStart = format(startOfMonth(currentMonth), 'yyyy-MM-dd')
-                  const monthEnd = format(endOfMonth(currentMonth), 'yyyy-MM-dd')
-                  const isDefaultMonth = dateRange.startDate === monthStart && dateRange.endDate === monthEnd
-
-                  if (isDefaultMonth) {
-                    onMonthChange(subMonths(currentMonth, 1))
-                  } else {
-                    const rangeDays = differenceInDays(new Date(dateRange.endDate), new Date(dateRange.startDate)) + 1
-                    const newStart = format(addDays(new Date(dateRange.startDate), -rangeDays), 'yyyy-MM-dd')
-                    const newEnd = format(addDays(new Date(dateRange.endDate), -rangeDays), 'yyyy-MM-dd')
-                    onDateRangeChange({ startDate: newStart, endDate: newEnd })
-                  }
-                }}
-                size="sm"
-                variant="ghost"
-                className="h-7 w-7 sm:h-8 sm:w-8 p-0"
-              >
-                <ChevronLeft className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-              </Button>
-            )}
-            <button
-              onClick={() => {
-                setCustomRange({ startDate: dateRange.startDate, endDate: dateRange.endDate })
-                setShowDatePicker(!showDatePicker)
-              }}
-              className="flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-1 rounded-md bg-secondary/50 border border-border/50 hover:bg-secondary/70 transition-colors cursor-pointer"
-            >
-              <Calendar className="h-3 w-3 text-muted-foreground" />
-              <span className="text-[11px] sm:text-sm font-medium min-w-[90px] sm:min-w-[120px] text-center">
-                {(() => {
-                  if (isAllTimeRange(dateRange)) return 'All Time'
-                  const monthStart = format(startOfMonth(currentMonth), 'yyyy-MM-dd')
-                  const monthEnd = format(endOfMonth(currentMonth), 'yyyy-MM-dd')
-                  const isDefaultMonth = dateRange.startDate === monthStart && dateRange.endDate === monthEnd
-                  if (isDefaultMonth) return format(currentMonth, 'MMMM yyyy')
-                  return `${format(new Date(dateRange.startDate), 'MMM d')} - ${format(new Date(dateRange.endDate), 'MMM d, yyyy').replace(`, ${new Date().getFullYear()}`, '')}`
-                })()}
-              </span>
-            </button>
-            {!isAllTimeRange(dateRange) && (
-              <Button
-                onClick={() => {
-                  const monthStart = format(startOfMonth(currentMonth), 'yyyy-MM-dd')
-                  const monthEnd = format(endOfMonth(currentMonth), 'yyyy-MM-dd')
-                  const isDefaultMonth = dateRange.startDate === monthStart && dateRange.endDate === monthEnd
-
-                  if (isDefaultMonth) {
-                    onMonthChange(addMonths(currentMonth, 1))
-                  } else {
-                    const rangeDays = differenceInDays(new Date(dateRange.endDate), new Date(dateRange.startDate)) + 1
-                    const newStart = format(addDays(new Date(dateRange.startDate), rangeDays), 'yyyy-MM-dd')
-                    const newEnd = format(addDays(new Date(dateRange.endDate), rangeDays), 'yyyy-MM-dd')
-                    onDateRangeChange({ startDate: newStart, endDate: newEnd })
-                  }
-                }}
-                size="sm"
-                variant="ghost"
-                className="h-7 w-7 sm:h-8 sm:w-8 p-0"
-              >
-                <ChevronRight className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-              </Button>
-            )}
-
-            {/* Date Range Picker with presets */}
-            {showDatePicker && (
-              <DateRangePicker
-                startDate={customRange.startDate}
-                endDate={customRange.endDate}
-                monthOnly={transactionView === 'calendar'}
-                onApply={(range) => {
-                  if (range.startDate === '1900-01-01' && range.endDate === '2100-12-31') {
-                    onDateRangeChange(range)
-                  } else {
-                    if (!onFiltersChange) onMonthChange(new Date(range.endDate))
-                    onDateRangeChange(range)
-                  }
-                  setShowDatePicker(false)
-                }}
-                onCancel={() => setShowDatePicker(false)}
-              />
-            )}
-            </div>
-          
-            {/* Filter and Sort Group - kept together */}
-            <div className="flex items-center gap-2">
-            {/* Category Filter */}
-            <Select
-              value={categoryFilter}
-              aria-label="Transaction category"
-              onChange={(e) => setCategoryFilter(e.target.value)}
-              className="h-8 sm:h-9 text-xs sm:text-sm w-auto min-w-[140px] sm:min-w-[160px]"
-            >
-              <option value="all">All Transactions</option>
-              <option value="all-expenses">All Expenses</option>
-              <option value="all-income">All Income</option>
-              {!['all', 'all-expenses', 'all-income', 'transfer'].includes(categoryFilter) && !categories.some(category => category.id === categoryFilter) && (
-                <option value={categoryFilter}>Selected category (unavailable)</option>
-              )}
-              {categories.filter(c => c.type === 'expense').length > 0 && (
-                <optgroup label="Expenses">
-                  {categories.filter(c => c.type === 'expense').map(cat => (
-                    <option key={cat.id} value={cat.id}>{cat.icon} {cat.name}</option>
-                  ))}
-                </optgroup>
-              )}
-              {categories.filter(c => c.type === 'income').length > 0 && (
-                <optgroup label="Income">
-                  {categories.filter(c => c.type === 'income').map(cat => (
-                    <option key={cat.id} value={cat.id}>{cat.icon} {cat.name}</option>
-                  ))}
-                </optgroup>
-              )}
-              <option value="transfer">🔄 Transfers</option>
-            </Select>
-
-            {/* Sort Order */}
-            <Select
-              value={sortOrder}
-              aria-label="Transaction sort order"
-              onChange={(e) => setSortOrder(e.target.value as 'date' | 'amount-high' | 'amount-low')}
-              className="h-8 sm:h-9 text-xs sm:text-sm w-auto min-w-[100px] sm:min-w-[120px]"
-            >
-              <option value="date">Newest</option>
-              <option value="amount-high">↓ High to Low</option>
-              <option value="amount-low">↑ Low to High</option>
-            </Select>
-            </div>
-          </div>
+          <Select value={['all', 'all-expenses', 'all-income', 'transfer'].includes(categoryFilter) ? 'all' : categoryFilter} aria-label="Transaction category" onChange={e => setCategoryFilter(e.target.value)} className="h-10 w-auto min-w-0 flex-1 text-[13px] sm:max-w-44">
+            <option value="all">Category</option>
+            {!['all', 'all-expenses', 'all-income', 'transfer'].includes(categoryFilter) && !categories.some(category => category.id === categoryFilter) && <option value={categoryFilter}>Selected category (unavailable)</option>}
+            {(['expense', 'income'] as const).map(type => <optgroup key={type} label={type === 'expense' ? 'Expenses' : 'Income'}>{categories.filter(c => c.type === type).map(cat => <option key={cat.id} value={cat.id}>{cat.icon} {cat.name}</option>)}</optgroup>)}
+          </Select>
+          <Select value={sortOrder} aria-label="Transaction sort order" onChange={e => setSortOrder(e.target.value as typeof sortOrder)} className="h-10 w-auto min-w-0 flex-1 text-[13px] sm:max-w-36">
+            <option value="date">Newest</option><option value="amount-high">High to low</option><option value="amount-low">Low to high</option>
+          </Select>
         </div>
       </CardHeader>}
-      
+
       <Modal 
         isOpen={isAdding} 
         onClose={handleCancel} 
@@ -1982,484 +1590,43 @@ export function TransactionList({
           </form>
       </Modal>
 
-      {!composerOnly && <CardContent className="space-y-3 sm:space-y-4">
-        {transactionView === 'calendar' ? (
-          <TransactionCalendar
-            transactions={transactions.filter(applyFilters)}
-            accounts={accounts}
-            currentMonth={currentMonth}
-            privacyMode={privacyMode}
-            getCategoryName={getCategoryName}
-            getCategoryIcon={getCategoryIcon}
-            getAccountName={getAccountName}
-            getAccountCurrency={getAccountCurrency}
-            convertToMasterCurrency={convertToMasterCurrency}
-            masterCurrency={masterCurrency}
-            sortOrder={sortOrder}
-          />
-        ) : (
-        <div className="space-y-3 sm:space-y-4">
-          {mcpReviewTransactions.length > 0 && (
-            <section className="space-y-1.5 rounded-xl border border-violet-500/20 bg-violet-500/[0.03] p-2 sm:p-3" aria-labelledby="mcp-review-heading">
-              <div className="flex items-center gap-1.5 sm:gap-2">
-                <Bot className="h-3.5 w-3.5 text-violet-500" />
-                <div id="mcp-review-heading" className="text-[10px] sm:text-xs font-semibold text-violet-600 dark:text-violet-300">
-                  MCP Review
-                </div>
-                <span className="rounded-full bg-violet-500/10 px-1.5 py-0.5 text-[9px] sm:text-[10px] font-medium text-violet-600 dark:text-violet-300">
-                  {mcpReviewTransactions.length}
-                </span>
-                <div className="flex-1 h-px bg-violet-500/20" />
-              </div>
-              {mcpBalancePreviews.length > 0 && (
-                <div className="flex flex-wrap gap-1.5 rounded-lg border border-violet-500/15 bg-violet-500/[0.04] p-1.5 sm:p-2">
-                  {mcpBalancePreviews.map(({ account, acceptedBalance }) => {
-                    const hideBalance = privacyMode === 'hidden' || (account.type === 'investment' && shouldHideInvestment())
-                    const formatBalance = (balance: number) => `${balance.toLocaleString('hu-HU', {
-                      minimumFractionDigits: account.currency === 'HUF' ? 0 : 2,
-                      maximumFractionDigits: account.currency === 'HUF' ? 0 : 2,
-                    })} ${account.currency}`
-
-                    return (
-                      <div key={account.id} className="inline-flex items-center gap-1.5 rounded-md bg-background/60 px-2 py-1 text-[10px] sm:text-xs">
-                        <span className="max-w-24 truncate font-medium text-muted-foreground">{account.name}</span>
-                        <span className={hideBalance ? 'select-none text-muted-foreground' : 'text-muted-foreground'}>
-                          {hideBalance ? '••••••' : formatBalance(account.balance)}
-                        </span>
-                        <ArrowRight className="h-3 w-3 flex-shrink-0 text-violet-500" aria-hidden="true" />
-                        <span className={hideBalance ? 'select-none font-semibold text-violet-500' : 'font-semibold text-violet-600 dark:text-violet-300'}>
-                          {hideBalance ? '••••••' : formatBalance(acceptedBalance)}
-                        </span>
-                      </div>
-                    )
-                  })}
-                </div>
-              )}
-              <div className="space-y-3 pt-0.5">
-                {sortedMcpReviewDates.map(date => (
-                  <div key={date} className="space-y-1.5">
-                    <div className="flex items-center gap-1.5 sm:gap-2">
-                      <div className="text-[10px] sm:text-xs font-medium text-muted-foreground">
-                        {new Date(date).getFullYear() !== new Date().getFullYear()
-                          ? format(new Date(date), 'EEEE, MMM d, yyyy')
-                          : format(new Date(date), 'EEEE, MMM d')}
-                      </div>
-                      <div className="flex-1 h-px bg-violet-500/20" />
-                    </div>
-                    <div className="space-y-1">
-                      {groupedMcpReviewTransactions[date].map(tx => renderPendingTransaction(tx, tx.date <= today))}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </section>
-          )}
-
-          {(readyTransactions.length > 0 || futureTransactions.length > 0) && (
-            <div className="space-y-3">
-              {readyTransactions.length > 0 && (
-                <div className="space-y-1.5">
-                  <div className="flex items-center gap-1.5 sm:gap-2">
-                    <div className="text-[10px] sm:text-xs font-medium text-success">
-                      Ready to confirm
-                    </div>
-                    <div className="flex-1 h-px bg-success/20" />
-                  </div>
-                  <div className="space-y-1">
-                    {readyTransactions.map(tx => renderPendingTransaction(tx, true))}
-                  </div>
-                </div>
-              )}
-
-              {futureTransactions.length > 0 && (
-                <div className="space-y-1.5">
-                  <div className="flex items-center gap-1.5 sm:gap-2">
-                    <div className="text-[10px] sm:text-xs font-medium text-primary">
-                      Upcoming
-                    </div>
-                    <div className="flex-1 h-px bg-primary/20" />
-                  </div>
-                  <div className="space-y-1">
-                    {futureTransactions.map(tx => renderPendingTransaction(tx, false))}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          {sortOrder === 'date' ? (
-            // Date-based grouping
-            (() => {
-              type ProcessedTx = Transaction & { relatedTx?: Transaction }
-
-              // Process each date's full filtered group first so transfers always find their pair
-              const processedGrouped: Record<string, ProcessedTx[]> = {}
-              sortedDates.forEach(date => {
-                const filtered = groupedTransactions[date].filter(applyFilters)
-                processedGrouped[date] = processTransactions(filtered)
-              })
-
-              // Flat list in date order — newest date first, newest tx within date first
-              const allProcessed = sortedDates.flatMap(date => processedGrouped[date])
-
-              const toShow = showAllTransactions ? allProcessed : allProcessed.slice(0, DISPLAY_LIMIT)
-              const shownIds = new Set(toShow.map(tx => tx.id))
-
-              const datesToDisplay = sortedDates.filter(date =>
-                processedGrouped[date].some(tx => shownIds.has(tx.id))
-              )
-
-              return <>
-                {datesToDisplay.map(date => {
-                  const dateProcessed = processedGrouped[date].filter(tx => shownIds.has(tx.id))
-
-                  if (dateProcessed.length === 0) return null
-
-              return (
-              <div key={date}>
-                <div className="flex items-center gap-1.5 sm:gap-2 mb-1.5 sm:mb-2">
-                  <div className="text-[10px] sm:text-xs font-medium text-muted-foreground">
-                    {new Date(date).getFullYear() !== new Date().getFullYear()
-                      ? format(new Date(date), 'EEEE, MMM d, yyyy')
-                      : format(new Date(date), 'EEEE, MMM d')}
-                  </div>
-                  <div className="flex-1 h-px bg-border" />
-                </div>
-                <div className="space-y-1">
-                  {dateProcessed.map(tx => {
-                    const isTransfer = !!tx.linked_transaction_id && !!(tx as any).relatedTx
-                    const related = (tx as any).relatedTx as Transaction | undefined
-                    
-                    return (
-                    <div 
-                      key={tx.id} 
-                      className="group flex items-center justify-between p-2 sm:p-3 rounded-lg sm:rounded-xl hover:bg-secondary/30 transition-all duration-200"
-                      onClick={() => setActiveTxId(activeTxId === tx.id ? null : tx.id)}
-                    >
-                      <div className="flex items-center gap-2 sm:gap-3 min-w-0" onClick={(e) => e.stopPropagation()}>
-                        <div className={`h-8 w-8 sm:h-10 sm:w-10 rounded-lg sm:rounded-xl flex items-center justify-center text-base sm:text-lg ${
-                          isTransfer ? 'bg-blue-500/10 text-blue-500' :
-                          tx.amount >= 0 ? 'bg-success/10' : 'bg-secondary'
-                        }`}>
-                          {isTransfer ? <ArrowRightLeft className="h-4 w-4 sm:h-5 sm:w-5" /> : getCategoryIcon(tx.category_id)}
-                        </div>
-                        <div className="min-w-0">
-                          <p className="font-medium text-xs sm:text-sm flex items-center gap-1.5 min-w-0">
-                            <span className="truncate">
-                              {isTransfer
-                                ? `Transfer to ${related ? getAccountName(related.account_id) : 'Unknown'}`
-                                : (tx.description || getCategoryName(tx.category_id))
-                              }
-                            </span>
-                            {renderRecentBadge(tx)}
-                          </p>
-                          <div className="flex items-center gap-1.5 sm:gap-2 text-[10px] sm:text-xs text-muted-foreground">
-                            <span className="truncate">{getAccountName(tx.account_id)}</span>
-                            {isTransfer && related && (
-                               <>
-                                 <span>→</span>
-                                 <span className="truncate">{getAccountName(related.account_id)}</span>
-                               </>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                      <div className="flex flex-col items-end gap-0.5">
-                        <div className={`font-bold text-xs sm:text-sm ${isTransfer ? 'text-destructive' : (tx.amount >= 0 ? 'text-success' : 'text-destructive')} ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
-                          {(() => {
-                            const account = accounts.find(a => a.id === tx.account_id)
-                            const isInvestmentTx = account?.type === 'investment'
-                            const shouldHide = privacyMode === 'hidden' || (isInvestmentTx && shouldHideInvestment())
-                            
-                            if (shouldHide) {
-                              return '••••••'
-                            }
-                            
-                            if (isInvestmentTx && tx.quantity !== undefined) {
-                              return <>{tx.quantity > 0 ? '+' : ''}{tx.quantity.toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 8})} {getAccountCurrency(tx.account_id)}</>
-                            }
-                            return <>{tx.amount >= 0 ? '+' : '-'}{isTransfer && isMcpReviewTransaction(tx) ? formatAmount(Math.abs(tx.amount)) : Math.abs(tx.amount).toLocaleString('hu-HU', {minimumFractionDigits: 2, maximumFractionDigits: 2})} {getAccountCurrency(tx.account_id)}</>
-                          })()}
-                        </div>
-                        {isTransfer && related && (
-                          <div className={`text-[10px] sm:text-xs text-success font-medium ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
-                            {(() => {
-                              const relatedAccount = accounts.find(a => a.id === related.account_id)
-                              const isInvestmentTx = relatedAccount?.type === 'investment'
-                              const shouldHide = privacyMode === 'hidden' || (isInvestmentTx && shouldHideInvestment())
-                              
-                              if (shouldHide) {
-                                return '••••••'
-                              }
-                              return <>+{isMcpReviewTransaction(tx) ? formatAmount(Math.abs(related.amount)) : Math.abs(related.amount).toLocaleString('hu-HU', {minimumFractionDigits: 2, maximumFractionDigits: 2})} {getAccountCurrency(related.account_id)}</>
-                            })()}
-                          </div>
-                        )}
-                        <div className={`flex gap-1 transition-opacity ${activeTxId === tx.id ? 'opacity-100' : 'opacity-0 md:group-hover:opacity-100'}`}>
-                          {!isLocked(tx.account_id) && !(related && isLocked(related.account_id)) && (
-                            <>
-                              <Button 
-                                size="icon" 
-                                variant="ghost" 
-                                className="h-7 w-7 sm:h-8 sm:w-8"
-                                aria-label={isTransfer ? 'Edit transfer' : 'Edit transaction'}
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  handleEdit(tx)
-                                }}
-                              >
-                                <Pencil className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
-                              </Button>
-                              <Button 
-                                size="icon" 
-                                variant="ghost" 
-                                className="h-7 w-7 sm:h-8 sm:w-8 text-destructive hover:text-destructive"
-                                disabled={deletingId === tx.id}
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  handleDelete(tx.id)
-                                }}
-                              >
-                                <Trash2 className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
-                              </Button>
-                            </>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  )})}
-                </div>
-              </div>
-            )})}
-            
-            {!showAllTransactions && allProcessed.length > DISPLAY_LIMIT && (
-              <div className="text-center pt-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setShowAllTransactions(true)}
-                  className="text-xs sm:text-sm"
-                >
-                  Show All ({allProcessed.length - DISPLAY_LIMIT} more)
-                </Button>
-              </div>
-            )}
-
-            {showAllTransactions && allProcessed.length > DISPLAY_LIMIT && (
-              <div className="text-center pt-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setShowAllTransactions(false)}
-                  className="text-xs sm:text-sm"
-                >
-                  Show Less
-                </Button>
-              </div>
-            )}
-          </>
-          }
-          )()
-          ) : (
-            // Amount-based sorting (flat list)
-            (() => {
-              const allTransactions = transactions.filter(applyFilters)
-              
-              // Sort by amount
-              const sortedTransactions = [...allTransactions].sort((a, b) => 
-                sortOrder === 'amount-high' 
-                  ? Math.abs(b.amount) - Math.abs(a.amount)
-                  : Math.abs(a.amount) - Math.abs(b.amount)
-              )
-              
-              const transactionsToDisplay = showAllTransactions ? sortedTransactions : sortedTransactions.slice(0, DISPLAY_LIMIT)
-              
-              return (
-                <>
-                <div className="space-y-1">
-                  {processTransactions(transactionsToDisplay).map(tx => {
-                  const isTransfer = !!tx.linked_transaction_id && !!(tx as any).relatedTx
-                  const related = (tx as any).relatedTx as Transaction | undefined
-                  
-                  return (
-                  <div 
-                    key={tx.id} 
-                    className="group flex items-center justify-between p-2 sm:p-3 rounded-lg sm:rounded-xl hover:bg-secondary/30 transition-all duration-200"
-                    onClick={() => setActiveTxId(activeTxId === tx.id ? null : tx.id)}
-                  >
-                    <div className="flex items-center gap-2 sm:gap-3 min-w-0" onClick={(e) => e.stopPropagation()}>
-                      <div className={`h-8 w-8 sm:h-10 sm:w-10 rounded-lg sm:rounded-xl flex items-center justify-center text-base sm:text-lg ${
-                        isTransfer ? 'bg-blue-500/10 text-blue-500' :
-                        tx.amount >= 0 ? 'bg-success/10' : 'bg-secondary'
-                      }`}>
-                        {isTransfer ? <ArrowRightLeft className="h-4 w-4 sm:h-5 sm:w-5" /> : getCategoryIcon(tx.category_id)}
-                      </div>
-                      <div className="min-w-0">
-                        <p className="font-medium text-xs sm:text-sm flex items-center gap-1.5 min-w-0">
-                          <span className="truncate">
-                            {isTransfer
-                              ? `Transfer to ${related ? getAccountName(related.account_id) : 'Unknown'}`
-                              : (tx.description || getCategoryName(tx.category_id))
-                            }
-                          </span>
-                          {renderRecentBadge(tx)}
-                        </p>
-                        <div className="flex items-center gap-1.5 sm:gap-2 text-[10px] sm:text-xs text-muted-foreground">
-                          <span>{new Date(tx.date).getFullYear() !== new Date().getFullYear()
-                            ? format(new Date(tx.date), 'MMM d, yyyy')
-                            : format(new Date(tx.date), 'MMM d')}</span>
-                          <span>•</span>
-                          <span className="truncate">{getAccountName(tx.account_id)}</span>
-                          {isTransfer && related && (
-                             <>
-                               <span>→</span>
-                               <span className="truncate">{getAccountName(related.account_id)}</span>
-                             </>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                    <div className="flex flex-col items-end gap-0.5">
-                      <div className={`font-bold text-xs sm:text-sm ${isTransfer ? 'text-destructive' : (tx.amount >= 0 ? 'text-success' : 'text-destructive')} ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
-                        {(() => {
-                          const account = accounts.find(a => a.id === tx.account_id)
-                          const isInvestmentTx = account?.type === 'investment'
-                          const shouldHide = privacyMode === 'hidden' || (isInvestmentTx && shouldHideInvestment())
-                          
-                          if (shouldHide) {
-                            return '••••••'
-                          }
-                          
-                          if (isInvestmentTx && tx.quantity !== undefined) {
-                            return <>{tx.quantity > 0 ? '+' : ''}{tx.quantity.toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 8})} {getAccountCurrency(tx.account_id)}</>
-                          }
-                          return <>{tx.amount >= 0 ? '+' : '-'}{Math.abs(tx.amount).toLocaleString('hu-HU', {minimumFractionDigits: 2, maximumFractionDigits: 2})} {getAccountCurrency(tx.account_id)}</>
-                        })()}
-                      </div>
-                      {isTransfer && related && (
-                        <div className={`text-[10px] sm:text-xs text-success font-medium ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
-                          {(() => {
-                            const relatedAccount = accounts.find(a => a.id === related.account_id)
-                            const isInvestmentTx = relatedAccount?.type === 'investment'
-                            const shouldHide = privacyMode === 'hidden' || (isInvestmentTx && shouldHideInvestment())
-                            
-                            if (shouldHide) {
-                              return '••••••'
-                            }
-                            return <>+{Math.abs(related.amount).toLocaleString('hu-HU', {minimumFractionDigits: 2, maximumFractionDigits: 2})} {getAccountCurrency(related.account_id)}</>
-                          })()}
-                        </div>
-                      )}
-                      <div className={`flex gap-1 transition-opacity ${activeTxId === tx.id ? 'opacity-100' : 'opacity-0 md:group-hover:opacity-100'}`}>
-                        {!isLocked(tx.account_id) && !(related && isLocked(related.account_id)) && (
-                          <>
-                            <Button 
-                              size="icon" 
-                              variant="ghost" 
-                              className="h-7 w-7 sm:h-8 sm:w-8"
-                              aria-label={isTransfer ? 'Edit transfer' : 'Edit transaction'}
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                handleEdit(tx)
-                              }}
-                            >
-                              <Pencil className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
-                            </Button>
-                            <Button 
-                              size="icon" 
-                              variant="ghost" 
-                              className="h-7 w-7 sm:h-8 sm:w-8 text-destructive hover:text-destructive"
-                              disabled={deletingId === tx.id}
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                handleDelete(tx.id)
-                              }}
-                            >
-                              <Trash2 className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
-                            </Button>
-                          </>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                  )})}
-                </div>
-                
-                {!showAllTransactions && sortedTransactions.length > DISPLAY_LIMIT && (
-                  <div className="text-center pt-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setShowAllTransactions(true)}
-                      className="text-xs sm:text-sm"
-                    >
-                      Show All ({sortedTransactions.length - DISPLAY_LIMIT} more)
-                    </Button>
-                  </div>
-                )}
-
-                {showAllTransactions && sortedTransactions.length > DISPLAY_LIMIT && (
-                  <div className="text-center pt-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setShowAllTransactions(false)}
-                      className="text-xs sm:text-sm"
-                    >
-                      Show Less
-                    </Button>
-                  </div>
-                )}
-              </>
-              )
-            })()
-          )}
-          
-          {loading && transactions.length === 0 && upcomingTransactions.length === 0 && (
-            <div className="space-y-2">
-              {[...Array(6)].map((_, i) => (
-                <div key={i} className="flex items-center gap-3 p-2 sm:p-3 rounded-xl">
-                  <div className="h-8 w-8 sm:h-10 sm:w-10 rounded-lg sm:rounded-xl bg-muted animate-pulse flex-shrink-0" />
-                  <div className="flex-1 space-y-1.5">
-                    <div className="h-3 bg-muted animate-pulse rounded w-2/5" style={{ animationDelay: `${i * 60}ms` }} />
-                    <div className="h-2.5 bg-muted animate-pulse rounded w-1/4" style={{ animationDelay: `${i * 60 + 30}ms` }} />
-                  </div>
-                  <div className="h-4 w-16 bg-muted animate-pulse rounded" style={{ animationDelay: `${i * 60}ms` }} />
-                </div>
-              ))}
-            </div>
-          )}
-
-          {transactions.length === 0 && upcomingTransactions.length === 0 && !isAdding && !loading && (
-            <div className="text-center py-12">
-              <div className="h-12 w-12 rounded-full bg-secondary/50 flex items-center justify-center mx-auto mb-3">
-                <Receipt className="h-6 w-6 text-muted-foreground" />
-              </div>
-              <p className="text-sm text-muted-foreground">No transactions yet</p>
-              <p className="text-xs text-muted-foreground/70 mt-1">Record your first transaction to start tracking</p>
-            </div>
-          )}
-
-          {(transactions.length > 0 || upcomingTransactions.length > 0) && totalFilteredCount === 0 && !isAdding && !loading && (
-            <div className="text-center py-12">
-              <div className="h-12 w-12 rounded-full bg-secondary/50 flex items-center justify-center mx-auto mb-3">
-                <Search className="h-6 w-6 text-muted-foreground" />
-              </div>
-              <p className="text-sm text-muted-foreground">No transactions found</p>
-              {searchQuery && !isAllTimeRange(dateRange) && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => onDateRangeChange(ALL_TIME_RANGE)}
-                  className="mt-3 text-xs sm:text-sm"
-                >
-                  Search in All Time
-                </Button>
-              )}
-            </div>
-          )}
-        </div>
-        )}
+      {!composerOnly && <CardContent className="p-3 sm:p-5">
+        {transactionView === 'calendar' ? <TransactionCalendar transactions={transactions.filter(applyFilters)} accounts={accounts} currentMonth={currentMonth} privacyMode={privacyMode}
+          getCategoryName={getCategoryName} getCategoryIcon={getCategoryIcon} getAccountName={getAccountName} getAccountCurrency={getAccountCurrency} convertToMasterCurrency={convertToMasterCurrency} masterCurrency={masterCurrency} sortOrder={sortOrder} />
+        : <div className="space-y-4">
+          {reviewTransactions.length > 0 && <section aria-labelledby="review-heading" className="overflow-hidden rounded-xl border border-border">
+            <div className="flex items-center gap-2 px-4 py-3"><h3 id="review-heading" className="text-sm font-semibold">Needs review</h3><span className="rounded-full bg-secondary px-2 py-0.5 text-xs">{reviewTransactions.length}</span><span className="ml-auto hidden text-xs text-muted-foreground sm:block">Balances change only after confirmation</span></div>
+            {reviewTransactions.map(tx => renderPendingTransaction(tx, tx.date <= today))}
+            {mcpBalancePreviews.length > 0 && <div className="border-t border-border bg-background/40 px-4 py-3 text-xs text-muted-foreground"><p className="mb-1 font-medium">If all assistant drafts are confirmed</p><div className="flex flex-wrap gap-x-4 gap-y-1">{mcpBalancePreviews.map(({ account, acceptedBalance }) => <span key={account.id}>{account.name}: {nativeAmount(account.balance, account.id, false)} → {nativeAmount(acceptedBalance, account.id, false)}</span>)}</div></div>}
+          </section>}
+          {futureTransactions.length > 0 && <section className="overflow-hidden rounded-xl border border-border">
+            <button type="button" aria-expanded={upcomingOpen} aria-controls="future-transactions" onClick={() => setUpcomingOpen(!upcomingOpen)} className="flex min-h-14 w-full flex-wrap items-center gap-2 px-4 py-3 text-left text-sm">
+              <Clock className="h-4 w-4 shrink-0 text-muted-foreground" /><span className="font-semibold">{futureTransactions.length} upcoming</span><span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">next {futureTransactions[0].description || getCategoryName(futureTransactions[0].category_id)} · {format(parseISO(futureTransactions[0].date), 'MMM d')}</span><span className="text-xs tabular-nums">{convertedAmount(sumCash(futureTransactions))}</span><ChevronDown className={cn('h-4 w-4 text-muted-foreground', upcomingOpen && 'rotate-180')} />
+            </button>
+            {upcomingOpen && <div id="future-transactions">{futureTransactions.map(tx => renderPendingTransaction(tx, false))}</div>}
+          </section>}
+          {(() => {
+            const allProcessed = sortOrder === 'date' ? sortedDates.flatMap(date => processTransactions(groupedTransactions[date].filter(applyFilters))) : processTransactions(transactions.filter(applyFilters)).sort((a, b) => sortOrder === 'amount-high' ? Math.abs(b.amount) - Math.abs(a.amount) : Math.abs(a.amount) - Math.abs(b.amount))
+            const shown = showAllTransactions ? allProcessed : allProcessed.slice(0, DISPLAY_LIMIT)
+            return <>
+              {sortOrder === 'date' ? sortedDates.map(date => {
+                const items = shown.filter(tx => tx.date === date)
+                if (!items.length) return null
+                return <section key={date} aria-label={format(parseISO(date), 'EEEE, MMM d, yyyy')}>
+                  <div className="mb-1 flex flex-wrap items-center justify-between gap-2 border-b border-border/60 px-1 pb-2 text-xs text-muted-foreground"><h3>{format(parseISO(date), 'EEE, MMM d, yyyy')}</h3><span className="tabular-nums" aria-label="Daily total" title="Income less spending; transfers and investment trades excluded">{convertedAmount(sumCash(groupedTransactions[date].filter(applyFilters)))}</span></div>
+                  {items.map(renderPostedTransaction)}
+                </section>
+              }) : shown.map(renderPostedTransaction)}
+              {allProcessed.length > DISPLAY_LIMIT && <div className="pt-2 text-center"><Button variant="outline" size="sm" onClick={() => setShowAllTransactions(!showAllTransactions)}>{showAllTransactions ? 'Show Less' : `Show All (${allProcessed.length - DISPLAY_LIMIT} more)`}</Button></div>}
+            </>
+          })()}
+          {loading && transactions.length === 0 && upcomingTransactions.length === 0 && <div role="status" className="py-8 text-center text-sm text-muted-foreground">Loading transactions…</div>}
+          {!loading && totalFilteredCount === 0 && !isAdding && <div className="py-12 text-center">
+            <Receipt className="mx-auto mb-3 h-8 w-8 text-muted-foreground" /><p className="text-sm text-muted-foreground">{transactions.length === 0 && upcomingTransactions.length === 0 ? 'No transactions yet' : 'No transactions found'}</p>
+            <p className="mt-1 text-xs text-muted-foreground">{transactions.length === 0 && upcomingTransactions.length === 0 ? 'Record your first transaction to start tracking' : 'Try changing the filters or period.'}</p>
+            {searchQuery && !isAllTimeRange(dateRange) && <Button variant="outline" size="sm" className="mt-3" onClick={() => onDateRangeChange(ALL_TIME_RANGE)}>Search in All Time</Button>}
+          </div>}
+        </div>}
       </CardContent>}
 
       {/* Bulk Transaction Modal */}

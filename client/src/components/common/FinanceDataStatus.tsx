@@ -5,7 +5,7 @@ import { Button } from './button'
 
 export type NamedDataStatus = { label: string; status: DataLoadStatus }
 
-export function FinanceDataStatus({ datasets, onRetry }: { datasets: NamedDataStatus[]; onRetry: () => void }) {
+export function FinanceDataStatus({ datasets, onRetry, compact = false }: { datasets: NamedDataStatus[]; onRetry: () => void; compact?: boolean }) {
   const failures = datasets.filter(({ status }) => status.error)
   if (failures.length === 0) return datasets.some(({ status }) => status.loaded && (status.loading || status.stale))
     ? (
@@ -18,10 +18,10 @@ export function FinanceDataStatus({ datasets, onRetry }: { datasets: NamedDataSt
   const retrying = failures.some(({ status }) => status.loading)
 
   return (
-    <div role="alert" className="mb-4 rounded-xl border border-destructive/40 bg-card p-4 text-sm">
+    <div role="alert" className={`mb-4 rounded-xl border bg-card text-sm ${compact ? 'border-amber-500/25 px-4 py-3' : 'border-destructive/40 p-4'}`}>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
-          <p className="font-medium text-foreground">Some financial data could not be loaded.</p>
+          <p className="font-medium text-foreground">{compact && failures.every(({ status }) => status.loaded) ? 'Some financial data did not refresh.' : 'Some financial data could not be loaded.'}</p>
           <ul className="mt-2 space-y-1 text-muted-foreground">
             {failures.map(({ label, status }) => (
               <li key={label}>{label}: {status.stale ? 'Showing previously loaded data. It may be out of date or from a different period.' : 'Unavailable.'}</li>

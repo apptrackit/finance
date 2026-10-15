@@ -18,7 +18,7 @@ vi.mock('../../context/PrivacyContext', () => ({
 }))
 
 vi.mock('../../context/AlertContext', () => ({
-  useAlert: () => ({ confirm: vi.fn(), showAlert: vi.fn() }),
+  useAlert: () => ({ confirm: vi.fn(async () => true), showAlert: vi.fn() }),
 }))
 
 describe('TransactionList transfer reviews', () => {
@@ -53,11 +53,11 @@ describe('TransactionList transfer reviews', () => {
       />
     )
 
-    const reviewSection = screen.getByRole('region', { name: /MCP Review/i })
+    const reviewSection = screen.getByRole('region', { name: /Needs review/i })
     expect(within(reviewSection).getByText('Savings account exchange')).toBeInTheDocument()
-    expect(within(reviewSection).getByText('Revolut Saving → Revolut MXN')).toBeInTheDocument()
-    expect(within(reviewSection).getByText('20 000 HUF')).toBeInTheDocument()
-    expect(within(reviewSection).getByText('1 095.83 MXN')).toBeInTheDocument()
+    expect(reviewSection).toHaveTextContent('Revolut Saving → Revolut MXN')
+    expect(reviewSection).toHaveTextContent('20 000 HUF')
+    expect(reviewSection).toHaveTextContent('1 095,83 MXN')
     expect(within(reviewSection).getByText('Sent')).toBeInTheDocument()
     expect(within(reviewSection).getByText('Received')).toBeInTheDocument()
     expect(within(reviewSection).getByRole('button', { name: 'Confirm transfer review draft' })).toBeInTheDocument()
@@ -265,4 +265,80 @@ it('retains a manual conversion when a late market-rate request completes', asyn
   await waitFor(() => expect(dialog).not.toHaveTextContent('Loading rate…'))
   expect(received).toHaveValue('12.34')
   expect(within(dialog).getByLabelText('Exchange Rate')).toHaveValue('0.1234')
+})
+
+describe('dashboard transaction presentation', () => {
+  it('combines due items and assistant drafts, keeps future drafts unconfirmable, and resolves both transfer legs once', async () => {
+    const user = userEvent.setup()
+    vi.mocked(apiFetch).mockReset()
+    vi.mocked(apiFetch).mockResolvedValue({ ok: true, json: async () => ({}) } as Response)
+    const onChange = vi.fn()
+    renderTransfers({ transactions: [], onTransactionAdded: onChange, upcomingTransactions: [
+      { id: 'due', account_id: 'source', amount: -500, date: '2020-01-01', description: 'Due bill', pending_kind: 'upcoming' },
+      { id: 'future', account_id: 'source', amount: -700, date: '2099-01-01', description: 'Future draft', pending_kind: 'mcp_review' },
+      { id: 'debit', account_id: 'source', amount: -100, date: '2020-01-01', description: 'Draft transfer', pending_kind: 'mcp_review', linked_transaction_id: 'credit' },
+      { id: 'credit', account_id: 'destination', amount: 10, date: '2020-01-01', description: 'Draft transfer', pending_kind: 'mcp_review', linked_transaction_id: 'debit' },
+    ] })
+    const queue = screen.getByRole('region', { name: 'Needs review' })
+    expect(within(queue).getAllByText('Draft transfer')).toHaveLength(1)
+    expect(within(queue).getByText('Due bill')).toBeInTheDocument()
+    expect(within(queue).getByText('Future draft')).toBeInTheDocument()
+    expect(within(queue).queryByRole('button', { name: 'Confirm assistant draft' })).not.toBeInTheDocument()
+    await user.click(within(queue).getByRole('button', { name: 'Confirm transfer review draft' }))
+    await waitFor(() => expect(within(queue).queryByText('Draft transfer')).not.toBeInTheDocument())
+    expect(apiFetch).toHaveBeenCalledExactlyOnceWith('/api/transactions/debit/confirm', { method: 'POST' })
+    expect(onChange).toHaveBeenCalledOnce()
+  })
+
+  it('retains failed confirmations and hides review mutations for either locked leg', async () => {
+    const user = userEvent.setup()
+    vi.mocked(apiFetch).mockReset()
+    vi.mocked(apiFetch).mockRejectedValue(new Error('Try again'))
+    renderTransfers({ transactions: [], upcomingTransactions: [
+      { id: 'due', account_id: 'source', amount: -500, date: '2020-01-01', description: 'Due bill', pending_kind: 'upcoming' },
+      { id: 'locked-pair', account_id: 'source', amount: -100, date: '2020-01-01', pending_kind: 'mcp_review', linked_transaction_id: 'locked-credit' },
+      { id: 'locked-credit', account_id: 'locked', amount: 100, date: '2020-01-01', pending_kind: 'mcp_review', linked_transaction_id: 'locked-pair' },
+    ] })
+    await user.click(screen.getByRole('button', { name: 'Confirm transaction' }))
+    expect(screen.getByText('Due bill')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Confirm transfer review draft' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Decline transfer review draft' })).not.toBeInTheDocument()
+  })
+
+  it('expands upcoming items without offering early confirmation', async () => {
+    const user = userEvent.setup()
+    renderTransfers({ transactions: [], upcomingTransactions: [{ id: 'future', account_id: 'source', amount: -700, date: '2099-01-01', description: 'Future bill', pending_kind: 'upcoming' }] })
+    const toggle = screen.getByRole('button', { name: /1 upcoming/ })
+    expect(toggle).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.queryByRole('button', { name: 'Edit upcoming transaction' })).not.toBeInTheDocument()
+    await user.click(toggle)
+    expect(toggle).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByRole('button', { name: 'Edit upcoming transaction' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Confirm transaction' })).not.toBeInTheDocument()
+  })
+
+  it('shows cash flow daily totals without transfers, native HUF precision, and foreign equivalents', () => {
+    renderTransfers({ transactions: [...postedTransfer,
+      { id: 'expense', account_id: 'source', amount: -20000, date: '2020-01-01', description: 'Groceries' },
+      { id: 'foreign', account_id: 'destination', amount: -4.2, date: '2020-01-01', description: 'Coffee' },
+    ], convertToMasterCurrency: (amount, id) => id === 'destination' ? amount * 400 : amount })
+    expect(screen.getByLabelText('Daily total')).toHaveTextContent('−21 680 HUF')
+    expect(screen.getByText('−20 000 HUF')).toBeInTheDocument()
+    expect(screen.getByText('≈ 1 680 HUF')).toBeInTheDocument()
+    expect(screen.getByText('100 HUF')).not.toHaveClass('text-destructive')
+  })
+
+  it('marks converted totals unavailable when a required rate is absent and masks totals in privacy mode', () => {
+    const { unmount } = render(<TransactionList transactions={[{ id: 'foreign', account_id: 'destination', amount: -4.2, date: '2020-01-01' }]} upcomingTransactions={[]} accounts={transferAccounts}
+      onTransactionAdded={vi.fn()} availableCategories={[]} dateRange={{ startDate: '2020-01-01', endDate: '2020-01-31' }} onDateRangeChange={vi.fn()}
+      currentMonth={new Date(2020, 0, 1)} onMonthChange={vi.fn()} masterCurrency="HUF" convertToMasterCurrency={() => null} />)
+    expect(screen.getByLabelText('Daily total')).toHaveTextContent('Total unavailable')
+    expect(screen.getByText('−4,20 EUR')).toBeInTheDocument()
+    expect(screen.getByText('Conversion unavailable')).toBeInTheDocument()
+    unmount()
+    privacy.mode = 'hidden'
+    renderTransfers({ convertToMasterCurrency: amount => amount })
+    expect(screen.getByLabelText('Daily total')).toHaveTextContent('••••••')
+    expect(screen.queryByText('100 HUF')).not.toBeInTheDocument()
+  })
 })
