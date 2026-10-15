@@ -129,23 +129,27 @@ export function DashboardPage() {
             <div className="mb-4"><MissingExchangeRates compact currencies={[...missingCurrencies].sort()} targetCurrency={masterCurrency}
               onRetry={() => { void handleDataChange() }} retrying={visibleData.some(({ status }) => status.loading)} /></div>
           )}
-          <section aria-label="Dashboard summary" className="mb-5 grid grid-cols-2 overflow-hidden rounded-[14px] border border-border bg-card lg:grid-cols-[1fr_1fr_1.45fr]">
-            <div className="col-span-2 min-w-0 border-b border-border p-4 sm:p-5 lg:col-span-1 lg:border-r lg:border-b-0">
+          <section aria-label="Dashboard summary" className="mb-5 grid grid-cols-2 overflow-hidden rounded-[14px] border border-border bg-card lg:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)]">
+            <div className="col-span-2 min-w-0 border-b border-border p-4 sm:p-5 lg:col-span-1 lg:col-start-1 lg:row-start-1 lg:py-4">
               <FinanceDataBoundary label="Net worth" datasets={netWorthData}>
-                <div className="mb-2 flex items-center gap-2 text-[13px] font-medium text-muted-foreground">Net worth
+                <div className="lg:grid lg:grid-cols-[auto_minmax(0,1fr)] lg:items-baseline lg:gap-x-4">
+                <div className="mb-2 flex items-center gap-2 text-[13px] font-medium text-muted-foreground lg:mb-0">Net worth
                   {shouldHideNetWorth() && !hidden && <button type="button" onClick={() => setShowNetWorth(!showNetWorth)} aria-label={showNetWorth ? 'Hide net worth' : 'Show net worth'} className="flex h-8 w-8 items-center justify-center rounded-lg hover:bg-secondary">
                     {showNetWorth ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </button>}
                 </div>
-                <p className="break-words text-2xl font-bold tracking-tight tabular-nums sm:text-[28px]">{amount(totalNetWorth, hideNetWorth)} <span className="text-xs font-medium text-muted-foreground sm:text-sm">{masterCurrency}</span></p>
-                {investmentValue !== 0 && <p className="mt-2 text-xs text-muted-foreground sm:text-[13px]">Incl. {amount(investmentValue, hideNetWorth || hidden)} {masterCurrency} investments</p>}
+                <p className="min-w-0 break-words text-2xl font-bold tracking-tight tabular-nums sm:text-[28px] lg:text-right lg:text-2xl lg:font-semibold">{amount(totalNetWorth, hideNetWorth)} <span className="text-xs font-medium text-muted-foreground sm:text-sm">{masterCurrency}</span></p>
+                {investmentValue !== 0 && <p className="mt-2 text-xs text-muted-foreground sm:text-[13px] lg:col-start-2 lg:text-right">Incl. {amount(investmentValue, hideNetWorth || hidden)} {masterCurrency} investments</p>}
+                </div>
               </FinanceDataBoundary>
             </div>
-            <div className="min-w-0 border-r border-border p-4 sm:p-5 lg:border-r-0">
+            <div className="min-w-0 border-r border-border p-4 sm:p-5 lg:col-start-1 lg:row-start-2 lg:border-r-0 lg:py-4">
               <FinanceDataBoundary label="Cash" datasets={accountData}>
-                <div className="mb-2 flex flex-wrap items-center justify-between gap-1 text-[13px] text-muted-foreground"><span className="font-medium">Cash</span><span className="hidden text-xs lg:inline">{cashAccounts.length} account{cashAccounts.length === 1 ? '' : 's'}</span></div>
-                <p className="break-words text-lg font-semibold tracking-tight tabular-nums lg:text-[28px]">{amount(cashBalance)} <span className="text-xs font-medium text-muted-foreground sm:text-sm">{masterCurrency}</span></p>
-                {(!dataStatus.upcoming.loaded || cashUpcoming.length > 0) && <p className="mt-2 text-xs text-muted-foreground sm:text-[13px]">{!dataStatus.upcoming.loaded ? 'Upcoming data unavailable' : pendingCashDelta === null ? 'Projection unavailable' : <><span className={hidden ? '' : pendingCashDelta >= 0 ? 'font-semibold text-success' : 'font-semibold text-destructive'}>{signed(pendingCashDelta)} {masterCurrency}</span> after {cashUpcoming.length} upcoming</>}</p>}
+                <div className="lg:grid lg:grid-cols-[auto_minmax(0,1fr)] lg:items-baseline lg:gap-x-4">
+                <div className="mb-2 flex flex-wrap items-center justify-between gap-1 text-[13px] text-muted-foreground lg:mb-0 lg:flex-col lg:items-start"><span className="font-medium">Cash</span><span className="hidden text-xs lg:inline">{cashAccounts.length} account{cashAccounts.length === 1 ? '' : 's'}</span></div>
+                <p className="min-w-0 break-words text-lg font-semibold tracking-tight tabular-nums lg:text-right lg:text-2xl">{amount(cashBalance)} <span className="text-xs font-medium text-muted-foreground sm:text-sm">{masterCurrency}</span></p>
+                {(!dataStatus.upcoming.loaded || cashUpcoming.length > 0) && <p className="mt-2 text-xs text-muted-foreground sm:text-[13px] lg:col-start-2 lg:text-right">{!dataStatus.upcoming.loaded ? 'Upcoming data unavailable' : pendingCashDelta === null ? 'Projection unavailable' : <><span className={hidden ? '' : pendingCashDelta >= 0 ? 'font-semibold text-success' : 'font-semibold text-destructive'}>{signed(pendingCashDelta)} {masterCurrency}</span> after {cashUpcoming.length} upcoming</>}</p>}
+                </div>
               </FinanceDataBoundary>
             </div>
             <div className="min-w-0 p-4 text-xs text-muted-foreground lg:hidden">
@@ -155,7 +159,7 @@ export function DashboardPage() {
                 <p className="mt-2">{hidden ? '••%' : ratio === null ? 'Ratio unavailable' : `${Math.round(ratio)}% of income spent`}</p>
               </FinanceDataBoundary>
             </div>
-            <div className="col-span-2 min-w-0 border-t border-border p-4 sm:p-5 lg:col-span-1 lg:border-t-0 lg:border-l">
+            <div className="col-span-2 min-w-0 border-t border-border p-4 sm:p-5 lg:col-span-1 lg:col-start-2 lg:row-start-1 lg:row-span-2 lg:border-t-0 lg:border-l">
               <FinanceDataBoundary label="Period activity" datasets={summaryData}>
                 <div className="mb-4 hidden items-baseline justify-between gap-3 border-b border-border/60 pb-3 lg:flex"><h2 className="text-xs font-medium tracking-wide text-muted-foreground">{periodLabel}</h2>{filters.range !== 'allTime' && today >= dateRange.startDate && today <= dateRange.endDate && <span className="shrink-0 text-xs text-muted-foreground">{daysLeft} days left</span>}</div>
                 <div className="hidden grid-cols-[auto_1fr_auto] items-baseline gap-x-3 gap-y-2 text-sm tabular-nums lg:grid">
