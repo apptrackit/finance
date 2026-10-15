@@ -130,26 +130,30 @@ export function DashboardPage() {
             <div className="mb-4"><MissingExchangeRates compact currencies={[...missingCurrencies].sort()} targetCurrency={masterCurrency}
               onRetry={() => { void handleDataChange() }} retrying={visibleData.some(({ status }) => status.loading)} /></div>
           )}
-          <section aria-label="Dashboard summary" className="mb-5 grid grid-cols-1 overflow-hidden rounded-[14px] border border-border bg-card lg:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)]">
-            <div className="min-w-0 border-b border-border p-4 sm:p-5 lg:col-start-1 lg:row-start-1 lg:py-4">
+          <section aria-label="Dashboard summary" className="mb-5 grid grid-cols-1 overflow-hidden rounded-[14px] border border-border bg-card lg:auto-rows-fr lg:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)]">
+            <div className="flex min-w-0 flex-col justify-center border-b border-border p-4 sm:p-5 lg:col-start-1 lg:row-start-1 lg:py-4">
               <FinanceDataBoundary label="Net worth" datasets={netWorthData}>
-                <div className="grid grid-cols-[auto_minmax(0,1fr)] items-baseline gap-x-4">
+                <div className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-4">
                 <div className="flex items-center gap-2 text-[13px] font-medium text-muted-foreground">Net worth
                   {shouldHideNetWorth() && !hidden && <button type="button" onClick={() => setShowNetWorth(!showNetWorth)} aria-label={showNetWorth ? 'Hide net worth' : 'Show net worth'} className="flex h-8 w-8 items-center justify-center rounded-lg hover:bg-secondary">
                     {showNetWorth ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </button>}
                 </div>
+                <div className="min-w-0 text-right">
                 <p className="min-w-0 break-words text-right text-xl font-semibold tracking-tight tabular-nums sm:text-2xl">{amount(totalNetWorth, hideNetWorth)} <span className="text-xs font-medium text-muted-foreground sm:text-sm">{masterCurrency}</span></p>
-                {investmentValue !== 0 && <p className="mt-2 text-xs text-muted-foreground sm:text-[13px] col-start-2 text-right">Incl. {amount(investmentValue, hideNetWorth || hidden)} {masterCurrency} investments</p>}
+                {investmentValue !== 0 && <p className="mt-2 text-xs text-muted-foreground sm:text-[13px]">Incl. {amount(investmentValue, hideNetWorth || hidden)} {masterCurrency} investments</p>}
+                </div>
                 </div>
               </FinanceDataBoundary>
             </div>
-            <div className="min-w-0 p-4 sm:p-5 lg:col-start-1 lg:row-start-2 lg:py-4">
+            <div className="flex min-w-0 flex-col justify-center p-4 sm:p-5 lg:col-start-1 lg:row-start-2 lg:py-4">
               <FinanceDataBoundary label="Cash" datasets={accountData}>
-                <div className="grid grid-cols-[auto_minmax(0,1fr)] items-baseline gap-x-4">
+                <div className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-4">
                 <div className="flex flex-col items-start gap-1 text-[13px] text-muted-foreground"><span className="font-medium">Cash</span><span className="text-xs">{cashAccounts.length} account{cashAccounts.length === 1 ? '' : 's'}</span></div>
+                <div className="min-w-0 text-right">
                 <p className="min-w-0 break-words text-right text-xl font-semibold tracking-tight tabular-nums sm:text-2xl">{amount(cashBalance)} <span className="text-xs font-medium text-muted-foreground sm:text-sm">{masterCurrency}</span></p>
-                {(!dataStatus.upcoming.loaded || cashUpcoming.length > 0) && <p className="mt-2 text-xs text-muted-foreground sm:text-[13px] col-start-2 text-right">{!dataStatus.upcoming.loaded ? 'Upcoming data unavailable' : pendingCashDelta === null ? 'Projection unavailable' : <><span className={hidden ? '' : pendingCashDelta >= 0 ? 'font-semibold text-success' : 'font-semibold text-destructive'}>{signed(pendingCashDelta)} {masterCurrency}</span> after {cashUpcoming.length} upcoming</>}</p>}
+                {(!dataStatus.upcoming.loaded || cashUpcoming.length > 0) && <p className="mt-2 text-xs text-muted-foreground sm:text-[13px]">{!dataStatus.upcoming.loaded ? 'Upcoming data unavailable' : pendingCashDelta === null ? 'Projection unavailable' : <><span className={hidden ? '' : pendingCashDelta >= 0 ? 'font-semibold text-success' : 'font-semibold text-destructive'}>{signed(pendingCashDelta)} {masterCurrency}</span> after {cashUpcoming.length} upcoming</>}</p>}
+                </div>
                 </div>
               </FinanceDataBoundary>
             </div>
