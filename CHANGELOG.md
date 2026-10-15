@@ -1,32 +1,55 @@
 # Changelog
 
-This file covers every published [GitHub release](https://github.com/apptrackit/finance/releases) through **v3.2**, newest first. Release dates are GitHub publication dates in UTC. Entries summarize the release notes, linked pull requests, and changes between tags.
+This file covers every published [GitHub release](https://github.com/apptrackit/finance/releases) through **v3.3**, newest first. Release dates are GitHub publication dates in UTC. Entries summarize the release notes, linked pull requests, and changes between tags.
 
 Intermediate package/UI version bumps are grouped under the next published GitHub release, rather than presented as separately published releases. The former README's **v1.6.3** notes are retained under v1.7, the release that included them.
 
 ## Unreleased
 
-### Fixed
+## v3.3 — 2026-10-15
 
-- Background refreshes use a compact spinner above mobile navigation or in the desktop corner, keeping page content stationary when the indicator appears and disappears. The indicator respects reduced motion and retains screen-reader feedback.
-- Analytics Money Map retains its Sankey chart on phones and uses smaller side margins to spread flows across the available width. Narrow-chart labels stay within their flow columns; tap and keyboard inspection show full category names and amounts with privacy masking.
+[GitHub release](https://github.com/apptrackit/finance/releases/tag/v3.3) · [Compare v3.2…v3.3](https://github.com/apptrackit/finance/compare/v3.2...v3.3)
+
+### Highlights
+
+- Private deployments now verify Cloudflare Access identity on every API read and write, replacing the shared browser API key. Existing deployments require authentication configuration before upgrading.
+- Dashboard loads only the selected dates; Analytics and search load complete history when opened. Widget skeletons and retained session snapshots make loading and return visits smoother.
+- Redesigned account and transfer dialogs, clearer AI forecast summaries, and previous-month cash balance comparisons.
+- Compact sidebar account shares and a Money Map that uses the available phone width.
 
 ### Added
 
-- Cash Balance Trend can compare daily actual balances with the previous month on a shared calendar-day axis, with smooth curves, explicit month labels and same-day tooltip differences. Comparison hides the moving average, requires previous-month history, and respects privacy, cash exclusions and missing exchange rates.
-- Compact sidebar account shares pair thin bars with percentages, comparing active cash and investment groups independently using converted values. Shares follow the Accounts page's positive-balance rules, include accounts excluded from totals, and respect privacy and unavailable valuations.
+- Cash Balance Trend can compare daily actual balances with the previous month on a shared calendar-day axis, with smooth curves, explicit month labels, and same-day tooltip differences. Comparison requires previous-month history, hides the moving average, and respects privacy, cash exclusions, and unavailable exchange rates. [#115](https://github.com/apptrackit/finance/pull/115)
+- Compact sidebar account shares pair thin bars with percentages, comparing cash and investment groups independently using converted positive balances. Active accounts excluded from totals still count; privacy and unavailable valuations remain explicit. [#104](https://github.com/apptrackit/finance/pull/104)
 
 ### Changed
 
-- API deployments now use verified Cloudflare Access identity in private mode or explicit unauthenticated public demo mode. Removed shared browser API keys, added API session sign-in/recovery, credentialed CORS, and deployment guidance. Private deployments disable previews and support explicit Access-protected workers.dev URLs or preferred same-site custom domains. Deployment URL validation identifies the affected setting. Local frontends can explicitly use the private production API with allowed HTTP loopback origins and direct requests that retain API session cookies.
-- Finance pages use text-free widget-shaped skeletons with a left-to-right gradient shimmer during initial loading, respecting Analytics widget visibility and reduced-motion preferences. Investments and saved forecast reads retain complete snapshots across navigation, refresh in the background, and keep the last complete data after failed refreshes. Portfolio display currency survives navigation within the session.
+- Private API reads and writes require verified Cloudflare Access identity; missing or invalid private configuration blocks access. API sign-in and session recovery retain unsaved forms, while an explicit public mode supports unauthenticated demos and local development. MCP keeps its separate authentication. [#117](https://github.com/apptrackit/finance/pull/117)
+- Dashboard requests only its selected cash and investment dates through bounded history pages; Analytics and global search request complete history on demand. Only complete, consistent page sequences replace the previous snapshot, with retry feedback after failures or changes during pagination. [#116](https://github.com/apptrackit/finance/pull/116)
+- Initial finance reads show widget-shaped shimmer skeletons that respect saved Analytics visibility and reduced motion. Investment portfolios and saved forecast reports remain in session memory across navigation, refresh in the background, and retain the last complete data after failures; portfolio display currency also survives navigation. [#116](https://github.com/apptrackit/finance/pull/116)
+- AI Financial Forecast presents a prominent headline, cash at generation, 7/30/90-day deltas and range bars, and a bounded uncertainty band. A unified 30-day/90-day/year/all-time history control, visible risks and suggestions, and expandable methodology retain saved-report selection, freshness warnings, and privacy masking. [#112](https://github.com/apptrackit/finance/pull/112)
+- Account creation and editing use compact dialogs with type cards, currency selection, inclusion switches, and clear save controls. Editing previews balance adjustments, offers transaction/overwrite choices and Revert, and groups protected account-management actions; market search and precise investment quantities remain available. [#107](https://github.com/apptrackit/finance/pull/107)
+- Transfer dialogs use compact From/To cards, account swapping, conversion controls, privacy-aware balance previews, and Revert. Posted edit previews undo the original transfer before applying the replacement; MCP review drafts preserve explicit native amounts and show confirmation-only previews. Failed saves retain the draft and display an inline error. [#109](https://github.com/apptrackit/finance/pull/109)
+- The app version moves from Settings to a centered sidebar footer, and the desktop privacy toggle sits beside the Finance logo. Removed the misleading Synced indicator, which described selected page requests rather than database synchronization. [#110](https://github.com/apptrackit/finance/pull/110)
+- Maintenance: expanded client, deployment, and real Worker/D1 regression coverage; documented history-loading measurements, comparison behavior, and private/public deployment setup. Deployment URL validation identifies the invalid setting, and private remote API development uses direct cookie-bearing requests from explicitly allowed localhost origins. [#116](https://github.com/apptrackit/finance/pull/116), [#117](https://github.com/apptrackit/finance/pull/117), [#115](https://github.com/apptrackit/finance/pull/115)
+- Bumped the root application version to **3.3**, used by the API version endpoint and sidebar.
 
-- Dashboard loads only its selected cash and investment dates through bounded combined history pages. Complete history loads when Analytics or global search opens; date changes avoid hidden-history refreshes, and failed page sequences keep the last complete snapshot with retry feedback.
+### Fixed
 
-- Redesigned AI Financial Forecast with a prominent headline, cash-at-generation summary, projection deltas and range bars, a bounded forecast band, a unified 30-day/90-day/year/all-time history switcher, visible risks and suggestions, and expandable methodology. Saved report selection, longer history views, freshness warnings, themes, and privacy masking remain available.
-- Redesigned account creation with type cards, an embedded starting-balance currency selector, inclusion switches, and a compact footer; market asset search and manual investment setup remain available.
-- Redesigned the account editor with a balance-first layout, signed adjustment preview, transaction/overwrite choices, inclusion switches, grouped management actions, inline protected deletion, and an unsaved-changes footer with Revert.
-- Add and edit transfers use compact account-and-amount cards with account swapping, conversion controls, privacy-aware balance previews, and edit revert feedback. Posted edit previews undo the original transfer before applying the replacement; MCP review drafts retain explicit native amounts and confirmation-only previews.
+- Background refresh feedback stays in a fixed desktop corner or above mobile navigation, so the page no longer shifts when it appears or disappears. Screen-reader feedback and reduced-motion support remain available. [#116](https://github.com/apptrackit/finance/pull/116)
+- Money Map spreads its Sankey flows across the available phone width. Narrow labels stay within their columns; touch and keyboard inspection reveal full names and amounts with privacy masking. [#114](https://github.com/apptrackit/finance/pull/114)
+
+### Removed
+
+- Removed shared browser API-key authentication and persistent service-worker caching of financial API responses. Updated installations clear the former API cache; offline app-shell navigation does not provide authenticated financial data. [#117](https://github.com/apptrackit/finance/pull/117)
+
+### Migration and upgrade notes
+
+- **Breaking authentication change:** configure Access on the entire private API hostname and the frontend before deploying. Set `API_AUTH_MODE=private`, an explicit HTTPS `API_URL`, `API_ACCESS_TEAM_DOMAIN`, `API_ACCESS_AUD`, `API_ACCESS_ALLOWED_EMAIL`, and exact `ALLOWED_ORIGINS`; client `VITE_API_AUTH_MODE` must match. Configure credentialed CORS, unauthenticated OPTIONS preflight, and Access session cookies. See the [API Access upgrade guide](https://github.com/apptrackit/finance/blob/main/docs/api-access.md). [#117](https://github.com/apptrackit/finance/pull/117)
+- Prefer frontend/API HTTPS hostnames on the same site. An explicitly configured Access-protected workers.dev API is supported, but cross-site cookies require SameSite=None and can still be blocked by browsers; preview URLs remain disabled. Local frontends using a private remote API need their exact loopback origin allowed and the same cookie considerations. [#117](https://github.com/apptrackit/finance/pull/117)
+- Deploy the updated API before the matching client in the same upgrade: the client depends on the new history and session endpoints. Refresh the frontend/PWA afterward. Remove obsolete `API_SECRET` and `VITE_API_KEY` entries from existing local files and set the new modes explicitly; old keys no longer authorize requests and missing settings never enable public access. [#116](https://github.com/apptrackit/finance/pull/116), [#117](https://github.com/apptrackit/finance/pull/117)
+- Public demos must explicitly use `API_AUTH_MODE=public` with a matching client and a separate synthetic-data Worker/database; public mode permits unauthenticated financial mutations. MCP authentication stays independent. [#117](https://github.com/apptrackit/finance/pull/117)
+- No new database migrations are required beyond v3.2's migration 016. Analytics and search still load the complete ledger on their first visit; pagination bounds each response rather than total browser memory. Session snapshots reset on browser reload. [#116](https://github.com/apptrackit/finance/pull/116)
 
 ## v3.2 — 2026-10-06
 
