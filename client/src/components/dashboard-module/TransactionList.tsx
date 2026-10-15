@@ -1301,8 +1301,10 @@ export function TransactionList({
     if (!account || account.type === 'investment') return null
     return convertToMasterCurrency ? convertToMasterCurrency(tx.amount, tx.account_id) : account.currency === masterCurrency ? tx.amount : null
   }
+  const cashFlowTransactions = (items: Transaction[]) => items.filter(tx =>
+    !tx.linked_transaction_id && accounts.find(account => account.id === tx.account_id)?.type !== 'investment')
   const sumCash = (items: Transaction[]) => {
-    const values = items.filter(tx => !tx.linked_transaction_id && accounts.find(a => a.id === tx.account_id)?.type !== 'investment').map(convertCash)
+    const values = cashFlowTransactions(items).map(convertCash)
     return values.some(value => value === null) ? null : values.reduce<number>((sum, value) => sum + value!, 0)
   }
   const reviewTransactions = [...readyTransactions, ...mcpReviewTransactions].sort((a, b) => a.date.localeCompare(b.date))
@@ -1637,8 +1639,9 @@ export function TransactionList({
               {sortOrder === 'date' ? sortedDates.map(date => {
                 const items = shown.filter(tx => tx.date === date)
                 if (!items.length) return null
+                const dailyCashFlow = cashFlowTransactions(groupedTransactions[date].filter(applyFilters))
                 return <section key={date} aria-label={format(parseISO(date), 'EEEE, MMM d, yyyy')}>
-                  <div className="mb-1 flex flex-wrap items-center justify-between gap-2 border-b border-border/60 px-1 pb-2 text-xs text-muted-foreground"><h3>{format(parseISO(date), 'EEE, MMM d, yyyy')}</h3><span className="tabular-nums" aria-label="Daily total" title="Income less spending; transfers and investment trades excluded">{convertedAmount(sumCash(groupedTransactions[date].filter(applyFilters)))}</span></div>
+                  <div className="mb-1 flex flex-wrap items-center justify-between gap-2 border-b border-border/60 px-1 pb-2 text-xs text-muted-foreground"><h3>{format(parseISO(date), 'EEE, MMM d, yyyy')}</h3>{dailyCashFlow.length > 0 && <span className="tabular-nums" aria-label="Daily total" title="Income less spending; transfers and investment trades excluded">{convertedAmount(sumCash(dailyCashFlow))}</span>}</div>
                   {items.map(renderPostedTransaction)}
                 </section>
               }) : shown.map(renderPostedTransaction)}

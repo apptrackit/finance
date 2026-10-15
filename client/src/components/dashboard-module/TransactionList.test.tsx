@@ -323,7 +323,8 @@ describe('dashboard transaction presentation', () => {
     expect(screen.queryByRole('button', { name: 'Confirm transaction' })).not.toBeInTheDocument()
   })
 
-  it('shows cash flow daily totals without transfers, native HUF precision, and foreign equivalents', () => {
+  it('shows cash flow daily totals without transfers, native HUF precision, and foreign equivalents', async () => {
+    const user = userEvent.setup()
     renderTransfers({ transactions: [...postedTransfer,
       { id: 'expense', account_id: 'source', amount: -20000, date: '2020-01-01', description: 'Groceries' },
       { id: 'foreign', account_id: 'destination', amount: -4.2, date: '2020-01-01', description: 'Coffee' },
@@ -332,6 +333,19 @@ describe('dashboard transaction presentation', () => {
     expect(screen.getByText('−20 000 HUF')).toBeInTheDocument()
     expect(screen.getByText('≈ 1 680 HUF')).toBeInTheDocument()
     expect(screen.getByText('100 HUF')).not.toHaveClass('text-destructive')
+    await user.click(screen.getByRole('button', { name: 'Transfers', exact: true }))
+    expect(screen.queryByLabelText('Daily total')).not.toBeInTheDocument()
+  })
+
+  it('omits transfer-only day totals but preserves real zero cash-flow totals', () => {
+    renderTransfers({ transactions: [...postedTransfer,
+      { id: 'income', account_id: 'source', amount: 100, date: '2020-01-02' },
+      { id: 'expense', account_id: 'source', amount: -100, date: '2020-01-02' },
+    ] })
+    const transferDay = screen.getByRole('region', { name: 'Wednesday, Jan 1, 2020' })
+    expect(within(transferDay).queryByLabelText('Daily total')).not.toBeInTheDocument()
+    expect(within(transferDay).getByText('100 HUF')).toBeInTheDocument()
+    expect(within(screen.getByRole('region', { name: 'Thursday, Jan 2, 2020' })).getByLabelText('Daily total')).toHaveTextContent('0 HUF')
   })
 
   it('marks converted totals unavailable when a required rate is absent and masks totals in privacy mode', () => {
@@ -343,7 +357,7 @@ describe('dashboard transaction presentation', () => {
     expect(screen.getByText('Conversion unavailable')).toBeInTheDocument()
     unmount()
     privacy.mode = 'hidden'
-    renderTransfers({ convertToMasterCurrency: amount => amount })
+    renderTransfers({ transactions: [...postedTransfer, { id: 'expense', account_id: 'source', amount: -5, date: '2020-01-01' }], convertToMasterCurrency: amount => amount })
     expect(screen.getByLabelText('Daily total')).toHaveTextContent('••••••')
     expect(screen.queryByText('100 HUF')).not.toBeInTheDocument()
   })
