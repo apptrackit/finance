@@ -177,7 +177,7 @@ function App() {
         </button>}
         {view !== 'dashboard' && <NavLink to="/settings" aria-label="Settings" className="finance-icon-button"><SettingsIcon className="h-4 w-4" /></NavLink>}
       </header>
-      <main id="main-content" className="mx-auto w-full max-w-[1280px] px-4 py-4 sm:px-6 lg:px-8 lg:py-6">
+      <main id="main-content" className={`mx-auto w-full px-4 py-4 sm:px-6 lg:px-8 lg:py-6 ${view === 'dashboard' ? 'max-w-[1120px]' : 'max-w-[1280px]'}`}>
         {view !== 'dashboard' && <div className="mb-5 hidden items-center justify-between lg:flex"><h1 className="text-2xl font-semibold tracking-tight">{title}</h1></div>}
         <FinanceDataStatus compact={view === 'dashboard'} datasets={visibleData} onRetry={() => { void finance.handleDataChange() }} />
         {initialLoading && <FinancePageLoader view={view} accounts={dataStatus.accounts.loaded ? finance.accounts : undefined}
