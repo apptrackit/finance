@@ -17,7 +17,7 @@ import { BulkTransactionModal, type BulkTransaction } from './BulkTransactionMod
 import { AmountInput } from '../common/amount-input'
 import { formatAmount, formatCalculatedAmount, parseAmount } from '../../lib/amount'
 import type { PendingKind } from '../../lib/transaction-review'
-import { getMcpReviewBalanceDeltas, getMcpReviewItems, hasPossibleDuplicateFlag, isMcpReviewTransaction } from '../../lib/transaction-review'
+import { getMcpReviewItems, hasPossibleDuplicateFlag, isMcpReviewTransaction } from '../../lib/transaction-review'
 import { TransactionCalendar } from './TransactionCalendar'
 import { TransferForm, type TransferAccount } from './TransferForm'
 import { cn } from '../../lib/utils'
@@ -1227,12 +1227,6 @@ export function TransactionList({
 
   const visibleUpcomingTransactions = upcomingTransactions.filter(tx => !resolvedPendingIds.has(tx.id))
   const standardPendingCount = visibleUpcomingTransactions.filter(tx => !isMcpReviewTransaction(tx)).length
-  const mcpReviewBalanceDeltas = getMcpReviewBalanceDeltas(visibleUpcomingTransactions)
-  const mcpBalancePreviews = accounts.flatMap(account => {
-    const delta = mcpReviewBalanceDeltas.get(account.id)
-    return delta === undefined ? [] : [{ account, acceptedBalance: account.balance + delta }]
-  })
-
   const mcpReviewTransactions = getMcpReviewItems(visibleUpcomingTransactions, applyFilters)
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
   const mcpReviewCount = mcpReviewTransactions.length
@@ -1312,6 +1306,37 @@ export function TransactionList({
     return values.some(value => value === null) ? null : values.reduce<number>((sum, value) => sum + value!, 0)
   }
   const reviewTransactions = [...readyTransactions, ...mcpReviewTransactions].sort((a, b) => a.date.localeCompare(b.date))
+
+  // Preview only the review items currently shown that can be confirmed now.
+  // A transfer contributes both native legs, even if only one matches a filter.
+  const confirmationLegs = new Map<string, Transaction>()
+  const canPreviewConfirmation = (tx: Transaction) => tx.date <= today
+    && (tx.status ?? 'pending') === 'pending'
+    && Number.isFinite(tx.amount)
+    && accounts.some(account => account.id === tx.account_id && account.type === 'cash')
+    && !isLocked(tx.account_id)
+  for (const tx of reviewTransactions) {
+    if (!canPreviewConfirmation(tx)) continue
+    if (tx.linked_transaction_id) {
+      const linked = visibleUpcomingTransactions.find(other => other.id === tx.linked_transaction_id)
+      if (!isMcpReviewTransaction(tx) || !linked || !isMcpReviewTransaction(linked)
+        || linked.linked_transaction_id !== tx.id || !canPreviewConfirmation(linked)) continue
+      confirmationLegs.set(linked.id, linked)
+    }
+    confirmationLegs.set(tx.id, tx)
+  }
+  const confirmationDeltas = new Map<string, number>()
+  for (const tx of confirmationLegs.values()) {
+    confirmationDeltas.set(tx.account_id, (confirmationDeltas.get(tx.account_id) ?? 0) + tx.amount)
+  }
+  const confirmationBalancePreviews = accounts.flatMap(account => {
+    const delta = confirmationDeltas.get(account.id)
+    return delta === undefined ? [] : [{ account, acceptedBalance: account.balance + delta }]
+  })
+  const previewBalance = (value: number, accountId: string) => {
+    const formatted = nativeAmount(value, accountId, false)
+    return value < 0 && formatted !== '••••••' ? `−${formatted}` : formatted
+  }
 
   const renderPendingTransaction = (tx: Transaction, ready: boolean) => {
     const linked = tx.linked_transaction_id ? visibleUpcomingTransactions.find(other => other.id === tx.linked_transaction_id) : undefined
@@ -1597,7 +1622,7 @@ export function TransactionList({
           {reviewTransactions.length > 0 && <section aria-labelledby="review-heading" className="overflow-hidden rounded-xl border border-border">
             <div className="flex items-center gap-2 px-4 py-3"><h3 id="review-heading" className="text-sm font-semibold">Needs review</h3><span className="rounded-full bg-secondary px-2 py-0.5 text-xs">{reviewTransactions.length}</span><span className="ml-auto hidden text-xs text-muted-foreground sm:block">Balances change only after confirmation</span></div>
             {reviewTransactions.map(tx => renderPendingTransaction(tx, tx.date <= today))}
-            {mcpBalancePreviews.length > 0 && <div className="border-t border-border bg-background/40 px-4 py-3 text-xs text-muted-foreground"><p className="mb-1 font-medium">If all MCP drafts are confirmed</p><div className="flex flex-wrap gap-x-4 gap-y-1">{mcpBalancePreviews.map(({ account, acceptedBalance }) => <span key={account.id}>{account.name}: {nativeAmount(account.balance, account.id, false)} → {nativeAmount(acceptedBalance, account.id, false)}</span>)}</div></div>}
+            {confirmationBalancePreviews.length > 0 && <div role="region" aria-label="Confirmation balance preview" className="border-t border-border bg-background/40 px-4 py-3 text-xs text-muted-foreground"><p className="mb-1 font-medium">If all ready transactions are confirmed</p><div className="grid gap-y-1 sm:flex sm:flex-wrap sm:gap-x-4">{confirmationBalancePreviews.map(({ account, acceptedBalance }) => <p key={account.id}>{account.name}: {previewBalance(account.balance, account.id)} → {previewBalance(acceptedBalance, account.id)}</p>)}</div></div>}
           </section>}
           {futureTransactions.length > 0 && <section className="overflow-hidden rounded-xl border border-border">
             <button type="button" aria-expanded={upcomingOpen} aria-controls="future-transactions" onClick={() => setUpcomingOpen(!upcomingOpen)} className="flex min-h-14 w-full flex-wrap items-center gap-2 px-4 py-3 text-left text-sm">

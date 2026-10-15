@@ -283,11 +283,15 @@ describe('dashboard transaction presentation', () => {
     expect(within(queue).getAllByText('Draft transfer')).toHaveLength(1)
     expect(within(queue).getByText('Due bill')).toBeInTheDocument()
     expect(within(queue).getByText('Future draft')).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Confirmation balance preview' })).toHaveTextContent('Savings: 900 HUF → 300 HUF')
+    expect(screen.getByRole('region', { name: 'Confirmation balance preview' })).toHaveTextContent('Travel: 110,00 EUR → 120,00 EUR')
     expect(within(queue).queryByRole('button', { name: 'Confirm MCP draft' })).not.toBeInTheDocument()
     await user.click(within(queue).getByRole('button', { name: 'Confirm transfer review draft' }))
     await waitFor(() => expect(within(queue).queryByText('Draft transfer')).not.toBeInTheDocument())
     expect(apiFetch).toHaveBeenCalledExactlyOnceWith('/api/transactions/debit/confirm', { method: 'POST' })
     expect(onChange).toHaveBeenCalledOnce()
+    expect(screen.getByRole('region', { name: 'Confirmation balance preview' })).toHaveTextContent('Savings: 900 HUF → 400 HUF')
+    expect(screen.getByRole('region', { name: 'Confirmation balance preview' })).not.toHaveTextContent('Travel')
   })
 
   it('retains failed confirmations and hides review mutations for either locked leg', async () => {
@@ -301,6 +305,8 @@ describe('dashboard transaction presentation', () => {
     ] })
     await user.click(screen.getByRole('button', { name: 'Confirm transaction' }))
     expect(screen.getByText('Due bill')).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Confirmation balance preview' })).toHaveTextContent('Savings: 900 HUF → 400 HUF')
+    expect(screen.getByRole('region', { name: 'Confirmation balance preview' })).not.toHaveTextContent('Locked cash')
     expect(screen.queryByRole('button', { name: 'Confirm transfer review draft' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Decline transfer review draft' })).not.toBeInTheDocument()
   })
@@ -340,5 +346,64 @@ describe('dashboard transaction presentation', () => {
     renderTransfers({ convertToMasterCurrency: amount => amount })
     expect(screen.getByLabelText('Daily total')).toHaveTextContent('••••••')
     expect(screen.queryByText('100 HUF')).not.toBeInTheDocument()
+  })
+})
+
+describe('confirmation balance preview', () => {
+  it('includes ready ordinary income and expenses, excludes future/locked/archived items, and preserves negative balances', () => {
+    vi.mocked(apiFetch).mockClear()
+    renderTransfers({ transactions: [], upcomingTransactions: [
+      { id: 'due', account_id: 'source', amount: -1200, date: '2020-01-01', pending_kind: 'upcoming' },
+      { id: 'income', account_id: 'source', amount: 100, date: '2020-01-01', pending_kind: 'upcoming' },
+      { id: 'future', account_id: 'source', amount: -700, date: '2099-01-01', pending_kind: 'upcoming' },
+      { id: 'future-draft', account_id: 'source', amount: -900, date: '2099-01-01', pending_kind: 'mcp_review' },
+      { id: 'locked', account_id: 'locked', amount: -500, date: '2020-01-01', pending_kind: 'upcoming' },
+      { id: 'archived', account_id: 'archived', amount: 200, date: '2020-01-01', pending_kind: 'upcoming' },
+    ] })
+    const preview = screen.getByRole('region', { name: 'Confirmation balance preview' })
+    expect(preview).toHaveTextContent('If all ready transactions are confirmed')
+    expect(preview).toHaveTextContent('Savings: 900 HUF → −200 HUF')
+    expect(preview).not.toHaveTextContent('Locked cash')
+    expect(preview).not.toHaveTextContent('Archived cash')
+    expect(transferAccounts[0].balance).toBe(900)
+    expect(apiFetch).not.toHaveBeenCalled()
+  })
+
+  it('previews the filtered queue and includes both transfer legs when only the credit matches', async () => {
+    const user = userEvent.setup()
+    renderTransfers({ transactions: [], upcomingTransactions: [
+      { id: 'debit', account_id: 'source', amount: -100, date: '2020-01-01', pending_kind: 'mcp_review', linked_transaction_id: 'credit' },
+      { id: 'credit', account_id: 'destination', amount: 10, date: '2020-01-01', pending_kind: 'mcp_review', linked_transaction_id: 'debit' },
+      { id: 'other', account_id: 'other', amount: -50, date: '2020-01-01', pending_kind: 'upcoming' },
+    ] })
+    await user.type(screen.getByRole('searchbox', { name: 'Filter transactions' }), 'Travel')
+    const preview = screen.getByRole('region', { name: 'Confirmation balance preview' })
+    expect(preview).toHaveTextContent('Savings: 900 HUF → 800 HUF')
+    expect(preview).toHaveTextContent('Travel: 110,00 EUR → 120,00 EUR')
+    expect(preview).not.toHaveTextContent('Other cash')
+  })
+
+  it('masks native balances and negative signs in privacy mode', () => {
+    privacy.mode = 'hidden'
+    renderTransfers({ transactions: [], upcomingTransactions: [
+      { id: 'due', account_id: 'source', amount: -1200, date: '2020-01-01', pending_kind: 'upcoming' },
+    ] })
+    const preview = screen.getByRole('region', { name: 'Confirmation balance preview' })
+    expect(preview).toHaveTextContent('Savings: •••••• → ••••••')
+    expect(preview).not.toHaveTextContent(/900|300|−/)
+  })
+
+  it('removes resolved ordinary transactions from the preview after declining', async () => {
+    const user = userEvent.setup()
+    vi.mocked(apiFetch).mockReset()
+    vi.mocked(apiFetch).mockResolvedValue({ ok: true, json: async () => ({}) } as Response)
+    renderTransfers({ transactions: [], upcomingTransactions: [
+      { id: 'due', account_id: 'source', amount: -500, date: '2020-01-01', pending_kind: 'upcoming' },
+    ] })
+    expect(screen.getByRole('region', { name: 'Confirmation balance preview' })).toHaveTextContent('Savings: 900 HUF → 400 HUF')
+    await user.click(screen.getByRole('button', { name: 'Decline transaction' }))
+    await waitFor(() => expect(screen.queryByRole('region', { name: 'Confirmation balance preview' })).not.toBeInTheDocument())
+    expect(apiFetch).toHaveBeenCalledExactlyOnceWith('/api/transactions/due/decline', { method: 'POST' })
+    expect(transferAccounts[0].balance).toBe(900)
   })
 })
