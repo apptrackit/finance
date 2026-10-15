@@ -6,18 +6,20 @@
 
 const isDev = import.meta.env.DEV
 
-// API Configuration
-const API_DOMAIN = import.meta.env.VITE_API_DOMAIN || 'localhost:8787'
-const isLocalhost = API_DOMAIN.includes('localhost')
-const protocol = isLocalhost ? 'http' : 'https'
-
-export const API_BASE_URL = isDev 
-  ? '/api'  // Proxied through Vite in development
-  : `${protocol}://${API_DOMAIN}`
-
 // Public is an explicit deployment choice, never an authentication fallback.
 export const API_AUTH_MODE = import.meta.env.VITE_API_AUTH_MODE || 'private'
 export const AUTH_REQUIRED_EVENT = 'finance-auth-required'
+
+// API Configuration
+const API_DOMAIN = import.meta.env.VITE_API_DOMAIN || 'localhost:8787'
+const isLocalhost = /^(localhost|127\.0\.0\.1|\[::1\])(?::\d+)?$/i.test(API_DOMAIN)
+const protocol = isLocalhost ? 'http' : 'https'
+
+// A private remote API must receive its own hostname's browser session cookie.
+// Proxying through localhost would send localhost cookies instead.
+export const API_BASE_URL = isDev && (isLocalhost || API_AUTH_MODE === 'public')
+  ? '/api'
+  : `${protocol}://${API_DOMAIN}`
 
 export const getApiLoginUrl = () => {
   const url = new URL(`${API_BASE_URL}/auth/login`, window.location.origin)

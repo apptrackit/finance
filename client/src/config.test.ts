@@ -81,3 +81,35 @@ describe('finance API request contract', () => {
     } finally { window.removeEventListener(AUTH_REQUIRED_EVENT, listener) }
   })
 })
+
+describe('API session routing during local frontend development', () => {
+  afterEach(() => { vi.unstubAllEnvs(); vi.resetModules() })
+
+  it.each([
+    ['private', 'api.finance.test', 'https://api.finance.test'],
+    ['public', 'api.finance.test', '/api'],
+    ['public', 'localhost:8787', '/api'],
+    ['private', 'localhost:8787', '/api'],
+    ['public', '127.0.0.1:8787', '/api'],
+    ['private', 'localhost.evil.test', 'https://localhost.evil.test'],
+  ])('routes %s development requests targeting %s to %s', async (mode, domain, expected) => {
+    vi.resetModules()
+    vi.stubEnv('DEV', true)
+    vi.stubEnv('VITE_API_AUTH_MODE', mode)
+    vi.stubEnv('VITE_API_DOMAIN', domain)
+    const { API_BASE_URL } = await import('./config')
+    expect(API_BASE_URL).toBe(expected)
+  })
+
+  it('signs in on the remote API hostname and returns to the current localhost page', async () => {
+    vi.resetModules()
+    vi.stubEnv('DEV', true)
+    vi.stubEnv('VITE_API_AUTH_MODE', 'private')
+    vi.stubEnv('VITE_API_DOMAIN', 'api.finance.test')
+    const { getApiLoginUrl } = await import('./config')
+    const login = new URL(getApiLoginUrl())
+    expect(login.origin).toBe('https://api.finance.test')
+    expect(login.pathname).toBe('/auth/login')
+    expect(login.searchParams.get('returnTo')).toBe(window.location.href)
+  })
+})

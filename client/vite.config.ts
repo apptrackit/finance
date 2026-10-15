@@ -21,6 +21,9 @@ export default defineConfig(({ mode }) => {
   return {
     test: {
       globals: true,
+      // Unit suites use synthetic local configuration, independent of a
+      // developer's .env.local pointing at a private production API.
+      env: { VITE_API_DOMAIN: 'localhost:8787', VITE_API_AUTH_MODE: 'public' },
       environment: 'jsdom',
       setupFiles: ['./src/test/setup.ts'],
       include: ['src/**/*.{test,spec}.{ts,tsx}'],

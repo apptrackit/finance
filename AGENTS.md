@@ -55,7 +55,7 @@ npm run dev -w client
 npm run dev -w mcp
 ```
 
-The API defaults to port 8787. Vite proxies `/api` to `VITE_API_DOMAIN` and strips the `/api` prefix. Check the configured target before making development mutations: it can point at a remote API. Use a bare hostname with optional port for `VITE_API_DOMAIN`; production `client/src/config.ts` adds the protocol. `VITE_*` values are public build-time bundle contents.
+The API defaults to port 8787. Vite proxies `/api` to `VITE_API_DOMAIN` and strips the `/api` prefix for local API targets and public mode. Private remote API targets use direct credentialed HTTPS requests so Access cookies stay on the API hostname. A local frontend using the private production API needs its exact loopback origin in production `ALLOWED_ORIGINS`; deployment permits HTTP only for localhost/loopback origins. Check the configured target before making development mutations: it can point at a remote API. Use a bare hostname with optional port for `VITE_API_DOMAIN`; production `client/src/config.ts` adds the protocol. `VITE_*` values are public build-time bundle contents.
 
 Local Wrangler state is workspace-specific by default. Separate API and MCP dev processes do not automatically share a local database just because their bindings have the same name. Configure shared persistence deliberately if testing them together. Keep `DISABLE_ACCESS_AUTH=true` restricted to local MCP testing.
 

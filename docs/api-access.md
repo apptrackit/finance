@@ -38,8 +38,10 @@ The ledger remains single-user; Access does not add separate user databases.
    API_ACCESS_ALLOWED_EMAIL=you@example.com
    ```
 
-   `ALLOWED_ORIGINS` accepts comma-separated **exact HTTPS origins**. Wildcards,
-   paths and trailing slashes are not supported. These settings are not secrets.
+   `ALLOWED_ORIGINS` accepts comma-separated **exact HTTPS origins**, plus explicit
+   HTTP loopback origins such as `http://localhost:5173` for a local frontend.
+   Arbitrary remote HTTP origins, wildcards, paths and trailing slashes are not
+   supported. These settings are not secrets.
    Existing ignored files are preserved; remove old `API_SECRET`/`VITE_API_KEY`
    entries from local files yourself. The CLI removes the obsolete `API_SECRET`
    entry from saved deployment configuration when deploying API/client.
@@ -70,7 +72,31 @@ an expired Access session, so retry is available too. Session cookies/tokens are
 never copied into browser storage. Financial API responses are not cached by the
 service worker; offline app-shell navigation does not grant access to the API.
 
-## Public demo and local development
+## Local frontend with the private production API
+
+A local frontend can use the private production API without frontend Access
+protection. The API independently requires the user's valid Access session.
+
+1. Add the exact browser origin, such as `http://localhost:5173`, to the
+   production `ALLOWED_ORIGINS` list alongside the production frontend's HTTPS
+   origin. HTTP is accepted only for explicit localhost/loopback origins; the API
+   URL and Access team domain still require HTTPS. Redeploy the API to apply it.
+2. In `client/.env.local`, set `VITE_API_AUTH_MODE=private` and set
+   `VITE_API_DOMAIN` to the production API hostname (without `https://`). Start
+   only the client with `npm run dev -w client`; no local API is needed.
+3. The private remote target bypasses Vite's `/api` proxy. Requests and Sign in
+   go directly to the remote API hostname so the browser sends its Access cookie,
+   then the login callback returns to the allowed localhost page.
+4. Sign in to the API when prompted, then retry. No frontend Access login is
+   required on localhost. Financial reads/writes affect the production ledger.
+
+These are cross-site browser requests even if the production frontend/API share
+one site. The API cookie needs SameSite=None, and browser third-party-cookie
+blocking can still prevent it. In that case, permit the API's cookies in the
+browser or use HTTPS frontend/API hostnames on the same site for development.
+Do not disable production authentication or put a token in frontend storage.
+
+## Public demo and fully local development
 
 Deploy the public demo as a **separate Pages project, API Worker, and D1 database**
 with only synthetic data. Use `API_AUTH_MODE=public`; the CLI builds the matching

@@ -216,6 +216,11 @@ npm run dev
 - Client: [http://localhost:5173](http://localhost:5173)
 - API: [http://localhost:8787](http://localhost:8787) — local public-mode API requests require an allowed Origin.
 
+To run only the local frontend against the private production API, keep client
+mode private, use the remote API hostname, explicitly allow `http://localhost:5173`
+on the API, and run `npm run dev -w client`. Private remote requests bypass the
+Vite proxy to use the API's Access cookie. See [local frontend with production API](docs/api-access.md#local-frontend-with-the-private-production-api).
+
 ### Restart while preserving local data
 
 Start these in separate terminals after the local schema has been initialized:

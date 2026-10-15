@@ -4,7 +4,7 @@ import { useFinanceWorkers } from './harness'
 const origin = 'https://finance.test'
 
 describe('private API authentication at the real Worker boundary', () => {
-  const f = useFinanceWorkers()
+  const f = useFinanceWorkers({ apiVars: { ALLOWED_ORIGINS: `${origin},http://localhost:5173` } })
   beforeEach(() => f.seed())
 
   it('rejects spoofed origins/legacy keys and invalid identities before reads or writes', async () => {
@@ -64,6 +64,26 @@ describe('private API authentication at the real Worker boundary', () => {
     }
     expect((await f.api.fetch(`/auth/login?returnTo=${origin}`, { redirect: 'manual' })).status).toBe(401)
     expect((await f.api.fetch('/accounts', { headers })).status).toBe(403)
+  })
+
+  it('authenticates a localhost frontend independently and returns the API login to localhost', async () => {
+    const localOrigin = 'http://localhost:5173'
+    const preflight = await f.api.fetch('/accounts', { method: 'OPTIONS', headers: { Origin: localOrigin } })
+    expect(preflight.status).toBe(204)
+    expect(preflight.headers.get('Access-Control-Allow-Origin')).toBe(localOrigin)
+    expect(preflight.headers.get('Access-Control-Allow-Credentials')).toBe('true')
+    expect((await f.api.fetch('/auth/session', { headers: { Origin: localOrigin } })).status).toBe(401)
+    const assertion = await f.accessToken({ aud: ['finance-api-audience'] })
+    const response = await f.api.fetch('/auth/session', { headers: { Origin: localOrigin, 'Cf-Access-Jwt-Assertion': assertion } })
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual({ mode: 'private' })
+    const destination = `${localOrigin}/analytics?range=month`
+    const login = await f.api.fetch(`/auth/login?returnTo=${encodeURIComponent(destination)}`, {
+      headers: { 'Cf-Access-Jwt-Assertion': assertion }, redirect: 'manual',
+    })
+    expect(login.status).toBe(302)
+    expect(login.headers.get('Location')).toBe(destination)
+    expect((await f.api.fetch('/auth/session', { headers: { Origin: 'http://localhost.evil.test:5173', 'Cf-Access-Jwt-Assertion': assertion } })).status).toBe(403)
   })
 })
 

@@ -122,6 +122,15 @@ export function apiOrigin(value, field = 'API_URL') {
   return url.origin
 }
 
+function browserOrigin(value) {
+  try {
+    const url = new URL(value)
+    const httpLoopback = url.protocol === 'http:' && ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname)
+    if ((url.protocol === 'https:' || httpLoopback) && url.origin === value && !value.includes('*')) return url.origin
+  } catch { /* Report the setting rather than the URL or parser internals. */ }
+  throw new Error('ALLOWED_ORIGINS must contain exact HTTPS origins or HTTP localhost/loopback origins, without credentials, paths, or trailing slashes.')
+}
+
 export function d1Rows(output) {
   let result
   try { result = JSON.parse(output) } catch { throw new Error('D1 returned invalid JSON; refusing to assume migrations are pending.') }
@@ -257,7 +266,7 @@ export async function deploy(options, { root = repositoryRoot, run = runCommand,
       await need('API_WORKER_NAME', 'finance-api')
       await need('ALLOWED_ORIGINS')
       const origins = config.ALLOWED_ORIGINS.split(',').map(value => value.trim())
-      if (origins.some(value => value.includes('*') || apiOrigin(value, 'ALLOWED_ORIGINS') !== value)) throw new Error('ALLOWED_ORIGINS must contain exact HTTPS origins without trailing slashes.')
+      origins.forEach(browserOrigin)
     }
     if (plan.client) {
       await need('PROJECT_NAME')

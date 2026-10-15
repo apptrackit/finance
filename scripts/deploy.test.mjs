@@ -174,11 +174,28 @@ test('private is the default and invalid modes/domains stop before remote writes
 })
 
 test('invalid HTTPS settings identify the actual configuration field before remote writes', async t => {
-  for (const key of ['ALLOWED_ORIGINS', 'API_URL', 'API_ACCESS_TEAM_DOMAIN', 'MCP_ACCESS_TEAM_DOMAIN']) {
+  for (const key of ['API_URL', 'API_ACCESS_TEAM_DOMAIN', 'MCP_ACCESS_TEAM_DOMAIN']) {
     const f = await fixture(t, { config: { ...fixtureConfig, [key]: 'http://localhost:5173' } })
     await assert.rejects(f.execute(['--with-mcp']), error => error.message.startsWith(`${key} must be an HTTPS origin`))
     assert.equal(f.mutations().length, 0)
     await f.assertClean()
+  }
+})
+
+test('a private production API can explicitly allow a local frontend without allowing arbitrary HTTP origins', async t => {
+  const allowedOrigins = 'https://finance.test,http://localhost:5173,http://127.0.0.1:5173,http://[::1]:5173'
+  const f = await fixture(t, { config: { ...fixtureConfig, ALLOWED_ORIGINS: allowedOrigins } })
+  await f.execute(['api'])
+  assert.equal(f.mutations()[0].config.vars.ALLOWED_ORIGINS, allowedOrigins)
+  assert.equal(f.mutations()[0].config.vars.API_AUTH_MODE, 'private')
+  assert.equal(f.mutations()[0].config.vars.API_ACCESS_AUD, fixtureConfig.API_ACCESS_AUD)
+  await f.assertClean()
+  for (const origin of ['http://finance.test', 'http://localhost.evil.test:5173', 'http://0.0.0.0:5173',
+    'http://localhost:5173/path', 'http://localhost:5173/', 'http://u:p@localhost:5173', 'http://*.localhost:5173']) {
+    const invalid = await fixture(t, { config: { ...fixtureConfig, ALLOWED_ORIGINS: origin } })
+    await assert.rejects(invalid.execute(['api']), /ALLOWED_ORIGINS must contain exact HTTPS origins or HTTP localhost\/loopback origins/)
+    assert.equal(invalid.mutations().length, 0)
+    await invalid.assertClean()
   }
 })
 

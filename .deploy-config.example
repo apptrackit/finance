@@ -20,6 +20,8 @@ DATABASE_ID=your-d1-database-id
 # API
 API_WORKER_NAME=finance-api
 ALLOWED_ORIGINS=https://finance.example.com
+# To use a local frontend with this private API, append ,http://localhost:5173
+# and keep VITE_API_AUTH_MODE=private with the remote API hostname locally.
 # Public mode can discover a workers.dev API_URL after the first deployment.
 # Private mode requires an explicit API_URL protected by Access. Prefer a custom
 # domain on the frontend's site to avoid third-party-cookie blocking. An explicit
