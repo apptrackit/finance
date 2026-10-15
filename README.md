@@ -295,7 +295,7 @@ The MCP staging smoke test (`npm run test:staging -w mcp`) creates a real review
 
 ### Cloudflare setup
 
-Provision a D1 database and a Pages project, then authenticate Wrangler with `npx wrangler login`. Private mode requires Cloudflare Access on the frontend and API, a custom API domain, and verified user identity. Public mode deliberately allows unauthenticated demo access. Follow the [API Access deployment guide](docs/api-access.md) before deploying. Optional MCP requires a custom hostname and its own Access application with Managed OAuth; see the [MCP deployment guide](mcp/README.md#deploy).
+Provision a D1 database and a Pages project, then authenticate Wrangler with `npx wrangler login`. Private mode requires Cloudflare Access on the frontend and API and verified user identity. Prefer a same-site custom API domain; explicit workers.dev URLs are supported subject to browser cookie restrictions. Public mode deliberately allows unauthenticated demo access. Follow the [API Access deployment guide](docs/api-access.md) before deploying. Optional MCP requires a custom hostname and its own Access application with Managed OAuth; see the [MCP deployment guide](mcp/README.md#deploy).
 
 All deployment commands use [scripts/deploy.mjs](scripts/deploy.mjs). The Node CLI works on macOS and Linux and reuses your existing gitignored `.deploy-config`. The former root `deploy.sh` and `deploy-client.sh` scripts have been removed.
 

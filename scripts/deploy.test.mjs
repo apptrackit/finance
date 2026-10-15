@@ -163,7 +163,7 @@ test('private is the default and invalid modes/domains stop before remote writes
   assert.equal(defaults.mutations()[0].config.vars.API_AUTH_MODE, 'private')
   for (const override of [
     { API_AUTH_MODE: 'legacy' }, { API_AUTH_MODE: 'PUBLIC' },
-    { API_URL: 'https://test.workers.dev' }, { API_ACCESS_TEAM_DOMAIN: 'https://evil.test' },
+    { API_ACCESS_TEAM_DOMAIN: 'https://evil.test' },
     { ALLOWED_ORIGINS: 'https://*.finance.test' },
   ]) {
     const f = await fixture(t, { config: { ...fixtureConfig, ...override } })
@@ -171,6 +171,30 @@ test('private is the default and invalid modes/domains stop before remote writes
     assert.equal(f.mutations().length, 0)
     await f.assertClean()
   }
+})
+
+test('invalid HTTPS settings identify the actual configuration field before remote writes', async t => {
+  for (const key of ['ALLOWED_ORIGINS', 'API_URL', 'API_ACCESS_TEAM_DOMAIN', 'MCP_ACCESS_TEAM_DOMAIN']) {
+    const f = await fixture(t, { config: { ...fixtureConfig, [key]: 'http://localhost:5173' } })
+    await assert.rejects(f.execute(['--with-mcp']), error => error.message.startsWith(`${key} must be an HTTPS origin`))
+    assert.equal(f.mutations().length, 0)
+    await f.assertClean()
+  }
+})
+
+test('explicit private workers.dev API keeps identity enforcement and enables only the configured public endpoint', async t => {
+  const f = await fixture(t, { config: { ...fixtureConfig, API_URL: 'https://test-api.example.workers.dev' } })
+  await f.execute(['--no-mcp'])
+  const worker = f.mutations().find(call => call.argv[0] === 'deploy').config
+  assert.equal(worker.workers_dev, true)
+  assert.equal(worker.preview_urls, false)
+  assert.equal(worker.routes, undefined)
+  assert.equal(worker.vars.API_AUTH_MODE, 'private')
+  assert.equal(worker.vars.API_ACCESS_AUD, fixtureConfig.API_ACCESS_AUD)
+  assert.equal(worker.vars.API_ACCESS_ALLOWED_EMAIL, fixtureConfig.API_ACCESS_ALLOWED_EMAIL)
+  const build = f.calls.find(call => call.kind === 'npm' && call.argv.includes('build'))
+  assert.deepEqual(build.options.env, { VITE_API_DOMAIN: 'test-api.example.workers.dev', VITE_API_AUTH_MODE: 'private' })
+  await f.assertClean()
 })
 
 for (const target of ['api', 'mcp']) {

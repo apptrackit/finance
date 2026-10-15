@@ -21,8 +21,10 @@ DATABASE_ID=your-d1-database-id
 API_WORKER_NAME=finance-api
 ALLOWED_ORIGINS=https://finance.example.com
 # Public mode can discover a workers.dev API_URL after the first deployment.
-# Private mode requires API_URL to be a custom domain, preferably on the same
-# site as the frontend (for example finance.example.com and api.finance.example.com).
+# Private mode requires an explicit API_URL protected by Access. Prefer a custom
+# domain on the frontend's site to avoid third-party-cookie blocking. An explicit
+# workers.dev API_URL is supported with SameSite=None cookies, subject to browser
+# third-party-cookie policies.
 # Configure Cloudflare Access before deploying; see docs/api-access.md.
 # An explicitly configured API_URL (including a custom domain) is preserved.
 

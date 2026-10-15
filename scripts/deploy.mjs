@@ -113,11 +113,11 @@ export function deploymentPlan(options, deployMcp = false) {
   }
 }
 
-export function apiOrigin(value) {
+export function apiOrigin(value, field = 'API_URL') {
   let url
-  try { url = new URL(value) } catch { throw new Error('API_URL must be a valid HTTPS origin.') }
+  try { url = new URL(value) } catch { throw new Error(`${field} must be a valid HTTPS origin.`) }
   if (url.protocol !== 'https:' || url.username || url.password || url.search || url.hash || url.pathname !== '/') {
-    throw new Error('API_URL must be an HTTPS origin without credentials, a path, query, or fragment.')
+    throw new Error(`${field} must be an HTTPS origin without credentials, a path, query, or fragment.`)
   }
   return url.origin
 }
@@ -257,7 +257,7 @@ export async function deploy(options, { root = repositoryRoot, run = runCommand,
       await need('API_WORKER_NAME', 'finance-api')
       await need('ALLOWED_ORIGINS')
       const origins = config.ALLOWED_ORIGINS.split(',').map(value => value.trim())
-      if (origins.some(value => value.includes('*') || apiOrigin(value) !== value)) throw new Error('ALLOWED_ORIGINS must contain exact HTTPS origins without trailing slashes.')
+      if (origins.some(value => value.includes('*') || apiOrigin(value, 'ALLOWED_ORIGINS') !== value)) throw new Error('ALLOWED_ORIGINS must contain exact HTTPS origins without trailing slashes.')
     }
     if (plan.client) {
       await need('PROJECT_NAME')
@@ -271,12 +271,11 @@ export async function deploy(options, { root = repositoryRoot, run = runCommand,
       if (config.API_AUTH_MODE === 'private') {
         await need('API_URL')
         config.API_URL = apiOrigin(config.API_URL)
-        if (new URL(config.API_URL).hostname.endsWith('.workers.dev')) throw new Error('Private mode requires an API custom domain, preferably on the frontend\'s site, for browser session cookies.')
         if (plan.api) {
           await need('API_ACCESS_TEAM_DOMAIN')
           await need('API_ACCESS_AUD')
           await need('API_ACCESS_ALLOWED_EMAIL')
-          config.API_ACCESS_TEAM_DOMAIN = apiOrigin(config.API_ACCESS_TEAM_DOMAIN)
+          config.API_ACCESS_TEAM_DOMAIN = apiOrigin(config.API_ACCESS_TEAM_DOMAIN, 'API_ACCESS_TEAM_DOMAIN')
           if (!new URL(config.API_ACCESS_TEAM_DOMAIN).hostname.endsWith('.cloudflareaccess.com') || new URL(config.API_ACCESS_TEAM_DOMAIN).port) {
             throw new Error('API_ACCESS_TEAM_DOMAIN must be your HTTPS cloudflareaccess.com team origin.')
           }
@@ -291,7 +290,7 @@ export async function deploy(options, { root = repositoryRoot, run = runCommand,
       await need('MCP_ACCESS_AUD', legacyValue('CF_ACCESS_AUD'))
       await need('MCP_ALLOWED_EMAIL', legacyValue('ALLOWED_EMAIL'))
       const team = config.MCP_ACCESS_TEAM_DOMAIN
-      config.MCP_ACCESS_TEAM_DOMAIN = apiOrigin(team.includes('://') ? team : `https://${team}`)
+      config.MCP_ACCESS_TEAM_DOMAIN = apiOrigin(team.includes('://') ? team : `https://${team}`, 'MCP_ACCESS_TEAM_DOMAIN')
     }
     if (config.API_URL && (plan.api || plan.client)) config.API_URL = apiOrigin(config.API_URL)
     await saveConfig(configPath, config, plan.api || plan.client ? ['API_SECRET'] : [])
@@ -306,7 +305,9 @@ export async function deploy(options, { root = repositoryRoot, run = runCommand,
     const apiConfig = (plan.api || plan.mcp || plan.migrations) ? await writeJson('api.json', {
       name: config.API_WORKER_NAME || 'finance-api', main: join(root, 'api/src/index.ts'),
       compatibility_date: '2024-09-23', compatibility_flags: ['nodejs_compat'],
-      define: { __dirname: "'/'" }, workers_dev: config.API_AUTH_MODE !== 'private', preview_urls: false,
+      define: { __dirname: "'/'" },
+      workers_dev: config.API_AUTH_MODE !== 'private' || Boolean(config.API_URL && new URL(config.API_URL).hostname.endsWith('.workers.dev')),
+      preview_urls: false,
       ...(plan.api && config.API_URL && !new URL(config.API_URL).hostname.endsWith('.workers.dev')
         ? { routes: [{ pattern: new URL(config.API_URL).hostname, custom_domain: true }] } : {}),
       vars: plan.api ? {

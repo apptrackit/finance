@@ -12,11 +12,14 @@ The ledger remains single-user; Access does not add separate user databases.
 
 ## Configure private production
 
-1. Choose an API custom hostname in your Cloudflare zone, preferably on the
-   same site as the frontend: `finance.example.com` and `api.finance.example.com`.
-   This avoids third-party cookie restrictions. The CLI requires a custom
-   `API_URL`, configures its Worker custom-domain route, and disables workers.dev
-   and preview URLs. It does not discover a private API URL automatically.
+1. Set an explicit HTTPS `API_URL`. Prefer a custom hostname on the same site
+   as the frontend: `finance.example.com` and `api.finance.example.com`. The CLI
+   configures its Worker custom-domain route and disables workers.dev for that
+   configuration. You can instead explicitly use the Worker's workers.dev URL;
+   the CLI keeps that endpoint enabled, with private JWT verification unchanged.
+   Protect the chosen hostname with Access. Preview URLs stay disabled, and the
+   CLI does not discover a private API URL automatically. Cross-site workers.dev
+   cookies can be blocked by browsers; a same-site custom domain avoids this.
 2. In Cloudflare Zero Trust, configure an Access self-hosted application covering
    the **entire API hostname**, not just `/auth/login`. Use an Allow policy for
    your exact email and your existing email one-time-code login. Do not add
@@ -47,7 +50,9 @@ The ledger remains single-user; Access does not add separate user databases.
    `GET, POST, PUT, PATCH, DELETE, OPTIONS`, and headers `Content-Type, X-Client-Date`.
    If Access answers preflight itself, configure these same values there.
 5. Configure Access cookies to permit same-site cross-origin requests (the two
-   HTTPS subdomains above), and choose the desired session duration. Deploy API
+   HTTPS subdomains above), and choose the desired session duration. For a
+   workers.dev API on a different site, select SameSite=None; this still cannot
+   override a browser's third-party-cookie blocking. Deploy API
    and client together with the same mode using `npm run deploy`. Access policy
    setup remains a Cloudflare dashboard operation; the CLI does not create it.
 
@@ -84,7 +89,7 @@ Access JWTs and disposable D1, without Cloudflare credentials.
 ## Migration from browser API keys
 
 This is a breaking authentication change. Existing private deployments must
-configure API Access, its custom domain, mode and identity settings before
+configure API Access, its chosen hostname, mode and identity settings before
 deploying the updated API/client. Existing public demos must explicitly select
 public mode. The old key cannot authorize either mode. Deploy API and client
 together, then refresh the frontend/PWA to load the new bundle. Existing local
@@ -95,7 +100,8 @@ configs need the new mode settings; missing settings do not enable public access
 - In a signed-out/incognito browser, the private frontend and API hostname must
   require Access login. Direct `/accounts`, `/export`, and mutation requests must
   not return financial data or apply changes. Inspect alternate Worker URLs to
-  ensure workers.dev and previews are disabled.
+  ensure previews are disabled and workers.dev is disabled when using a custom
+  domain, or protected by Access when it is the explicitly chosen API address.
 - From the frontend, sign in, inspect `/auth/session` (200 with `mode: private`),
   load accounts, and save a harmless edit to a synthetic account. Verify the
   request includes the API session cookie and no `X-API-Key`.
@@ -118,7 +124,7 @@ configs need the new mode settings; missing settings do not enable public access
 
 ## Troubleshooting
 
-- **CORS/network error:** check the API custom hostname, cookie settings,
+- **CORS/network error:** check the API hostname, cookie settings,
   preflight policy, exact frontend origin and whether the API cookie exists.
   Cross-site domains may be blocked by browser third-party-cookie policies.
 - **401:** assertion missing, invalid, expired, or scoped to another application.
