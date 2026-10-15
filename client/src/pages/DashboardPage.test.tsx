@@ -24,6 +24,12 @@ beforeEach(() => {
 const mount = () => render(<MemoryRouter initialEntries={['/dashboard?from=2026-10-01&to=2026-10-31']}><DashboardPage /></MemoryRouter>)
 
 describe('dashboard summary', () => {
+  it('omits upcoming details when there are no upcoming transactions', () => {
+    state.finance.upcomingTransactions = []
+    mount()
+    expect(screen.getByRole('region', { name: 'Dashboard summary' })).not.toHaveTextContent(/upcoming/i)
+  })
+
   it('shows current balances, period activity, and only upcoming cash changes', () => {
     mount()
     const summary = screen.getByRole('region', { name: 'Dashboard summary' })
@@ -33,6 +39,12 @@ describe('dashboard summary', () => {
     expect(summary).toHaveTextContent('40% of income spent')
     expect(summary).toHaveTextContent('30 000 HUF')
     expect(summary).not.toHaveTextContent('9 000')
+    expect(summary).not.toHaveTextContent('+0 upcoming')
+    expect(summary).not.toHaveTextContent('Spent')
+    expect(summary).toHaveTextContent('Expense')
+    expect(within(summary).getAllByText('+50 000', { exact: false }).some(element => element.classList.contains('text-success'))).toBe(true)
+    expect(within(summary).getAllByText('−20 000', { exact: false }).some(element => element.classList.contains('text-destructive'))).toBe(true)
+    expect(summary).toHaveTextContent('−1 000 upcoming')
     expect(screen.getByRole('button', { name: /Choose period: October 2026/ })).toBeInTheDocument()
   })
 
