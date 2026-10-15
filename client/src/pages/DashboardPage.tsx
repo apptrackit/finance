@@ -113,8 +113,9 @@ export function DashboardPage() {
   const signed = (value: number | null) => value === null ? 'Unavailable' : hidden ? '••••••' : `${value > 0 ? '+' : value < 0 ? '−' : ''}${amount(Math.abs(value))}`
   const today = format(new Date(), 'yyyy-MM-dd')
   const wholeMonth = dateRange.startDate === format(startOfMonth(currentMonth), 'yyyy-MM-dd') && dateRange.endDate === format(endOfMonth(currentMonth), 'yyyy-MM-dd')
-  const periodLabel = filters.range === 'allTime' ? 'All time' : wholeMonth ? `${format(currentMonth, 'MMMM')}${today >= dateRange.startDate && today <= dateRange.endDate ? ' so far' : ' activity'}` : 'Period activity'
-  const daysLeft = differenceInCalendarDays(parseISO(dateRange.endDate), new Date())
+  const isCurrentPeriod = filters.range === 'current' && wholeMonth && today >= dateRange.startDate && today <= dateRange.endDate
+  const periodLabel = filters.range === 'allTime' ? 'All time' : wholeMonth ? `${format(currentMonth, 'MMMM')}${isCurrentPeriod ? ' so far' : ' activity'}` : 'Period activity'
+  const daysLeft = differenceInCalendarDays(parseISO(dateRange.endDate), parseISO(today))
   const ratio = totalIncome !== null && totalExpenses !== null && totalIncome > 0 ? totalExpenses / totalIncome * 100 : null
   const barSpent = hidden || ratio === null ? 0 : Math.min(100, ratio)
   const barUpcoming = hidden || ratio === null || pendingExpenses === null || !dataStatus.upcoming.loaded ? 0 : Math.min(100 - barSpent, pendingExpenses / totalIncome! * 100)
@@ -154,7 +155,7 @@ export function DashboardPage() {
             </div>
             <div className="min-w-0 border-t border-border p-4 sm:p-5 lg:col-start-2 lg:row-start-1 lg:row-span-2 lg:border-t-0 lg:border-l">
               <FinanceDataBoundary label="Period activity" datasets={summaryData}>
-                <div className="mb-4 flex items-baseline justify-between gap-3 border-b border-border/60 pb-3"><h2 className="text-xs font-medium tracking-wide text-muted-foreground">{periodLabel}</h2>{filters.range !== 'allTime' && today >= dateRange.startDate && today <= dateRange.endDate && <span className="shrink-0 text-xs text-muted-foreground">{daysLeft} days left</span>}</div>
+                <div className="mb-4 flex items-baseline justify-between gap-3 border-b border-border/60 pb-3"><h2 className="text-xs font-medium tracking-wide text-muted-foreground">{periodLabel}</h2>{isCurrentPeriod && <span className="shrink-0 text-xs text-muted-foreground">{daysLeft} day{daysLeft === 1 ? '' : 's'} left</span>}</div>
                 <div className="grid grid-cols-[auto_minmax(0,1fr)] items-baseline gap-x-3 gap-y-2 text-sm tabular-nums lg:grid-cols-[auto_1fr_auto]">
                   <span className="text-muted-foreground">Income</span><span className={`text-right font-semibold ${totalIncome === null ? 'text-muted-foreground' : 'text-success'}`}>{signed(totalIncome)} <span className="text-xs font-normal text-muted-foreground">{masterCurrency}</span></span><span className={`col-start-2 text-right text-xs text-muted-foreground lg:col-auto ${dataStatus.upcoming.loaded && pendingIncome === 0 ? 'hidden lg:block' : '-mt-1 lg:mt-0'}`}>{!dataStatus.upcoming.loaded || pendingIncome === null ? 'Upcoming unavailable' : pendingIncome > 0 ? `${signed(pendingIncome)} upcoming` : null}</span>
                   <span className="text-muted-foreground">Expense</span><span className={`text-right font-semibold ${totalExpenses === null ? 'text-muted-foreground' : 'text-destructive'}`}>{signed(totalExpenses === null ? null : -totalExpenses)} <span className="text-xs font-normal text-muted-foreground">{masterCurrency}</span></span><span className={`col-start-2 text-right text-xs text-muted-foreground lg:col-auto ${dataStatus.upcoming.loaded && pendingExpenses === 0 ? 'hidden lg:block' : '-mt-1 lg:mt-0'}`}>{!dataStatus.upcoming.loaded || pendingExpenses === null ? 'Upcoming unavailable' : pendingExpenses > 0 ? `${signed(-pendingExpenses)} upcoming` : null}</span>

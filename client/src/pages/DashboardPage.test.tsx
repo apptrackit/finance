@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { DashboardPage } from './DashboardPage'
 
 const state = vi.hoisted(() => ({ hidden: false, netWorthOnly: false, finance: {} as Record<string, unknown> }))
@@ -9,6 +9,8 @@ vi.mock('../context/PrivacyContext', () => ({ usePrivacy: () => ({ privacyMode: 
 vi.mock('../components/dashboard-module/TransactionList', () => ({ TransactionList: () => <div>Ledger</div> }))
 
 beforeEach(() => {
+  vi.useFakeTimers({ toFake: ['Date'] })
+  vi.setSystemTime(new Date(2026, 9, 15, 12))
   state.hidden = false
   state.netWorthOnly = false
   const loaded = { loaded: true, loading: false, stale: false, error: false }
@@ -21,7 +23,8 @@ beforeEach(() => {
     dataStatus: Object.fromEntries(['accounts', 'transactions', 'upcoming', 'categories', 'netWorth', 'investment', 'exchangeRates'].map(key => [key, loaded])),
   }
 })
-const mount = () => render(<MemoryRouter initialEntries={['/dashboard?from=2026-10-01&to=2026-10-31']}><DashboardPage /></MemoryRouter>)
+afterEach(() => vi.useRealTimers())
+const mount = (path = '/dashboard?from=2026-10-01&to=2026-10-31') => render(<MemoryRouter initialEntries={[path]}><DashboardPage /></MemoryRouter>)
 
 describe('dashboard summary', () => {
   it('omits empty upcoming and investment details', () => {
@@ -78,5 +81,38 @@ describe('dashboard summary', () => {
     expect(screen.getByRole('alert')).toHaveTextContent('MXN')
     expect(screen.getByRole('region', { name: 'Dashboard summary' })).toHaveTextContent('Unavailable')
     expect(screen.getByRole('region', { name: 'Dashboard summary' })).not.toHaveTextContent('40%')
+  })
+})
+
+
+describe('dashboard period context', () => {
+  it.each([
+    ['/dashboard', 'October so far', '16 days left'],
+    ['/dashboard?from=2026-10-01&to=2026-10-31', 'October activity', null],
+    ['/dashboard?from=2026-10-10&to=2026-10-20', 'Period activity', null],
+    ['/dashboard?from=2026-09-20&to=2026-11-10', 'Period activity', null],
+    ['/dashboard?from=2026-09-01&to=2026-09-30', 'September activity', null],
+    ['/dashboard?from=2026-11-01&to=2026-11-30', 'November activity', null],
+    ['/dashboard?range=allTime', 'All time', null],
+    ['/dashboard?from=2026-10-10&to=2026-10-20&view=calendar', 'October activity', null],
+  ])('shows accurate period context for %s', (path, heading, countdown) => {
+    mount(path)
+    const summary = screen.getByRole('region', { name: 'Dashboard summary' })
+    expect(within(summary).getByRole('heading', { name: heading })).toBeInTheDocument()
+    if (countdown) expect(summary).toHaveTextContent(countdown)
+    else expect(summary).not.toHaveTextContent(/days? left/)
+  })
+
+  it.each([
+    [new Date(2026, 9, 25, 23, 59), '6 days left'],
+    [new Date(2026, 9, 30, 23, 59), '1 day left'],
+    [new Date(2026, 9, 31, 23, 59), '0 days left'],
+    [new Date(2024, 1, 28, 23, 59), '1 day left'],
+    [new Date(2026, 11, 31, 23, 59), '0 days left'],
+    [new Date(2027, 0, 1, 0, 1), '30 days left'],
+  ])('counts local calendar days at %s', (now, countdown) => {
+    vi.setSystemTime(now)
+    mount('/dashboard')
+    expect(screen.getByRole('region', { name: 'Dashboard summary' })).toHaveTextContent(countdown)
   })
 })
