@@ -138,7 +138,7 @@ export function DashboardPage() {
                   </button>}
                 </div>
                 <p className="break-words text-2xl font-bold tracking-tight tabular-nums sm:text-[28px]">{amount(totalNetWorth, hideNetWorth)} <span className="text-xs font-medium text-muted-foreground sm:text-sm">{masterCurrency}</span></p>
-                <p className="mt-2 text-xs text-muted-foreground sm:text-[13px]">Incl. {amount(investmentValue, hideNetWorth || hidden)} {masterCurrency} investments</p>
+                {investmentValue !== 0 && <p className="mt-2 text-xs text-muted-foreground sm:text-[13px]">Incl. {amount(investmentValue, hideNetWorth || hidden)} {masterCurrency} investments</p>}
               </FinanceDataBoundary>
             </div>
             <div className="min-w-0 border-r border-border p-4 sm:p-5 lg:border-r-0">

@@ -24,16 +24,18 @@ beforeEach(() => {
 const mount = () => render(<MemoryRouter initialEntries={['/dashboard?from=2026-10-01&to=2026-10-31']}><DashboardPage /></MemoryRouter>)
 
 describe('dashboard summary', () => {
-  it('omits upcoming details when there are no upcoming transactions', () => {
+  it('omits empty upcoming and investment details', () => {
     state.finance.upcomingTransactions = []
+    state.finance.investmentValue = 0
     mount()
-    expect(screen.getByRole('region', { name: 'Dashboard summary' })).not.toHaveTextContent(/upcoming/i)
+    expect(screen.getByRole('region', { name: 'Dashboard summary' })).not.toHaveTextContent(/upcoming|Incl\./i)
   })
 
   it('shows current balances, period activity, and only upcoming cash changes', () => {
     mount()
     const summary = screen.getByRole('region', { name: 'Dashboard summary' })
     expect(summary).toHaveTextContent('105 000 HUF')
+    expect(summary).toHaveTextContent('Incl. 5 000 HUF investments')
     expect(summary).toHaveTextContent('100 000 HUF')
     expect(summary).toHaveTextContent('−1 000 HUF after 1 upcoming')
     expect(summary).toHaveTextContent('40% of income spent')
