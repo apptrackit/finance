@@ -8,12 +8,12 @@ import { Label } from './label'
 const ALL_TIME = { startDate: '1900-01-01', endDate: '2100-12-31' }
 const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
-type PickerMode = 'month' | 'custom' | 'all'
+export type DateRangePickerMode = 'month' | 'custom' | 'all'
 
 type DateRangePickerProps = {
   startDate: string
   endDate: string
-  onApply: (range: { startDate: string; endDate: string }) => void
+  onApply: (range: { startDate: string; endDate: string }, mode: DateRangePickerMode) => void
   onCancel: () => void
   monthOnly?: boolean
 }
@@ -34,9 +34,9 @@ export function DateRangePicker({ startDate, endDate, onApply, onCancel, monthOn
   const currentDate = new Date()
   const isAllTime = startDate === ALL_TIME.startDate && endDate === ALL_TIME.endDate
   const initialMonth = isAllTime ? new Date() : toLocalDate(startDate)
-  const initialMode: PickerMode = monthOnly ? 'month' : isAllTime ? 'all' : isWholeMonth(startDate, endDate) ? 'month' : 'custom'
+  const initialMode: DateRangePickerMode = monthOnly ? 'month' : isAllTime ? 'all' : isWholeMonth(startDate, endDate) ? 'month' : 'custom'
 
-  const [mode, setMode] = useState<PickerMode>(initialMode)
+  const [mode, setMode] = useState<DateRangePickerMode>(initialMode)
   const [customRange, setCustomRange] = useState({ startDate, endDate })
   const [selectedMonth, setSelectedMonth] = useState(initialMonth)
   const [displayYear, setDisplayYear] = useState(initialMonth.getFullYear())
@@ -55,7 +55,7 @@ export function DateRangePicker({ startDate, endDate, onApply, onCancel, monthOn
   const selectMonth = (month: number) => {
     const next = new Date(displayYear, month, 1)
     setSelectedMonth(next)
-    onApply(monthRange(next))
+    onApply(monthRange(next), 'month')
   }
 
   return (
@@ -109,7 +109,7 @@ export function DateRangePicker({ startDate, endDate, onApply, onCancel, monthOn
               role="tab"
               aria-selected={mode === 'all'}
               disabled={monthOnly}
-              onClick={() => onApply(ALL_TIME)}
+              onClick={() => onApply(ALL_TIME, 'all')}
               className={`flex min-w-0 items-center justify-center whitespace-nowrap rounded-lg px-1 py-2 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${mode === 'all' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
             >
               All time
@@ -188,7 +188,7 @@ export function DateRangePicker({ startDate, endDate, onApply, onCancel, monthOn
         {mode === 'custom' && (
           <div className="flex gap-2 border-t border-border/70 p-3 sm:p-4">
             <Button size="sm" variant="outline" onClick={onCancel} className="flex-1">Cancel</Button>
-            <Button size="sm" onClick={() => onApply(selectedRange)} disabled={invalidCustomRange} className="flex-1">
+            <Button size="sm" onClick={() => onApply(selectedRange, 'custom')} disabled={invalidCustomRange} className="flex-1">
               Apply timeframe
             </Button>
           </div>

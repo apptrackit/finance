@@ -87,6 +87,37 @@ describe('dashboard summary', () => {
 
 describe('dashboard period context', () => {
   it.each([
+    ['Previous period', 'September activity', 'Next period'],
+    ['Next period', 'November activity', 'Previous period'],
+  ])('restores the current-month countdown after using %s and returning', (away, heading, back) => {
+    mount('/dashboard')
+    const summary = screen.getByRole('region', { name: 'Dashboard summary' })
+    fireEvent.click(screen.getByRole('button', { name: away }))
+    expect(within(summary).getByRole('heading', { name: heading })).toBeInTheDocument()
+    expect(summary).not.toHaveTextContent(/days? left/)
+    fireEvent.click(screen.getByRole('button', { name: back }))
+    expect(within(summary).getByRole('heading', { name: 'October so far' })).toBeInTheDocument()
+    expect(summary).toHaveTextContent('16 days left')
+  })
+
+  it('restores the countdown when selecting the current month in the month picker', () => {
+    mount('/dashboard?from=2026-09-01&to=2026-09-30')
+    fireEvent.click(screen.getByRole('button', { name: 'Choose period: September 2026' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Oct', exact: true }))
+    expect(screen.getByRole('region', { name: 'Dashboard summary' })).toHaveTextContent('16 days left')
+  })
+
+  it('keeps the countdown hidden when applying the same dates through Custom', () => {
+    mount('/dashboard')
+    fireEvent.click(screen.getByRole('button', { name: 'Choose period: October 2026' }))
+    fireEvent.click(screen.getByRole('tab', { name: 'Custom', exact: true }))
+    fireEvent.click(screen.getByRole('button', { name: 'Apply timeframe' }))
+    const summary = screen.getByRole('region', { name: 'Dashboard summary' })
+    expect(within(summary).getByRole('heading', { name: 'October activity' })).toBeInTheDocument()
+    expect(summary).not.toHaveTextContent(/days? left/)
+  })
+
+  it.each([
     ['/dashboard', 'October so far', '16 days left'],
     ['/dashboard?from=2026-10-01&to=2026-10-31', 'October activity', null],
     ['/dashboard?from=2026-10-10&to=2026-10-20', 'Period activity', null],

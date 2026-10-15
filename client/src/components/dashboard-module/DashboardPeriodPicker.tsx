@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { addDays, addMonths, differenceInCalendarDays, endOfMonth, format, parseISO, startOfMonth } from 'date-fns'
 import { Calendar, ChevronLeft, ChevronRight } from 'lucide-react'
 import { DateRangePicker } from '../common/DateRangePicker'
+import type { DateRangePickerMode } from '../common/DateRangePicker'
 import type { DashboardFilters, FilterChange } from '../../navigation/filters'
 
 export function DashboardPeriodPicker({ filters, onChange }: { filters: DashboardFilters; onChange: FilterChange<DashboardFilters> }) {
@@ -10,15 +11,17 @@ export function DashboardPeriodPicker({ filters, onChange }: { filters: Dashboar
   const end = parseISO(filters.endDate)
   const wholeMonth = filters.startDate === format(startOfMonth(start), 'yyyy-MM-dd') && filters.endDate === format(endOfMonth(start), 'yyyy-MM-dd')
   const label = filters.range === 'allTime' ? 'All Time' : wholeMonth ? format(start, 'MMMM yyyy') : `${format(start, 'MMM d, yyyy')} – ${format(end, 'MMM d, yyyy')}`
-  const apply = (range: { startDate: string; endDate: string }) => {
-    onChange({ ...range, range: range.startDate === '1900-01-01' && range.endDate === '2100-12-31' ? 'allTime' : 'custom' })
+  const apply = (range: { startDate: string; endDate: string }, mode: DateRangePickerMode) => {
+    const today = new Date()
+    const currentMonth = mode === 'month' && range.startDate === format(startOfMonth(today), 'yyyy-MM-dd') && range.endDate === format(endOfMonth(today), 'yyyy-MM-dd')
+    onChange({ ...range, range: mode === 'all' ? 'allTime' : currentMonth ? 'current' : 'custom' })
     setOpen(false)
   }
   const step = (direction: number) => {
     const month = addMonths(start, direction)
     const days = (differenceInCalendarDays(end, start) + 1) * direction
     apply(wholeMonth ? { startDate: format(startOfMonth(month), 'yyyy-MM-dd'), endDate: format(endOfMonth(month), 'yyyy-MM-dd') }
-      : { startDate: format(addDays(start, days), 'yyyy-MM-dd'), endDate: format(addDays(end, days), 'yyyy-MM-dd') })
+      : { startDate: format(addDays(start, days), 'yyyy-MM-dd'), endDate: format(addDays(end, days), 'yyyy-MM-dd') }, wholeMonth ? 'month' : 'custom')
   }
   return <div className="relative w-fit max-w-full">
     <div className="flex min-h-10 items-center overflow-hidden rounded-[10px] border border-border bg-card text-sm">
