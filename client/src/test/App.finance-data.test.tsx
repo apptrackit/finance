@@ -180,7 +180,7 @@ describe('finance read errors in App', () => {
     payloads['/transactions'] = []
     payloads['/transactions/date-range'] = []
     renderApp()
-    expect(await screen.findByRole('region', { name: 'Dashboard summary' })).toHaveTextContent('0 accounts')
+    expect(await screen.findByRole('region', { name: 'Dashboard summary' })).toHaveTextContent(/Cash\s*•••••• HUF/)
     expect(await screen.findByText('No transactions yet')).toBeInTheDocument()
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
