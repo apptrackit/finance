@@ -172,14 +172,14 @@ function App() {
         <div className="min-w-0 flex-1"><p className="text-xs text-muted-foreground">Finance</p><h1 className="text-[22px] font-semibold tracking-tight">{title}</h1></div>
         {privacyControl}
         <button type="button" className="finance-icon-button" aria-label="Search everything" onClick={() => setSearchOpen(true)}><Search className="h-4 w-4" /></button>
-        <button type="button" className="finance-icon-button" aria-label={colorMode === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'} onClick={() => setColorMode(colorMode === 'dark' ? 'light' : 'dark')}>
+        {view !== 'dashboard' && <button type="button" className="finance-icon-button" aria-label={colorMode === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'} onClick={() => setColorMode(colorMode === 'dark' ? 'light' : 'dark')}>
           {colorMode === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-        </button>
-        <NavLink to="/settings" aria-label="Settings" className="finance-icon-button"><SettingsIcon className="h-4 w-4" /></NavLink>
+        </button>}
+        {view !== 'dashboard' && <NavLink to="/settings" aria-label="Settings" className="finance-icon-button"><SettingsIcon className="h-4 w-4" /></NavLink>}
       </header>
       <main id="main-content" className="mx-auto w-full max-w-[1280px] px-4 py-4 sm:px-6 lg:px-8 lg:py-6">
-        <div className="mb-5 hidden items-center justify-between lg:flex"><h1 className="text-2xl font-semibold tracking-tight">{title}</h1></div>
-        <FinanceDataStatus datasets={visibleData} onRetry={() => { void finance.handleDataChange() }} />
+        {view !== 'dashboard' && <div className="mb-5 hidden items-center justify-between lg:flex"><h1 className="text-2xl font-semibold tracking-tight">{title}</h1></div>}
+        <FinanceDataStatus compact={view === 'dashboard'} datasets={visibleData} onRetry={() => { void finance.handleDataChange() }} />
         {initialLoading && <FinancePageLoader view={view} accounts={dataStatus.accounts.loaded ? finance.accounts : undefined}
           calendar={view === 'dashboard' && parseDashboardFilters(new URLSearchParams(search)).view === 'calendar'} />}
         <div hidden={initialLoading}>
@@ -199,6 +199,7 @@ function App() {
       <nav aria-label="More navigation" className="space-y-1">
         {moreNav.map(item => <NavLink key={item.key} to={`/${item.key}`} end onClick={() => setMoreOpen(false)} className="finance-nav-item">{item.icon}<span>{item.label}</span></NavLink>)}
         <NavLink to="/settings" onClick={() => setMoreOpen(false)} className="finance-nav-item"><SettingsIcon className="h-4 w-4" />Settings</NavLink>
+        {view === 'dashboard' && themeControl}
       </nav>
     </Modal>
     <SearchPalette isOpen={searchOpen} onClose={() => setSearchOpen(false)} finance={finance} canCompose={canCompose} hasUnfinishedChanges={hasUnfinishedChanges} onNewTransaction={newTransaction}

@@ -1,13 +1,15 @@
 import { useCallback, useMemo, useState } from 'react'
-import { Link, useLocation, useOutletContext } from 'react-router'
-import { startOfMonth, endOfMonth, format, parseISO } from 'date-fns'
-import { Wallet, TrendingUp, TrendingDown, Activity, Eye, EyeOff } from 'lucide-react'
+import { useLocation, useOutletContext } from 'react-router'
+import { startOfMonth, endOfMonth, format, parseISO, differenceInCalendarDays } from 'date-fns'
+import { Eye, EyeOff, Layers3, Wallet } from 'lucide-react'
 import { convertCurrency, sumAvailable } from '../../../shared/currency'
 import { MissingExchangeRates } from '../components/common/MissingExchangeRates'
 import { FinanceDataBoundary } from '../components/common/FinanceDataStatus'
-import { AccountList } from '../components/dashboard-module/AccountList'
+import { DashboardActivityBars } from '../components/dashboard-module/DashboardActivityBars'
+import { DashboardPeriodPicker } from '../components/dashboard-module/DashboardPeriodPicker'
 import { TransactionList } from '../components/dashboard-module/TransactionList'
 import { usePrivacy } from '../context/PrivacyContext'
+import { formatCalculatedAmount } from '../lib/amount'
 import { isUpcomingProjectionTransaction } from '../lib/transaction-review'
 import { parseDashboardFilters, dashboardSearch } from '../navigation/filters'
 import { useUrlFilters } from '../navigation/useUrlFilters'
@@ -22,13 +24,11 @@ export function DashboardPage() {
   const [filters, updateFilters] = useUrlFilters(parseFilters, dashboardSearch)
   const dateRange = useMemo(() => ({ startDate: filters.startDate, endDate: filters.endDate }), [filters.startDate, filters.endDate])
   const currentMonth = filters.range === 'allTime' ? new Date() : parseISO(filters.startDate)
-  const isTransactionCalendarOpen = filters.view === 'calendar'
   const [showNetWorth, setShowNetWorth] = useState(false)
   const { privacyMode, shouldHideNetWorth } = usePrivacy()
   const {
     netWorth,
     investmentValue,
-    investmentError,
     accounts,
     transactions,
     upcomingTransactions,
@@ -105,205 +105,66 @@ export function DashboardPage() {
     })
     .map(t => convertToMasterCurrency(t.amount, t.account_id)))
 
-  const pendingNetWorthDelta = sumAvailable(projectableUpcomingTransactions
-    .filter(t => {
-      const account = accounts.find(a => a.id === t.account_id)
-      return account?.type !== 'investment' && !account?.exclude_from_net_worth
-    })
-    .map(t => convertToMasterCurrency(t.amount, t.account_id)))
-
   const totalNetWorth = netWorth !== null && investmentValue !== null && dataStatus.investment.loaded && !dataStatus.netWorth.error && !dataStatus.investment.error ? netWorth + investmentValue : null
-  const projectedNetWorth = sumAvailable([totalNetWorth, pendingNetWorthDelta])
-  const projectedCashBalance = sumAvailable([cashBalance, pendingCashDelta])
-  const hasInvestmentAccounts = accounts.some(a => a.type === 'investment')
-  const showSeparateCashCard = hasInvestmentAccounts
+  const cashAccounts = accounts.filter(a => a.archived_at == null && a.type === 'cash' && !(a.exclude_from_cash_balance && a.exclude_from_net_worth))
+  const cashUpcoming = projectableUpcomingTransactions.filter(t => cashAccounts.some(a => a.id === t.account_id))
+  const hidden = privacyMode === 'hidden'
+  const hideNetWorth = hidden || (shouldHideNetWorth() && !showNetWorth)
+  const amount = (value: number | null, hide = hidden) => value === null ? 'Unavailable' : hide ? '••••••' : formatCalculatedAmount(value, { maximumFractionDigits: 0 })
+  const signed = (value: number | null) => value === null ? 'Unavailable' : hidden ? '••••••' : `${value > 0 ? '+' : value < 0 ? '−' : ''}${amount(Math.abs(value))}`
+  const today = format(new Date(), 'yyyy-MM-dd')
+  const wholeMonth = dateRange.startDate === format(startOfMonth(currentMonth), 'yyyy-MM-dd') && dateRange.endDate === format(endOfMonth(currentMonth), 'yyyy-MM-dd')
+  const isCurrentPeriod = filters.range === 'current' && wholeMonth && today >= dateRange.startDate && today <= dateRange.endDate
+  const periodLabel = filters.range === 'allTime' ? 'All time' : wholeMonth ? `${format(currentMonth, 'MMMM')}${isCurrentPeriod ? ' so far' : ' activity'}` : 'Period activity'
+  const daysLeft = differenceInCalendarDays(parseISO(dateRange.endDate), parseISO(today))
 
   return (<>
+          <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+            <h1 className="hidden text-2xl font-semibold tracking-tight lg:block">Dashboard</h1>
+            <DashboardPeriodPicker filters={filters} onChange={updateFilters} />
+          </div>
           {dataStatus.accounts.loaded && !dataStatus.exchangeRates.loading && (
-            <div className="mb-4"><MissingExchangeRates currencies={[...missingCurrencies].sort()} targetCurrency={masterCurrency}
+            <div className="mb-4"><MissingExchangeRates compact currencies={[...missingCurrencies].sort()} targetCurrency={masterCurrency}
               onRetry={() => { void handleDataChange() }} retrying={visibleData.some(({ status }) => status.loading)} /></div>
           )}
-            <div className={`grid gap-3 sm:gap-4 grid-cols-2 ${showSeparateCashCard ? 'min-[1440px]:grid-cols-4' : 'min-[1440px]:grid-cols-3'} mb-4 sm:mb-6`}>
-              {/* Net Worth Card */}
-              <FinanceDataBoundary label="Net Worth" datasets={netWorthData}>
-              <div className="group relative overflow-hidden rounded-xl sm:rounded-2xl border border-border/50 bg-gradient-to-br from-card to-card/80 p-4 sm:p-6 shadow-xl">
-                <div className="absolute top-0 right-0 w-32 h-32 bg-primary/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" />
-                <div className="relative">
-                  <div className="flex items-center justify-between mb-1.5 sm:mb-4">
-                    <span className="text-xs sm:text-sm font-medium text-muted-foreground">Net Worth</span>
-                    <div className="h-6 w-6 sm:h-8 sm:w-8 rounded-lg bg-primary/10 flex items-center justify-center">
-                      <Activity className="h-3 w-3 sm:h-4 sm:w-4 text-primary" />
+          <section aria-label="Dashboard summary" className="mb-5 flex flex-wrap gap-px overflow-hidden rounded-[14px] border border-border bg-border">
+            <div className="dashboard-summary-balances">
+              <div className="dashboard-summary-balance flex flex-col justify-center bg-card p-4 sm:px-6 sm:py-5">
+                <FinanceDataBoundary label="Net worth" datasets={netWorthData}>
+                  <div className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-4 sm:contents">
+                    <div className="flex min-h-5 items-center gap-2 text-[13px] font-medium text-muted-foreground"><Layers3 aria-hidden="true" className="h-4 w-4 shrink-0 text-primary" />Net worth
+                      {shouldHideNetWorth() && !hidden && <button type="button" onClick={() => setShowNetWorth(!showNetWorth)} aria-label={showNetWorth ? 'Hide net worth' : 'Show net worth'} className="flex h-8 w-8 items-center justify-center rounded-lg hover:bg-secondary">
+                        {showNetWorth ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </button>}
+                    </div>
+                    <div className="min-w-0 text-right sm:contents sm:text-left">
+                      <p className="break-words text-xl font-semibold tracking-tight tabular-nums sm:text-left sm:text-[28px] sm:leading-tight">{amount(totalNetWorth, hideNetWorth)} <span className="text-xs font-medium text-muted-foreground sm:text-sm">{masterCurrency}</span></p>
+                      {investmentValue !== 0 && <p className="dashboard-balance-detail mt-2 text-xs text-muted-foreground sm:mt-0 sm:text-[13px]">Incl. {amount(investmentValue, hideNetWorth || hidden)} {masterCurrency} investments</p>}
                     </div>
                   </div>
-                  <div className="flex items-center gap-1 sm:gap-2">
-                    <div className="text-lg sm:text-4xl font-bold tracking-tight text-foreground leading-tight">
-                      {investmentError && !dataStatus.investment.loaded ? (
-                        <span className="text-xs sm:text-lg text-destructive">Error loading data</span>
-                      ) : totalNetWorth !== null ? (
-                        <>
-                          <span className={shouldHideNetWorth() ? 'select-none' : ''}>
-                            {shouldHideNetWorth() && !showNetWorth
-                              ? '••••••'
-                              : totalNetWorth.toLocaleString('hu-HU', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
-                          </span>
-                          <span className="text-muted-foreground text-xs sm:text-2xl ml-0.5 sm:ml-1">{masterCurrency}</span>
-                        </>
-                      ) : (
-                        <span className="text-xs sm:text-lg text-muted-foreground">Unavailable</span>
-                      )}
-                    </div>
-                    {shouldHideNetWorth() && totalNetWorth !== null && (
-                      <button
-                        onClick={() => setShowNetWorth(!showNetWorth)}
-                        className="ml-1 sm:ml-2 p-1 sm:p-1.5 rounded-lg hover:bg-primary/10 transition-colors"
-                        aria-label={showNetWorth ? 'Hide net worth' : 'Show net worth'}
-                      >
-                        {showNetWorth ? (
-                          <EyeOff className="h-3 w-3 sm:h-4 sm:w-4 text-muted-foreground" />
-                        ) : (
-                          <Eye className="h-3 w-3 sm:h-4 sm:w-4 text-muted-foreground" />
-                        )}
-                      </button>
-                    )}
-                  </div>
-                  <p className="text-[10px] sm:text-xs text-muted-foreground mt-1 sm:mt-2">
-                    {investmentError ? investmentError : !dataStatus.upcoming.loaded ? 'Upcoming data unavailable' : projectedNetWorth === null ? 'Projection unavailable' : projectedNetWorth !== null && pendingNetWorthDelta !== 0 ? (
-                      <>
-                        After all upcoming{' '}
-                        <span className={shouldHideNetWorth() ? 'select-none' : ''}>
-                          {shouldHideNetWorth() && !showNetWorth
-                            ? '••••••'
-                            : projectedNetWorth.toLocaleString('hu-HU', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
-                        </span>{' '}
-                        {masterCurrency}
-                      </>
-                    ) : 'Total value'}
-                  </p>
-                </div>
-              </div>
-
-              </FinanceDataBoundary>
-
-              {/* Cash Balance Card */}
-              {showSeparateCashCard && (
-                <FinanceDataBoundary label="Cash" datasets={accountData}>
-                <div className="group relative overflow-hidden rounded-xl sm:rounded-2xl border border-border/50 bg-card p-4 sm:p-6 shadow-xl hover:border-primary/30 transition-colors">
-                  <div className="flex items-center justify-between mb-1.5 sm:mb-4">
-                    <span className="text-xs sm:text-sm font-medium text-muted-foreground">Cash</span>
-                    <div className="h-6 w-6 sm:h-8 sm:w-8 rounded-lg bg-primary/10 flex items-center justify-center">
-                      <Wallet className="h-3 w-3 sm:h-4 sm:w-4 text-primary" />
-                    </div>
-                  </div>
-                  <div className="text-lg sm:text-4xl font-bold tracking-tight text-foreground leading-tight">
-                    {cashBalance !== null ? (
-                      <>
-                        <span className={privacyMode === 'hidden' ? 'select-none' : ''}>
-                          {privacyMode === 'hidden'
-                            ? '••••••'
-                            : cashBalance.toLocaleString('hu-HU', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
-                        </span>
-                        <span className="text-muted-foreground text-xs sm:text-2xl ml-0.5 sm:ml-1">{masterCurrency}</span>
-                      </>
-                    ) : (
-                      <span className="text-xs sm:text-lg text-muted-foreground">Unavailable</span>
-                    )}
-                  </div>
-                  <p className="text-[10px] sm:text-xs text-muted-foreground mt-1 sm:mt-2">
-                    {!dataStatus.upcoming.loaded ? 'Upcoming data unavailable' : projectedCashBalance === null ? 'Projection unavailable' : pendingCashDelta !== 0 ? (
-                      <>
-                        After all upcoming{' '}
-                        <span className={privacyMode === 'hidden' ? 'select-none' : ''}>
-                          {privacyMode === 'hidden'
-                            ? '••••••'
-                            : projectedCashBalance.toLocaleString('hu-HU', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
-                        </span>{' '}
-                        {masterCurrency}
-                      </>
-                    ) : (
-                      <>
-                        {accounts.filter(a => a.archived_at == null && a.type === 'cash').length} account{accounts.filter(a => a.archived_at == null && a.type === 'cash').length !== 1 ? 's' : ''}
-                      </>
-                    )}
-                  </p>
-                </div>
                 </FinanceDataBoundary>
-              )}
-
-              {/* Income Card */}
-              <FinanceDataBoundary label="Income" datasets={summaryData}>
-              <div className="group relative overflow-hidden rounded-xl sm:rounded-2xl border border-border/50 bg-card p-4 sm:p-6 shadow-xl hover:border-success/30 transition-colors">
-                <div className="flex items-center justify-between mb-1.5 sm:mb-4">
-                  <span className="text-xs sm:text-sm font-medium text-muted-foreground">Income</span>
-                  <div className="h-6 w-6 sm:h-8 sm:w-8 rounded-lg bg-success/10 flex items-center justify-center">
-                    <TrendingUp className="h-3 w-3 sm:h-4 sm:w-4 text-success" />
-                  </div>
-                </div>
-                <div className="text-lg sm:text-3xl font-bold tracking-tight text-success leading-tight">
-                  {!dataStatus.transactions.loaded && transactionsLoading ? (
-                    <div className="h-5 sm:h-9 w-20 sm:w-32 bg-muted animate-pulse rounded" />
-                  ) : totalIncome === null ? <span className="text-xs sm:text-lg text-muted-foreground">Unavailable</span> : (
-                    <>
-                      <span className={privacyMode === 'hidden' ? 'select-none' : ''}>
-                        +{privacyMode === 'hidden' ? '••••••' : totalIncome.toLocaleString('hu-HU', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
-                      </span>{' '}
-                      <span className="text-[10px] sm:text-base">{masterCurrency}</span>
-                    </>
-                  )}
-                </div>
-                <p className="text-[10px] sm:text-xs text-muted-foreground mt-1 sm:mt-2">
-                  {!dataStatus.upcoming.loaded ? 'Upcoming data unavailable' : pendingIncome === null ? 'Pending total unavailable' : pendingIncome > 0 ? (
-                    <>
-                      +{privacyMode === 'hidden' ? '••••••' : pendingIncome.toLocaleString('hu-HU', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} {masterCurrency} pending
-                    </>
-                  ) : 'This period'}
-                </p>
               </div>
-
-              </FinanceDataBoundary>
-
-              {/* Expenses Card */}
-              <FinanceDataBoundary label="Expenses" datasets={summaryData}>
-              <div className="group relative overflow-hidden rounded-xl sm:rounded-2xl border border-border/50 bg-card p-4 sm:p-6 shadow-xl hover:border-destructive/30 transition-colors">
-                <div className="flex items-center justify-between mb-1.5 sm:mb-4">
-                  <span className="text-xs sm:text-sm font-medium text-muted-foreground">Expenses</span>
-                  <div className="h-6 w-6 sm:h-8 sm:w-8 rounded-lg bg-destructive/10 flex items-center justify-center">
-                    <TrendingDown className="h-3 w-3 sm:h-4 sm:w-4 text-destructive" />
+              <div className="dashboard-summary-balance flex flex-col justify-center bg-card p-4 sm:px-6 sm:py-5">
+                <FinanceDataBoundary label="Cash" datasets={accountData}>
+                  <div className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-4 sm:contents">
+                    <div className="flex min-h-5 items-center gap-2 text-[13px] font-medium text-muted-foreground"><Wallet aria-hidden="true" className="h-4 w-4 shrink-0 text-primary" />Cash</div>
+                    <div className="min-w-0 text-right sm:contents sm:text-left">
+                      <p className="break-words text-xl font-semibold tracking-tight tabular-nums sm:text-left sm:text-[28px] sm:leading-tight">{amount(cashBalance)} <span className="text-xs font-medium text-muted-foreground sm:text-sm">{masterCurrency}</span></p>
+                      {(!dataStatus.upcoming.loaded || cashUpcoming.length > 0) && <p className="dashboard-balance-detail mt-2 text-xs text-muted-foreground sm:mt-0 sm:text-[13px]">{!dataStatus.upcoming.loaded ? 'Upcoming data unavailable' : pendingCashDelta === null ? 'Projection unavailable' : <><span className={hidden ? '' : pendingCashDelta >= 0 ? 'font-semibold text-success' : 'font-semibold text-destructive'}>{signed(pendingCashDelta)} {masterCurrency}</span> after {cashUpcoming.length} upcoming</>}</p>}
+                    </div>
                   </div>
-                </div>
-                <div className="text-lg sm:text-3xl font-bold tracking-tight text-destructive leading-tight">
-                  {!dataStatus.transactions.loaded && transactionsLoading ? (
-                    <div className="h-5 sm:h-9 w-20 sm:w-32 bg-muted animate-pulse rounded" />
-                  ) : totalExpenses === null ? <span className="text-xs sm:text-lg text-muted-foreground">Unavailable</span> : (
-                    <>
-                      <span className={privacyMode === 'hidden' ? 'select-none' : ''}>
-                        <span className="mr-0.5">−</span>
-                        {privacyMode === 'hidden' ? '••••••' : totalExpenses.toLocaleString('hu-HU', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
-                      </span>{' '}
-                      <span className="text-[10px] sm:text-base">{masterCurrency}</span>
-                    </>
-                  )}
-                </div>
-                <p className="text-[10px] sm:text-xs text-muted-foreground mt-1 sm:mt-2">
-                  {!dataStatus.upcoming.loaded ? 'Upcoming data unavailable' : pendingExpenses === null ? 'Pending total unavailable' : pendingExpenses > 0 ? (
-                    <>
-                      −{privacyMode === 'hidden' ? '••••••' : pendingExpenses.toLocaleString('hu-HU', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} {masterCurrency} pending
-                    </>
-                  ) : 'This period'}
-                </p>
+                </FinanceDataBoundary>
               </div>
+            </div>
+            <div className="dashboard-summary-activity bg-card p-4 sm:px-6 sm:py-5">
+              <FinanceDataBoundary label="Period activity" datasets={summaryData}>
+                <DashboardActivityBars periodLabel={periodLabel} daysLeft={isCurrentPeriod ? daysLeft : null}
+                  income={totalIncome} expenses={totalExpenses} pendingIncome={pendingIncome} pendingExpenses={pendingExpenses}
+                  upcomingLoaded={dataStatus.upcoming.loaded} currency={masterCurrency} hidden={hidden} />
               </FinanceDataBoundary>
             </div>
-            <div className="grid gap-3 sm:gap-6 grid-cols-1 lg:grid-cols-12">
-              {!isTransactionCalendarOpen && (
-                <div className="lg:hidden">
-                  <Link to="/accounts" className="mb-2 block text-right text-xs font-medium text-primary">Manage accounts →</Link>
-                  <FinanceDataBoundary label="Accounts" datasets={accountData}>
-                    <AccountList sortValues={finance.accountSortValues} accounts={accounts.filter(account => account.archived_at == null)} onAccountAdded={handleDataChange} loading={!dataStatus.accounts.loaded && dataStatus.accounts.loading} />
-                  </FinanceDataBoundary>
-                </div>
-              )}
-              <div className={isTransactionCalendarOpen ? 'lg:col-span-12' : 'lg:col-span-12'}>
-                <FinanceDataBoundary label="Transactions" datasets={transactionData}>
+          </section>
+          <FinanceDataBoundary label="Transactions" datasets={transactionData}>
                 <TransactionList
                   searchRequest={searchRequest?.transactionSearch} searchRequestKey={location.key}
                   transactions={transactions}
@@ -327,8 +188,6 @@ export function DashboardPage() {
                   filters={filters}
                   onFiltersChange={updateFilters}
                 />
-                </FinanceDataBoundary>
-              </div>
-            </div>
+          </FinanceDataBoundary>
   </>)
 }

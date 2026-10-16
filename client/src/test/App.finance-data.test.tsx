@@ -146,7 +146,7 @@ describe('finance read errors in App', () => {
     expect(screen.queryByText(/98765/)).not.toBeInTheDocument()
     failures.clear()
     await retry()
-    expect(await screen.findByText('Loaded accounts')).toBeInTheDocument()
+    expect(await screen.findByRole('region', { name: 'Dashboard summary' })).toHaveTextContent('Cash')
     expect(await screen.findByText('Loaded ledger')).toBeInTheDocument()
     await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument())
   })
@@ -154,7 +154,7 @@ describe('finance read errors in App', () => {
   it('keeps successful accounts visible during a partial ledger failure', async () => {
     failures.add('/transactions/date-range')
     renderApp()
-    expect(await screen.findByText('Loaded accounts')).toBeInTheDocument()
+    expect(await screen.findByRole('region', { name: 'Dashboard summary' })).toHaveTextContent('Cash')
     expect(await screen.findByRole('alert')).toHaveTextContent('Period transactions: Unavailable.')
     expect(screen.queryByText('No transactions yet')).not.toBeInTheDocument()
     expect(screen.queryByText('Loaded ledger')).not.toBeInTheDocument()
@@ -180,7 +180,7 @@ describe('finance read errors in App', () => {
     payloads['/transactions'] = []
     payloads['/transactions/date-range'] = []
     renderApp()
-    expect(await screen.findByText('No accounts yet')).toBeInTheDocument()
+    expect(await screen.findByRole('region', { name: 'Dashboard summary' })).toHaveTextContent(/Cash\s*•••••• HUF/)
     expect(await screen.findByText('No transactions yet')).toBeInTheDocument()
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
