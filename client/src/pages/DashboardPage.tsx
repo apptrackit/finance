@@ -5,6 +5,7 @@ import { Eye, EyeOff } from 'lucide-react'
 import { convertCurrency, sumAvailable } from '../../../shared/currency'
 import { MissingExchangeRates } from '../components/common/MissingExchangeRates'
 import { FinanceDataBoundary } from '../components/common/FinanceDataStatus'
+import { DashboardActivityBars } from '../components/dashboard-module/DashboardActivityBars'
 import { DashboardPeriodPicker } from '../components/dashboard-module/DashboardPeriodPicker'
 import { TransactionList } from '../components/dashboard-module/TransactionList'
 import { usePrivacy } from '../context/PrivacyContext'
@@ -116,10 +117,6 @@ export function DashboardPage() {
   const isCurrentPeriod = filters.range === 'current' && wholeMonth && today >= dateRange.startDate && today <= dateRange.endDate
   const periodLabel = filters.range === 'allTime' ? 'All time' : wholeMonth ? `${format(currentMonth, 'MMMM')}${isCurrentPeriod ? ' so far' : ' activity'}` : 'Period activity'
   const daysLeft = differenceInCalendarDays(parseISO(dateRange.endDate), parseISO(today))
-  const ratio = totalIncome !== null && totalExpenses !== null && totalIncome > 0 ? totalExpenses / totalIncome * 100 : null
-  const barSpent = hidden || ratio === null ? 0 : Math.min(100, ratio)
-  const barUpcoming = hidden || ratio === null || pendingExpenses === null || !dataStatus.upcoming.loaded ? 0 : Math.min(100 - barSpent, pendingExpenses / totalIncome! * 100)
-  const leftover = totalIncome !== null && totalExpenses !== null ? totalIncome - totalExpenses : null
 
   return (<>
           <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
@@ -130,42 +127,38 @@ export function DashboardPage() {
             <div className="mb-4"><MissingExchangeRates compact currencies={[...missingCurrencies].sort()} targetCurrency={masterCurrency}
               onRetry={() => { void handleDataChange() }} retrying={visibleData.some(({ status }) => status.loading)} /></div>
           )}
-          <section aria-label="Dashboard summary" className="mb-5 grid grid-cols-1 overflow-hidden rounded-[14px] border border-border bg-card lg:auto-rows-fr lg:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)] xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,2fr)]">
-            <div className="flex min-w-0 flex-col justify-center border-b border-border p-4 sm:p-5 lg:col-start-1 lg:row-start-1 lg:py-4 xl:border-r xl:border-b-0">
+          <section aria-label="Dashboard summary" className="mb-5 flex flex-wrap gap-px overflow-hidden rounded-[14px] border border-border bg-border">
+            <div className="dashboard-summary-balance flex flex-col justify-center bg-card p-4 sm:px-6 sm:py-5">
               <FinanceDataBoundary label="Net worth" datasets={netWorthData}>
-                <div className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-4 xl:grid-cols-1 xl:gap-y-3">
-                <div className="flex items-center gap-2 text-[13px] font-medium text-muted-foreground">Net worth
-                  {shouldHideNetWorth() && !hidden && <button type="button" onClick={() => setShowNetWorth(!showNetWorth)} aria-label={showNetWorth ? 'Hide net worth' : 'Show net worth'} className="flex h-8 w-8 items-center justify-center rounded-lg hover:bg-secondary">
-                    {showNetWorth ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  </button>}
-                </div>
-                <div className="min-w-0 text-right xl:text-left">
-                <p className="min-w-0 break-words text-right text-xl font-semibold tracking-tight tabular-nums sm:text-2xl xl:text-left">{amount(totalNetWorth, hideNetWorth)} <span className="text-xs font-medium text-muted-foreground sm:text-sm">{masterCurrency}</span></p>
-                {investmentValue !== 0 && <p className="mt-2 text-xs text-muted-foreground sm:text-[13px]">Incl. {amount(investmentValue, hideNetWorth || hidden)} {masterCurrency} investments</p>}
-                </div>
+                <div className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-4 sm:grid-cols-1 sm:gap-y-2">
+                  <div className="flex min-h-5 items-center gap-2 text-[13px] font-medium text-muted-foreground">Net worth
+                    {shouldHideNetWorth() && !hidden && <button type="button" onClick={() => setShowNetWorth(!showNetWorth)} aria-label={showNetWorth ? 'Hide net worth' : 'Show net worth'} className="flex h-8 w-8 items-center justify-center rounded-lg hover:bg-secondary">
+                      {showNetWorth ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>}
+                  </div>
+                  <div className="min-w-0 text-right sm:text-left">
+                    <p className="break-words text-xl font-semibold tracking-tight tabular-nums sm:text-[28px] sm:leading-tight">{amount(totalNetWorth, hideNetWorth)} <span className="text-xs font-medium text-muted-foreground sm:text-sm">{masterCurrency}</span></p>
+                    {investmentValue !== 0 && <p className="mt-2 text-xs text-muted-foreground sm:text-[13px]">Incl. {amount(investmentValue, hideNetWorth || hidden)} {masterCurrency} investments</p>}
+                  </div>
                 </div>
               </FinanceDataBoundary>
             </div>
-            <div className="flex min-w-0 flex-col justify-center p-4 sm:p-5 lg:col-start-1 lg:row-start-2 lg:py-4 xl:col-start-2 xl:row-start-1">
+            <div className="dashboard-summary-balance flex flex-col justify-center bg-card p-4 sm:px-6 sm:py-5">
               <FinanceDataBoundary label="Cash" datasets={accountData}>
-                <div className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-4 xl:grid-cols-1 xl:gap-y-3">
-                <div className="flex flex-col items-start gap-1 text-[13px] text-muted-foreground xl:flex-row xl:flex-wrap xl:items-baseline xl:justify-between xl:gap-x-2"><span className="font-medium">Cash</span><span className="text-xs">{cashAccounts.length} account{cashAccounts.length === 1 ? '' : 's'}</span></div>
-                <div className="min-w-0 text-right xl:text-left">
-                <p className="min-w-0 break-words text-right text-xl font-semibold tracking-tight tabular-nums sm:text-2xl xl:text-left">{amount(cashBalance)} <span className="text-xs font-medium text-muted-foreground sm:text-sm">{masterCurrency}</span></p>
-                {(!dataStatus.upcoming.loaded || cashUpcoming.length > 0) && <p className="mt-2 text-xs text-muted-foreground sm:text-[13px]">{!dataStatus.upcoming.loaded ? 'Upcoming data unavailable' : pendingCashDelta === null ? 'Projection unavailable' : <><span className={hidden ? '' : pendingCashDelta >= 0 ? 'font-semibold text-success' : 'font-semibold text-destructive'}>{signed(pendingCashDelta)} {masterCurrency}</span> after {cashUpcoming.length} upcoming</>}</p>}
-                </div>
+                <div className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-4 sm:grid-cols-1 sm:gap-y-2">
+                  <div className="flex min-h-5 flex-col items-start gap-1 text-[13px] text-muted-foreground sm:flex-row sm:flex-wrap sm:items-baseline sm:justify-between sm:gap-x-2"><span className="font-medium">Cash</span><span className="text-xs">{cashAccounts.length} account{cashAccounts.length === 1 ? '' : 's'}</span></div>
+                  <div className="min-w-0 text-right sm:text-left">
+                    <p className="break-words text-xl font-semibold tracking-tight tabular-nums sm:text-[28px] sm:leading-tight">{amount(cashBalance)} <span className="text-xs font-medium text-muted-foreground sm:text-sm">{masterCurrency}</span></p>
+                    {(!dataStatus.upcoming.loaded || cashUpcoming.length > 0) && <p className="mt-2 text-xs text-muted-foreground sm:text-[13px]">{!dataStatus.upcoming.loaded ? 'Upcoming data unavailable' : pendingCashDelta === null ? 'Projection unavailable' : <><span className={hidden ? '' : pendingCashDelta >= 0 ? 'font-semibold text-success' : 'font-semibold text-destructive'}>{signed(pendingCashDelta)} {masterCurrency}</span> after {cashUpcoming.length} upcoming</>}</p>}
+                  </div>
                 </div>
               </FinanceDataBoundary>
             </div>
-            <div className="min-w-0 border-t border-border p-4 sm:p-5 lg:col-start-2 lg:row-start-1 lg:row-span-2 lg:border-t-0 lg:border-l xl:col-start-3 xl:row-span-1">
+            <div className="dashboard-summary-activity bg-card p-4 sm:px-6 sm:py-5">
               <FinanceDataBoundary label="Period activity" datasets={summaryData}>
-                <div className="mb-4 flex items-baseline justify-between gap-3 border-b border-border/60 pb-3"><h2 className="text-xs font-medium tracking-wide text-muted-foreground">{periodLabel}</h2>{isCurrentPeriod && <span className="shrink-0 text-xs text-muted-foreground">{daysLeft} day{daysLeft === 1 ? '' : 's'} left</span>}</div>
-                <div className="grid grid-cols-[auto_minmax(0,1fr)] items-baseline gap-x-3 gap-y-2 text-sm tabular-nums lg:grid-cols-[auto_1fr_auto]">
-                  <span className="text-muted-foreground">Income</span><span className={`text-right font-semibold ${totalIncome === null ? 'text-muted-foreground' : 'text-success'}`}>{signed(totalIncome)} <span className="text-xs font-normal text-muted-foreground">{masterCurrency}</span></span><span className={`col-start-2 text-right text-xs text-muted-foreground lg:col-auto ${dataStatus.upcoming.loaded && pendingIncome === 0 ? 'hidden lg:block' : '-mt-1 lg:mt-0'}`}>{!dataStatus.upcoming.loaded || pendingIncome === null ? 'Upcoming unavailable' : pendingIncome > 0 ? `${signed(pendingIncome)} upcoming` : null}</span>
-                  <span className="text-muted-foreground">Expense</span><span className={`text-right font-semibold ${totalExpenses === null ? 'text-muted-foreground' : 'text-destructive'}`}>{signed(totalExpenses === null ? null : -totalExpenses)} <span className="text-xs font-normal text-muted-foreground">{masterCurrency}</span></span><span className={`col-start-2 text-right text-xs text-muted-foreground lg:col-auto ${dataStatus.upcoming.loaded && pendingExpenses === 0 ? 'hidden lg:block' : '-mt-1 lg:mt-0'}`}>{!dataStatus.upcoming.loaded || pendingExpenses === null ? 'Upcoming unavailable' : pendingExpenses > 0 ? `${signed(-pendingExpenses)} upcoming` : null}</span>
-                </div>
-                <div aria-hidden="true" className="mt-3 flex h-1.5 overflow-hidden rounded-full bg-secondary"><div className="bg-primary" style={{ width: `${barSpent}%` }} /><div className="bg-primary/35" style={{ width: `${barUpcoming}%` }} /></div>
-                <div className="mt-2 flex flex-wrap justify-between gap-2 text-xs text-muted-foreground"><span>{hidden ? '••%' : ratio === null ? 'Ratio unavailable' : `${Math.round(ratio)}% of income spent`}</span><span><span className="font-medium lg:font-semibold lg:text-foreground">{amount(leftover)} {masterCurrency}</span> left over</span></div>
+                <DashboardActivityBars periodLabel={periodLabel} daysLeft={isCurrentPeriod ? daysLeft : null}
+                  income={totalIncome} expenses={totalExpenses} pendingIncome={pendingIncome} pendingExpenses={pendingExpenses}
+                  upcomingLoaded={dataStatus.upcoming.loaded} currency={masterCurrency} hidden={hidden} />
               </FinanceDataBoundary>
             </div>
           </section>

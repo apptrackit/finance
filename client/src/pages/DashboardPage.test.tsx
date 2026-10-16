@@ -60,7 +60,7 @@ describe('dashboard summary', () => {
     expect(summary).not.toHaveTextContent(/105 000|100 000|30 000|40%|−1 000/)
     expect(summary).toHaveTextContent('••%')
     expect(within(summary).queryByRole('button', { name: 'Show net worth' })).not.toBeInTheDocument()
-    expect(summary.querySelector('[style*="width: 40%"]')).toBeNull()
+    for (const bar of within(summary).getAllByTestId(/-(posted|upcoming)-bar$/)) expect(bar).toHaveStyle({ width: '0%' })
   })
 
   it('supports the separate startup net-worth preference without hiding cash', () => {
@@ -81,6 +81,40 @@ describe('dashboard summary', () => {
     expect(screen.getByRole('alert')).toHaveTextContent('MXN')
     expect(screen.getByRole('region', { name: 'Dashboard summary' })).toHaveTextContent('Unavailable')
     expect(screen.getByRole('region', { name: 'Dashboard summary' })).not.toHaveTextContent('40%')
+    expect(screen.getByTestId('income-posted-bar')).toHaveStyle({ width: '0%' })
+    expect(screen.getByTestId('expense-posted-bar')).toHaveStyle({ width: '0%' })
+  })
+
+  it('compares posted and upcoming amounts on one scale without including MCP drafts', () => {
+    state.finance.upcomingTransactions = [...state.finance.upcomingTransactions as object[],
+      { id: 'incoming', account_id: 'cash', amount: 50000, date: '2026-10-20', pending_kind: 'upcoming' }]
+    mount()
+    expect(screen.getByTestId('income-posted-bar')).toHaveStyle({ width: '50%' })
+    expect(screen.getByTestId('income-upcoming-bar')).toHaveStyle({ width: '50%' })
+    expect(screen.getByTestId('expense-posted-bar')).toHaveStyle({ width: '20%' })
+    expect(screen.getByTestId('expense-upcoming-bar')).toHaveStyle({ width: '1%' })
+  })
+
+  it.each([
+    [0, -20000, '0%', '100%'],
+    [10000, -20000, '50%', '100%'],
+    [0.5, -0.25, '100%', '50%'],
+    [0, 0, '0%', '0%'],
+  ])('keeps bars finite with income %s and expense %s', (income, expense, incomeWidth, expenseWidth) => {
+    state.finance.transactions = [{ id: 'income', account_id: 'cash', amount: income }, { id: 'expense', account_id: 'cash', amount: expense }]
+    state.finance.upcomingTransactions = []
+    mount()
+    expect(screen.getByTestId('income-posted-bar')).toHaveStyle({ width: incomeWidth })
+    expect(screen.getByTestId('expense-posted-bar')).toHaveStyle({ width: expenseWidth })
+  })
+
+  it('does not represent unavailable upcoming data as a projection', () => {
+    const statuses = state.finance.dataStatus as Record<string, object>
+    statuses.upcoming = { loaded: false, loading: false, stale: false, error: true }
+    mount()
+    expect(screen.getByRole('region', { name: 'Dashboard summary' })).toHaveTextContent('Upcoming unavailable')
+    expect(screen.getByTestId('income-upcoming-bar')).toHaveStyle({ width: '0%' })
+    expect(screen.getByTestId('expense-upcoming-bar')).toHaveStyle({ width: '0%' })
   })
 })
 
