@@ -74,7 +74,7 @@ export class TransactionController {
       const id = c.req.param('id')
       const body = await c.req.json<UpdateTransactionDto>()
       const transaction = await this.transactionService.updateTransaction(id, body, this.getClientDate(c))
-      if (!(transaction.linked_transaction_id && transaction.status === 'pending' && transaction.pending_kind === 'mcp_review')) {
+      if (!transaction.auditRecorded && !(transaction.linked_transaction_id && transaction.status === 'pending' && transaction.pending_kind === 'mcp_review')) {
         await new AuditRepository(c.env.DB).log('UPDATE', 'transaction', id, { amount: body.amount, category_id: body.category_id })
       }
       return c.json(TransactionMapper.toResponseDto(transaction))
@@ -94,8 +94,8 @@ export class TransactionController {
   async delete(c: Context<{ Bindings: Bindings }>) {
     try {
       const id = c.req.param('id')
-      await this.transactionService.deleteTransaction(id)
-      await new AuditRepository(c.env.DB).log('DELETE', 'transaction', id)
+      const auditRecorded = await this.transactionService.deleteTransaction(id)
+      if (!auditRecorded) await new AuditRepository(c.env.DB).log('DELETE', 'transaction', id)
       return c.json({ success: true })
     } catch (error: any) {
       if (error instanceof AppError || error.message?.includes('ACCOUNT_')) throw error

@@ -56,7 +56,7 @@ function createService(transactions: Record<string, Transaction>, accounts: Reco
   const service = new TransactionService(
     transactionRepo as any,
     accountRepo as any,
-    { create: vi.fn() } as any
+    { create: vi.fn(), findById: vi.fn(async () => null), findByCashTransactionId: vi.fn(async () => null) } as any
   )
 
   return { service, transactionRepo, accountRepo }

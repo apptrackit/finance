@@ -1,7 +1,12 @@
 import { InvestmentTransaction } from '../models/InvestmentTransaction'
+import { InvestmentTransferRepository } from './investment-transfer.repository'
 
 export class InvestmentTransactionRepository {
-  constructor(private db: D1Database) {}
+  readonly transfers: InvestmentTransferRepository
+
+  constructor(private db: D1Database) {
+    this.transfers = new InvestmentTransferRepository(db)
+  }
 
   async findAll(): Promise<InvestmentTransaction[]> {
     const { results } = await this.db.prepare(
@@ -22,9 +27,14 @@ export class InvestmentTransactionRepository {
       .bind(id).first<InvestmentTransaction>()
   }
 
+  async findByCashTransactionId(id: string): Promise<InvestmentTransaction | null> {
+    return this.db.prepare('SELECT * FROM investment_transactions WHERE linked_transaction_id = ?')
+      .bind(id).first<InvestmentTransaction>()
+  }
+
   async create(transaction: InvestmentTransaction): Promise<void> {
     await this.db.prepare(
-      'INSERT INTO investment_transactions (id, account_id, type, quantity, price, total_amount, date, notes, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+      'INSERT INTO investment_transactions (id, account_id, type, quantity, price, total_amount, date, notes, created_at, linked_transaction_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
     ).bind(
       transaction.id,
       transaction.account_id,
@@ -34,7 +44,8 @@ export class InvestmentTransactionRepository {
       transaction.total_amount,
       transaction.date,
       transaction.notes || null,
-      transaction.created_at
+      transaction.created_at,
+      transaction.linked_transaction_id ?? null
     ).run()
   }
 

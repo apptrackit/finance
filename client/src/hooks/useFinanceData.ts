@@ -71,7 +71,7 @@ const mapInvestmentTransaction = (transaction: InvestmentTransaction) => ({
   date: transaction.date,
   is_recurring: false,
   category_id: undefined,
-  linked_transaction_id: undefined,
+  linked_transaction_id: transaction.linked_transaction_id ?? undefined,
   created_at: transaction.created_at,
   updated_at: transaction.updated_at ?? transaction.created_at,
 })
@@ -114,6 +114,7 @@ type InvestmentTransaction = {
   total_amount: number
   date: string
   notes?: string
+  linked_transaction_id?: string | null
   created_at?: number
   updated_at?: number
 }
@@ -122,6 +123,7 @@ const isInvestmentTransaction = (value: unknown): value is InvestmentTransaction
   && (value.type === 'buy' || value.type === 'sell') && typeof value.date === 'string'
   && isNumber(value.quantity) && isNumber(value.price) && isNumber(value.total_amount)
   && (value.notes == null || typeof value.notes === 'string')
+  && (value.linked_transaction_id == null || typeof value.linked_transaction_id === 'string')
 
 const readJson = async (url: string): Promise<unknown> => {
   const response = await apiFetch(url, { throwOnError: true })

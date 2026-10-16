@@ -13,6 +13,7 @@ export type InvestmentSnapshot = {
 type InvestmentTrade = {
   id: string; account_id: string; type: 'buy' | 'sell'; quantity: number
   price: number; total_amount: number; date: string; notes?: string | null
+  linked_transaction_id?: string | null
 }
 const record = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value)
 const finite = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value)
@@ -25,6 +26,7 @@ const trade = (value: unknown): value is InvestmentTrade => record(value) && typ
   && typeof value.account_id === 'string' && (value.type === 'buy' || value.type === 'sell')
   && finite(value.quantity) && finite(value.price) && finite(value.total_amount) && typeof value.date === 'string'
   && (value.notes == null || typeof value.notes === 'string')
+  && (value.linked_transaction_id == null || typeof value.linked_transaction_id === 'string')
 
 async function readArray<T>(path: string, validate: (value: unknown) => value is T, signal: AbortSignal): Promise<T[]> {
   const response = await apiFetch(`${API_BASE_URL}${path}`, { throwOnError: true, signal })
@@ -58,6 +60,7 @@ export async function readInvestmentSnapshot(signal: AbortSignal): Promise<Inves
     amount: item.type === 'buy' ? item.total_amount : -item.total_amount,
     quantity: item.type === 'buy' ? item.quantity : -item.quantity,
     price: item.price, date: item.date, is_recurring: false,
+    linked_transaction_id: item.linked_transaction_id ?? undefined,
     description: description(item, accountById.get(item.account_id)!.quote_currency || 'trading currency'),
   }))
   const symbols = [...new Set(accounts.filter(item => item.asset_type !== 'manual' && item.symbol).map(item => item.symbol!))]

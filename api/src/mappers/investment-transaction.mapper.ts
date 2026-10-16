@@ -12,6 +12,7 @@ export class InvestmentTransactionMapper {
       total_amount: transaction.total_amount,
       date: transaction.date,
       notes: transaction.notes,
+      linked_transaction_id: transaction.linked_transaction_id ?? null,
       created_at: transaction.created_at
     }
   }

@@ -25,7 +25,7 @@ export class TransferController {
 
   async create(c: Context) {
     try {
-      const body = await c.req.json<CreateTransferDto>()
+      const body = c.get('validatedBody') as CreateTransferDto
       const transfer = await this.transferService.createTransfer(body)
       return c.json(transfer, 201)
     } catch (error: any) {

@@ -21,8 +21,8 @@ it('exports every durable table and transaction state with stored links and fina
       VALUES ('cancelled', 'cash', -5, '2026-01-01', 'cancelled', 3)`),
     f.db.prepare(`INSERT INTO transactions (id, account_id, amount, date, linked_transaction_id)
       VALUES ('purchase-cash', 'cash', -12.5, '2026-01-01', 'buy')`),
-    f.db.prepare(`INSERT INTO investment_transactions (id, account_id, type, quantity, price, total_amount, date, notes, created_at)
-      VALUES ('buy', 'stock', 'buy', 0.125, 100, 12.5, '2026-01-01', 'Fractional holding', 1)`),
+    f.db.prepare(`INSERT INTO investment_transactions (id, account_id, type, quantity, price, total_amount, date, notes, created_at, linked_transaction_id)
+      VALUES ('buy', 'stock', 'buy', 0.125, 100, 12.5, '2026-01-01', 'Fractional holding', 1, 'purchase-cash')`),
     f.db.prepare(`INSERT INTO recurring_schedules (id, type, frequency, month, day_of_month, account_id, to_account_id, amount, amount_to, description, is_active, created_at, last_processed_date, remaining_occurrences, end_date)
       VALUES ('schedule', 'transfer', 'yearly', 11, 31, 'cash', 'savings', 20, 20, 'Annual transfer', 0, 1, '2025-12-31', 2, '2028-12-31')`),
     f.db.prepare(`INSERT INTO app_settings VALUES ('navigation.visible_menus', '{"dashboard":true,"analytics":false}', 2)`),
@@ -39,9 +39,9 @@ it('exports every durable table and transaction state with stored links and fina
   expect(response.headers.get('cache-control')).toBe('no-store')
   const exported = await response.json() as DataExport
   expect(isDataExport(exported)).toBe(true)
-  expect(exported).toMatchObject({ exportVersion: 1, schemaVersion: '016-account-archive', manifest: { restoreSupported: false } })
+  expect(exported).toMatchObject({ exportVersion: 1, schemaVersion: '017-investment-transfer-links', manifest: { restoreSupported: false } })
   expect(new Date(exported.exportedAt).toISOString()).toBe(exported.exportedAt)
-  expect(exported.migrations).toHaveLength(16)
+  expect(exported.migrations).toHaveLength(17)
   for (const table of EXPORT_TABLES) {
     const stored = (await f.db.prepare(`SELECT * FROM ${table} ORDER BY ${table === 'app_settings' ? 'key' : 'id'}`).all()).results
     expect(exported.data[table], table).toEqual(stored)
@@ -49,7 +49,7 @@ it('exports every durable table and transaction state with stored links and fina
   }
   expect(exported.data.transactions).toHaveLength(6)
   expect(exported.data.transactions).toContainEqual(expect.objectContaining({ id: 'review', pending_kind: 'mcp_review', review_source: 'chatgpt_mcp', review_batch_id: 'batch', review_flags: '["duplicate"]' }))
-  expect(exported.data.investment_transactions).toContainEqual(expect.objectContaining({ id: 'buy', quantity: 0.125 }))
+  expect(exported.data.investment_transactions).toContainEqual(expect.objectContaining({ id: 'buy', quantity: 0.125, linked_transaction_id: 'purchase-cash' }))
   expect(exported.manifest.excluded).toHaveProperty('mcp_draft_proposals')
   expect(JSON.stringify(exported)).not.toContain('secret-proposal-id')
   expect(JSON.stringify(exported)).not.toContain('integration-test-key')

@@ -120,6 +120,33 @@ function mockRates(rate = 0.2) {
 }
 
 describe('TransactionList redesigned transfers', () => {
+  it('groups a reciprocal investment pair once and edits it through the cash transaction', async () => {
+    mockRates()
+    const user = userEvent.setup()
+    const added = renderTransfers({
+      accounts: [...transferAccounts, { id: 'holding', name: 'Test holding', balance: 2.125, currency: 'SHARE', quote_currency: 'EUR', type: 'investment' }],
+      transactions: [
+        { id: 'buy', account_id: 'holding', amount: 50, quantity: 0.125, price: 400,
+          linked_transaction_id: 'purchase-cash', date: '2020-01-01', description: 'Transfer from Savings' },
+        { id: 'purchase-cash', account_id: 'source', amount: -100, linked_transaction_id: 'buy',
+          date: '2020-01-01', description: 'Transfer to Test holding' },
+      ],
+    })
+    expect(screen.getByText('1 posted')).toBeInTheDocument()
+    await user.click(screen.getAllByRole('button', { name: 'Edit transfer' })[0])
+    const dialog = screen.getByRole('dialog')
+    expect(within(dialog).getByLabelText('Amount to Send (HUF)')).toHaveValue('100')
+    const quantity = within(dialog).getByLabelText('Shares to Receive')
+    expect(quantity).toHaveValue('0.125')
+    await user.clear(quantity)
+    await user.type(quantity, '0.25')
+    await user.click(within(dialog).getByRole('button', { name: 'Save changes' }))
+    await waitFor(() => expect(added).toHaveBeenCalledOnce())
+    const save = vi.mocked(apiFetch).mock.calls.find(([url, options]) => url === '/api/transactions/purchase-cash' && options?.method === 'PUT')
+    expect(save).toBeDefined()
+    expect(JSON.parse(String(save?.[1]?.body))).toMatchObject({ amount: 100, amount_to: 0.25, price: 400 })
+  })
+
   it('previews posted edit deltas, preserves both native amounts when swapping, and reverts the full edit', async () => {
     mockRates()
     const user = userEvent.setup()

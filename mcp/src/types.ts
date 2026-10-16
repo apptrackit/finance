@@ -105,6 +105,7 @@ export type InvestmentTransactionRow = {
   total_amount: number
   date: string
   notes?: string | null
+  linked_transaction_id?: string | null
   created_at?: number | null
 }
 

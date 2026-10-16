@@ -9,6 +9,11 @@ Intermediate package/UI version bumps are grouped under the next published GitHu
 ### Changed
 
 - Dashboard uses a shared period picker, a responsive balance/activity summary, compact transaction filters, and a combined review queue with explicit confirmation actions. Transaction rows show neutral transfers, daily cash-flow totals, and native/converted amounts; privacy masking and loading states follow the new layout.
+- Investment purchases store reciprocal links between the cash ledger and investment history. Linked creation, edits, and deletion batch both records, balances, and audit entries atomically; deletion from either side reverses the pair once. History, portfolio reads, MCP activity, and JSON exports preserve the investment-side link. Inconsistent legacy links and unsupported investment-source transfers are rejected before changing balances.
+
+### Migration and upgrade notes
+
+- Migration 017 adds the nullable investment-side cash link and backfills unambiguous active and archived history without changing financial values or source revision. Standalone trades remain unlinked; ambiguous or invalid legacy relationships are preserved for explicit repair. Apply the migration before deploying the updated API, client, or MCP.
 
 ## v3.3 — 2026-10-15
 
