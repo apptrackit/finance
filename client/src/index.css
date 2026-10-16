@@ -236,7 +236,15 @@
 }
 .finance-app { position:relative; height:100dvh; overflow:hidden; filter:var(--app-color-filter, none); }
 .finance-main { min-width:0; height:100dvh; overflow-y:auto; overscroll-behavior-y:contain; }
-.dashboard-summary-balance { flex:1 1 264px; min-width:0; }
+.dashboard-summary-balances { flex:2 1 529px; min-width:0; display:grid; grid-template-columns:minmax(0,1fr); gap:1px; background:hsl(var(--border)); }
+.dashboard-summary-balance { min-width:0; }
+@media (min-width:640px) {
+  .dashboard-summary-balances { position:relative; grid-template-columns:repeat(2,minmax(0,1fr)); grid-template-rows:repeat(2,auto); align-content:center; row-gap:8px; background:hsl(var(--card)); }
+  .dashboard-summary-balances::after { content:''; position:absolute; top:0; bottom:0; left:50%; border-left:1px solid hsl(var(--border)); pointer-events:none; }
+  .dashboard-summary-balance { display:grid; grid-template-columns:minmax(0,1fr); grid-template-rows:subgrid; grid-row:span 2; justify-content:normal; }
+  .dashboard-summary-balances:has(.dashboard-balance-detail) { grid-template-rows:repeat(3,auto); }
+  .dashboard-summary-balances:has(.dashboard-balance-detail) > .dashboard-summary-balance { grid-row:span 3; }
+}
 .dashboard-summary-activity { flex:999 1 560px; min-width:0; container-type:inline-size; }
 .dashboard-cash-flow-grid { display:grid; grid-template-columns:auto minmax(0,1fr); align-items:center; gap:8px 12px; }
 .dashboard-cash-flow-bar { grid-column:1 / -1; display:flex; height:10px; overflow:hidden; border-radius:999px; background:hsl(var(--secondary)); }

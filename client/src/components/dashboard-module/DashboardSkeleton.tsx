@@ -6,12 +6,14 @@ export function DashboardSkeleton({ calendar }: { accounts?: Account[]; calendar
   return <div className="space-y-5">
     <div className="flex justify-between gap-4"><Skeleton className="hidden h-8 w-36 lg:block" /><Skeleton className="h-10 w-56 rounded-[10px]" /></div>
     <Panel widget="summary-cards" className="flex flex-wrap gap-px overflow-hidden rounded-[14px] bg-border">
-      {[0, 1].map(index => <div key={index} className="dashboard-summary-balance flex flex-col justify-center bg-card p-4 sm:px-6 sm:py-5">
-        <div className="space-y-2">
-          <div className="flex items-center justify-between gap-4 sm:flex-col sm:items-start sm:gap-2"><Skeleton className="h-3 w-20" /><Skeleton className="h-8 w-44 max-w-[65%] sm:max-w-full" /></div>
-          <Skeleton className="ml-auto h-3 w-48 max-w-[65%] sm:ml-0 sm:max-w-full" />
-        </div>
-      </div>)}
+      <div className="dashboard-summary-balances">
+        {[0, 1].map(index => <div key={index} className="dashboard-summary-balance flex flex-col justify-center bg-card p-4 sm:px-6 sm:py-5">
+          <div className="space-y-2 sm:contents">
+            <div className="flex items-center justify-between gap-4 sm:contents"><Skeleton className="h-3 w-20" /><Skeleton className="h-8 w-44 max-w-[65%] sm:max-w-full" /></div>
+            <Skeleton className="dashboard-balance-detail ml-auto h-3 w-48 max-w-[65%] sm:ml-0 sm:max-w-full" />
+          </div>
+        </div>)}
+      </div>
       <div className="dashboard-summary-activity space-y-4 bg-card p-4 sm:px-6 sm:py-5">
         <div className="flex flex-wrap justify-between gap-2"><Skeleton className="h-3 w-32" /><Skeleton className="h-3 w-48" /></div>
         <div className="dashboard-cash-flow-grid">{[0, 1].map(index => <div key={index} className="col-span-full grid grid-cols-subgrid items-center gap-y-2">

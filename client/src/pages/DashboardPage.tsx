@@ -128,31 +128,33 @@ export function DashboardPage() {
               onRetry={() => { void handleDataChange() }} retrying={visibleData.some(({ status }) => status.loading)} /></div>
           )}
           <section aria-label="Dashboard summary" className="mb-5 flex flex-wrap gap-px overflow-hidden rounded-[14px] border border-border bg-border">
-            <div className="dashboard-summary-balance flex flex-col justify-center bg-card p-4 sm:px-6 sm:py-5">
-              <FinanceDataBoundary label="Net worth" datasets={netWorthData}>
-                <div className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-4 sm:grid-cols-1 sm:gap-y-2">
-                  <div className="flex min-h-5 items-center gap-2 text-[13px] font-medium text-muted-foreground">Net worth
-                    {shouldHideNetWorth() && !hidden && <button type="button" onClick={() => setShowNetWorth(!showNetWorth)} aria-label={showNetWorth ? 'Hide net worth' : 'Show net worth'} className="flex h-8 w-8 items-center justify-center rounded-lg hover:bg-secondary">
-                      {showNetWorth ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                    </button>}
+            <div className="dashboard-summary-balances">
+              <div className="dashboard-summary-balance flex flex-col justify-center bg-card p-4 sm:px-6 sm:py-5">
+                <FinanceDataBoundary label="Net worth" datasets={netWorthData}>
+                  <div className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-4 sm:contents">
+                    <div className="flex min-h-5 items-center gap-2 text-[13px] font-medium text-muted-foreground">Net worth
+                      {shouldHideNetWorth() && !hidden && <button type="button" onClick={() => setShowNetWorth(!showNetWorth)} aria-label={showNetWorth ? 'Hide net worth' : 'Show net worth'} className="flex h-8 w-8 items-center justify-center rounded-lg hover:bg-secondary">
+                        {showNetWorth ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </button>}
+                    </div>
+                    <div className="min-w-0 text-right sm:contents sm:text-left">
+                      <p className="break-words text-xl font-semibold tracking-tight tabular-nums sm:text-left sm:text-[28px] sm:leading-tight">{amount(totalNetWorth, hideNetWorth)} <span className="text-xs font-medium text-muted-foreground sm:text-sm">{masterCurrency}</span></p>
+                      {investmentValue !== 0 && <p className="dashboard-balance-detail mt-2 text-xs text-muted-foreground sm:mt-0 sm:text-[13px]">Incl. {amount(investmentValue, hideNetWorth || hidden)} {masterCurrency} investments</p>}
+                    </div>
                   </div>
-                  <div className="min-w-0 text-right sm:text-left">
-                    <p className="break-words text-xl font-semibold tracking-tight tabular-nums sm:text-[28px] sm:leading-tight">{amount(totalNetWorth, hideNetWorth)} <span className="text-xs font-medium text-muted-foreground sm:text-sm">{masterCurrency}</span></p>
-                    {investmentValue !== 0 && <p className="mt-2 text-xs text-muted-foreground sm:text-[13px]">Incl. {amount(investmentValue, hideNetWorth || hidden)} {masterCurrency} investments</p>}
+                </FinanceDataBoundary>
+              </div>
+              <div className="dashboard-summary-balance flex flex-col justify-center bg-card p-4 sm:px-6 sm:py-5">
+                <FinanceDataBoundary label="Cash" datasets={accountData}>
+                  <div className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-4 sm:contents">
+                    <div className="flex min-h-5 flex-col items-start gap-1 text-[13px] text-muted-foreground sm:flex-row sm:flex-wrap sm:items-baseline sm:justify-between sm:gap-x-2"><span className="font-medium">Cash</span><span className="text-xs">{cashAccounts.length} account{cashAccounts.length === 1 ? '' : 's'}</span></div>
+                    <div className="min-w-0 text-right sm:contents sm:text-left">
+                      <p className="break-words text-xl font-semibold tracking-tight tabular-nums sm:text-left sm:text-[28px] sm:leading-tight">{amount(cashBalance)} <span className="text-xs font-medium text-muted-foreground sm:text-sm">{masterCurrency}</span></p>
+                      {(!dataStatus.upcoming.loaded || cashUpcoming.length > 0) && <p className="dashboard-balance-detail mt-2 text-xs text-muted-foreground sm:mt-0 sm:text-[13px]">{!dataStatus.upcoming.loaded ? 'Upcoming data unavailable' : pendingCashDelta === null ? 'Projection unavailable' : <><span className={hidden ? '' : pendingCashDelta >= 0 ? 'font-semibold text-success' : 'font-semibold text-destructive'}>{signed(pendingCashDelta)} {masterCurrency}</span> after {cashUpcoming.length} upcoming</>}</p>}
+                    </div>
                   </div>
-                </div>
-              </FinanceDataBoundary>
-            </div>
-            <div className="dashboard-summary-balance flex flex-col justify-center bg-card p-4 sm:px-6 sm:py-5">
-              <FinanceDataBoundary label="Cash" datasets={accountData}>
-                <div className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-4 sm:grid-cols-1 sm:gap-y-2">
-                  <div className="flex min-h-5 flex-col items-start gap-1 text-[13px] text-muted-foreground sm:flex-row sm:flex-wrap sm:items-baseline sm:justify-between sm:gap-x-2"><span className="font-medium">Cash</span><span className="text-xs">{cashAccounts.length} account{cashAccounts.length === 1 ? '' : 's'}</span></div>
-                  <div className="min-w-0 text-right sm:text-left">
-                    <p className="break-words text-xl font-semibold tracking-tight tabular-nums sm:text-[28px] sm:leading-tight">{amount(cashBalance)} <span className="text-xs font-medium text-muted-foreground sm:text-sm">{masterCurrency}</span></p>
-                    {(!dataStatus.upcoming.loaded || cashUpcoming.length > 0) && <p className="mt-2 text-xs text-muted-foreground sm:text-[13px]">{!dataStatus.upcoming.loaded ? 'Upcoming data unavailable' : pendingCashDelta === null ? 'Projection unavailable' : <><span className={hidden ? '' : pendingCashDelta >= 0 ? 'font-semibold text-success' : 'font-semibold text-destructive'}>{signed(pendingCashDelta)} {masterCurrency}</span> after {cashUpcoming.length} upcoming</>}</p>}
-                  </div>
-                </div>
-              </FinanceDataBoundary>
+                </FinanceDataBoundary>
+              </div>
             </div>
             <div className="dashboard-summary-activity bg-card p-4 sm:px-6 sm:py-5">
               <FinanceDataBoundary label="Period activity" datasets={summaryData}>
