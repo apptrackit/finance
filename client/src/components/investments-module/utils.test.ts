@@ -31,8 +31,8 @@ describe('calculatePosition', () => {
     expect(position.quoteCurrency).toBe('EUR')
     expect(position.displayValue).toBe(4_125)
     expect(position.currentValue).toBeCloseTo(4_125 / 0.85)
-    expect(position.nativeInvested).toBe(4_000)
-    expect(position.netInvested).toBeCloseTo(4_000 / 0.85)
+    expect(position.nativeInvested).toBeNull()
+    expect(position.netInvested).toBeNull()
   })
 })
 
@@ -41,22 +41,22 @@ describe('missing investment FX', () => {
   it.each([undefined, 0, -1, Infinity, NaN])('keeps native manual value but withholds USD value for rate %s', rate => {
     const position = calculatePosition(manual, [], {}, { HUF: rate as number })
     expect(position.displayValue).toBe(40_000)
-    expect(position.nativeInvested).toBe(40_000)
+    expect(position.nativeInvested).toBeNull()
     expect(position.currentValue).toBeNull()
     expect(position.netInvested).toBeNull()
     expect(position.gainLoss).toBeNull()
     expect(position.missingCurrencies).toEqual(['HUF'])
   })
-  it('converts manual returns and invested amounts consistently', () => {
+  it('does not invent manual cost or profit from a current appraisal', () => {
     const position = calculatePosition(manual, [{ id: 'gain', account_id: 'manual', amount: 360, date: '2026-09-01', is_recurring: false }], {}, { HUF: 360 })
-    expect(position.netInvested).toBeCloseTo(40_000 / 360)
-    expect(position.gainLoss).toBe(1)
+    expect(position.netInvested).toBeNull()
+    expect(position.gainLoss).toBeNull()
   })
   it('preserves EUR quote values but withholds portfolio value without EUR FX', () => {
     const stock = { ...manual, balance: 2, currency: 'SHARE', quote_currency: 'EUR', symbol: 'TEST', asset_type: 'stock' as const }
     const position = calculatePosition(stock, [{ id: 'buy', account_id: 'manual', amount: 20, quantity: 2, date: '2026-09-01', is_recurring: false }], { TEST: { regularMarketPrice: 12, currency: 'EUR' } }, {})
     expect(position.displayValue).toBe(24)
-    expect(position.nativeInvested).toBe(20)
+    expect(position.nativeInvested).toBeNull()
     expect(position.currentValue).toBeNull()
     expect(position.missingCurrencies).toEqual(['EUR'])
   })
@@ -82,5 +82,16 @@ describe('holding metadata reads', () => {
     expect(position.displayValue).toBe(240)
     expect(position.currentValue).toBe(300)
     expect(position.priceFetchError).toBe(false)
+  })
+})
+
+describe('server accounting ledgers',()=>{
+  it('uses selected-currency history directly and preserves negative invested cash',()=>{
+    const account={id:'cash-ledger',name:'Synthetic',type:'investment' as const,balance:1,currency:'SHARE',quote_currency:'USD',asset_type:'stock' as const,updated_at:0}
+    const metrics={account_id:account.id,currency:'HUF',quantity:1,value:20000,native_value:50,native_currency:'USD',remaining_basis:20000,average_cost:20000,net_invested:-45600,realized_gain:65600,unrealized_gain:0,total_gain:65600,
+      native:{remaining_basis:50,average_cost:50,net_invested:-114,realized_gain:164,unrealized_gain:0,total_gain:164},allocation_percent:100,
+      estimated_return_percent:null,unrealized_gain_percent:0,trade_realized:{},performance_start:null,coverage:{value:[],cost:[]},price_change:null,price_change_percent:null}
+    const position=calculatePosition(account,[],{}, {USD:1,HUF:999},metrics,'HUF')
+    expect(position).toMatchObject({currentValue:20000,netInvested:-45600,gainLoss:65600,gainLossPercent:null,nativeInvested:-114,reportingCurrency:'HUF'})
   })
 })

@@ -1359,6 +1359,8 @@ export function TransactionList({
             {/* Transfer Form */}
             {formData.type === 'transfer' ? (
               <TransferForm
+                tradeId={editingId || undefined}
+                tradeVersion={originalTradeVersion.current}
                 accounts={accounts}
                 data={{ ...formData,...tradeDraft }}
                 editing={!!editingId}

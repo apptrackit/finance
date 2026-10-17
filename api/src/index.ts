@@ -1,3 +1,4 @@
+import { InvestmentMetricsController } from './controllers/investment-metrics.controller'
 import { ManualValuationRepository } from './repositories/manual-valuation.repository'
 import { ManualValuationService } from './services/manual-valuation.service'
 import { ManualValuationController } from './controllers/manual-valuation.controller'
@@ -108,7 +109,9 @@ function createDependencies(db: D1Database) {
   const financialOutlookController = new FinancialOutlookController(financialOutlookService)
   const dataExportController = new DataExportController(dataExportService)
   const transactionHistoryController = new TransactionHistoryController(transactionHistoryService)
-  const investmentTradeController = new InvestmentTradeController(new InvestmentTradeService(investmentTransactionRepo.trades))
+  const investmentTrades = new InvestmentTradeService(investmentTransactionRepo.trades)
+  const investmentTradeController = new InvestmentTradeController(investmentTrades)
+  const investmentMetricsController = new InvestmentMetricsController(db,investmentTrades)
 
   return {
     accountController,
@@ -124,6 +127,7 @@ function createDependencies(db: D1Database) {
     dataExportController,
     transactionHistoryController,
     investmentTradeController,
+    investmentMetricsController,
     manualValuationController: new ManualValuationController(new ManualValuationService(new ManualValuationRepository(db)))
   }
 }
@@ -237,6 +241,8 @@ app.delete('/investment-transactions/:id', (c) => getControllers(c).investmentTr
 app.get('/accounts/:id/valuations', c => getControllers(c).manualValuationController.history(c))
 app.put('/accounts/:id/valuations', validateBody(ManualValuationSchema), c => getControllers(c).manualValuationController.save(c))
 
+app.get('/investment-metrics', c => getControllers(c).investmentMetricsController.read(c))
+app.post('/investment-trades/preview', validateBody(InvestmentTradeSchema), c => getControllers(c).investmentMetricsController.preview(c))
 app.post('/investment-trades', validateBody(InvestmentTradeSchema), c => getControllers(c).investmentTradeController.save(c))
 app.put('/investment-trades/:id', validateBody(InvestmentTradeSchema), c => getControllers(c).investmentTradeController.save(c))
 app.delete('/investment-trades/:id', c => getControllers(c).investmentTradeController.delete(c))

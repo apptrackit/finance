@@ -1,8 +1,6 @@
-import { readMarketQuotes } from '../../lib/market-data'
+import type { CurrencyMetrics, InvestmentMetricsSnapshot } from '../../../../shared/investment-metrics'
 import type { TradeFacts } from '../../../../shared/investment-trade'
-import { usesMarketPricing } from '../../../../shared/holding'
 import { API_BASE_URL, apiFetch } from '../../config'
-import { isValidRate, validRates } from '../../../../shared/currency'
 import type { Account, Category, MarketQuote, Transaction } from './types'
 
 export type InvestmentSnapshot = {
@@ -10,6 +8,7 @@ export type InvestmentSnapshot = {
   transactions: Transaction[]
   categories: Category[]
   quotes: Record<string, MarketQuote>
+  metrics: Record<string,CurrencyMetrics>
   exchangeRates: Record<string, number>
 }
 
@@ -51,11 +50,14 @@ const description = (transaction: InvestmentTrade, quoteCurrency: string) => {
 // One complete snapshot replaces the previous one. Failed account/history reads
 // must never publish incomplete quantities or a zero-value portfolio.
 export async function readInvestmentSnapshot(signal: AbortSignal): Promise<InvestmentSnapshot> {
-  const [allAccounts, trades, categories] = await Promise.all([
-    readArray('/accounts', account, signal),
-    readArray('/investment-transactions', trade, signal),
-    readArray('/categories', category, signal),
+  const [response,categories] = await Promise.all([
+    apiFetch(`${API_BASE_URL}/investment-metrics`,{throwOnError:true,signal}),
+    readArray('/categories',category,signal),
   ])
+  const snapshot: InvestmentMetricsSnapshot = await response.json()
+  if (!Array.isArray(snapshot.accounts) || !snapshot.accounts.every(account) || !Array.isArray(snapshot.trades) || !snapshot.trades.every(trade)
+    || !snapshot.by_currency?.HUF || !snapshot.by_currency?.USD || !snapshot.current_fx?.rates || !snapshot.quotes) throw new Error('Invalid investment metrics response')
+  const allAccounts=snapshot.accounts as Account[],trades=snapshot.trades as InvestmentTrade[]
   const accounts = allAccounts.filter(item => item.type === 'investment' && item.archived_at == null)
   const accountById = new Map(accounts.map(item => [item.id, item]))
   const transactions: Transaction[] = trades.filter(item => accountById.has(item.account_id)).map(item => ({
@@ -68,18 +70,6 @@ export async function readInvestmentSnapshot(signal: AbortSignal): Promise<Inves
       ? `${item.notes || `${item.quantity} units @ ${item.price}`} · execution currency unverified`
       : description(item, accountById.get(item.account_id)!.quote_currency || 'trading currency'),
   }))
-  const symbols = [...new Set(accounts.filter(item => usesMarketPricing(item) && item.balance !== 0 && item.symbol).map(item => item.symbol!))]
-  const quotePromise = readMarketQuotes(symbols,signal)
-  const ratesPromise = (async () => {
-    try {
-      const response = await fetch('https://open.er-api.com/v6/latest/USD', { signal })
-      if (!response.ok) throw new Error('Rates unavailable')
-      const value: unknown = await response.json()
-      if (!record(value) || !record(value.rates) || !isValidRate(value.rates.USD)) throw new Error('Invalid rates')
-      return validRates(value.rates)
-    } catch { return {} }
-  })()
-  const [quotes, exchangeRates] = await Promise.all([quotePromise, ratesPromise])
   signal.throwIfAborted()
-  return { accounts, transactions, categories, quotes, exchangeRates }
+  return { accounts, transactions, categories, quotes:snapshot.quotes, exchangeRates:snapshot.current_fx.rates,metrics:snapshot.by_currency }
 }

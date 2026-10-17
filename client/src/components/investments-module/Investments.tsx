@@ -1,4 +1,4 @@
-import { sumAvailable, convertCurrency } from '../../../../shared/currency'
+import { sumAvailable } from '../../../../shared/currency'
 import { MissingExchangeRates } from '../common/MissingExchangeRates'
 import { useState } from 'react'
 import { useOutletContext } from 'react-router'
@@ -6,7 +6,7 @@ import type { FinancePageContext } from '../../App'
 import { FinanceDataBoundary } from '../common/FinanceDataStatus'
 import { usePrivacy } from '../../context/PrivacyContext'
 import type { PortfolioStats } from './types'
-import { calculatePosition, convertToDisplayCurrency } from './utils'
+import { calculatePosition } from './utils'
 import { PortfolioSummary } from './PortfolioSummary'
 import { HoldingsList } from './HoldingsList'
 import { InvestmentDetailModal } from './InvestmentDetailModal'
@@ -23,6 +23,7 @@ export function Investments() {
   const quotes = data?.quotes ?? {}
   const exchangeRates = data?.exchangeRates ?? {}
   const refreshing = status.loading
+  const metrics=data?.metrics[currencyDisplay]
 
   const getAccountTransactions = (accountId: string) => {
     return allTransactions.filter(tx => tx.account_id === accountId)
@@ -30,7 +31,7 @@ export function Investments() {
 
   const calculatePortfolioStats = (): PortfolioStats => {
     const positions = investmentAccounts.map(acc => 
-      calculatePosition(acc, getAccountTransactions(acc.id), quotes, exchangeRates)
+      calculatePosition(acc, getAccountTransactions(acc.id), quotes, exchangeRates,metrics?.holdings.find(h=>h.account_id===acc.id),currencyDisplay)
     )
     
     // Sort positions by current value (descending, most to least)
@@ -38,20 +39,18 @@ export function Investments() {
     
     const totalValue = sumAvailable(positions.map(pos => pos.currentValue))
     const totalInvested = sumAvailable(positions.map(pos => pos.netInvested))
-    const totalGainLoss = totalValue === null || totalInvested === null ? null : totalValue - totalInvested
-    const totalGainLossPercent = totalInvested === null || totalGainLoss === null ? null : totalInvested > 0 ? (totalGainLoss / totalInvested) * 100 : 0
+    const totalGainLoss = metrics?.total_gain ?? sumAvailable(positions.map(p=>p.gainLoss))
+    const totalGainLossPercent = metrics?.estimated_return_percent ?? null
     
     return { totalValue, totalInvested, totalGainLoss, totalGainLossPercent, positions: sortedPositions }
   }
 
   const stats = calculatePortfolioStats()
 
-  const convertDisplayCurrency = (usdValue: number | null) =>
-    convertToDisplayCurrency(usdValue, currencyDisplay, exchangeRates)
+  const convertDisplayCurrency = (value: number | null) => value
 
   const missingCurrencies = [...new Set([
     ...stats.positions.flatMap(position => position.missingCurrencies),
-    ...convertCurrency(1, 'USD', currencyDisplay, exchangeRates, 'USD').missingCurrencies,
   ])].sort()
 
   return (
@@ -93,6 +92,12 @@ export function Investments() {
         investmentAccountsCount={investmentAccounts.length}
       />
 
+      {metrics && <div className="rounded-xl border border-border bg-card p-4 text-sm space-y-2">
+        <p>All active investment holdings · {currencyDisplay}. Net-worth exclusions apply on Dashboard and MCP.</p>
+        <p title={metrics.market_today.boundary}>Market Today: {privacyMode==='hidden'?'••••••':`${metrics.market_today.gain===null?'Unavailable':metrics.market_today.gain.toLocaleString(undefined,{maximumFractionDigits:2})} ${currencyDisplay}`} · {metrics.market_today.covered_holdings}/{metrics.market_today.total_holdings} holdings covered.</p>
+        <p className="text-xs text-muted-foreground">Flow-adjusted estimate from the prior daily close, including FX movement. Manual values, stale quotes and missing inputs are omitted.</p>
+        {metrics.market_today.excluded.length>0 && <details><summary>Market Today coverage</summary><ul>{metrics.market_today.excluded.map(e=><li key={e.account_id}>{investmentAccounts.find(a=>a.id===e.account_id)?.name}: {e.reasons.join(', ').replaceAll('_',' ')}</li>)}</ul></details>}
+      </div>}
       {/* Holdings List */}
       <HoldingsList
         positions={stats.positions}
@@ -113,6 +118,8 @@ export function Investments() {
         exchangeRates={exchangeRates}
         privacyMode={privacyMode}
         onClose={() => setSelectedAccountId(null)}
+        metrics={metrics?.holdings.find(h=>h.account_id===selectedAccountId)}
+        reportingCurrency={currencyDisplay}
         onValuationSaved={() => { void finance.handleDataChange() }}
       />
     </div>

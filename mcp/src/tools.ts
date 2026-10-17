@@ -467,6 +467,7 @@ export const TOOL_DEFINITIONS = [
     outputSchema: output(['as_of', 'currency', 'total_value', 'total_invested', 'total_gain_loss', 'total_gain_loss_percent', 'holdings', 'warnings', 'valuation_status', 'gain_loss_coverage'], {
       as_of: { type: 'string' }, currency: { type: 'string' }, total_value: { type: 'number' }, total_invested: { type: ['number', 'null'] },
       total_gain_loss: { type: ['number', 'null'] }, total_gain_loss_percent: { type: ['number', 'null'] }, holdings: RECORDS, warnings: WARNINGS, valuation_status: { type: 'string' }, gain_loss_coverage:RECORD,
+      remaining_basis: {type:['number','null']},realized_gain:{type:['number','null']},unrealized_gain:{type:['number','null']},market_today:RECORD,scope:{type:'string'},
     }),
     annotations: READ_ONLY,
     _meta: { 'openai/toolInvocation/invoking': 'Valuing portfolio…', 'openai/toolInvocation/invoked': 'Portfolio ready' },

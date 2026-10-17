@@ -371,3 +371,11 @@ describe('useFinanceData', () => {
   })
 
 })
+
+it('Dashboard investment value honors net-worth exclusions without requiring excluded prices',async()=>{
+ payloads['/accounts']=[mockAccount,{...investmentAccount,balance:500},{...investmentAccount,id:'excluded',balance:20000,exclude_from_net_worth:true},
+  {...investmentAccount,id:'excluded-market',asset_type:'stock',symbol:'MISSING',currency:'SHARE',balance:2,exclude_from_net_worth:true}]
+ const {result}=setup()
+ await waitFor(()=>expect(result.current.investmentValue).toBe(500))
+ expect(fetchMock.mock.calls.some(([url])=>String(url).includes('MISSING'))).toBe(false)
+})

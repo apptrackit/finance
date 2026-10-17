@@ -26,14 +26,15 @@ const schedules: RecurringScheduleRow[] = [{ id: 'subscription', type: 'transact
 const investmentTransactions: InvestmentTransactionRow[] = []
 
 function fakeDb() {
-  return {
+  const db = {
+    async batch(statements: {all:()=>Promise<unknown>}[]) {return Promise.all(statements.map(s=>s.all()))},
     prepare(sql: string) {
       if (/^\s*(INSERT|UPDATE|DELETE|REPLACE|ALTER|DROP|CREATE)\b/i.test(sql)) throw new Error(`Mutation SQL is forbidden in MCP tests: ${sql}`)
       let bindings: unknown[] = []
       const statement = {
         bind(...values: unknown[]) { bindings = values; return statement },
         async all<T>() {
-          if (sql.includes('FROM accounts')) return { results: accounts as T[] }
+          if (sql.includes('FROM accounts')) return { results: (sql.includes("WHERE a.type='investment'")?accounts.filter(a=>a.type==='investment'&&a.archived_at==null):accounts) as T[] }
           if (sql.includes('FROM categories')) return { results: categories as T[] }
           if (sql.includes('FROM recurring_schedules')) return { results: schedules as T[] }
           if (sql.includes('FROM investment_transactions it')) {
@@ -65,11 +66,12 @@ function fakeDb() {
           }
           return { results: [] as T[] }
         },
-        async first<T>() { return { min_date: '2026-07-05', max_date: '2026-07-08' } as T },
+        async first<T>() { if(sql.includes('financial_data_revision')) return {revision:0} as T; return { min_date: '2026-07-05', max_date: '2026-07-08' } as T },
       }
       return statement
     },
-  } as unknown as Env['DB']
+  }
+  return db as unknown as Env['DB']
 }
 
 describe('FinanceService read-only calculations', () => {
