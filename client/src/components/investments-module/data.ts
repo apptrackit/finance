@@ -1,3 +1,4 @@
+import { usesMarketPricing } from '../../../../shared/holding'
 import { API_BASE_URL, apiFetch } from '../../config'
 import { isValidRate, validRates } from '../../../../shared/currency'
 import type { Account, Category, MarketQuote, Transaction } from './types'
@@ -61,9 +62,11 @@ export async function readInvestmentSnapshot(signal: AbortSignal): Promise<Inves
     quantity: item.type === 'buy' ? item.quantity : -item.quantity,
     price: item.price, date: item.date, is_recurring: false,
     linked_transaction_id: item.linked_transaction_id ?? undefined,
-    description: description(item, accountById.get(item.account_id)!.quote_currency || 'trading currency'),
+    description: accountById.get(item.account_id)!.holding_position
+      ? `${item.notes || `${item.quantity} units @ ${item.price}`} · execution currency unverified`
+      : description(item, accountById.get(item.account_id)!.quote_currency || 'trading currency'),
   }))
-  const symbols = [...new Set(accounts.filter(item => item.asset_type !== 'manual' && item.symbol).map(item => item.symbol!))]
+  const symbols = [...new Set(accounts.filter(item => usesMarketPricing(item) && item.symbol).map(item => item.symbol!))]
   const quotePromise = Promise.all(symbols.map(async symbol => {
     try {
       const response = await apiFetch(`${API_BASE_URL}/market/quote?symbol=${encodeURIComponent(symbol)}`, { throwOnError: true, signal })

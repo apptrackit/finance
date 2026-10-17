@@ -1,4 +1,6 @@
-import { convertCurrency, sumConversions, validRates, isValidRate } from '../../../shared/currency'
+import { usesMarketPricing } from '../../../shared/holding'
+import type { HoldingFields } from '../../../shared/holding'
+import { sumConversions, validRates, isValidRate } from '../../../shared/currency'
 import type { ConversionResult } from '../../../shared/currency'
 import { accountValueForOrdering } from '../lib/account-order'
 import { useEffect, useState, useCallback, useRef } from 'react'
@@ -6,7 +8,7 @@ import { API_BASE_URL, apiFetch, ApiRequestError } from '../config'
 import { useLoadableData } from './useLoadableData'
 import type { PendingKind, ReviewSource } from '../lib/transaction-review'
 
-export type Account = {
+export type Account = HoldingFields & {
   id: string
   name: string
   type: 'cash' | 'investment'
@@ -14,7 +16,7 @@ export type Account = {
   currency: string
   quote_currency?: string
   symbol?: string
-  asset_type?: 'stock' | 'crypto' | 'manual'
+  asset_type?: 'etf' | 'stock' | 'crypto' | 'manual'
   exclude_from_net_worth?: boolean
   exclude_from_cash_balance?: boolean
   archived_at?: number | null
@@ -260,7 +262,7 @@ export function useFinanceData(
       }
 
       const symbolsToFetch = investmentAccounts
-        .filter(acc => acc.asset_type !== 'manual' && acc.symbol)
+        .filter(acc => usesMarketPricing(acc) && acc.symbol)
         .map(acc => acc.symbol!)
       const uniqueSymbols = [...new Set(symbolsToFetch)]
 
@@ -276,12 +278,7 @@ export function useFinanceData(
       // A rate outage makes only required foreign conversions unavailable.
       // Same-currency values do not depend on the rate service.
       const rates = await readExchangeRates(masterCurrency).catch(() => ({}))
-      const conversions = investmentAccounts.map(acc => {
-        if (acc.asset_type === 'manual') return convertCurrency(acc.balance, acc.currency, masterCurrency, rates)
-        const quote = acc.symbol ? quotes[acc.symbol] : null
-        const quoteCurrency = (acc.quote_currency || quote?.currency || 'USD').toUpperCase()
-        return convertCurrency((quote?.regularMarketPrice || 0) * acc.balance, quoteCurrency, masterCurrency, rates)
-      })
+      const conversions = investmentAccounts.map(acc => accountValueForOrdering(acc, quotes, masterCurrency, rates))
       return { conversion: sumConversions(conversions), currency: masterCurrency, quotes }
     })
   }, [accounts, masterCurrency, loadInvestmentValue])

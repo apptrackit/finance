@@ -1,3 +1,4 @@
+import { usesMarketPricing } from '../../../../shared/holding'
 import type { Account, Category, Transaction } from './types'
 import { formatValue, calculatePosition } from './utils'
 import { InvestmentChart } from './InvestmentChart'
@@ -89,7 +90,7 @@ export function InvestmentDetailModal({
         </div>
         
         <div className="flex-1 overflow-y-auto p-6 space-y-6">
-          {privacyMode !== 'hidden' && account.asset_type !== 'manual' && account.symbol && (
+          {privacyMode !== 'hidden' && usesMarketPricing(account) && account.symbol && (
             <div className="bg-secondary/20 rounded-xl p-4">
               <InvestmentChart 
                 symbol={account.symbol}
@@ -143,13 +144,13 @@ export function InvestmentDetailModal({
                         <div className={`text-xl font-bold ${tx.amount > 0 ? 'text-green-600' : 'text-red-600'} ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
                           {privacyMode === 'hidden' ? '••••••' : (
                             tx.quantity !== undefined 
-                              ? `${tx.quantity > 0 ? '+' : ''}${Math.abs(tx.quantity).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 8 })} ${account.currency}`
+                              ? `${tx.quantity > 0 ? '+' : ''}${Math.abs(tx.quantity).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 12 })} ${account.currency}`
                               : `${tx.amount > 0 ? '+' : ''}$${Math.abs(tx.amount).toFixed(2)}`
                           )}
                         </div>
                         {tx.quantity !== undefined && (
                           <div className="text-sm text-muted-foreground">
-                            {privacyMode === 'hidden' ? '••••••' : formatValue(Math.abs(tx.amount), undefined, account.quote_currency || position.quoteCurrency)}
+                            {privacyMode === 'hidden' ? '••••••' : account.holding_position ? `${Math.abs(tx.amount).toLocaleString(undefined, { maximumFractionDigits: 12 })} · currency unverified` : formatValue(Math.abs(tx.amount), undefined, account.quote_currency || position.quoteCurrency)}
                           </div>
                         )}
                       </div>

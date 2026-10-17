@@ -66,3 +66,21 @@ describe('missing investment FX', () => {
     expect(convertToDisplayCurrency(100, 'USD', {})).toBe(100)
   })
 })
+
+describe('holding metadata reads', () => {
+  it('values stored units even when the available trade history is shorter', () => {
+    const account = { id: 'opening', name: 'Opening ETF', type: 'investment' as const, balance: 5, currency: 'SHARE', quote_currency: 'EUR', asset_type: 'etf' as const, updated_at: 1,
+      holding_position: { quantity: 5, activity_quantity: 2, residual: 3, history_status: 'mismatch' as const, coverage_reasons: ['unknown_opening'], anchor: null } }
+    const position = calculatePosition(account, [{ id: 'buy', account_id: 'opening', amount: 20, quantity: 2, date: '2026-01-02', is_recurring: false }], { 'TEST': { regularMarketPrice: 12 } }, { EUR: 1 })
+    expect(position.actualQuantity).toBe(5)
+    expect(position.netInvested).toBeNull()
+    expect(position.gainLoss).toBeNull()
+  })
+  it('uses a saved manual unit price without requiring a market symbol', () => {
+    const account = { id: 'manual-etf', name: 'Manual ETF', type: 'investment' as const, balance: 2, currency: 'SHARE', quote_currency: 'EUR', asset_type: 'etf' as const, pricing_method: 'manual' as const, manual_price: 120, updated_at: 1 }
+    const position = calculatePosition(account, [], {}, { EUR: 0.8 })
+    expect(position.displayValue).toBe(240)
+    expect(position.currentValue).toBe(300)
+    expect(position.priceFetchError).toBe(false)
+  })
+})

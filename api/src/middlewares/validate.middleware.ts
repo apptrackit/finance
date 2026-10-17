@@ -1,6 +1,10 @@
 import { Context, Next } from 'hono'
 import { z, ZodSchema } from 'zod'
 
+declare module 'hono' {
+  interface ContextVariableMap { validatedBody: unknown }
+}
+
 export function validateBody<T>(schema: ZodSchema<T>) {
   return async (c: Context, next: Next) => {
     let body: unknown

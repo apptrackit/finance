@@ -1,4 +1,5 @@
-export type Account = {
+import type { HoldingFields } from '../../../../shared/holding'
+export type Account = HoldingFields & {
   id: string
   name: string
   type: string

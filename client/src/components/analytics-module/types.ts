@@ -1,3 +1,4 @@
+import type { HoldingFields } from '../../../../shared/holding'
 import type { PendingKind, ReviewSource } from '../../lib/transaction-review'
 
 export type Transaction = {
@@ -22,7 +23,7 @@ export type Category = {
   type: 'income' | 'expense'
 }
 
-export type Account = {
+export type Account = HoldingFields & {
   id: string
   name: string
   type: string

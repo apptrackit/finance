@@ -34,7 +34,7 @@ it('backfills only unambiguous investment cash links, preserving financial data 
   const beforeCash = (await f.db.prepare('SELECT rowid, * FROM transactions ORDER BY id').all()).results
   const accounts = (await f.db.prepare('SELECT * FROM accounts ORDER BY id').all()).results
   const revision = await f.db.prepare('SELECT revision FROM financial_data_revision WHERE id = 1').first('revision')
-  await migrate(f.db)
+  await migrate(f.db, 17)
   const links: Record<string, string> = { purchase: 'cash-buy', sale: 'cash-sell', 'archived-buy': 'cash-archived-buy', 'archived-sell': 'cash-archived-sell' }
   expect((await f.db.prepare('SELECT rowid, * FROM investment_transactions ORDER BY id').all()).results)
     .toEqual(beforeTrades.map(row => ({ ...row, linked_transaction_id: links[String(row.id)] ?? null })))

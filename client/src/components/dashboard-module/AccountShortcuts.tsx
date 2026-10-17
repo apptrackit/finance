@@ -12,7 +12,7 @@ type ShortcutAccount = ValuedAccount & { archived_at?: number | null }
 const compactNumber = (amount: number) =>
   new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 2 }).format(amount)
 const fullAmount = (amount: number, currency: string, quantity = false) =>
-  `${amount.toLocaleString('hu-HU', { maximumFractionDigits: quantity ? 8 : 2 })} ${currency}`
+  `${amount.toLocaleString('hu-HU', { maximumFractionDigits: quantity ? 12 : 2 })} ${currency}`
 
 export function AccountShortcuts({ accounts, values, reportingCurrency, status, valuationLoading }: {
   accounts: ShortcutAccount[]

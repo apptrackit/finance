@@ -1,3 +1,4 @@
+import type { HoldingFields } from '../../../../shared/holding'
 import type { DashboardFilters, FilterChange } from '../../navigation/filters'
 import { useUnsavedChanges } from '../../navigation/UnsavedChanges'
 import { matchesTransaction } from '../../lib/global-search'
@@ -43,7 +44,7 @@ type Transaction = {
   updated_at?: number | null
 }
 
-type Account = {
+type Account = HoldingFields & {
   id: string
   name: string
   balance: number
@@ -51,7 +52,7 @@ type Account = {
   quote_currency?: string
   type: 'cash' | 'investment'
   symbol?: string
-  asset_type?: 'stock' | 'crypto' | 'manual'
+  asset_type?: 'etf' | 'stock' | 'crypto' | 'manual'
   exclude_from_net_worth?: boolean
   exclude_from_cash_balance?: boolean
   archived_at?: number | null

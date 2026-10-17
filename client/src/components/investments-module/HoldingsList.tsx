@@ -1,3 +1,5 @@
+import { Link } from 'react-router'
+import { usesMarketPricing } from '../../../../shared/holding'
 import { RefreshCw, TrendingUp, TrendingDown } from 'lucide-react'
 import type { Account, Position, MarketQuote } from './types'
 import { formatValue } from './utils'
@@ -52,7 +54,7 @@ export function HoldingsList({
               Create an investment account to start tracking your portfolio
             </p>
             <p className="text-xs text-muted-foreground">
-              Go to Dashboard → Accounts → Add Account → Choose "Investment" type
+              <Link className="text-primary underline" to="/accounts" state={{ addAccount: true, investment: true }}>Add an investment holding in Accounts</Link>
             </p>
           </div>
         ) : (
@@ -79,12 +81,13 @@ export function HoldingsList({
                   <div>
                     <div className="font-semibold text-lg flex items-center gap-2">
                       {position.account.symbol || position.account.name}
-                      {position.account.asset_type !== 'manual' && !position.priceFetchError && quote && (
+                      {usesMarketPricing(position.account) && !position.priceFetchError && quote && (
                         <span className={`text-xs px-2 py-0.5 rounded-full ${priceChange >= 0 ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'}`}>
                           {priceChange >= 0 ? '+' : ''}{priceChange.toFixed(2)}%
                         </span>
                       )}
                     </div>
+                    {position.account.holding_position && <p className="text-xs text-amber-700 dark:text-amber-300">{position.account.holding_position.history_status === 'reconciled' ? 'Opening recorded' : 'Opening history needs reconciliation'} <Link to="/accounts" state={{ editAccountId: position.account.id }} onClick={event => event.stopPropagation()} className="underline">Review opening in Accounts</Link></p>}
                     <div className={`text-sm text-muted-foreground ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
                       {privacyMode === 'hidden' ? '•••• invested' : `${formatValue(position.nativeInvested, position.account, position.quoteCurrency)} invested`}
                     </div>
@@ -97,7 +100,7 @@ export function HoldingsList({
                   </div>
                   {position.account.asset_type !== 'manual' && (
                     <div className={`text-sm text-muted-foreground ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
-                      {privacyMode === 'hidden' ? '•••• ' : `${position.actualQuantity > 0 ? '+' : ''}${position.actualQuantity.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 8 })} `}
+                      {privacyMode === 'hidden' ? '•••• ' : `${position.actualQuantity > 0 ? '+' : ''}${position.actualQuantity.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 12 })} `}
                       {position.account.currency}
                     </div>
                   )}

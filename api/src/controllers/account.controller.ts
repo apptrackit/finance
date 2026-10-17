@@ -14,17 +14,17 @@ export class AccountController {
   }
 
   async create(c: Context<{ Bindings: Bindings }>) {
-    const body = await c.req.json<CreateAccountDto>()
-    const account = await this.accountService.createAccount(body)
-    await new AuditRepository(c.env.DB).log('CREATE', 'account', account.id, { name: account.name, type: account.type })
+    const body = c.get('validatedBody') as CreateAccountDto
+    const account = await this.accountService.createAccount(body, c.req.header('X-Client-Date'))
+    if (account.type !== 'investment') await new AuditRepository(c.env.DB).log('CREATE', 'account', account.id, { name: account.name, type: account.type })
     return c.json(AccountMapper.toResponseDto(account), 201)
   }
 
   async update(c: Context<{ Bindings: Bindings }>) {
     const id = c.req.param('id')
-    const body = await c.req.json<UpdateAccountDto>()
-    const account = await this.accountService.updateAccount(id, body)
-    await new AuditRepository(c.env.DB).log('UPDATE', 'account', id, { name: body.name, balance: body.balance })
+    const body = c.get('validatedBody') as UpdateAccountDto
+    const account = await this.accountService.updateAccount(id, body, c.req.header('X-Client-Date'))
+    if (account.type !== 'investment') await new AuditRepository(c.env.DB).log('UPDATE', 'account', id, { name: body.name, balance: body.balance })
     return c.json(AccountMapper.toResponseDto(account))
   }
 
