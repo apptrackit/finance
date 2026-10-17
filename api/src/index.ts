@@ -59,7 +59,7 @@ import { logger } from './utils/logger'
 import { UpdateNavigationSettingsSchema } from './validators/settings.validator'
 import { CreateAccountSchema, UpdateAccountSchema } from './validators/account.validator'
 import { CreateTransactionSchema, UpdateTransactionSchema } from './validators/transaction.validator'
-import { SaveSplitSchema } from './validators/transaction-split.validator'
+import { SaveSplitSchema, UpdateSplitSchema } from './validators/transaction-split.validator'
 import { CreateCategorySchema, UpdateCategorySchema } from './validators/category.validator'
 import { CreateTransferSchema } from './validators/transfer.validator'
 import { CreateRecurringScheduleSchema, UpdateRecurringScheduleSchema } from './validators/recurring-schedule.validator'
@@ -211,7 +211,7 @@ app.get('/transactions', (c) => getControllers(c).transactionController.getAll(c
 app.post('/transactions', validateBody(CreateTransactionSchema), (c) => getControllers(c).transactionController.create(c))
 app.get('/transactions/upcoming', (c) => getControllers(c).transactionController.getUpcoming(c))
 app.post('/transactions/splits', validateBody(SaveSplitSchema), (c) => getControllers(c).transactionSplitController.create(c))
-app.put('/transactions/splits/:id', validateBody(SaveSplitSchema), (c) => getControllers(c).transactionSplitController.update(c))
+app.put('/transactions/splits/:id', validateBody(UpdateSplitSchema), (c) => getControllers(c).transactionSplitController.update(c))
 app.delete('/transactions/splits/:id', (c) => getControllers(c).transactionSplitController.delete(c))
 app.post('/transactions/:id/confirm', (c) => getControllers(c).transactionController.confirm(c))
 app.post('/transactions/:id/decline', (c) => getControllers(c).transactionController.decline(c))

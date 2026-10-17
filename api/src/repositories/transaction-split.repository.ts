@@ -45,6 +45,11 @@ export class TransactionSplitRepository {
       .bind(id).first<TransactionSplit>()
   }
 
+  async findTransaction(id: string): Promise<Transaction | null> {
+    const row = await this.db.prepare('SELECT * FROM transactions WHERE id = ?').bind(id).first<RawTransactionRow>()
+    return row ? TransactionRepository.mapRow(row) : null
+  }
+
   async findLines(splitId: string): Promise<Transaction[]> {
     const { results } = await this.db.prepare(
       `SELECT t.*, s.description AS split_description FROM transactions t
@@ -60,13 +65,15 @@ export class TransactionSplitRepository {
   }
 
   private insertLines(split: SplitWrite, now: number, ready: { sql: string; values: D1Value[] }, claimedSql: string, claimedValues: D1Value[]): D1PreparedStatement[] {
+    // A single remaining line is an ordinary transaction, not a split.
+    const splitId = split.lines.length > 1 ? split.id : null
     return split.lines.map(line => this.db.prepare(
       `INSERT INTO transactions (id, account_id, category_id, amount, description, date, exclude_from_estimate,
          status, pending_kind, review_source, review_flags, confirmed_at, created_at, updated_at, split_id)
        SELECT ?, ?, ?, ?, ?, ?, ?, 'posted', 'upcoming', 'manual', '[]', ?, ?, ?, ?
        WHERE ${ready.sql} AND ${claimedSql}`
     ).bind(line.id, split.account_id, line.category_id, line.amount, line.description, split.date,
-      split.exclude_from_estimate ? 1 : 0, now, now, now, split.id, ...ready.values, ...claimedValues))
+      split.exclude_from_estimate ? 1 : 0, now, now, now, splitId, ...ready.values, ...claimedValues))
   }
 
   private audit(action: 'CREATE' | 'UPDATE' | 'DELETE', splitId: string, details: Record<string, unknown>, now: number,
@@ -119,6 +126,9 @@ export class TransactionSplitRepository {
       this.db.prepare(`DELETE FROM transactions WHERE id IN (${placeholders}) AND split_id IS NULL AND ${claimed.sql}`).bind(...oldIds, ...claimed.values),
       this.db.prepare(`UPDATE accounts SET balance = balance + ?, updated_at = ? WHERE id = ? AND ${claimed.sql}`)
         .bind(next.total, now, next.account_id, ...claimed.values),
+      // Last, because it removes the claim row: an undone split leaves no split-linked lines.
+      this.db.prepare('DELETE FROM transaction_splits WHERE id = ? AND NOT EXISTS (SELECT 1 FROM transactions WHERE split_id = ?)')
+        .bind(next.id, next.id),
     ]
     const results = await this.db.batch(statements)
     return results[0].meta.changes === 1

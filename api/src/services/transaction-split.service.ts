@@ -43,7 +43,8 @@ export class TransactionSplitService {
       id: crypto.randomUUID(),
       category_id: line.category_id,
       amount: line.amount,
-      description: line.note?.trim() || null,
+      // An undone split keeps the shared payee as the transaction description.
+      description: (dto.lines.length === 1 ? dto.description?.trim() : '') || line.note?.trim() || null,
     }))
     const total = round(lines.reduce((sum, line) => sum + line.amount, 0))
     if (dto.balance_adjustment) {
@@ -92,6 +93,11 @@ export class TransactionSplitService {
     const now = Math.max(Date.now(), (previous.split.updated_at ?? 0) + 1)
     const applied = await this.splitRepo.replace(previous, write, now, dto.balance_adjustment?.expected_balance)
     if (!applied) throw this.conflict()
+    if (write.lines.length === 1) {
+      // Undone split: the remaining line is an ordinary transaction and the split row is gone.
+      const line = (await this.splitRepo.findTransaction(write.lines[0].id))!
+      return { split: { id, description: write.description, created_at: previous.split.created_at, updated_at: now }, lines: [line], total: write.total }
+    }
     return this.load(id)
   }
 
