@@ -88,6 +88,17 @@ describe('transaction splits against real D1', () => {
     expect(await f.db.prepare("SELECT COUNT(*) AS n FROM audit_log WHERE entity = 'transaction_split' AND action = 'UPDATE'").first('n')).toBe(1)
   })
 
+  it('turns a split back into an ordinary transaction when one line is left', async () => {
+    const split = await createSplit()
+    const response = await f.request(`/transactions/splits/${split.id}`, 'PUT', payload({ lines: [{ category_id: 'food', amount: -120 }] }))
+    expect(response.status, await response.clone().text()).toBe(200)
+    expect(await f.balances()).toEqual([{ id: 'cash', balance: 880 }, { id: 'savings', balance: 200 }])
+    expect(await f.db.prepare('SELECT COUNT(*) AS n FROM transaction_splits').first('n')).toBe(0)
+    expect(await f.db.prepare('SELECT amount, description, split_id FROM transactions').all()).toMatchObject({ results: [{ amount: -120, description: 'Spar', split_id: null }] })
+    // Creating a split still needs at least two lines.
+    expect((await f.request('/transactions/splits', 'POST', payload({ lines: [lines[0]] }))).status).toBe(400)
+  })
+
   it('deletes every line once, reverts the balance and removes the split row; repeats are not found', async () => {
     const split = await createSplit()
     expect((await f.request(`/transactions/splits/${split.id}`, 'DELETE')).status).toBe(200)

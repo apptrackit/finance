@@ -6,7 +6,13 @@ Intermediate package/UI version bumps are grouped under the next published GitHu
 
 ## Unreleased
 
+### Added
+
+- One transaction composer for single, split and adjustment entries. **Split into categories** divides one payment over several category lines (shared account, date and description; the first line takes the rest of the total), saved atomically and shown as one expandable row. **Save and add another** keeps type, account and date for the next payment. Recording a balance difference opens the same controls with the amount and account fixed. New `transaction_splits` table and `transactions.split_id` (migration 017), `/transactions/splits` endpoints, and `transaction_splits` in the JSON export. [#138](https://github.com/apptrackit/finance/issues/138)
+
 ### Changed
+
+- Bulk add and the separate balance-adjustment choice and split dialogs are replaced by the composer. Per-row account and date, sliders, auto-balance and fill-with-total are gone; log unrelated payments with Save and add another.
 
 - Dashboard uses a shared period picker, a responsive balance/activity summary, compact transaction filters, and a combined review queue with explicit confirmation actions. Transaction rows show neutral transfers, daily cash-flow totals, and native/converted amounts; privacy masking and loading states follow the new layout.
 

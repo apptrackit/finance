@@ -9,14 +9,24 @@ const SplitLineSchema = z.object({
   note: z.string().max(500).nullable().optional(),
 }).strict()
 
-export const SaveSplitSchema = z.object({
+const splitFields = {
   account_id: z.string().min(1, 'account_id is required'),
   date: z.string().regex(dateRegex, 'Date must be YYYY-MM-DD'),
   description: z.string().max(500).nullable().optional(),
   exclude_from_estimate: z.boolean().optional(),
-  lines: z.array(SplitLineSchema).min(2, 'A split needs at least two lines').max(MAX_SPLIT_LINES),
   balance_adjustment: z.object({
     expected_balance: z.number().finite(),
     new_balance: z.number().finite(),
   }).strict().optional(),
+}
+
+export const SaveSplitSchema = z.object({
+  ...splitFields,
+  lines: z.array(SplitLineSchema).min(2, 'A split needs at least two lines').max(MAX_SPLIT_LINES),
+}).strict()
+
+// Replacing a split with a single line turns it back into an ordinary transaction ("undo split").
+export const UpdateSplitSchema = z.object({
+  ...splitFields,
+  lines: z.array(SplitLineSchema).min(1).max(MAX_SPLIT_LINES),
 }).strict()

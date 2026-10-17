@@ -25,7 +25,7 @@ The latest published release is [v3.3](https://github.com/apptrackit/finance/rel
 | --- | --- |
 | Accounts | Dedicated Accounts page for cash accounts and investment holdings; multiple currencies; balance adjustments; locks; independent exclusions; archive/restore with retained history. |
 | Search | Search everything palette (Cmd/Ctrl+K) across full transaction history, pending items, accounts, categories, recurring schedules, amounts, and dates. |
-| Transactions | Income and expenses, categories and icons, linked transfers, search and date filters, bulk entry, split adjustments, and recent-change indicators. |
+| Transactions | Income and expenses, categories and icons, linked transfers, search and date filters, split payments, save-and-add-another entry, balance adjustments, and recent-change indicators. |
 | Upcoming transactions | One-time future income and expenses, projected cash balances, and explicit confirmation or decline without changing the posted balance early. |
 | Recurring schedules | Daily, weekly, monthly, and yearly options; transaction and transfer schedules; pause/resume, end dates, occurrence limits, and a calendar view. |
 | Investments | Stock/crypto symbol search, Yahoo Finance quotes and price history, buy/sell records, manual assets, allocation, cost basis, and gain/loss views. |
