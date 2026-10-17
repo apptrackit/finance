@@ -70,7 +70,11 @@ function ledger(account: MetricAccount,trades: MetricTrade[],currency: string,va
     const amount = native ? nativeCash(t,currency) : t.cash_amount != null && t.cash_currency
       ? convert(t.cash_amount,t.cash_currency,currency,t.date) : null
     if (amount === null) reasons.add(native ? 'unknown_execution_currency_or_fee' : t.cash_amount == null || !t.cash_currency ? 'unknown_cash_flow' : 'missing_dated_fx')
-    invested = plus(invested,amount === null ? null : t.type==='buy'?amount:-amount)
+    // Native execution basis is not a converted external cash ledger. The
+    // settlement ratio can price a known fee, but must not invent native cash.
+    const cash = native ? t.cash_currency===currency && t.cash_amount!=null?t.cash_amount:null : amount
+    if(native && t.cash_currency!==currency) reasons.add('cash_recorded_in_other_currency')
+    invested = plus(invested,cash === null ? null : t.type==='buy'?cash:-cash)
     const quantity = manual ? t.quantity === 1 && t.asset_event === (t.type==='buy'?'acquisition':'disposal') ? 1 : null : t.quantity
     if (q === null || quantity === null || !Number.isFinite(quantity) || quantity<=0 || (t.type==='sell' && quantity>q) || (manual && (t.type==='buy'?q!==0:q!==1))) {
       q=null; basis=null; realized=null; reasons.add('unsupported_position_history'); continue

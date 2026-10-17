@@ -90,7 +90,7 @@ export function HoldingsList({
                     </div>
                     {position.account.holding_position && <p className="text-xs text-amber-700 dark:text-amber-300">{position.account.holding_position.history_status === 'reconciled' ? 'Opening recorded' : 'Opening history needs reconciliation'} <Link to="/accounts" state={{ editAccountId: position.account.id }} onClick={event => event.stopPropagation()} className="underline">Review opening in Accounts</Link></p>}
                     <div className={`text-sm text-muted-foreground ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
-                      {privacyMode === 'hidden' ? '•••• invested' : `${formatValue(position.nativeInvested, position.account, position.quoteCurrency)} invested`}
+                      {privacyMode === 'hidden' ? '•••• remaining basis' : `${formatValue(position.metrics.native.remaining_basis, position.account, position.quoteCurrency)} remaining basis`}
                     </div>
                   </div>
                 </div>

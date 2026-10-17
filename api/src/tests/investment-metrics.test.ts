@@ -40,6 +40,7 @@ describe('production investment accounting against the reviewed golden fixtures'
   const e=examples.cross_currency,a=opening();a.balance=e.quantity;a.quote_currency='EUR';a.manual_price=e.mark_price
   const t={...trade(e.quantity,e.execution_price,e.net_cash_paid),execution_currency:'EUR',cash_currency:'HUF',fee_currency:'HUF',fee_amount:e.included_fee_cash}
   const m=holdingMetrics(a,[t],'HUF',undefined,(n,s,r)=>convertCurrency(n,s,r,{EUR:1,HUF:e.mark_huf_per_eur},'EUR').value,convert,'2026-10-17')
+  expect(m.native.net_invested).toBeNull() // An implied execution/fee rate is not dated reporting cash FX.
   close(m.remaining_basis,e.expected.reporting_basis);close(m.native.remaining_basis,e.expected.native_basis)
   close(m.unrealized_gain,e.expected.reporting_unrealized_gain);close(m.native.unrealized_gain,e.expected.native_unrealized_gain)
   expect(m.unrealized_gain).not.toBe(e.expected.incorrect_current_fx_gain)

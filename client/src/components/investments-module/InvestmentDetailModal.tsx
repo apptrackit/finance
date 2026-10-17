@@ -64,7 +64,7 @@ export function InvestmentDetailModal({
               <div>
                 <div className="text-xs text-muted-foreground">Net Invested</div>
                 <div className={`text-lg font-bold ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
-                  {privacyMode === 'hidden' ? '••••••' : formatValue(position.nativeInvested, account, position.quoteCurrency)}
+                  {privacyMode === 'hidden' ? '••••••' : formatValue(position.netInvested, undefined, reportingCurrency)}
                 </div>
               </div>
               {position.currentPrice > 0 && (
