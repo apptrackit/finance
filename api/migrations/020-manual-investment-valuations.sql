@@ -89,7 +89,7 @@ COALESCE((SELECT CASE WHEN t.asset_event = 'acquisition' THEN 'owned' ELSE 'disp
   FROM investment_transactions t WHERE t.account_id = a.id AND t.asset_event IS NOT NULL
     AND (CASE WHEN p.kind = 'opening' THEN t.date > p.effective_date ELSE t.effective_order > COALESCE(p.trade_order_boundary,p.trade_rowid_boundary,0) END)
   ORDER BY t.date DESC, t.effective_order DESC, t.id DESC LIMIT 1),
-  CASE WHEN p.owned = 1 THEN 'owned' WHEN p.owned = 0 THEN 'unowned' WHEN p.balance > 0 THEN 'owned' WHEN p.kind = 'opening' THEN 'unowned' ELSE 'unknown' END)
+  CASE WHEN p.owned = 1 THEN 'owned' WHEN p.owned = 0 THEN 'unowned' WHEN p.balance > 0 THEN 'owned' ELSE 'unknown' END)
 ) IN ('owned','unknown')) BEGIN SELECT RAISE(ABORT, 'MANUAL_ASSET_OWNED'); END;
 CREATE TRIGGER manual_asset_event_update BEFORE UPDATE ON investment_transactions
 WHEN NEW.asset_event IS NOT NULL BEGIN

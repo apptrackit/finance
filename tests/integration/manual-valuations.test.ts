@@ -195,6 +195,26 @@ it('keeps an explicitly owned zero opening distinct from an empty asset awaiting
   expect((await trade(a.id,'sell')).status).toBe(201)
 })
 
+it('keeps old zero openings unverified and rejects positive remaining cost on an unowned opening',async()=>{
+  const before=await snapshot()
+  expect((await f.request('/accounts','POST',{name:'Invalid unowned basis',type:'investment',asset_type:'manual',currency:'HUF',balance:0,
+    opening:{balance:0,date:'2026-01-10',owned:false,cost_amount:50,cost_currency:'HUF'}})).status).toBe(400)
+  expect(await snapshot()).toEqual(before)
+  await f.db.batch([
+    f.db.prepare("INSERT INTO accounts (id,name,type,balance,currency,asset_type,pricing_method) VALUES ('old-zero','Old zero asset','investment',0,'HUF','manual','manual')"),
+    f.db.prepare("INSERT INTO investment_position_anchors (id,account_id,kind,effective_date,balance,cost_amount,cost_currency,created_at) VALUES ('old-zero-opening','old-zero','opening','2026-01-10',0,50,'HUF',1)"),
+  ])
+  expect(await account('old-zero')).toMatchObject({manual_ownership:'unknown',holding_position:{history_status:'unverified',coverage_reasons:expect.arrayContaining(['unknown_ownership']),anchor:{owned:null,cost_amount:50}}})
+  expect((await save('old-zero',100)).status).toBe(200)
+  expect(await account('old-zero')).toMatchObject({balance:0,manual_ownership:'unknown'})
+  expect((await trade('old-zero','sell')).status).toBe(409)
+  expect((await f.request('/accounts/old-zero/archive','PATCH')).status).toBe(409)
+  expect((await f.request('/accounts/old-zero','PUT',{opening:{balance:0,date:'2026-01-10',owned:false,cost_amount:50,cost_currency:'HUF'}})).status).toBe(400)
+  expect((await f.request('/accounts/old-zero','PUT',{opening:{balance:0,date:'2026-01-10',owned:true,cost_amount:50,cost_currency:'HUF'}})).status).toBe(200)
+  expect(await account('old-zero')).toMatchObject({manual_ownership:'owned',balance:100,holding_position:{anchor:{owned:true,cost_amount:50}}})
+  expect((await trade('old-zero','sell')).status).toBe(201)
+})
+
 it('guards manual trade edits/deletes against later disposals and atomically preserves both ledgers on failure',async()=>{
   const a=await create(true,0)
   const buy=await (await trade(a.id,'buy')).json() as {trade_id:string;cash_transaction_id:string}

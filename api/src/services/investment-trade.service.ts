@@ -90,7 +90,7 @@ export class InvestmentTradeService {
     }
     const oldEvents = op.state.trades.filter(t => t.account_id === account.id && included(t))
     const replay = (events: InvestmentTransaction[]) => {
-      let owned: boolean | null = anchor.owned ?? (anchor.balance > 0 ? true : anchor.kind === 'opening' ? false : null)
+      let owned: boolean | null = anchor.owned ?? (anchor.balance > 0 ? true : null)
       for (const t of events.sort((a,b) => a.date.localeCompare(b.date) || (a.effective_order??0)-(b.effective_order??0) || a.id.localeCompare(b.id))) {
         if (!t.asset_event || t.quantity !== 1 || t.date < anchor.effective_date || t.date > today) throw reconcile('Resolve unsupported legacy manual activity before changing ownership.')
         if (owned === null) throw reconcile('A legacy zero value does not establish ownership. Confirm a known opening in Accounts first.')

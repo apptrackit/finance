@@ -55,6 +55,7 @@ export class AccountService {
       if (account.manual_price_date && (!validLocalDate(account.manual_price_date) || account.manual_price_date > today)) throw AppError.validation('Manual price date cannot be in the future')
       if (account.asset_type !== 'manual' && dto.opening?.owned !== undefined) throw AppError.validation('Explicit ownership belongs to total manual assets')
       if (account.asset_type === 'manual' && dto.opening?.owned === false && account.balance !== 0) throw AppError.validation('An unowned asset must start at zero current value')
+      if (account.asset_type === 'manual' && account.balance === 0 && dto.opening?.owned !== true && (dto.opening?.cost_amount??0) > 0) throw AppError.validation('An unowned opening has no remaining cost. Mark an owned zero-value asset as owned, or leave its cost unknown.')
       await this.accountRepo.createHolding(account, this.anchor(account.balance, 'opening', date, now,
         account.asset_type === 'manual' ? { ...dto.opening, balance:account.balance, date, owned:dto.opening?.owned??account.balance!==0 } : dto.opening))
       return (await this.accountRepo.findById(id))!
@@ -98,7 +99,14 @@ export class AccountService {
         if (existing.asset_type !== 'manual' && dto.opening.owned !== undefined) throw AppError.validation('Explicit ownership belongs to total manual assets')
         if (await this.accountRepo.hasFutureInvestmentActivity(id, today)) throw AppError.validation('Resolve future-dated legacy investment activity before confirming an opening')
         if (!validLocalDate(dto.opening.date) || dto.opening.date > today) throw AppError.validation('Opening date must be on or before today')
-        anchor = this.anchor(dto.opening.balance, 'opening', dto.opening.date, now, dto.opening)
+        if (existing.asset_type === 'manual' && dto.opening.owned === false && dto.opening.balance !== 0) throw AppError.validation('An unowned opening must have zero current value')
+        if (existing.asset_type === 'manual' && (dto.opening.owned === false || (dto.opening.owned == null && dto.opening.balance === 0)) && (dto.opening.cost_amount??0) > 0) throw AppError.validation('An unowned opening has no remaining cost. Confirm ownership for a zero-value asset with remaining cost.')
+        anchor = this.anchor(dto.opening.balance, 'opening', dto.opening.date, now, existing.asset_type === 'manual' ? {...dto.opening,owned:dto.opening.owned??dto.opening.balance!==0} : dto.opening)
+        if (existing.asset_type === 'manual') {
+          const current = anchor.owned ? existing.manual_valuation?.observation?.amount ?? existing.balance : 0
+          if (!validHoldingNumber(current)) throw AppError.validation('Record a valid current appraisal before confirming this asset ownership')
+          next = {...next,balance:current}
+        }
       } else if (next.balance !== existing.balance) {
         const date = dto.correction_date ?? today
         if (!validLocalDate(date) || date !== today) throw AppError.validation('A current position correction must use today; supply a dated opening to reconcile earlier history')

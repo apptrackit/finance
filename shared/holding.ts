@@ -50,7 +50,7 @@ export const MANUAL_OWNERSHIP_SQL = `COALESCE((SELECT CASE WHEN t.asset_event = 
   FROM investment_transactions t WHERE t.account_id = a.id AND t.asset_event IS NOT NULL
     AND (CASE WHEN p.kind = 'opening' THEN t.date > p.effective_date ELSE t.effective_order > COALESCE(p.trade_order_boundary,p.trade_rowid_boundary,0) END)
   ORDER BY t.date DESC, t.effective_order DESC, t.id DESC LIMIT 1),
-  CASE WHEN p.owned = 1 THEN 'owned' WHEN p.owned = 0 THEN 'unowned' WHEN p.balance > 0 THEN 'owned' WHEN p.kind = 'opening' THEN 'unowned' ELSE 'unknown' END)`
+  CASE WHEN p.owned = 1 THEN 'owned' WHEN p.owned = 0 THEN 'unowned' WHEN p.balance > 0 THEN 'owned' ELSE 'unknown' END)`
 export const HOLDING_ACCOUNT_SELECT = `SELECT a.*,
   CASE WHEN a.asset_type = 'manual' THEN ${MANUAL_OWNERSHIP_SQL} END AS _manual_ownership,
   (SELECT json_object('id',v.id,'account_id',v.account_id,'effective_date',v.effective_date,'kind',v.kind,
@@ -76,6 +76,8 @@ export function mapHoldingAccount<T extends HoldingInput>(raw: T & { _activity?:
   if (a.type === 'investment' && !usesMarketPricing(a)) {
     a.manual_valuation = manualValuationStatus(_valuation ? JSON.parse(_valuation) as ManualValuation : null, today)
     a.manual_ownership = _manual_ownership ?? null
+    if (a.manual_ownership === 'unknown' && a.holding_position) a.holding_position = { ...a.holding_position,
+      history_status:'unverified',coverage_reasons:[...a.holding_position.coverage_reasons,'unknown_ownership'] }
   }
   return a
 }
