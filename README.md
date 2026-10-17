@@ -52,7 +52,9 @@ Cash income is positive and expenses are negative. Posted transactions affect ac
 
 Future-dated ordinary transactions remain pending until confirmed. Confirmation is guarded against duplicate balance updates and cannot post a future-dated transaction. The client sends its local calendar date in `X-Client-Date` so the API and browser agree on what is due.
 
-Transfers link both sides of a movement and are excluded from income/expense aggregates. Cash-to-investment transfers link the cash transaction to a buy/sell record in `investment_transactions`.
+Transfers link both sides of a movement and are excluded from income/expense aggregates. Cash-to-investment purchases store reciprocal `linked_transaction_id` values on the cash transaction and its buy record in `investment_transactions`. Standalone investment records keep this field null. Linked purchase creation, edits, and deletion update both records, native cash/holding balances, and audit entries in one guarded D1 batch. Edit the pair through its cash transaction; deleting either record removes the pair and reverses both movements once.
+
+Migration 017 backfills unambiguous existing investment links without changing financial values, balances, or financial-source revision. Ambiguous or inconsistent legacy links remain unchanged and require repair before pair mutation. The `/transfers` endpoint accepts cash-to-investment purchases; investment-source transfers are rejected because that older path did not record a corresponding sale. A linked sale-entry workflow remains follow-up Investments work.
 
 ### Investments and currencies
 

@@ -64,6 +64,26 @@ export class InvestmentTransactionService {
   async deleteInvestmentTransaction(id: string): Promise<void> {
     // Get investment transaction to revert balance
     const invTx = await this.investmentTransactionRepo.findById(id)
+    if (!invTx) return
+
+    const cashLinks = await this.investmentTransactionRepo.transfers.findCashLinks(id)
+    if (invTx.linked_transaction_id || cashLinks.length) {
+      if (cashLinks.length !== 1 || cashLinks[0].id !== invTx.linked_transaction_id) {
+        if (!await this.investmentTransactionRepo.findById(id)) return
+        throw new AppError('INVESTMENT_TRANSFER_CONFLICT', 'Investment transfer links are inconsistent; refresh and repair the pair before deleting.', 409)
+      }
+      for (const accountId of new Set([invTx.account_id, cashLinks[0].account_id])) {
+        const account = await this.accountRepo.findById(accountId)
+        if (!account) throw AppError.notFound('ACCOUNT_NOT_FOUND', 'Account not found')
+        if (account.archived_at != null) throw new AppError('ACCOUNT_ARCHIVED', 'Restore this account before making changes.', 409)
+        if (account.is_locked) throw new AppError('ACCOUNT_LOCKED', 'Unlock this account before making changes.', 409)
+      }
+      const applied = await this.investmentTransactionRepo.transfers.delete(cashLinks[0], invTx, Date.now())
+      if (!applied && await this.investmentTransactionRepo.findById(id)) {
+        throw new AppError('INVESTMENT_TRANSFER_CONFLICT', 'Investment transfer changed; refresh and try again.', 409)
+      }
+      return
+    }
     
     if (invTx) {
       // Revert balance by subtracting the quantity that was added

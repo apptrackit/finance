@@ -9,6 +9,8 @@ import { CreateTransactionDto, UpdateTransactionDto } from '../dtos/transaction.
 import { fetchPriceFromYahoo } from '../utils/yahoo-finance.util'
 import { PaginatedResponse, PaginationHelper, PaginationParams } from '../models/Pagination'
 
+type TransactionMutationResult = Transaction & { auditRecorded?: boolean }
+
 export class TransactionService {
   constructor(
     private transactionRepo: TransactionRepository,
@@ -63,6 +65,13 @@ export class TransactionService {
 
     this.assertAccountUnlocked(account)
 
+    if (dto.linked_transaction_id) {
+      if (this.resolveCreateStatus(dto, today) === 'pending') {
+        throw new Error('Linked transfers cannot be pending; use the /transfers endpoint')
+      }
+      throw AppError.validation('Create linked transfers through the /transfers endpoint so both records are saved together')
+    }
+
     // For investment accounts: redirect to investment_transactions table
     if (account.type === 'investment') {
       const quantity = dto.amount
@@ -114,10 +123,6 @@ export class TransactionService {
     const now = Date.now()
     const status = this.resolveCreateStatus(dto, today)
 
-    if (dto.linked_transaction_id && status === 'pending') {
-      throw new Error('Linked transfers cannot be pending; use the /transfers endpoint')
-    }
-
     const transaction: Transaction = {
       id,
       account_id: dto.account_id,
@@ -148,7 +153,7 @@ export class TransactionService {
     return transaction
   }
 
-  async updateTransaction(id: string, dto: UpdateTransactionDto, today?: string): Promise<Transaction> {
+  async updateTransaction(id: string, dto: UpdateTransactionDto, today?: string): Promise<TransactionMutationResult> {
     // Get old transaction to adjust balance
     const oldTx = await this.transactionRepo.findById(id)
 
@@ -158,6 +163,10 @@ export class TransactionService {
 
     if ((oldTx.status || 'posted') === 'cancelled') {
       throw new Error('Cancelled transaction cannot be edited')
+    }
+    const investmentLink = await this.investmentTransactionRepo.findByCashTransactionId(id)
+    if (investmentLink && investmentLink.id !== oldTx.linked_transaction_id) {
+      throw new AppError('INVESTMENT_TRANSFER_CONFLICT', 'Investment transfer links are inconsistent; repair the pair before editing.', 409)
     }
 
     if (oldTx.linked_transaction_id) {
@@ -171,14 +180,18 @@ export class TransactionService {
       }
 
       const linkedTx = await this.transactionRepo.findById(oldTx.linked_transaction_id)
+      const linkedInvestmentTx = await this.investmentTransactionRepo.findById(oldTx.linked_transaction_id)
+      if (linkedTx && linkedInvestmentTx) {
+        throw new AppError('INVESTMENT_TRANSFER_CONFLICT', 'Linked transaction ID is ambiguous; repair the transfer before editing.', 409)
+      }
       if (linkedTx) {
         return await this.updateTransferPair(oldTx, linkedTx, dto)
       }
 
-      const linkedInvestmentTx = await this.investmentTransactionRepo.findById(oldTx.linked_transaction_id)
       if (linkedInvestmentTx) {
         return await this.updateInvestmentTransfer(oldTx, linkedInvestmentTx, dto)
       }
+      throw new AppError('INVESTMENT_TRANSFER_CONFLICT', 'Linked transaction is missing; refresh and repair the transfer before editing.', 409)
     }
 
     const oldAccount = await this.accountRepo.findById(oldTx.account_id)
@@ -386,7 +399,7 @@ export class TransactionService {
     outgoing: Transaction,
     investmentTx: InvestmentTransaction,
     dto: UpdateTransactionDto
-  ): Promise<Transaction> {
+  ): Promise<TransactionMutationResult> {
     const fromAccountId = dto.account_id || outgoing.account_id
     const toAccountId = dto.to_account_id || investmentTx.account_id
     const amountFrom = Math.abs(dto.amount ?? outgoing.amount)
@@ -399,8 +412,12 @@ export class TransactionService {
     if (fromAccountId === toAccountId) {
       throw new Error('Cannot transfer to same account')
     }
-    if (amountFrom <= 0 || amountTo <= 0 || price < 0) {
+    if (![amountFrom, amountTo, price, amountTo * price].every(Number.isFinite)
+      || amountFrom <= 0 || amountTo <= 0 || price < 0) {
       throw new Error('Transfer amounts and price must be valid')
+    }
+    if (investmentTx.linked_transaction_id !== outgoing.id) {
+      throw new AppError('INVESTMENT_TRANSFER_CONFLICT', 'Investment transfer links are inconsistent; refresh and repair the pair before editing.', 409)
     }
 
     const accountIds = new Set([outgoing.account_id, investmentTx.account_id, fromAccountId, toAccountId])
@@ -413,25 +430,8 @@ export class TransactionService {
     }
 
     const toAccount = accounts.get(toAccountId)!
-    if (toAccount.type !== 'investment') {
-      throw new Error('Investment transfer must target an investment account')
-    }
-
-    const balanceDeltas = new Map<string, number>()
-    const addDelta = (accountId: string, delta: number) => {
-      balanceDeltas.set(accountId, (balanceDeltas.get(accountId) || 0) + delta)
-    }
-
-    // Revert the original cash and share movements, then apply the new ones.
-    addDelta(outgoing.account_id, -outgoing.amount)
-    addDelta(investmentTx.account_id, -investmentTx.quantity)
-    addDelta(fromAccountId, -amountFrom)
-    addDelta(toAccountId, amountTo)
-
-    for (const [accountId, delta] of balanceDeltas) {
-      if (delta === 0) continue
-      const account = accounts.get(accountId)!
-      await this.accountRepo.updateBalance(accountId, account.balance + delta, now)
+    if (toAccount.type !== 'investment' || accounts.get(fromAccountId)!.type === 'investment') {
+      throw AppError.validation('Investment transfers require a cash account and an investment holding')
     }
 
     let outgoingDescription = outgoing.description
@@ -448,34 +448,28 @@ export class TransactionService {
       }
     }
 
-    await this.transactionRepo.update(outgoing.id, {
-      account_id: fromAccountId,
-      category_id: null,
-      amount: -amountFrom,
-      description: outgoingDescription,
-      date,
-      exclude_from_estimate: false,
-      updated_at: now
-    })
-    await this.investmentTransactionRepo.update(investmentTx.id, {
-      account_id: toAccountId,
-      type: investmentTx.type,
-      quantity: amountTo,
-      price,
-      total_amount: amountTo * price,
-      date,
-      notes: investmentNotes
-    })
+    const applied = await this.investmentTransactionRepo.transfers.update(outgoing, investmentTx, {
+      cashAccountId: fromAccountId, investmentAccountId: toAccountId,
+      cashAmount: investmentTx.type === 'buy' ? -amountFrom : amountFrom,
+      quantity: amountTo, price, date, description: outgoingDescription ?? null, notes: investmentNotes ?? null,
+    }, now)
+    if (!applied) throw new AppError('INVESTMENT_TRANSFER_CONFLICT', 'Investment transfer changed; refresh and try again.', 409)
 
     const updated = await this.transactionRepo.findById(outgoing.id)
-    return updated!
+    if (!updated) throw new AppError('INVESTMENT_TRANSFER_CONFLICT', 'Investment transfer changed; refresh and try again.', 409)
+    return { ...updated, auditRecorded: true }
   }
 
-  async deleteTransaction(id: string): Promise<void> {
+  // True means auditing was included in the pair batch, or deletion was a no-op.
+  async deleteTransaction(id: string): Promise<boolean> {
     // Get transaction to revert balance
     const tx = await this.transactionRepo.findById(id)
 
     if (tx) {
+      const investmentLink = await this.investmentTransactionRepo.findByCashTransactionId(id)
+      if (investmentLink && investmentLink.id !== tx.linked_transaction_id) {
+        throw new AppError('INVESTMENT_TRANSFER_CONFLICT', 'Investment transfer links are inconsistent; repair the pair before deleting.', 409)
+      }
       if (tx.linked_transaction_id && tx.status === 'pending') {
         throw new Error('Pending transfer review pairs must be declined together')
       }
@@ -489,22 +483,28 @@ export class TransactionService {
 
       if (tx.linked_transaction_id) {
         linkedTx = await this.transactionRepo.findById(tx.linked_transaction_id)
+        const investmentTx = await this.investmentTransactionRepo.findById(tx.linked_transaction_id)
+        if (linkedTx && investmentTx) {
+          throw new AppError('INVESTMENT_TRANSFER_CONFLICT', 'Linked transaction ID is ambiguous; repair the transfer before deleting.', 409)
+        }
         if (linkedTx) {
           linkedAccount = await this.accountRepo.findById(linkedTx.account_id)
           if (linkedAccount) {
             this.assertAccountUnlocked(linkedAccount)
           }
         } else {
-          const investmentTx = await this.investmentTransactionRepo.findById(tx.linked_transaction_id)
           if (investmentTx) {
             const investmentAccount = await this.accountRepo.findById(investmentTx.account_id)
             if (investmentAccount) this.assertAccountUnlocked(investmentAccount)
-            await this.transactionRepo.deleteInvestmentTransferAndRevertBalances(tx.id, investmentTx.id, Date.now())
-            return
+            const applied = await this.investmentTransactionRepo.transfers.delete(tx, investmentTx, Date.now())
+            if (!applied && await this.transactionRepo.findById(id)) {
+              throw new AppError('INVESTMENT_TRANSFER_CONFLICT', 'Investment transfer changed or has inconsistent links; refresh and try again.', 409)
+            }
+            return true
           }
           // Another deletion may have removed the pair after our initial read.
           // Never refund a stale row or treat an orphaned transfer as cash-only.
-          if (!await this.transactionRepo.findById(id)) return
+          if (!await this.transactionRepo.findById(id)) return true
           throw new Error('Linked transaction not found')
         }
       }
@@ -532,7 +532,9 @@ export class TransactionService {
 
       // Delete the main transaction
       await this.transactionRepo.delete(id)
+      return false
     }
+    return true
   }
 
   async getUpcomingTransactions(): Promise<Transaction[]> {

@@ -44,6 +44,14 @@ describe('portfolio snapshots across navigation', () => {
     expect(fetchMock.mock.calls.filter(([url]) => String(url).includes('/investment-transactions'))).toHaveLength(1)
   })
 
+  it('retains cash links on investment records without inventing links for standalone trades', async () => {
+    payloads['/investment-transactions'] = [{ ...buy, linked_transaction_id: 'cash-purchase' }, sell]
+    const { result } = renderHook(() => useInvestmentData(true, 1))
+    await waitFor(() => expect(result.current.status.loaded).toBe(true))
+    expect(result.current.data?.transactions[0]).toMatchObject({ id: 'buy', linked_transaction_id: 'cash-purchase' })
+    expect(result.current.data?.transactions[1].linked_transaction_id).toBeUndefined()
+  })
+
   it('retains data and display currency while a return visit refreshes in the background', async () => {
     const { result, rerender } = renderHook(({ active }) => useInvestmentData(active, 1), { initialProps: { active: true } })
     await waitFor(() => expect(result.current.status.loaded).toBe(true))

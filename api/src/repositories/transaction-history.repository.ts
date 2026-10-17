@@ -9,7 +9,7 @@ type HistoryRow = HistoryPosition & { payload: string }
 const cashColumns = ['id', 'account_id', 'category_id', 'amount', 'description', 'date',
   'linked_transaction_id', 'exclude_from_estimate', 'status', 'pending_kind', 'review_source',
   'review_batch_id', 'review_flags', 'confirmed_at', 'cancelled_at', 'created_at', 'updated_at']
-const investmentColumns = ['id', 'account_id', 'type', 'quantity', 'price', 'total_amount', 'date', 'notes', 'created_at']
+const investmentColumns = ['id', 'account_id', 'type', 'quantity', 'price', 'total_amount', 'date', 'notes', 'created_at', 'linked_transaction_id']
 const jsonColumns = (columns: string[]) => columns.map(column => `'${column}', t.${column}`).join(', ')
 
 export class TransactionHistoryRepository {
