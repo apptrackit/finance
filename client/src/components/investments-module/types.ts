@@ -1,3 +1,4 @@
+import type { HoldingMetrics } from '../../../../shared/investment-metrics'
 import type { ClientQuote } from '../../lib/market-data'
 import type { TradeFacts } from '../../../../shared/investment-trade'
 import type { HoldingFields } from '../../../../shared/holding'
@@ -41,6 +42,8 @@ export type Category = {
 
 export type Position = {
   account: Account
+  metrics: HoldingMetrics
+  reportingCurrency: string
   netInvested: number | null
   currentValue: number | null
   displayValue: number | null

@@ -1,3 +1,4 @@
+import {TradeMetricsPreview} from '../investments-module/TradeMetricsPreview'
 import type { ReactNode } from 'react'
 import { AlertCircle, ArrowDownUp, ChevronsUpDown, Loader2 } from 'lucide-react'
 import { AmountInput } from '../common/amount-input'
@@ -37,6 +38,8 @@ export type TransferFormData = {
 type TransferFormProps = {
   accounts: TransferAccount[]
   data: TransferFormData
+  tradeId?: string
+  tradeVersion?: number
   editing: boolean
   reviewDraft: boolean
   dirty: boolean
@@ -174,6 +177,14 @@ export function TransferForm(props: TransferFormProps) {
             </div>}</div>
           <p className="text-xs text-muted-foreground">The fee is already included in actual cash. It creates no extra expense. Confirm the execution price; a market quote is not a past fill.</p>
         </div>}
+        {holding && <TradeMetricsPreview tradeId={props.tradeId} hidden={props.hideBalance(holding) || (!!from && props.hideBalance(from)) || (!!to && props.hideBalance(to))}
+          input={from && to && sent!==null && received!==null && parseAmount(data.manual_price)!==null && data.execution_currency && (data.fee_status==='unknown' || parseAmount(data.fee_amount||'')!==null)?{
+            holding_account_id:holding.id,cash_account_id:from.type==='investment'?to.id:from.id,type:from.type==='investment'?'sell':'buy',
+            quantity:from.type==='investment'?sent:received,cash_amount:from.type==='investment'?received:sent,
+            price:parseAmount(data.manual_price)!,execution_currency:data.execution_currency,fee_status:data.fee_status??'known',
+            fee_amount:data.fee_status==='unknown'?null:parseAmount(data.fee_amount||''),date:data.date,notes:data.description,
+            ...(props.editing?{expected_version:props.tradeVersion}:{}),
+          }:null}/>}
         <div className="grid grid-cols-[repeat(auto-fit,minmax(150px,1fr))] gap-3">
           <div className="space-y-1.5"><Label htmlFor="transfer_date">Date</Label><Input id="transfer_date" type="date" value={data.date} onChange={event => props.onChange({ date: event.target.value })} required className="min-w-0 rounded-[10px] bg-background" /></div>
           <div className="space-y-1.5"><Label htmlFor="transfer_description">Note <span className="font-normal text-muted-foreground">(optional)</span></Label><Input id="transfer_description" value={data.description} onChange={event => props.onChange({ description: event.target.value })} placeholder="e.g. Monthly savings" className="rounded-[10px] bg-background" /></div>

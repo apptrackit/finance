@@ -8,6 +8,8 @@ Intermediate package/UI version bumps are grouped under the next published GitHu
 
 ### Added
 
+- Shared derived investment accounting with remaining weighted-average basis, exact net invested, realized/unrealized gains, acquisition-date reporting FX and nonmutating trade previews. Market Today exposes omitted holdings; full daily-linked return percentages await the historical series. No schema migration is added.
+
 - Shared normalized Yahoo quotes/daily histories, bounded provider caching, and dated ECB FX via Frankfurter. Source/session dates, missing/stale prices, split-aware raw history and incomplete dated-FX coverage remain explicit; market refreshes change no financial ledger facts.
 
 - Dated manual total/per-unit appraisal history, guarded corrections, step charts and 90-day reminders. Explicit whole-asset acquisitions/disposals remain linked cash events; a zero appraisal preserves ownership.
@@ -15,6 +17,8 @@ Intermediate package/UI version bumps are grouped under the next published GitHu
 - Added direct cash-linked investment purchases and sales with exact settlement, confirmed execution currency/included fees, guarded event replay, stale-edit protection and bounded retry receipts. Migration 019 preserves legacy facts and makes unsupported standalone posting read-only; see `docs/investment-trades.md`.
 
 ### Changed
+
+- Dashboard investment net worth now honors holding exclusions; Investments retains all active holdings. Known gains remain visible when complete daily return percentages are unavailable, and missing legacy costs/FX remain explicit across API, client and independent MCP.
 
 - Investment account setup separates ETF/stock/crypto/manual categories from pricing, preserves stored quantities across portfolio consumers, and records explicit dated openings/corrections without fake cash movements. Missing legacy cost/history stays unavailable; manually priced unit holdings use their saved fiat price.
 - Dashboard uses a shared period picker, a responsive balance/activity summary, compact transaction filters, and a combined review queue with explicit confirmation actions. Transaction rows show neutral transfers, daily cash-flow totals, and native/converted amounts; privacy masking and loading states follow the new layout.

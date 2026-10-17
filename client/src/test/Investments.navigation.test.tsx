@@ -1,3 +1,4 @@
+import {investmentFixture} from './investment-fixture'
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { createMemoryRouter, RouterProvider } from 'react-router'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
@@ -20,7 +21,7 @@ beforeEach(() => {
   fetchMock.mockImplementation(async input => {
     const path = new URL(String(input), 'http://localhost').pathname.replace(/^\/api/, '')
     const data: Record<string, unknown> = {
-      '/accounts': [holding], '/investment-transactions': [trade], '/categories': [],
+      '/investment-metrics':investmentFixture(), '/accounts': [holding], '/investment-transactions': [trade], '/categories': [],
       '/transactions/upcoming': [], '/market/quote': { regularMarketPrice: 150, currency: 'USD' },
       '/dashboard/net-worth': { net_worth: 0 },
       '/v6/latest/HUF': { rates: { HUF: 1, USD: 0.0025 } }, '/v6/latest/USD': { rates: { USD: 1, HUF: 400 } },
@@ -35,13 +36,13 @@ afterEach(() => { cleanup(); vi.unstubAllGlobals() })
 it('shows one cold-load animation, then returns to cached portfolio content while refreshing', async () => {
   const baseFetch = fetchMock.getMockImplementation()!
   let release: (response: Response) => void = () => {}
-  fetchMock.mockImplementation(async (input, options) => String(input).includes('/investment-transactions')
+  fetchMock.mockImplementation(async (input, options) => String(input).includes('/investment-metrics')
     ? new Promise(resolve => { release = resolve }) : baseFetch(input, options))
   const router = createMemoryRouter(appRoutes, { initialEntries: ['/investments'] })
   render(<ThemeProvider><AlertProvider><RouterProvider router={router} /></AlertProvider></ThemeProvider>)
   expect(screen.getAllByRole('status', { name: 'Loading your finances' })).toHaveLength(1)
-  await waitFor(() => expect(fetchMock.mock.calls.some(([input]) => String(input).includes('/investment-transactions'))).toBe(true))
-  await act(async () => { release(Response.json([trade])) })
+  await waitFor(() => expect(fetchMock.mock.calls.some(([input]) => String(input).includes('/investment-metrics'))).toBe(true))
+  await act(async () => { release(Response.json(investmentFixture())) })
   expect(await screen.findByRole('heading', { name: 'Total Portfolio Value' })).toBeVisible()
   expect(screen.queryByRole('status', { name: 'Loading your finances' })).not.toBeInTheDocument()
   fireEvent.click(screen.getByRole('button', { name: 'USD', exact: true }))

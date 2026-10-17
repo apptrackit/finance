@@ -59,14 +59,14 @@ export function HoldingsList({
           </div>
         ) : (
           positions.map(position => {
-            const quote = position.account.symbol ? quotes[position.account.symbol] : null
+            const quote = position.account.symbol ? quotes[position.account.symbol.trim().toUpperCase()] : null
             const priceChange = quote?.regularMarketChangePercent ?? null
             
             const priceLabel = quote?.as_of ? `${quote.status === 'stale' ? 'Stale price' : quote.status === 'last_close' ? 'Last close' : 'Price as of'} ${quote.as_of}` : null
             return (
               <div 
                 key={position.account.id} 
-                className="p-4 flex items-center justify-between hover:bg-secondary/20 transition-colors cursor-pointer group"
+                className="p-4 flex flex-wrap gap-3 items-center justify-between hover:bg-secondary/20 transition-colors cursor-pointer group"
                 onClick={() => onOpenDetail(position.account)}
               >
                 <div className="flex items-center gap-4">
@@ -114,10 +114,10 @@ export function HoldingsList({
                   <div className={`text-sm font-semibold mt-1 flex items-center justify-end gap-1 ${position.priceFetchError ? 'text-yellow-600 dark:text-yellow-400' : (position.gainLoss ?? 0) >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'} ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
                     {position.priceFetchError ? (
                       <span className="text-xs">⚠️ Error fetching price</span>
-                    ) : position.gainLoss === null || position.gainLossPercent === null ? <span className="text-xs text-muted-foreground">Return unavailable</span> : (
+                    ) : position.gainLoss === null ? <span className="text-xs text-muted-foreground">Return unavailable</span> : (
                       <>
                         {(position.gainLoss ?? 0) >= 0 ? <TrendingUp className="h-3.5 w-3.5" /> : <TrendingDown className="h-3.5 w-3.5" />}
-                        {privacyMode === 'hidden' ? '••••' : `${(position.gainLoss ?? 0) >= 0 ? '+' : ''}${formatValue(Math.abs(position.gainLoss), undefined, 'USD')} (${position.gainLossPercent >= 0 ? '+' : ''}${position.gainLossPercent.toFixed(2)}%)`}
+                        {privacyMode === 'hidden' ? '••••' : `${(position.gainLoss ?? 0) >= 0 ? '+' : ''}${formatValue(position.gainLoss, undefined, position.reportingCurrency)} · ${position.gainLossPercent===null?'Estimated return unavailable':`${position.gainLossPercent.toFixed(2)}% estimated return`}`}
                       </>
                     )}
                   </div>

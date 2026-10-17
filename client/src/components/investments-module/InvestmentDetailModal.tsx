@@ -1,3 +1,4 @@
+import type { HoldingMetrics } from '../../../../shared/investment-metrics'
 import { Modal } from '../common/modal'
 import { useHasUnsavedChanges } from '../../navigation/UnsavedChanges'
 import { useAlert } from '../../context/AlertContext'
@@ -14,6 +15,8 @@ type Props = {
   quotes: Record<string, any>
   exchangeRates: Record<string, number>
   privacyMode: string
+  metrics?: HoldingMetrics
+  reportingCurrency?: string
   onClose: () => void
   onValuationSaved?: () => void
 }
@@ -25,6 +28,7 @@ export function InvestmentDetailModal({
   quotes,
   exchangeRates,
   privacyMode,
+  metrics,reportingCurrency='USD',
   onClose,
   onValuationSaved = () => {}
 }: Props) {
@@ -37,7 +41,7 @@ export function InvestmentDetailModal({
   if (!account) return null
 
   const transactions = allTransactions.filter(tx => tx.account_id === account.id)
-  const position = calculatePosition(account, transactions, quotes, exchangeRates)
+  const position = calculatePosition(account, transactions, quotes, exchangeRates,metrics,reportingCurrency)
 
   const getCategoryName = (categoryId?: string) => {
     if (!categoryId) return 'Transfer'
@@ -72,14 +76,24 @@ export function InvestmentDetailModal({
                 </div>
               )}
               <div>
-                <div className="text-xs text-muted-foreground">Total Return</div>
+                <div className="text-xs text-muted-foreground">Total Gain</div>
                 <div className={`text-lg font-bold ${position.priceFetchError ? 'text-yellow-600 dark:text-yellow-400' : position.gainLoss === null ? 'text-muted-foreground' : (position.gainLoss ?? 0) >= 0 ? 'text-green-600' : 'text-red-600'} ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
-                  {privacyMode === 'hidden' ? '••••••' : position.priceFetchError ? '⚠️ Error fetching price' : position.gainLoss === null || position.gainLossPercent === null ? 'Return unavailable' : `${(position.gainLoss ?? 0) >= 0 ? '+' : ''}${formatValue(Math.abs(position.gainLoss), undefined, 'USD')} (${position.gainLossPercent >= 0 ? '+' : ''}${position.gainLossPercent.toFixed(2)}%)`}
+                  {privacyMode === 'hidden' ? '••••••' : position.priceFetchError ? '⚠️ Error fetching price' : position.gainLoss === null ? 'Return unavailable' : `${(position.gainLoss ?? 0) >= 0 ? '+' : ''}${formatValue(position.gainLoss, undefined, reportingCurrency)}`}
                 </div>
               </div>
             </div>
       </div>
         <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-6 space-y-6">
+          <section className="rounded-xl border border-border p-4 space-y-3" aria-label="Accounting metrics">
+            <h3 className="font-semibold">Moving weighted-average cost · {reportingCurrency}</h3>
+            <dl className="grid grid-cols-2 gap-3 sm:grid-cols-3">{[
+              ['Remaining cost basis',position.metrics.remaining_basis],['Average remaining cost',position.metrics.average_cost],
+              ['Net invested',position.metrics.net_invested],['Realized gain',position.metrics.realized_gain],['Unrealized gain',position.metrics.unrealized_gain],
+            ].map(([label,value])=><div key={String(label)}><dt className="text-xs text-muted-foreground">{label}</dt><dd>{privacyMode==='hidden'?'••••••':formatValue(value as number|null,undefined,reportingCurrency)}</dd></div>)}</dl>
+            <p className="text-xs text-muted-foreground">Cost includes fees and uses acquisition-date FX. Net invested is cash paid minus cash received, separate from remaining basis. Imported remaining basis does not prove earlier cash or realized gains.</p>
+            <p className="text-xs text-muted-foreground" title="Daily factors use start-of-day contributions and end-of-day withdrawals, geometrically linked. This is an estimate, not exact intraday performance.">Estimated return: {privacyMode==='hidden'?'••••':position.gainLossPercent===null?'unavailable; complete daily history required':`${position.gainLossPercent.toFixed(2)}%`}</p>
+            <p className="text-xs text-muted-foreground">{position.metrics.coverage.cost.join(', ').replaceAll('_',' ') || 'Cost and cash history covered'}</p>
+          </section>
           {!usesMarketPricing(account) && <ManualValuations key={account.id} account={account} hidden={privacyMode==='hidden'} onSaved={onValuationSaved} />}
           {privacyMode !== 'hidden' && usesMarketPricing(account) && account.symbol && (
             <div className="bg-secondary/20 rounded-xl p-4">
@@ -135,7 +149,7 @@ export function InvestmentDetailModal({
                         <div className={`text-xl font-bold ${tx.amount > 0 ? 'text-green-600' : 'text-red-600'} ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
                           {privacyMode === 'hidden' ? '••••••' : (
                             tx.quantity !== undefined 
-                              ? `${tx.quantity > 0 ? '+' : ''}${Math.abs(tx.quantity).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 12 })} ${tx.asset_event ? 'ITEM' : account.currency}`
+                              ? `${tx.quantity > 0 ? '+' : ''}${tx.quantity.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 12 })} ${tx.asset_event ? 'ITEM' : account.currency}`
                               : `${tx.amount > 0 ? '+' : ''}$${Math.abs(tx.amount).toFixed(2)}`
                           )}
                         </div>

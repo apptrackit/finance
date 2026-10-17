@@ -1,8 +1,6 @@
-import { MarketReader } from '../../shared/market-reader'
-import { D1MarketCache } from '../../shared/market-cache'
-import type { Quote } from '../../shared/market-data'
+import { createInvestmentMetricsReader } from '../../shared/investment-metrics-reader'
 import { tradeCoverage } from '../../shared/investment-trade'
-import { HOLDING_ACCOUNT_SELECT, mapHoldingAccount, usesMarketPricing, holdingNativeValue } from '../../shared/holding'
+import { HOLDING_ACCOUNT_SELECT, mapHoldingAccount } from '../../shared/holding'
 import { validRates } from '../../shared/currency'
 import { MCP_WORKER_VERSION, type InvestmentTransactionRow, type AccountRow, type CanonicalReviewDraft, type CategoryRow, type Env, type RecurringScheduleRow, type ReviewDraftInput, type StoredReviewDraftProposal, type TransactionRow } from './types'
 import { addUtcDays, daysBetween, periodEndDates, recurringDates } from './date-series'
@@ -14,7 +12,6 @@ import { TransferDraftService } from './transfer-drafts'
 import { TransferReviewCorrectionService } from './transfer-review-corrections'
 
 type Rates = { values: Record<string, number>; available: boolean }
-type LiveQuote = Quote
 type DuplicateCandidate = Pick<TransactionRow, 'id' | 'date' | 'amount' | 'description' | 'status' | 'pending_kind'>
 type ReviewDraftResultRow = TransactionRow & {
   account_name: string
@@ -118,14 +115,6 @@ export class FinanceService {
     if (source === target) return amount
     const rate = rates.values[source]
     return rate ? amount / rate : 0
-  }
-
-  private async liveQuotes(accounts: AccountRow[]) {
-    const reader = new MarketReader(new D1MarketCache(this.env.DB))
-    const symbols = [...new Set(accounts.map(a => a.symbol!).filter(Boolean))]
-    const quotes: Record<string,Quote> = {}
-    for (let i = 0; i < symbols.length; i += 50) Object.assign(quotes,await reader.quotes(symbols.slice(i,i+50)))
-    return new Map(accounts.map(a => [a.id,quotes[a.symbol!] ?? null]))
   }
 
   private conversionWarnings(accounts: AccountRow[], target: string, rates: Rates) {
@@ -1072,45 +1061,33 @@ export class FinanceService {
 
   async portfolio(args: Record<string, unknown>) {
     const currency = typeof args.currency === 'string' ? args.currency.toUpperCase() : 'HUF'
-    const [accounts, rates] = await Promise.all([this.accounts(true), this.rates(currency)])
-    const investmentAccounts = accounts.filter(item => item.type === 'investment' && item.archived_at == null && !bool(item.exclude_from_net_worth))
-    const quotes = await this.liveQuotes(investmentAccounts.filter(account => usesMarketPricing(account) && account.balance !== 0 && Boolean(account.symbol)))
-    const warnings: string[] = []
-    let total = 0
-    let valueComplete = true
-    const holdings = investmentAccounts.map(account => {
-      const live = quotes.get(account.id)
-      const quote = live && live.price !== null && live.currency ? { regularMarketPrice: live.price, currency: live.currency } : undefined
-      const native = holdingNativeValue(account, quote)
-      const missingFx = native.currency !== currency && !rates.values[native.currency]
-      const value = native.value === null || (!native.currency && native.value !== 0) || (missingFx && native.value !== 0)
-        ? null : native.value === 0 ? 0 : this.convert(native.value, native.currency, currency, rates)
-      if (value === null) {
-        valueComplete = false
-        warnings.push(native.value === null ? `Price unavailable for ${account.symbol || account.name}` : `Exchange rate unavailable for ${native.currency}; ${account.name} excluded from ${currency} totals`)
-      } else total += value
-      if (live?.status === 'stale') warnings.push(`Stale price for ${account.symbol}; last observation ${live.as_of}.`)
-      if (account.manual_valuation?.status === 'stale') warnings.push(`Manual valuation for ${account.name} is ${account.manual_valuation.age_days} days old (as of ${account.manual_valuation.as_of}); 90-day update reminder.`)
-      const activityQuantity = account.holding_position?.activity_quantity ?? 0
-      if (account.holding_position?.history_status !== 'reconciled') warnings.push(`Opening history needs reconciliation for ${account.name}`)
-      // #131 owns cost/return calculations. Do not keep the old fabricated USD
-      // cost assumption while exposing the new legacy-coverage model.
-      return { account_id: account.id, name: account.name, symbol: account.symbol || null, asset_type: account.asset_type,
-        pricing_method: account.pricing_method ?? null, unit: account.unit ?? null, quote_currency: account.quote_currency ?? null,
-        provider: account.provider ?? null, exchange: account.exchange ?? null,
-        manual_price: account.manual_price ?? null, manual_price_date: account.manual_price_date ?? null,
-        holding_position: account.holding_position, manual_valuation: account.manual_valuation, manual_ownership: account.manual_ownership,
-        quantity: account.asset_type === 'manual' ? null : account.balance, activity_quantity: activityQuantity,
-        native_value: native.value, native_currency: native.currency, valuation_reason:native.reason??null, value, currency,
-        native_net_invested: null, investment_currency: null, net_invested: null,
-        gain_loss: null, gain_loss_percent: null, cost_basis_status: 'unavailable',
-        quote: live ? { ...live, market_state: live.marketState } : null }
+    const snapshot=await createInvestmentMetricsReader(this.env.DB).read({currencies:[currency],scope:'net_worth',partial:true})
+    const result=snapshot.by_currency[currency]
+    const warnings:string[]=[]
+    const holdings=result.holdings.map(h=>{
+      const account=snapshot.accounts.find(a=>a.id===h.account_id)!
+      const live=snapshot.quotes[account.symbol?.trim().toUpperCase()??'']
+      if(h.value===null) warnings.push(`Value unavailable for ${account.name}; excluded from ${currency} totals (${h.native_currency} → ${currency}; ${h.coverage.value.join(', ')}).`)
+      if(h.coverage.value.includes('stale_price')) warnings.push(`Stale price for ${account.symbol}; last observation ${live?.as_of}.`)
+      if(account.manual_valuation?.status==='stale') warnings.push(`Manual valuation for ${account.name} is ${account.manual_valuation.age_days} days old (as of ${account.manual_valuation.as_of}); 90-day update reminder.`)
+      if(h.total_gain===null) warnings.push(`Return history incomplete for ${account.name}: ${h.coverage.cost.join(', ')}.`)
+      return {...h,name:account.name,symbol:account.symbol??null,asset_type:account.asset_type,
+        pricing_method:account.pricing_method,unit:account.unit,quote_currency:account.quote_currency,
+        provider:account.provider,exchange:account.exchange,manual_price:account.manual_price,manual_price_date:account.manual_price_date,
+        manual_valuation:account.manual_valuation,manual_ownership:account.manual_ownership,holding_position:account.holding_position,
+        activity_quantity:account.holding_position?.activity_quantity??0,
+        native_net_invested:h.native.net_invested,investment_currency:h.native_currency,
+        gain_loss:h.total_gain,gain_loss_percent:h.estimated_return_percent,cost_basis_status:h.remaining_basis===null?'unavailable':'known',
+        valuation_reason:h.coverage.value[0]??null,
+        allocation_percent:result.valuation_status==='complete' && result.total_value!==null && result.total_value>0 && h.value!==null?round(h.value/result.total_value*100):null,
+        quote:live?{...live,market_state:live.marketState}:null}
     })
-    const withAllocation = holdings.map(holding => ({ ...holding, allocation_percent: valueComplete && total > 0 && holding.value !== null ? round(holding.value / total * 100) : null }))
-    return { as_of: new Date().toISOString(), currency, total_value: round(total), total_invested: null,
-      total_gain_loss: null, total_gain_loss_percent: null,
-      gain_loss_coverage: { holdings_with_cost_basis: 0, holdings_total: holdings.length, comparable_invested: null, status: 'unavailable', reason: 'Investment cost and return history is not yet verified.' },
-      holdings: withAllocation, warnings: [...new Set(warnings)], valuation_status: valueComplete ? 'complete' : 'partial' }
+    if(result.coverage.gain_covered<holdings.length) warnings.push('Gain and invested totals cover known amounts only; see coverage counts. No unknown cost or missing FX was treated as zero.')
+    return {as_of:snapshot.as_of,currency,total_value:result.total_value??0,total_invested:result.total_invested,
+      total_gain_loss:result.total_gain,total_gain_loss_percent:result.estimated_return_percent,
+      remaining_basis:result.remaining_basis,realized_gain:result.realized_gain,unrealized_gain:result.unrealized_gain,
+      market_today:result.market_today,scope:'net_worth',gain_loss_coverage:result.coverage,
+      holdings,warnings:[...new Set(warnings)],valuation_status:result.valuation_status}
   }
 
   async investmentActivity(args: Record<string, unknown>) {

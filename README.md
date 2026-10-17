@@ -28,7 +28,7 @@ The latest published release is [v3.3](https://github.com/apptrackit/finance/rel
 | Transactions | Income and expenses, categories and icons, linked transfers, search and date filters, bulk entry, split adjustments, and recent-change indicators. |
 | Upcoming transactions | One-time future income and expenses, projected cash balances, and explicit confirmation or decline without changing the posted balance early. |
 | Recurring schedules | Daily, weekly, monthly, and yearly options; transaction and transfer schedules; pause/resume, end dates, occurrence limits, and a calendar view. |
-| Investments | Stock/crypto symbol search, Yahoo Finance quotes and price history, buy/sell records, manual assets, allocation, cost basis, and gain/loss views. |
+| Investments | ETF/stock/crypto/manual holdings, normalized free Yahoo sources, dated manual values, exact linked cash trades and previews, moving weighted-average cost and covered gain/loss metrics. |
 | Analytics | Configurable widgets for cash trends, AI financial forecasts, income/expense trends and breakdowns, individual account trends, Money Map, and top expenses. |
 | AI financial forecasts | Saved HUF forecasts with 7/30/90-day ranges, daily cash paths, report history, source-data freshness, and privacy-aware narratives. |
 | MCP review | Prepare income, expense, or cash transfer drafts in conversation; list and correct ordinary drafts or transfer pairs; review and confirm or decline them in the app. |
@@ -54,13 +54,13 @@ Future-dated ordinary transactions remain pending until confirmed. Confirmation 
 
 Transfers link both sides of a movement and are excluded from income/expense aggregates. Cash-to-investment purchases store reciprocal `linked_transaction_id` values on the cash transaction and its buy record in `investment_transactions`. Standalone investment records keep this field null. Linked purchase creation, edits, and deletion update both records, native cash/holding balances, and audit entries in one guarded D1 batch. Edit the pair through its cash transaction; deleting either record removes the pair and reverses both movements once.
 
-Migration 017 backfills unambiguous existing investment links without changing financial values, balances, or financial-source revision. Ambiguous or inconsistent legacy links remain unchanged and require repair before pair mutation. The `/transfers` endpoint accepts cash-to-investment purchases; investment-source transfers are rejected because that older path did not record a corresponding sale. A linked sale-entry workflow remains follow-up Investments work.
+Migration 017 backfills unambiguous existing investment links without changing financial values, balances, or financial-source revision. Ambiguous or inconsistent legacy links remain unchanged and require repair before pair mutation. The app records purchases and sales through the shared `/investment-trades` writer, with exact cash, included fees and validated execution facts. Unsupported standalone investment posting is read-only; legacy unverified pairs need reconciliation before mutation.
 
 ### Investments and currencies
 
 Market-priced holdings distinguish share/coin quantity from cash value. Their buy/sell history lives in `investment_transactions`; current portfolio valuation uses quantities, market quotes, and currency conversion. Manual assets use a separately managed value. Individual account trend charts keep the account's native currency, while aggregate views use the selected reporting currency.
 
-Market quotes and exchange rates come from external services and may be unavailable or delayed. The epic’s [market input contract](docs/investment-market-data.md) implements shared API/MCP quote normalization, bounded caching, actual source/session timestamps and dated ECB FX without a paid provider. Investment and conversion behavior differs between some API, client, and MCP paths; contributors should follow the [financial rules in AGENTS.md](AGENTS.md#financial-rules-to-preserve) when changing calculations.
+Market quotes and exchange rates come from external services and may be unavailable or delayed. The epic’s [market input contract](docs/investment-market-data.md) implements shared API/MCP quote normalization, bounded caching, actual source/session timestamps and dated ECB FX without a paid provider. Investment metrics use a shared calculator with documented complete/partial aggregate policies; contributors should follow the [financial rules in AGENTS.md](AGENTS.md#financial-rules-to-preserve) when changing calculations.
 
 The investment rework's [versioned accounting contract](docs/investment-accounting.md) records these implementation gaps and specifies opening quantities, exact cash/fees, remaining cost basis, manual valuations, historical FX, and estimated return calculations. Its [synthetic worked examples](tests/fixtures/investment-accounting-v1.json) are checked by the API suite. This is the specification for the remaining epic work, not a change to current runtime behavior.
 
@@ -87,6 +87,8 @@ For cash-to-cash transfers, `prepare_mcp_transfer_drafts` previews both account 
 For forecasts, an AI client obtains context with `get_financial_outlook_context` and publishes a snapshot with `create_financial_outlook_snapshot`. The current format stores actual cash history and a daily 90-day HUF forecast. Source revisions and timestamps determine freshness; saved reports remain immutable. The API and Analytics UI read those reports without generating them automatically.
 
 See the [MCP guide](mcp/README.md) for tools, authentication, setup, and the complete workflow. This project does not require an OpenAI API key or run a model itself.
+
+Investment values, remaining cost, net invested and realized/unrealized gains use [shared accounting rules](docs/investment-metrics.md). Currency modes recompute acquisition-date FX; unknown legacy history stays unavailable. Market Today is a covered daily-close estimate, and complete daily-linked return percentages await the historical portfolio series.
 
 ## Architecture
 
@@ -431,6 +433,8 @@ curl --fail-with-body \
 - **A development edit affected remote data:** check `VITE_API_DOMAIN` and the Vite proxy target before making further changes.
 - **Stale UI or data after deployment:** inspect service-worker caching; Settings includes cache management and force-reload controls. Cached assets do not provide offline transaction writes.
 - **Empty or stale AI forecast:** a connected MCP client must publish a report first. Later ledger changes can make it stale; the UI does not automatically request a replacement.
+
+For the derived metrics and nonmutating preview endpoints, see [Investment metrics](docs/investment-metrics.md).
 
 For investment execution and migration 019, see [Direct cash investment trades](docs/investment-trades.md).
 
