@@ -1,3 +1,4 @@
+import type { HoldingFields } from '../../../../shared/holding'
 import { useUnsavedChanges } from '../../navigation/UnsavedChanges'
 import { useState, useEffect } from 'react'
 import { Modal } from '../common/modal'
@@ -17,7 +18,7 @@ type Category = {
   type: 'income' | 'expense'
 }
 
-type Account = {
+type Account = HoldingFields & {
   id: string
   name: string
   currency: string

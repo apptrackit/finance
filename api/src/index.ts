@@ -129,6 +129,9 @@ app.onError((err, c) => {
   const accountErrors = {
     ACCOUNT_ARCHIVED: 'Restore the archived account before making changes.',
     ACCOUNT_LOCKED: 'Unlock the account before making changes.',
+    HOLDING_HISTORY_METADATA: 'This change would reinterpret holding history. Keep its instrument, units, quote currency and pricing method, or create a separate holding.',
+    HOLDING_POSITION_MISMATCH: 'Opening quantity and later activity do not match the current holding. Reconcile the opening or record an explicit correction.',
+    HOLDING_OPENING_DATE: 'The trade date must be after the end-of-day opening position. Correct the opening date before backdating this trade.',
     ACCOUNT_ARCHIVE_NONZERO: 'The balance or holding must be zero before archiving.',
     ACCOUNT_ARCHIVE_PENDING: 'Confirm or decline all pending and review transactions before archiving.',
     ACCOUNT_DELETE_LINKED: 'This account has linked transfers. Archive it to preserve both sides and their history.',

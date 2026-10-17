@@ -64,6 +64,8 @@ Market quotes and exchange rates come from external services and may be unavaila
 
 The investment rework's [versioned accounting contract](docs/investment-accounting.md) records these implementation gaps and specifies opening quantities, exact cash/fees, remaining cost basis, manual valuations, historical FX, and estimated return calculations. Its [synthetic worked examples](tests/fixtures/investment-accounting-v1.json) are checked by the API suite. This is the specification for the remaining epic work, not a change to current runtime behavior.
 
+The epic’s [holding model and account setup](docs/investment-holdings.md) implement explicit ETF/category/pricing selection, dated openings and safe current-position corrections. Migration 018 preserves existing balances and records while marking incomplete history. Full trade, manual-history and return calculations remain separate epic work.
+
 ### Recurring schedules
 
 The API Worker runs recurring processing using the configured daily cron (`0 0 * * *`, midnight UTC). It creates posted transactions and updates balances for eligible schedules, respecting locks, archived accounts, end dates, remaining occurrences, and last-processed dates. Monthly days beyond the end of a month clamp to its final day.

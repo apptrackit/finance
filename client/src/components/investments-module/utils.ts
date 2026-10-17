@@ -1,7 +1,8 @@
+import { holdingNativeValue, usesMarketPricing } from '../../../../shared/holding'
 import { convertCurrency } from '../../../../shared/currency'
 import type { Account, Transaction, Position } from './types'
 
-export const formatValue = (value: number, account?: Account, currency?: string) => {
+export const formatValue = (value: number | null, account?: Account, currency?: string) => {
   const valueCurrency = currency || (account?.asset_type === 'manual' ? account.currency : 'USD')
   if (value === null) return 'Unavailable'
   const currencySymbols: Record<string, string> = {
@@ -49,14 +50,14 @@ export const calculatePosition = (
   quotes: Record<string, any>,
   exchangeRates: Record<string, number>
 ): Position => {
-  // Calculate actual quantity from transactions (don't trust account.balance)
-  const actualQuantity = transactions.reduce((sum, tx) => sum + (tx.quantity || 0), 0)
+  // Stored units include openings and corrections that legacy activity may omit.
+  const actualQuantity = account.balance
   
   // Get current market price if available
   let currentPrice = 0
   let priceFetchError = false
   let quoteCurrency = (account.asset_type === 'manual' ? account.currency : account.quote_currency || 'USD').toUpperCase()
-  if (account.asset_type !== 'manual' && account.symbol) {
+  if (usesMarketPricing(account) && account.symbol) {
     if (quotes[account.symbol]) {
       currentPrice = quotes[account.symbol].regularMarketPrice || 0
       quoteCurrency = (quotes[account.symbol].currency || quoteCurrency).toUpperCase()
@@ -74,12 +75,16 @@ export const calculatePosition = (
   }
 
   // Keep native values available even when the portfolio conversion fails.
-  const displayValue = account.asset_type === 'manual' ? account.balance : actualQuantity * currentPrice
-  const currentValue = priceFetchError ? null : convertToUsd(displayValue, quoteCurrency)
+  const nativeValue = holdingNativeValue(account, account.symbol ? quotes[account.symbol] : undefined)
+  const displayValue = nativeValue.value
+  quoteCurrency = nativeValue.currency || quoteCurrency
+  priceFetchError = displayValue === null
+  if (!usesMarketPricing(account)) currentPrice = account.manual_price ?? 0
+  const currentValue = priceFetchError ? null : convertToUsd(displayValue!, quoteCurrency)
   const transactionNet = transactions.reduce((sum, tx) => sum + tx.amount, 0)
-  const nativeInvested = account.asset_type === 'manual' ? account.balance : transactionNet
-  const netInvested = convertToUsd(nativeInvested, account.asset_type === 'manual' ? account.currency : account.quote_currency || quoteCurrency)
-  const gainLoss = account.asset_type === 'manual'
+  const nativeInvested = account.holding_position ? null : account.asset_type === 'manual' ? account.balance : transactionNet
+  const netInvested = nativeInvested === null ? null : convertToUsd(nativeInvested, account.asset_type === 'manual' ? account.currency : account.quote_currency || quoteCurrency)
+  const gainLoss = account.holding_position ? null : account.asset_type === 'manual'
     ? convertToUsd(transactionNet, account.currency)
     : currentValue === null || netInvested === null ? null : currentValue - netInvested
   const gainLossPercent = gainLoss === null || netInvested === null ? null : netInvested > 0 ? gainLoss / netInvested * 100 : 0

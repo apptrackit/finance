@@ -1,4 +1,5 @@
-export type Account = {
+import type { HoldingFields } from '../../../../shared/holding'
+export type Account = HoldingFields & {
   id: string
   name: string
   type: 'cash' | 'investment' | 'credit'
@@ -6,7 +7,7 @@ export type Account = {
   currency: string
   quote_currency?: string
   symbol?: string
-  asset_type?: 'stock' | 'crypto' | 'manual'
+  asset_type?: 'etf' | 'stock' | 'crypto' | 'manual'
   exclude_from_net_worth?: boolean
   exclude_from_cash_balance?: boolean
   archived_at?: number | null
@@ -46,10 +47,10 @@ export type Position = {
   account: Account
   netInvested: number | null
   currentValue: number | null
-  displayValue: number
+  displayValue: number | null
   currentPrice: number
   quoteCurrency: string
-  nativeInvested: number
+  nativeInvested: number | null
   gainLoss: number | null
   gainLossPercent: number | null
   transactions: Transaction[]

@@ -34,3 +34,7 @@ Example: `001-init.sql`, `002-add-user-table.sql`
 ## Important
 
 The initial schema (`001-init.sql`) is applied during the first deployment. All subsequent changes must be new migration files.
+
+## Holding metadata upgrade
+
+Migration 018 follows the reciprocal-link foundation in 017. It adds independent holding metadata and observed position anchors without rewriting balances or ledger rows. See [holding setup and migration notes](../../docs/investment-holdings.md) for compatibility, export/source-revision rules and verification boundaries. Apply before deploying its consumers.

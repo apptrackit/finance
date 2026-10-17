@@ -1,3 +1,4 @@
+import type { HoldingFields } from '../../../../shared/holding'
 import { useUnsavedChanges } from '../../navigation/UnsavedChanges'
 import { useState, useEffect, useRef } from 'react'
 import { API_BASE_URL, apiFetch } from '../../config'
@@ -20,7 +21,7 @@ function toLocalDateString(date: Date): string {
   return `${year}-${month}-${day}`
 }
 
-type Account = {
+type Account = HoldingFields & {
   id: string
   name: string
   type: 'cash' | 'investment'

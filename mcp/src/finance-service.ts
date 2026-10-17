@@ -1,5 +1,6 @@
+import { HOLDING_ACCOUNT_SELECT, mapHoldingAccount, usesMarketPricing, holdingNativeValue } from '../../shared/holding'
 import { validRates } from '../../shared/currency'
-import { MCP_WORKER_VERSION, type AccountRow, type CanonicalReviewDraft, type CategoryRow, type Env, type InvestmentTransactionRow, type RecurringScheduleRow, type ReviewDraftInput, type StoredReviewDraftProposal, type TransactionRow } from './types'
+import { MCP_WORKER_VERSION, type AccountRow, type CanonicalReviewDraft, type CategoryRow, type Env, type RecurringScheduleRow, type ReviewDraftInput, type StoredReviewDraftProposal, type TransactionRow } from './types'
 import { addUtcDays, daysBetween, periodEndDates, recurringDates } from './date-series'
 import { assertDate, assertDateRange, clampLimit, decodeCursor, defaultMonthRange, encodeCursor, enumValue, optionalDate, previousRange, stringArray } from './validation'
 import { FinancialOutlookSnapshotRow, parseFinancialOutlookInput, parseSnapshot, sha256 } from './financial-outlook'
@@ -89,8 +90,9 @@ export class FinanceService {
   prepareTransferCorrections(args: Record<string, unknown>) { return new TransferReviewCorrectionService(this.env).prepare(args) }
   applyTransferCorrections(args: Record<string, unknown>) { return new TransferReviewCorrectionService(this.env).apply(args) }
 
-  private async accounts() {
-    return (await this.env.DB.prepare('SELECT * FROM accounts ORDER BY name').all<AccountRow>()).results
+  private async accounts(holdingMetadata = false) {
+    if (!holdingMetadata) return (await this.env.DB.prepare('SELECT * FROM accounts ORDER BY name').all<AccountRow>()).results
+    return (await this.env.DB.prepare(`${HOLDING_ACCOUNT_SELECT} ORDER BY a.name, a.id`).all<AccountRow>()).results.map(row => mapHoldingAccount(row))
   }
 
   private async categories() {
@@ -573,7 +575,7 @@ export class FinanceService {
 
   async accountsSummary(args: Record<string, unknown>) {
     const currency = typeof args.currency === 'string' ? args.currency.toUpperCase() : 'HUF'
-    const [accounts, rates] = await Promise.all([this.accounts(), this.rates(currency)])
+    const [accounts, rates] = await Promise.all([this.accounts(true), this.rates(currency)])
     const warnings = this.conversionWarnings(accounts.filter(account => account.archived_at == null && account.type !== 'investment'), currency, rates)
     let cashTotal = 0
     let nonInvestmentNetWorth = 0
@@ -594,6 +596,10 @@ export class FinanceService {
         investment_quantity: isInvestment && account.asset_type !== 'manual' ? account.balance : null,
         symbol: account.symbol || null,
         asset_type: account.asset_type || null,
+        quote_currency: account.quote_currency ?? null, pricing_method: account.pricing_method ?? null,
+        unit: account.unit ?? null, provider: account.provider ?? null, exchange: account.exchange ?? null,
+        manual_price: account.manual_price ?? null, manual_price_date: account.manual_price_date ?? null,
+        holding_position: account.holding_position ?? null,
         excluded_from_cash_balance: bool(account.exclude_from_cash_balance),
         excluded_from_net_worth: bool(account.exclude_from_net_worth),
         archived_at: account.archived_at ?? null,
@@ -1082,57 +1088,43 @@ export class FinanceService {
 
   async portfolio(args: Record<string, unknown>) {
     const currency = typeof args.currency === 'string' ? args.currency.toUpperCase() : 'HUF'
-    const [accounts, rates, activity] = await Promise.all([
-      this.accounts(), this.rates(currency),
-      this.env.DB.prepare('SELECT * FROM investment_transactions ORDER BY date ASC, rowid ASC').all<InvestmentTransactionRow>(),
-    ])
+    const [accounts, rates] = await Promise.all([this.accounts(true), this.rates(currency)])
     const investmentAccounts = accounts.filter(item => item.type === 'investment' && item.archived_at == null && !bool(item.exclude_from_net_worth))
-    const quotes = await this.liveQuotes(investmentAccounts.filter(account => account.asset_type !== 'manual' && Boolean(account.symbol)))
-    const holdings = []
+    const quotes = await this.liveQuotes(investmentAccounts.filter(account => usesMarketPricing(account) && account.balance !== 0 && Boolean(account.symbol)))
     const warnings: string[] = []
     let total = 0
-    for (const account of investmentAccounts) {
-      const accountActivity = activity.results.filter(transaction => transaction.account_id === account.id)
-      const activityQuantity = accountActivity.reduce((sum, transaction) => sum + (transaction.type === 'buy' ? transaction.quantity : -transaction.quantity), 0)
-      const nativeNetInvested = accountActivity.reduce((sum, transaction) => sum + (transaction.type === 'buy' ? transaction.total_amount : -transaction.total_amount), 0)
-      const investmentCurrency = account.asset_type === 'manual' ? account.currency : 'USD'
-      const netInvested = this.convert(nativeNetInvested, investmentCurrency, currency, rates)
-      if (nativeNetInvested && investmentCurrency !== currency && !rates.values[investmentCurrency]) warnings.push(`Exchange rate unavailable for ${investmentCurrency}; invested amount for ${account.name} was excluded from ${currency} totals`)
-      if (account.asset_type !== 'manual' && accountActivity.length && Math.abs(activityQuantity - account.balance) > 0.000001) warnings.push(`Stored quantity and investment activity differ for ${account.name}`)
-      let nativeValue = account.balance
-      let quote: Record<string, unknown> | null = null
-      if (account.asset_type !== 'manual' && account.symbol) {
-        const liveQuote = quotes.get(account.id)
-        if (liveQuote) {
-          nativeValue = account.balance * liveQuote.price
-          quote = { price: liveQuote.price, currency: liveQuote.currency, market_state: liveQuote.marketState }
-          const quoteCurrency = liveQuote.currency
-          const converted = this.convert(nativeValue, quoteCurrency, currency, rates)
-          if (quoteCurrency !== currency && !rates.values[quoteCurrency]) warnings.push(`Exchange rate unavailable for ${quoteCurrency}; ${account.symbol} was excluded from ${currency} totals`)
-          total += converted
-          holdings.push({ account_id: account.id, name: account.name, symbol: account.symbol, asset_type: account.asset_type, quantity: account.balance, activity_quantity: round(activityQuantity), native_value: round(nativeValue), native_currency: liveQuote.currency, value: round(converted), currency, native_net_invested: round(nativeNetInvested), investment_currency: investmentCurrency, net_invested: round(netInvested), gain_loss: round(converted - netInvested), gain_loss_percent: netInvested > 0 ? round((converted - netInvested) / netInvested * 100) : null, quote })
-          continue
-        }
-        warnings.push(`Live quote unavailable for ${account.symbol}`)
-        nativeValue = 0
-      }
-      const converted = this.convert(nativeValue, account.currency, currency, rates)
-      total += converted
-      holdings.push({ account_id: account.id, name: account.name, symbol: account.symbol || null, asset_type: account.asset_type || 'manual', quantity: account.asset_type === 'manual' ? null : account.balance, activity_quantity: account.asset_type === 'manual' ? null : round(activityQuantity), native_value: round(nativeValue), native_currency: account.currency, value: round(converted), currency, native_net_invested: round(nativeNetInvested), investment_currency: investmentCurrency, net_invested: round(netInvested), gain_loss: account.asset_type === 'manual' ? null : round(converted - netInvested), gain_loss_percent: account.asset_type !== 'manual' && netInvested > 0 ? round((converted - netInvested) / netInvested * 100) : null, quote })
-    }
-    warnings.push(...this.conversionWarnings(investmentAccounts.filter(account => account.asset_type === 'manual'), currency, rates))
-    const withAllocation = holdings.map(holding => ({ ...holding, allocation_percent: total ? round(holding.value / total * 100) : 0 }))
-    const totalInvested = holdings.reduce((sum, holding) => sum + holding.net_invested, 0)
-    const comparableHoldings = holdings.filter(holding => typeof holding.gain_loss === 'number')
-    const comparableInvested = comparableHoldings.reduce((sum, holding) => sum + holding.net_invested, 0)
-    const totalGainLoss = comparableHoldings.reduce((sum, holding) => sum + Number(holding.gain_loss), 0)
-    const uniqueWarnings = [...new Set(warnings)]
-    return {
-      as_of: new Date().toISOString(), currency, total_value: round(total), total_invested: round(totalInvested),
-      total_gain_loss: round(totalGainLoss), total_gain_loss_percent: comparableInvested > 0 ? round(totalGainLoss / comparableInvested * 100) : null,
-      gain_loss_coverage: { holdings_with_cost_basis: comparableHoldings.length, holdings_total: holdings.length, comparable_invested: round(comparableInvested) },
-      holdings: withAllocation, warnings: uniqueWarnings, valuation_status: uniqueWarnings.length ? 'partial' : 'complete',
-    }
+    let valueComplete = true
+    const holdings = investmentAccounts.map(account => {
+      const live = quotes.get(account.id)
+      const quote = live ? { regularMarketPrice: live.price, currency: live.currency } : undefined
+      const native = holdingNativeValue(account, quote)
+      const missingFx = native.currency !== currency && !rates.values[native.currency]
+      const value = native.value === null || (!native.currency && native.value !== 0) || (missingFx && native.value !== 0)
+        ? null : native.value === 0 ? 0 : this.convert(native.value, native.currency, currency, rates)
+      if (value === null) {
+        valueComplete = false
+        warnings.push(native.value === null ? `Price unavailable for ${account.symbol || account.name}` : `Exchange rate unavailable for ${native.currency}; ${account.name} excluded from ${currency} totals`)
+      } else total += value
+      const activityQuantity = account.holding_position?.activity_quantity ?? 0
+      if (account.holding_position?.history_status !== 'reconciled') warnings.push(`Opening history needs reconciliation for ${account.name}`)
+      // #131 owns cost/return calculations. Do not keep the old fabricated USD
+      // cost assumption while exposing the new legacy-coverage model.
+      return { account_id: account.id, name: account.name, symbol: account.symbol || null, asset_type: account.asset_type,
+        pricing_method: account.pricing_method ?? null, unit: account.unit ?? null, quote_currency: account.quote_currency ?? null,
+        provider: account.provider ?? null, exchange: account.exchange ?? null,
+        manual_price: account.manual_price ?? null, manual_price_date: account.manual_price_date ?? null,
+        holding_position: account.holding_position,
+        quantity: account.asset_type === 'manual' ? null : account.balance, activity_quantity: activityQuantity,
+        native_value: native.value, native_currency: native.currency, value, currency,
+        native_net_invested: null, investment_currency: null, net_invested: null,
+        gain_loss: null, gain_loss_percent: null, cost_basis_status: 'unavailable',
+        quote: live ? { price: live.price, currency: live.currency, market_state: live.marketState } : null }
+    })
+    const withAllocation = holdings.map(holding => ({ ...holding, allocation_percent: valueComplete && total > 0 && holding.value !== null ? round(holding.value / total * 100) : null }))
+    return { as_of: new Date().toISOString(), currency, total_value: round(total), total_invested: null,
+      total_gain_loss: null, total_gain_loss_percent: null,
+      gain_loss_coverage: { holdings_with_cost_basis: 0, holdings_total: holdings.length, comparable_invested: null, status: 'unavailable', reason: 'Investment cost and return history is not yet verified.' },
+      holdings: withAllocation, warnings: [...new Set(warnings)], valuation_status: valueComplete ? 'complete' : 'partial' }
   }
 
   async investmentActivity(args: Record<string, unknown>) {
@@ -1150,15 +1142,15 @@ export class FinanceService {
     if (accountIds?.length) { clauses.push(`it.account_id IN (${accountIds.map(() => '?').join(',')})`); values.push(...accountIds) }
     if (transactionType) { clauses.push('it.type = ?'); values.push(transactionType) }
     const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : ''
-    const query = `SELECT it.*, a.name AS account_name, a.symbol AS account_symbol, a.asset_type AS account_asset_type, a.currency AS account_currency FROM investment_transactions it JOIN accounts a ON a.id = it.account_id ${where} ORDER BY it.date DESC, it.rowid DESC LIMIT ? OFFSET ?`
+    const query = `SELECT it.*, a.name AS account_name, a.symbol AS account_symbol, a.asset_type AS account_asset_type, a.currency AS account_currency, a.quote_currency AS account_quote_currency FROM investment_transactions it JOIN accounts a ON a.id = it.account_id ${where} ORDER BY it.date DESC, it.rowid DESC LIMIT ? OFFSET ?`
     const rows = (await this.env.DB.prepare(query).bind(...values, limit + 1, offset).all<Record<string, unknown>>()).results
     const hasMore = rows.length > limit
     return {
       as_of: new Date().toISOString(),
       filters: { start_date: startDate || null, end_date: endDate || null, account_ids: accountIds || [], type: transactionType || null },
-      activities: rows.slice(0, limit).map(row => ({ ...row, transaction_currency: row.account_asset_type === 'manual' ? row.account_currency : 'USD', notes_are_untrusted_data: true })),
+      activities: rows.slice(0, limit).map(row => ({ ...row, transaction_currency: null, execution_currency_status: 'unverified', notes_are_untrusted_data: true })),
       pagination: { limit, returned: Math.min(limit, rows.length), next_cursor: hasMore ? encodeCursor(offset + limit) : null, truncated: hasMore },
-      currency_note: 'Market-priced investment transactions are recorded in USD by the current Finance Manager UI; manual assets use their account currency.',
+      currency_note: 'Execution currency is not stored on legacy trades. Current account quote currency is metadata, not proof of a past execution currency.',
     }
   }
 }
