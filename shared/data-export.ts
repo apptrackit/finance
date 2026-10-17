@@ -1,6 +1,6 @@
 // Explicit coverage: adding a durable table requires updating this contract.
 export const EXPORT_TABLES = [
-  'accounts', 'categories', 'transactions', 'investment_transactions',
+  'accounts', 'categories', 'transaction_splits', 'transactions', 'investment_transactions',
   'recurring_schedules', 'app_settings', 'audit_log',
   'financial_outlook_snapshots', 'financial_data_revision', 'mcp_draft_batches',
   'mcp_draft_correction_runs', 'mcp_transfer_correction_runs',
