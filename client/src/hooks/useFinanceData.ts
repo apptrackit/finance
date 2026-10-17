@@ -1,3 +1,4 @@
+import type { TradeFacts } from '../../../shared/investment-trade'
 import { usesMarketPricing } from '../../../shared/holding'
 import type { HoldingFields } from '../../../shared/holding'
 import { sumConversions, validRates, isValidRate } from '../../../shared/currency'
@@ -24,7 +25,7 @@ export type Account = HoldingFields & {
   updated_at: number
 }
 
-export type Transaction = {
+export type Transaction = TradeFacts & {
   id: string
   account_id: string
   category_id?: string
@@ -64,6 +65,8 @@ const formatInvestmentTransactionDescription = (transaction: InvestmentTransacti
 }
 
 const mapInvestmentTransaction = (transaction: InvestmentTransaction) => ({
+  trade_version:transaction.trade_version, execution_currency:transaction.execution_currency, gross_amount:transaction.gross_amount, fee_amount:transaction.fee_amount,
+  fee_status:transaction.fee_status, fee_currency:transaction.fee_currency, cash_amount:transaction.cash_amount, cash_currency:transaction.cash_currency, effective_order:transaction.effective_order,
   id: transaction.id,
   account_id: transaction.account_id,
   amount: transaction.type === 'buy' ? transaction.total_amount : -transaction.total_amount,
@@ -107,7 +110,7 @@ const isCategory = (value: unknown): value is Category => isRecord(value)
   && typeof value.id === 'string' && typeof value.name === 'string'
   && (value.type === 'income' || value.type === 'expense')
 
-type InvestmentTransaction = {
+type InvestmentTransaction = TradeFacts & {
   id: string
   account_id: string
   type: 'buy' | 'sell'

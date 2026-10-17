@@ -26,7 +26,7 @@ export class TransferController {
   async create(c: Context) {
     try {
       const body = c.get('validatedBody') as CreateTransferDto
-      const transfer = await this.transferService.createTransfer(body)
+      const transfer = await this.transferService.createTransfer(body, c.req.header('X-Client-Date'))
       return c.json(transfer, 201)
     } catch (error: any) {
       if (error instanceof AppError || error.message?.includes('ACCOUNT_')) throw error

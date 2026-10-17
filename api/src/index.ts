@@ -40,6 +40,9 @@ import { RecurringScheduleController } from './controllers/recurring-schedule.co
 import { SettingsController } from './controllers/settings.controller'
 import { FinancialOutlookController } from './controllers/financial-outlook.controller'
 import { DataExportController } from './controllers/data-export.controller'
+import { InvestmentTradeController } from './controllers/investment-trade.controller'
+import { InvestmentTradeService } from './services/investment-trade.service'
+import { InvestmentTradeSchema } from './validators/investment-trade.validator'
 
 // Middleware
 import { allowedOrigins, corsMiddleware } from './middlewares/cors.middleware'
@@ -101,6 +104,7 @@ function createDependencies(db: D1Database) {
   const financialOutlookController = new FinancialOutlookController(financialOutlookService)
   const dataExportController = new DataExportController(dataExportService)
   const transactionHistoryController = new TransactionHistoryController(transactionHistoryService)
+  const investmentTradeController = new InvestmentTradeController(new InvestmentTradeService(investmentTransactionRepo.trades))
 
   return {
     accountController,
@@ -114,7 +118,8 @@ function createDependencies(db: D1Database) {
     settingsController,
     financialOutlookController,
     dataExportController,
-    transactionHistoryController
+    transactionHistoryController,
+    investmentTradeController
   }
 }
 
@@ -132,6 +137,7 @@ app.onError((err, c) => {
     HOLDING_HISTORY_METADATA: 'This change would reinterpret holding history. Keep its instrument, units, quote currency and pricing method, or create a separate holding.',
     HOLDING_POSITION_MISMATCH: 'Opening quantity and later activity do not match the current holding. Reconcile the opening or record an explicit correction.',
     HOLDING_OPENING_DATE: 'The trade date must be after the end-of-day opening position. Correct the opening date before backdating this trade.',
+    TRADE_CASH_CURRENCY: 'This cash currency is protected by recorded trade settlements. Create a separate cash account for a different currency.',
     ACCOUNT_ARCHIVE_NONZERO: 'The balance or holding must be zero before archiving.',
     ACCOUNT_ARCHIVE_PENDING: 'Confirm or decline all pending and review transactions before archiving.',
     ACCOUNT_DELETE_LINKED: 'This account has linked transfers. Archive it to preserve both sides and their history.',
@@ -222,6 +228,9 @@ app.post('/investment-transactions', (c) => getControllers(c).investmentTransact
 app.delete('/investment-transactions/:id', (c) => getControllers(c).investmentTransactionController.delete(c))
 
 // Transfers
+app.post('/investment-trades', validateBody(InvestmentTradeSchema), c => getControllers(c).investmentTradeController.save(c))
+app.put('/investment-trades/:id', validateBody(InvestmentTradeSchema), c => getControllers(c).investmentTradeController.save(c))
+app.delete('/investment-trades/:id', c => getControllers(c).investmentTradeController.delete(c))
 app.get('/transfers/exchange-rate', (c) => getControllers(c).transferController.getExchangeRate(c))
 app.post('/transfers', validateBody(CreateTransferSchema), (c) => getControllers(c).transferController.create(c))
 

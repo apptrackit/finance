@@ -4,7 +4,7 @@ export type PricingMethod = 'market' | 'manual'
 export type PositionAnchor = {
   id: string; kind: 'opening' | 'observed' | 'correction'; effective_date: string
   balance: number; cost_amount: number | null; cost_currency: string | null
-  trade_rowid_boundary: number; created_at: number
+  trade_rowid_boundary: number; trade_order_boundary?: number | null; created_at: number
 }
 export type HoldingPosition = {
   has_history?: boolean; quantity: number | null; activity_quantity: number; residual: number | null
@@ -49,7 +49,7 @@ export const HOLDING_ACCOUNT_SELECT = `SELECT a.*,
   COALESCE((SELECT SUM(CASE WHEN t.type = 'buy' THEN t.quantity ELSE -t.quantity END) FROM investment_transactions t WHERE t.account_id = a.id), 0) AS _activity,
   COALESCE((SELECT SUM(CASE WHEN t.type = 'buy' THEN t.quantity ELSE -t.quantity END) FROM investment_transactions t WHERE t.account_id = a.id AND t.date > p.effective_date), 0) AS _after_anchor,
   CASE WHEN p.id IS NOT NULL THEN json_object('id', p.id, 'kind', p.kind, 'effective_date', p.effective_date, 'balance', p.balance,
-    'cost_amount', p.cost_amount, 'cost_currency', p.cost_currency, 'trade_rowid_boundary', p.trade_rowid_boundary, 'created_at', p.created_at) END AS _anchor
+    'cost_amount', p.cost_amount, 'cost_currency', p.cost_currency, 'trade_rowid_boundary', p.trade_rowid_boundary, 'trade_order_boundary', p.trade_order_boundary, 'created_at', p.created_at) END AS _anchor
  FROM accounts a LEFT JOIN investment_position_anchors p ON p.rowid =
    (SELECT x.rowid FROM investment_position_anchors x WHERE x.account_id = a.id ORDER BY x.rowid DESC LIMIT 1)`
 export function mapHoldingAccount<T extends HoldingInput>(raw: T & { _activity?: number; _after_anchor?: number; _anchor?: string | null; _has_history?: number }): T {

@@ -150,7 +150,7 @@ export function InvestmentDetailModal({
                         </div>
                         {tx.quantity !== undefined && (
                           <div className="text-sm text-muted-foreground">
-                            {privacyMode === 'hidden' ? '••••••' : account.holding_position ? `${Math.abs(tx.amount).toLocaleString(undefined, { maximumFractionDigits: 12 })} · currency unverified` : formatValue(Math.abs(tx.amount), undefined, account.quote_currency || position.quoteCurrency)}
+                            {privacyMode === 'hidden' ? '••••••' : tx.execution_currency ? formatValue(Math.abs(tx.amount),undefined,tx.execution_currency) : account.holding_position ? `${Math.abs(tx.amount).toLocaleString(undefined, { maximumFractionDigits: 12 })} · currency unverified` : formatValue(Math.abs(tx.amount), undefined, account.quote_currency || position.quoteCurrency)}
                           </div>
                         )}
                       </div>

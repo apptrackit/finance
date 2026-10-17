@@ -1,6 +1,7 @@
+import type { TradeFacts } from '../../../shared/investment-trade'
 export type InvestmentTransactionType = 'buy' | 'sell'
 
-export interface InvestmentTransaction {
+export interface InvestmentTransaction extends TradeFacts {
   id: string
   account_id: string
   type: InvestmentTransactionType

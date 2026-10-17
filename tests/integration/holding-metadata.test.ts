@@ -37,7 +37,7 @@ it('upgrades 017 without changing any old application column/rowid, source revis
     f.db.prepare("UPDATE accounts SET archived_at = 1, updated_at = 1 WHERE id = 'closed'"),
   ])
   const snapshots = []
-  for (const table of EXPORT_TABLES.filter(table => table !== 'investment_position_anchors')) {
+  for (const table of EXPORT_TABLES.filter(table => !['investment_position_anchors','investment_trade_sequence'].includes(table))) {
     const columns = (await f.db.prepare(`PRAGMA table_info(${table})`).all<{ name: string }>()).results.map(column => column.name)
     const rows = (await f.db.prepare(`SELECT rowid, ${columns.join(',')} FROM ${table} ORDER BY rowid`).all()).results
     snapshots.push({ table, columns, rows })

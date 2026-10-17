@@ -30,13 +30,6 @@ export class TransactionController {
       const body = await c.req.json<CreateTransactionDto>()
       const result = await this.transactionService.createTransaction(body, this.getClientDate(c))
 
-      // Handle investment transaction response differently
-      if ('type' in result && 'quantity' in result) {
-        const entityId = 'id' in result && typeof result.id === 'string' ? result.id : 'unknown'
-        await new AuditRepository(c.env.DB).log('CREATE', 'investment_transaction', entityId, { account_id: body.account_id, amount: body.amount })
-        return c.json({ id: crypto.randomUUID(), ...result }, 201)
-      }
-
       await new AuditRepository(c.env.DB).log('CREATE', 'transaction', result.id, { account_id: body.account_id, amount: body.amount })
       return c.json(TransactionMapper.toResponseDto(result), 201)
     } catch (error: any) {
@@ -72,7 +65,7 @@ export class TransactionController {
   async update(c: Context<{ Bindings: Bindings }>) {
     try {
       const id = c.req.param('id')
-      const body = await c.req.json<UpdateTransactionDto>()
+      const body = c.get('validatedBody') as UpdateTransactionDto
       const transaction = await this.transactionService.updateTransaction(id, body, this.getClientDate(c))
       if (!transaction.auditRecorded && !(transaction.linked_transaction_id && transaction.status === 'pending' && transaction.pending_kind === 'mcp_review')) {
         await new AuditRepository(c.env.DB).log('UPDATE', 'transaction', id, { amount: body.amount, category_id: body.category_id })
@@ -94,7 +87,7 @@ export class TransactionController {
   async delete(c: Context<{ Bindings: Bindings }>) {
     try {
       const id = c.req.param('id')
-      const auditRecorded = await this.transactionService.deleteTransaction(id)
+      const auditRecorded = await this.transactionService.deleteTransaction(id,this.getClientDate(c))
       if (!auditRecorded) await new AuditRepository(c.env.DB).log('DELETE', 'transaction', id)
       return c.json({ success: true })
     } catch (error: any) {

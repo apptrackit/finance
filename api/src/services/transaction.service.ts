@@ -6,7 +6,7 @@ import { TransactionRepository } from '../repositories/transaction.repository'
 import { AccountRepository } from '../repositories/account.repository'
 import { InvestmentTransactionRepository } from '../repositories/investment-transaction.repository'
 import { CreateTransactionDto, UpdateTransactionDto } from '../dtos/transaction.dto'
-import { fetchPriceFromYahoo } from '../utils/yahoo-finance.util'
+import { InvestmentTradeService } from './investment-trade.service'
 import { PaginatedResponse, PaginationHelper, PaginationParams } from '../models/Pagination'
 
 type TransactionMutationResult = Transaction & { auditRecorded?: boolean }
@@ -53,7 +53,7 @@ export class TransactionService {
     return await this.transactionRepo.findAll()
   }
 
-  async createTransaction(dto: CreateTransactionDto, today?: string): Promise<Transaction | { type: string; quantity: number; price: number; total_amount: number }> {
+  async createTransaction(dto: CreateTransactionDto, today?: string): Promise<Transaction> {
     const id = crypto.randomUUID()
 
     // Get account to check if it's an investment account
@@ -72,51 +72,8 @@ export class TransactionService {
       throw AppError.validation('Create linked transfers through the /transfers endpoint so both records are saved together')
     }
 
-    // For investment accounts: redirect to investment_transactions table
     if (account.type === 'investment') {
-      const quantity = dto.amount
-      const isIncome = quantity > 0
-      const absQuantity = Math.abs(quantity)
-      let pricePerUnit = dto.price || 0
-      
-      // Only fetch price if not provided by frontend
-      if (!pricePerUnit && account.asset_type !== 'manual' && account.symbol) {
-        try {
-          pricePerUnit = await fetchPriceFromYahoo(account.symbol, dto.date)
-          
-          if (!pricePerUnit || pricePerUnit === 0) {
-            throw new Error(`Could not fetch price for ${account.symbol} on ${dto.date}. Please try again or contact support.`)
-          }
-        } catch (error: any) {
-          if (error.message === 'RATE_LIMITED') {
-            throw new Error('Yahoo Finance is rate-limiting. Please try again in a few seconds, or enter the price manually.')
-          }
-          throw new Error(`Failed to fetch price for ${account.symbol}. Error: ${error.message}`)
-        }
-      }
-      
-      const totalAmount = absQuantity * pricePerUnit
-      
-      // Create investment_transaction record
-      const investmentTransaction: InvestmentTransaction = {
-        id,
-        account_id: dto.account_id,
-        type: isIncome ? 'buy' : 'sell',
-        quantity: absQuantity,
-        price: pricePerUnit,
-        total_amount: totalAmount,
-        date: dto.date,
-        notes: dto.description ?? undefined,
-        created_at: Date.now()
-      }
-
-      await this.investmentTransactionRepo.create(investmentTransaction)
-      
-      // Update account balance with quantity
-      const newBalance = account.balance + quantity
-      await this.accountRepo.updateBalance(dto.account_id, newBalance, Date.now())
-      
-      return { type: isIncome ? 'buy' : 'sell', quantity: absQuantity, price: pricePerUnit, total_amount: totalAmount }
+      throw AppError.validation('Record investment buys/sells through the linked trade flow with exact cash settlement. Legacy standalone records remain read-only.')
     }
 
     // For non-investment accounts: use regular transactions table
@@ -189,7 +146,7 @@ export class TransactionService {
       }
 
       if (linkedInvestmentTx) {
-        return await this.updateInvestmentTransfer(oldTx, linkedInvestmentTx, dto)
+        return await this.updateInvestmentTransfer(oldTx, linkedInvestmentTx, dto, today)
       }
       throw new AppError('INVESTMENT_TRANSFER_CONFLICT', 'Linked transaction is missing; refresh and repair the transfer before editing.', 409)
     }
@@ -199,6 +156,7 @@ export class TransactionService {
       throw new Error('Account not found')
     }
     this.assertAccountUnlocked(oldAccount)
+    if (oldAccount.type === 'investment') throw AppError.validation('Legacy cash rows on holdings are read-only; use the linked investment trade flow')
 
     const newAccountId = dto.account_id || oldTx.account_id
     const newAmount = dto.amount ?? oldTx.amount
@@ -210,6 +168,7 @@ export class TransactionService {
         throw new Error('Account not found')
       }
       this.assertAccountUnlocked(targetAccount)
+      if (targetAccount.type === 'investment') throw AppError.validation('Use the linked trade flow instead of moving an ordinary cash row to a holding')
     }
 
     if (this.isPosted(oldTx)) {
@@ -333,6 +292,8 @@ export class TransactionService {
       accounts.set(accountId, account)
     }
 
+    if ([...accounts.values()].some(a => a.type === 'investment')) throw AppError.validation('Cash transfers cannot be reinterpreted as investment trades; use the linked trade flow')
+
     const balanceDeltas = new Map<string, number>()
     const addDelta = (accountId: string, delta: number) => {
       balanceDeltas.set(accountId, (balanceDeltas.get(accountId) || 0) + delta)
@@ -395,73 +356,23 @@ export class TransactionService {
     return updated!
   }
 
-  private async updateInvestmentTransfer(
-    outgoing: Transaction,
-    investmentTx: InvestmentTransaction,
-    dto: UpdateTransactionDto
-  ): Promise<TransactionMutationResult> {
-    const fromAccountId = dto.account_id || outgoing.account_id
-    const toAccountId = dto.to_account_id || investmentTx.account_id
-    const amountFrom = Math.abs(dto.amount ?? outgoing.amount)
-    const amountTo = dto.amount_to ?? investmentTx.quantity
-    const price = dto.price ?? investmentTx.price
-    const date = dto.date || outgoing.date
-    const note = dto.description !== undefined ? dto.description : undefined
-    const now = Date.now()
-
-    if (fromAccountId === toAccountId) {
-      throw new Error('Cannot transfer to same account')
-    }
-    if (![amountFrom, amountTo, price, amountTo * price].every(Number.isFinite)
-      || amountFrom <= 0 || amountTo <= 0 || price < 0) {
-      throw new Error('Transfer amounts and price must be valid')
-    }
-    if (investmentTx.linked_transaction_id !== outgoing.id) {
-      throw new AppError('INVESTMENT_TRANSFER_CONFLICT', 'Investment transfer links are inconsistent; refresh and repair the pair before editing.', 409)
-    }
-
-    const accountIds = new Set([outgoing.account_id, investmentTx.account_id, fromAccountId, toAccountId])
-    const accounts = new Map<string, Account>()
-    for (const accountId of accountIds) {
-      const account = await this.accountRepo.findById(accountId)
-      if (!account) throw new Error('Account not found')
-      this.assertAccountUnlocked(account)
-      accounts.set(accountId, account)
-    }
-
-    const toAccount = accounts.get(toAccountId)!
-    if (toAccount.type !== 'investment' || accounts.get(fromAccountId)!.type === 'investment') {
-      throw AppError.validation('Investment transfers require a cash account and an investment holding')
-    }
-
-    let outgoingDescription = outgoing.description
-    let investmentNotes = investmentTx.notes
-    if (note !== undefined) {
-      const fromAccount = accounts.get(fromAccountId)!
-      const quoteCurrency = toAccount.quote_currency || 'USD'
-      const purchaseDetails = `${amountTo.toFixed(8)} shares${price > 0 ? ` @ ${quoteCurrency} ${price.toFixed(2)}/share` : ''}`
-      outgoingDescription = `Transfer to ${toAccount.name} (${purchaseDetails})`
-      investmentNotes = `Transfer from ${fromAccount.name} (${purchaseDetails})`
-      if (note) {
-        outgoingDescription += ` - ${note}`
-        investmentNotes += ` - ${note}`
-      }
-    }
-
-    const applied = await this.investmentTransactionRepo.transfers.update(outgoing, investmentTx, {
-      cashAccountId: fromAccountId, investmentAccountId: toAccountId,
-      cashAmount: investmentTx.type === 'buy' ? -amountFrom : amountFrom,
-      quantity: amountTo, price, date, description: outgoingDescription ?? null, notes: investmentNotes ?? null,
-    }, now)
-    if (!applied) throw new AppError('INVESTMENT_TRANSFER_CONFLICT', 'Investment transfer changed; refresh and try again.', 409)
-
-    const updated = await this.transactionRepo.findById(outgoing.id)
-    if (!updated) throw new AppError('INVESTMENT_TRANSFER_CONFLICT', 'Investment transfer changed; refresh and try again.', 409)
-    return { ...updated, auditRecorded: true }
+  private async updateInvestmentTransfer(outgoing: Transaction, investmentTx: InvestmentTransaction, dto: UpdateTransactionDto, today?: string): Promise<TransactionMutationResult> {
+    const cashId = dto.account_id || outgoing.account_id
+    const holdingId = dto.to_account_id || investmentTx.account_id
+    const result = await new InvestmentTradeService(this.investmentTransactionRepo.trades).save({
+      idempotency_key: dto.idempotency_key || crypto.randomUUID(), holding_account_id: holdingId, cash_account_id: cashId,
+      expected_version:dto.expected_version ?? investmentTx.trade_version,
+      type: investmentTx.type, quantity: dto.amount_to ?? investmentTx.quantity,
+      price: dto.price ?? investmentTx.price, execution_currency: dto.execution_currency ?? investmentTx.execution_currency!,
+      cash_amount: Math.abs(dto.amount ?? outgoing.amount), date: dto.date || outgoing.date,
+      fee_status: dto.fee_status ?? investmentTx.fee_status!, fee_amount: dto.fee_amount !== undefined ? dto.fee_amount : investmentTx.fee_amount,
+      notes: dto.description !== undefined ? dto.description : investmentTx.notes,
+    },today,investmentTx.id)
+    return { ...(await this.transactionRepo.findById(result.cash_transaction_id))!, auditRecorded:true }
   }
 
   // True means auditing was included in the pair batch, or deletion was a no-op.
-  async deleteTransaction(id: string): Promise<boolean> {
+  async deleteTransaction(id: string, today?: string): Promise<boolean> {
     // Get transaction to revert balance
     const tx = await this.transactionRepo.findById(id)
 
@@ -496,10 +407,7 @@ export class TransactionService {
           if (investmentTx) {
             const investmentAccount = await this.accountRepo.findById(investmentTx.account_id)
             if (investmentAccount) this.assertAccountUnlocked(investmentAccount)
-            const applied = await this.investmentTransactionRepo.transfers.delete(tx, investmentTx, Date.now())
-            if (!applied && await this.transactionRepo.findById(id)) {
-              throw new AppError('INVESTMENT_TRANSFER_CONFLICT', 'Investment transfer changed or has inconsistent links; refresh and try again.', 409)
-            }
+            await new InvestmentTradeService(this.investmentTransactionRepo.trades).remove(investmentTx.id,today)
             return true
           }
           // Another deletion may have removed the pair after our initial read.
@@ -509,7 +417,9 @@ export class TransactionService {
         }
       }
 
-      // Revert balance for the main transaction
+      if (account?.type === 'investment' || linkedAccount?.type === 'investment') throw AppError.validation('Legacy cash rows on holdings are read-only until reconciled')
+
+    // Revert balance for the main transaction
       if (account && this.isPosted(tx)) {
         await this.accountRepo.updateBalance(
           tx.account_id,
@@ -568,6 +478,7 @@ export class TransactionService {
       throw new Error('Account not found')
     }
     this.assertAccountUnlocked(account)
+    if (account.type === 'investment') throw AppError.validation('Investment posting requires a complete linked trade; this pending cash row cannot be confirmed')
 
     const now = Date.now()
     const confirmed = await this.transactionRepo.confirmPendingAndApplyBalance(tx, now, effectiveToday)

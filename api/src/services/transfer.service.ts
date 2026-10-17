@@ -1,3 +1,4 @@
+import { InvestmentTradeService } from './investment-trade.service'
 import { AppError } from '../errors/codes'
 import { AccountRepository } from '../repositories/account.repository'
 import { TransactionRepository } from '../repositories/transaction.repository'
@@ -27,7 +28,7 @@ export class TransferService {
     return { rate, from, to }
   }
 
-  async createTransfer(dto: CreateTransferDto): Promise<TransferResponseDto> {
+  async createTransfer(dto: CreateTransferDto, clientDate?: string): Promise<TransferResponseDto> {
     if (dto.from_account_id === dto.to_account_id) {
       throw new Error('Cannot transfer to same account')
     }
@@ -53,34 +54,20 @@ export class TransferService {
     if (toAccount.is_locked) {
       throw new Error(`Account "${toAccount.name}" is locked`)
     }
-    if (fromAccount.type === 'investment') {
-      throw AppError.validation('Transfers from investment holdings require a linked sale workflow, which this endpoint does not support yet.')
-    }
-
-    if (toAccount.type === 'investment') {
-      const now = Date.now()
-      const outgoingId = crypto.randomUUID()
-      const incomingId = crypto.randomUUID()
-      const price = dto.price ?? 0
-      if (!Number.isFinite(dto.amount_to * price)) throw AppError.validation('Investment total must be finite')
-      const details = `${dto.amount_to.toFixed(8)} shares${price > 0 ? ` @ ${toAccount.quote_currency || 'USD'} ${price.toFixed(2)}/share` : ''}`
-      const note = dto.description ? ` - ${dto.description}` : ''
-      const created = await this.investmentTransactionRepo.transfers.create({
-        id: outgoingId, account_id: fromAccount.id, amount: -dto.amount_from,
-        description: `Transfer to ${toAccount.name} (${details})${note}`, date: dto.date,
-        linked_transaction_id: incomingId,
-      }, {
-        id: incomingId, account_id: toAccount.id, type: 'buy', quantity: dto.amount_to,
-        price, total_amount: dto.amount_to * price, date: dto.date,
-        notes: `Transfer from ${fromAccount.name} (${details})${note}`,
-        linked_transaction_id: outgoingId, created_at: now,
-      }, now)
-      if (!created) throw new AppError('INVESTMENT_TRANSFER_CONFLICT', 'Transfer accounts changed; refresh and try again.', 409)
-      return {
-        id: crypto.randomUUID(), outgoing_transaction_id: outgoingId, incoming_transaction_id: incomingId,
+    if (fromAccount.type === 'investment' || toAccount.type === 'investment') {
+      if (fromAccount.type === 'investment' && toAccount.type === 'investment') throw AppError.validation('Choose a cash account for trade settlement')
+      const buy = toAccount.type === 'investment'
+      const trade = await new InvestmentTradeService(this.investmentTransactionRepo.trades).save({
+        idempotency_key: dto.idempotency_key!, holding_account_id: buy ? toAccount.id : fromAccount.id,
+        cash_account_id: buy ? fromAccount.id : toAccount.id, type: buy ? 'buy' : 'sell',
+        quantity: buy ? dto.amount_to : dto.amount_from, cash_amount: buy ? dto.amount_from : dto.amount_to,
+        price: dto.price!, execution_currency: dto.execution_currency!, fee_status: dto.fee_status!,
+        fee_amount: dto.fee_amount, date: dto.date, notes: dto.description,
+      }, clientDate)
+      return { id: trade.trade_id, outgoing_transaction_id: buy ? trade.cash_transaction_id : trade.trade_id,
+        incoming_transaction_id: buy ? trade.trade_id : trade.cash_transaction_id,
         amount_from: dto.amount_from, amount_to: dto.amount_to, exchange_rate: dto.amount_to / dto.amount_from,
-        from_account_id: fromAccount.id, to_account_id: toAccount.id, is_investment_transfer: true,
-      }
+        from_account_id: fromAccount.id, to_account_id: toAccount.id, is_investment_transfer: true }
     }
 
     const totalDeduction = dto.amount_from

@@ -120,6 +120,37 @@ function mockRates(rate = 0.2) {
 }
 
 describe('TransactionList redesigned transfers', () => {
+  it('records a sale with exact proceeds and preserves the draft and request key after a failed save', async () => {
+    mockRates()
+    localStorage.clear()
+    let attempts=0
+    vi.mocked(apiFetch).mockImplementation(async (url,options) => {
+      if (url==='/api/investment-trades' && options?.method==='POST' && attempts++===0) throw new Error('Temporary failure')
+      return {ok:true,json:async()=>({})} as Response
+    })
+    const user=userEvent.setup()
+    const added=renderTransfers({composerOnly:true,openRequest:1,transactions:[],accounts:[...transferAccounts,
+      {id:'holding',name:'Sale holding',balance:1.5,currency:'SHARE',quote_currency:'EUR',type:'investment'}]})
+    await user.click(screen.getByRole('button',{name:'Transfer'}))
+    const dialog=screen.getByRole('dialog')
+    await user.selectOptions(within(dialog).getByRole('combobox',{name:'From account'}),'holding')
+    await user.selectOptions(within(dialog).getByRole('combobox',{name:'To account'}),'source')
+    await user.type(within(dialog).getByLabelText('Units to Sell'),'0.25')
+    await user.type(within(dialog).getByLabelText('Amount to Receive (HUF)'),'100')
+    await user.type(within(dialog).getByLabelText('Executed unit price'),'1')
+    await user.type(within(dialog).getByLabelText('Fee (HUF)'),'0')
+    await user.click(within(dialog).getByRole('button',{name:'Record sale'}))
+    expect(await within(dialog).findByText('Temporary failure')).toBeInTheDocument()
+    expect(within(dialog).getByLabelText('Units to Sell')).toHaveValue('0.25')
+    expect(within(dialog).getByLabelText('Amount to Receive (HUF)')).toHaveValue('100')
+    await user.click(within(dialog).getByRole('button',{name:'Record sale'}))
+    await waitFor(()=>expect(added).toHaveBeenCalledOnce())
+    const saves=vi.mocked(apiFetch).mock.calls.filter(([url,o])=>url==='/api/investment-trades'&&o?.method==='POST').map(([,o])=>JSON.parse(String(o?.body)))
+    expect(saves).toHaveLength(2)
+    expect(saves[0]).toEqual(saves[1])
+    expect(saves[0]).toMatchObject({type:'sell',quantity:0.25,cash_amount:100,execution_currency:'EUR',fee_amount:0})
+    expect(vi.mocked(apiFetch).mock.calls.some(([url])=>String(url).includes('/market/'))).toBe(false)
+  })
   it('groups a reciprocal investment pair once and edits it through the cash transaction', async () => {
     mockRates()
     const user = userEvent.setup()
@@ -136,15 +167,15 @@ describe('TransactionList redesigned transfers', () => {
     await user.click(screen.getAllByRole('button', { name: 'Edit transfer' })[0])
     const dialog = screen.getByRole('dialog')
     expect(within(dialog).getByLabelText('Amount to Send (HUF)')).toHaveValue('100')
-    const quantity = within(dialog).getByLabelText('Shares to Receive')
+    const quantity = within(dialog).getByLabelText('Units to Buy')
     expect(quantity).toHaveValue('0.125')
     await user.clear(quantity)
     await user.type(quantity, '0.25')
     await user.click(within(dialog).getByRole('button', { name: 'Save changes' }))
     await waitFor(() => expect(added).toHaveBeenCalledOnce())
-    const save = vi.mocked(apiFetch).mock.calls.find(([url, options]) => url === '/api/transactions/purchase-cash' && options?.method === 'PUT')
+    const save = vi.mocked(apiFetch).mock.calls.find(([url, options]) => url === '/api/investment-trades/purchase-cash' && options?.method === 'PUT')
     expect(save).toBeDefined()
-    expect(JSON.parse(String(save?.[1]?.body))).toMatchObject({ amount: 100, amount_to: 0.25, price: 400 })
+    expect(JSON.parse(String(save?.[1]?.body))).toMatchObject({ cash_amount:100,quantity:0.25,price:400,execution_currency:'EUR',fee_status:'unknown' })
   })
 
   it('previews posted edit deltas, preserves both native amounts when swapping, and reverts the full edit', async () => {
@@ -246,14 +277,15 @@ describe('TransactionList redesigned transfers', () => {
     await user.selectOptions(within(dialog).getByRole('combobox', { name: 'From account' }), 'source')
     await user.selectOptions(within(dialog).getByRole('combobox', { name: 'To account' }), 'holding')
     await user.type(within(dialog).getByLabelText('Amount to Send (HUF)'), '100')
-    const quantity = within(dialog).getByLabelText('Shares to Receive')
+    const quantity = within(dialog).getByLabelText('Units to Buy')
     await user.clear(quantity)
-    await user.type(quantity, '0.12345678')
-    await user.type(within(dialog).getByLabelText('Price per Share in EUR (optional - leave blank to auto-fetch)'), '123.45')
-    await user.click(within(dialog).getByRole('button', { name: 'Transfer 100 HUF' }))
+    await user.type(quantity, '0.123456789123')
+    await user.type(within(dialog).getByLabelText('Executed unit price'), '123.45')
+    await user.type(within(dialog).getByLabelText('Fee (HUF)'), '0')
+    await user.click(within(dialog).getByRole('button', { name:'Record purchase' }))
     await waitFor(() => expect(added).toHaveBeenCalledOnce())
-    const save = vi.mocked(apiFetch).mock.calls.find(([url, options]) => url === '/api/transfers' && options?.method === 'POST')
-    expect(JSON.parse(String(save?.[1]?.body))).toMatchObject({ amount_to: 0.12345678, price: 123.45 })
+    const save = vi.mocked(apiFetch).mock.calls.find(([url, options]) => url === '/api/investment-trades' && options?.method === 'POST')
+    expect(JSON.parse(String(save?.[1]?.body))).toMatchObject({ quantity:0.123456789123,price:123.45,execution_currency:'EUR',fee_status:'known',fee_amount:0,cash_amount:100 })
   })
 })
 

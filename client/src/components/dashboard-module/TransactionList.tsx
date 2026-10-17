@@ -1,3 +1,4 @@
+import type { TradeFacts } from '../../../../shared/investment-trade'
 import type { HoldingFields } from '../../../../shared/holding'
 import type { DashboardFilters, FilterChange } from '../../navigation/filters'
 import { useUnsavedChanges } from '../../navigation/UnsavedChanges'
@@ -20,10 +21,10 @@ import { formatAmount, formatCalculatedAmount, parseAmount } from '../../lib/amo
 import type { PendingKind } from '../../lib/transaction-review'
 import { getMcpReviewItems, hasPossibleDuplicateFlag, isMcpReviewTransaction } from '../../lib/transaction-review'
 import { TransactionCalendar } from './TransactionCalendar'
-import { TransferForm, type TransferAccount } from './TransferForm'
+import { TransferForm, type TransferAccount, type TransferFormData } from './TransferForm'
 import { cn } from '../../lib/utils'
 
-type Transaction = {
+type Transaction = TradeFacts & {
   id: string
   account_id: string
   category_id?: string | null
@@ -169,6 +170,10 @@ export function TransactionList({
     manual_price: '', // For investment accounts - manual price override
     exclude_from_estimate: false
   })
+  const [tradeDraft, setTradeDraft] = useState({ execution_currency:'', fee_status:'known' as 'known'|'unknown', fee_amount:'' })
+  const originalTradeVersion = useRef<number | undefined>(undefined)
+  const originalTradeDraft = useRef<typeof tradeDraft | null>(null)
+  const tradeRequest = useRef<{ signature:string; key:string } | null>(null)
   const originalTransferRef = useRef<{ data: typeof formData; rate: number | null; rateDraft: string } | null>(null)
   const [transferSaveError, setTransferSaveError] = useState<string | null>(null)
   const [exchangeRate, setExchangeRate] = useState<number | null>(null)
@@ -281,6 +286,11 @@ export function TransactionList({
       return
     }
 
+    if (fromAccount.type === 'investment' || toAccount.type === 'investment') {
+      setSuggestedRate(null); setExchangeRate(null); setExchangeRateDraft(''); setIsLoadingRate(false)
+      return
+    }
+
     const pairKey = getTransferPairKey(fromAccount.id, toAccount.id)
     const shouldKeepCurrentRate = () =>
       (!!editingId && editedTransferPairRef.current === pairKey)
@@ -290,19 +300,6 @@ export function TransactionList({
       setIsLoadingRate(true)
       try {
         let rate = 0
-
-        // Helper to get quote price
-        const getQuotePrice = async (symbol: string) => {
-          try {
-            const res = await apiFetch(`${API_BASE_URL}/market/quote?symbol=${encodeURIComponent(symbol)}`)
-            if (!res.ok) return null
-            const data = await res.json()
-            return { price: data.regularMarketPrice, currency: data.currency }
-          } catch {
-            console.error('Quote fetch failed')
-            return null
-          }
-        }
 
         // Helper to get FX rate
         const getFxRate = async (from: string, to: string) => {
@@ -318,52 +315,8 @@ export function TransactionList({
           }
         }
 
-        // Case 1: Investment -> Cash/Other
-        if (fromAccount.type === 'investment' && fromAccount.symbol) {
-          const quote = await getQuotePrice(fromAccount.symbol)
-          if (quote && quote.price) {
-            // Ensure currency is uppercase, trimmed, and default to USD
-            const quoteCurrency = (quote.currency || 'USD').toUpperCase().trim()
-            
-            let fxRate = await getFxRate(quoteCurrency, toAccount.currency)
-            
-            // If failed and currency wasn't USD, try USD as fallback (common for crypto quotes)
-            if (!fxRate && quoteCurrency !== 'USD') {
-               fxRate = await getFxRate('USD', toAccount.currency)
-            }
-
-            if (fxRate) {
-              rate = quote.price * fxRate
-            }
-          }
-        }
-        // Case 2: Cash/Other -> Investment
-        else if (toAccount.type === 'investment' && toAccount.symbol) {
-          const quote = await getQuotePrice(toAccount.symbol)
-          if (quote && quote.price) {
-            const quoteCurrency = (quote.currency || 'USD').toUpperCase().trim()
-            
-            let fxRate = await getFxRate(fromAccount.currency, quoteCurrency)
-            
-            // If failed and currency wasn't USD, try converting From -> USD
-            if (!fxRate && quoteCurrency !== 'USD') {
-               fxRate = await getFxRate(fromAccount.currency, 'USD')
-            }
-
-            if (fxRate) {
-              rate = fxRate / quote.price
-            }
-          }
-        }
-        
-        // Fallback / Case 3: Direct Currency Conversion
-        // Only try this if we haven't calculated a rate yet AND it's not an investment case that just failed
-        const isInvestmentCase = (fromAccount.type === 'investment' && fromAccount.symbol) || (toAccount.type === 'investment' && toAccount.symbol)
-        
-        if (!rate && !isInvestmentCase && fromAccount.currency !== toAccount.currency) {
-           const directRate = await getFxRate(fromAccount.currency, toAccount.currency)
-           if (directRate) rate = directRate
-        }
+        const directRate = await getFxRate(fromAccount.currency, toAccount.currency)
+        if (directRate) rate = directRate
 
         if (!isCurrentRequest()) return
 
@@ -409,6 +362,7 @@ export function TransactionList({
 
     const fromAccount = accounts.find(a => a.id === formData.account_id)
     const toAccount = accounts.find(a => a.id === formData.to_account_id)
+    if (fromAccount?.type === 'investment' || toAccount?.type === 'investment') return
     const isDifferentCurrency = fromAccount && toAccount && fromAccount.currency !== toAccount.currency
 
     if (editingReviewTransfer && isDifferentCurrency) return
@@ -417,7 +371,7 @@ export function TransactionList({
       // Different currency: amount_to = amount_from × exchange_rate
       const amountFrom = parseAmount(formData.amount) || 0
       const calculated = amountFrom * exchangeRate
-      const maximumFractionDigits = toAccount?.type === 'investment' ? 8 : 2
+      const maximumFractionDigits = 2
       setFormData(prev => ({
         ...prev,
         amount_to: formatCalculatedAmount(calculated, { maximumFractionDigits })
@@ -430,92 +384,7 @@ export function TransactionList({
     }
   }, [formData.amount, exchangeRate, formData.type, formData.account_id, formData.to_account_id, accounts, editingReviewTransfer])
 
-  // Auto-fetch price for investment accounts when date or account changes
-  useEffect(() => {
-    let cancelled = false
-    const fetchHistoricalPrice = async () => {
-      // Never overwrite a price that the user has edited, including a deliberate
-      // empty value. This also protects against a pending fetch resolving late.
-      if (manuallyEditedTransferFieldsRef.current.manual_price) {
-        return
-      }
-      
-      // Check if income/expense to investment account OR transfer to investment account
-      let investmentAccount = null
-      
-      if (formData.type === 'transfer') {
-        const toAccount = accounts.find(a => a.id === formData.to_account_id)
-        if (toAccount?.type === 'investment' && toAccount.symbol && toAccount.asset_type !== 'manual') {
-          investmentAccount = toAccount
-        }
-      } else {
-        const account = accounts.find(a => a.id === formData.account_id)
-        if (account?.type === 'investment' && account.symbol && account.asset_type !== 'manual') {
-          investmentAccount = account
-        }
-      }
-      
-      if (!investmentAccount || !formData.date) return
-      
-      try {
-        const txDate = new Date(formData.date)
-        const startDate = new Date(txDate)
-        startDate.setDate(startDate.getDate() - 7)
-        const endDate = new Date(txDate)
-        endDate.setDate(endDate.getDate() + 1)
-        
-        const period1 = Math.floor(startDate.getTime() / 1000)
-        const period2 = Math.floor(endDate.getTime() / 1000)
-        
-        const chartRes = await apiFetch(
-          `${API_BASE_URL}/market/chart?symbol=${encodeURIComponent(investmentAccount.symbol!)}&interval=1d&period1=${period1}&period2=${period2}`
-        )
-        
-        if (chartRes.ok) {
-          const chartData = await chartRes.json()
-          
-          if (chartData.quotes && Array.isArray(chartData.quotes) && chartData.quotes.length > 0) {
-            const txTime = txDate.getTime()
-            let closestIdx = 0
-            let minDiff = Math.abs(new Date(chartData.quotes[0].date).getTime() - txTime)
-            
-            for (let i = 1; i < chartData.quotes.length; i++) {
-              const quoteTime = new Date(chartData.quotes[i].date).getTime()
-              const diff = Math.abs(quoteTime - txTime)
-              if (diff < minDiff) {
-                minDiff = diff
-                closestIdx = i
-              }
-            }
-            
-            // Only use the price if it's within 3 days of the target date
-            const daysDiff = Math.abs(minDiff) / (1000 * 60 * 60 * 24)
-            if (daysDiff <= 3) {
-              const price = chartData.quotes[closestIdx].close
-              if (!cancelled && !manuallyEditedTransferFieldsRef.current.manual_price) {
-                setFormData(prev => ({ ...prev, manual_price: price.toFixed(2) }))
-              }
-            } else {
-              if (!cancelled && !manuallyEditedTransferFieldsRef.current.manual_price) {
-                setFormData(prev => ({ ...prev, manual_price: '' }))
-              }
-            }
-          } else {
-            // No chart data, clear manual_price
-            if (!cancelled && !manuallyEditedTransferFieldsRef.current.manual_price) {
-              setFormData(prev => ({ ...prev, manual_price: '' }))
-            }
-          }
-        }
-      } catch {
-        console.error('Failed to auto-fetch price')
-        // Don't set manual_price on error
-      }
-    }
-    
-    fetchHistoricalPrice()
-    return () => { cancelled = true }
-  }, [formData.date, formData.account_id, formData.to_account_id, formData.type, accounts])
+
 
   // Load saved defaults when opening the form
   const loadSavedDefaults = (type: 'expense' | 'income' | 'transfer') => {
@@ -673,7 +542,26 @@ export function TransactionList({
           price = parsedPrice
         }
 
-        if (editingId) {
+        const holding = sourceAccount.type === 'investment' ? sourceAccount : toAccount.type === 'investment' ? toAccount : null
+        if (holding) {
+          if (sourceAccount.type === 'investment' && toAccount.type === 'investment') throw new Error('Choose one cash account and one holding')
+          const executedPrice = parseAmount(formData.manual_price)
+          const fee = tradeDraft.fee_status === 'known' ? parseAmount(tradeDraft.fee_amount) : null
+          if (executedPrice === null || executedPrice <= 0) throw new Error('Enter the executed unit price')
+          if (tradeDraft.fee_status === 'known' && fee === null) throw new Error('Enter the included fee, including zero')
+          const body = { ...(editingId ? { expected_version:originalTradeVersion.current } : {}),holding_account_id:holding.id, cash_account_id:sourceAccount.type === 'investment' ? toAccount.id : sourceAccount.id,
+            type:sourceAccount.type === 'investment' ? 'sell' : 'buy', quantity:sourceAccount.type === 'investment' ? amount : amountTo,
+            cash_amount:sourceAccount.type === 'investment' ? amountTo : amount, price:executedPrice,
+            execution_currency:tradeDraft.execution_currency, fee_status:tradeDraft.fee_status, fee_amount:fee,
+            date:formData.date, notes:formData.description }
+          const signature = JSON.stringify([editingId,body])
+          if (tradeRequest.current?.signature !== signature) tradeRequest.current = { signature,key:crypto.randomUUID() }
+          await apiFetch(`${API_BASE_URL}/investment-trades${editingId ? `/${editingId}` : ''}`, {
+            method:editingId ? 'PUT' : 'POST', headers:{ 'Content-Type':'application/json' },
+            body:JSON.stringify({ ...body,idempotency_key:tradeRequest.current.key }) })
+          tradeRequest.current = null
+          setEditingId(null)
+        } else if (editingId) {
           await apiFetch(`${API_BASE_URL}/transactions/${editingId}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
@@ -794,7 +682,7 @@ export function TransactionList({
 
     const formatNumber = (num: number) => isMcpReviewTransaction(tx)
       ? formatAmount(Math.abs(num))
-      : formatAmount(Math.abs(num), { maximumFractionDigits: 8 })
+      : formatAmount(Math.abs(num), { maximumFractionDigits: 12 })
     
     const relatedTx = (tx as Transaction & { relatedTx?: Transaction }).relatedTx
       || (tx.linked_transaction_id ? allKnownTransactions.find(t => t.id === tx.linked_transaction_id) : undefined)
@@ -812,9 +700,15 @@ export function TransactionList({
       const incomingValue = incomingAccount?.type === 'investment' && incoming.quantity !== undefined
         ? Math.abs(incoming.quantity)
         : Math.abs(incoming.amount)
-      const investmentPrice = incomingAccount?.type === 'investment' && incoming.price !== undefined
-        ? formatNumber(incoming.price)
+      const investmentRow = outgoingAccount?.type === 'investment' ? outgoing : incoming
+      const investmentPrice = investmentRow.price !== undefined
+        ? formatNumber(investmentRow.price)
         : ''
+      const tradeRow = outgoingAccount?.type === 'investment' ? outgoing : incomingAccount?.type === 'investment' ? incoming : undefined
+      originalTradeVersion.current = tradeRow?.trade_version ?? 0
+      const draft = { execution_currency:tradeRow?.execution_currency || (outgoingAccount?.type === 'investment' ? outgoingAccount : incomingAccount)?.quote_currency || '',
+        fee_status:tradeRow?.fee_status || 'unknown' as 'known'|'unknown', fee_amount:tradeRow?.fee_amount == null ? '' : formatAmount(tradeRow.fee_amount) }
+      setTradeDraft(draft); originalTradeDraft.current = draft; tradeRequest.current = null
       const existingRate = Math.abs(outgoing.amount) > 0
         ? incomingValue / Math.abs(outgoing.amount)
         : null
@@ -1098,6 +992,20 @@ export function TransactionList({
     return acc ? acc.currency : 'HUF'
   }
 
+  const selectedHoldingId = formData.type === 'transfer' ? accounts.find(a => a.type === 'investment' && (a.id === formData.account_id || a.id === formData.to_account_id))?.id : undefined
+  const selectedHoldingQuote = accounts.find(a => a.id === selectedHoldingId)?.quote_currency || ''
+  useEffect(() => {
+    if (!editingId) setTradeDraft({ execution_currency:selectedHoldingQuote,fee_status:'known',fee_amount:'' })
+  },[selectedHoldingId,selectedHoldingQuote,editingId])
+  const handleTransferPatch = (patch: Partial<TransferFormData>) => {
+    const { execution_currency,fee_status,fee_amount,...regular } = patch
+    setFormData(prev => ({ ...prev,...regular }))
+    setTradeDraft(prev => ({ ...prev,
+      ...(execution_currency !== undefined ? { execution_currency } : {}),
+      ...(fee_status !== undefined ? { fee_status } : {}),
+      ...(fee_amount !== undefined ? { fee_amount } : {}) }))
+  }
+
   // For transfer preview
   const fromAccount = accounts.find(a => a.id === formData.account_id)
   const toAccount = accounts.find(a => a.id === formData.to_account_id)
@@ -1109,6 +1017,7 @@ export function TransactionList({
     (['account_id', 'to_account_id', 'date', 'description'] as const).some(key => formData[key] !== originalTransfer.data[key])
     || (['amount', 'amount_to', 'manual_price'] as const).some(key => parseAmount(formData[key]) !== parseAmount(originalTransfer.data[key]))
     || parseAmount(exchangeRateDraft) !== parseAmount(originalTransfer.rateDraft)
+    || !!originalTradeDraft.current && JSON.stringify(tradeDraft) !== JSON.stringify(originalTradeDraft.current)
   )
   // Posted balances already include the old legs. Undo them before previewing
   // the replacement, including when either selected account has changed.
@@ -1182,6 +1091,7 @@ export function TransactionList({
     manuallyEditedTransferFieldsRef.current = { amount_to: true, manual_price: !!originalTransfer.data.manual_price }
     editedTransferPairRef.current = getTransferPairKey(originalTransfer.data.account_id, originalTransfer.data.to_account_id)
     setFormData({ ...originalTransfer.data })
+    if (originalTradeDraft.current) setTradeDraft({ ...originalTradeDraft.current })
     setExchangeRate(originalTransfer.rate)
     setExchangeRateDraft(originalTransfer.rateDraft)
     setIsLoadingRate(false)
@@ -1438,19 +1348,19 @@ export function TransactionList({
         isOpen={isAdding} 
         onClose={handleCancel} 
         placement={formData.type === 'transfer' ? 'centered' : 'center'}
-        className={formData.type === 'transfer' ? 'sm:max-w-[480px] rounded-2xl' : undefined}
+        className={formData.type === 'transfer' ? 'sm:max-w-[480px] rounded-2xl flex min-h-0 flex-col overflow-hidden' : undefined}
         headerClassName={formData.type === 'transfer' ? 'px-5 py-4 sm:px-6 sm:py-4 [&_h2]:text-[17px] [&_h2]:tracking-tight' : undefined}
-        contentClassName={formData.type === 'transfer' ? 'p-0 sm:p-0' : undefined}
+        contentClassName={formData.type === 'transfer' ? 'p-0 sm:p-0 flex min-h-0 flex-1 flex-col' : undefined}
         title={editingId ? (formData.type === 'transfer' ? 'Edit Transfer' : 'Edit Transaction') : (formData.type === 'transfer' ? 'New transaction' : formData.type === 'income' ? 'Add Income' : 'Add Transaction')}
       >
-        <form onSubmit={handleSubmit} className={formData.type === 'transfer' ? '' : 'space-y-4'}>
+        <form onSubmit={handleSubmit} className={formData.type === 'transfer' ? 'flex min-h-0 flex-1 flex-col' : 'space-y-4'}>
             {formData.type !== 'transfer' && typeSelector}
 
             {/* Transfer Form */}
             {formData.type === 'transfer' ? (
               <TransferForm
                 accounts={accounts}
-                data={formData}
+                data={{ ...formData,...tradeDraft }}
                 editing={!!editingId}
                 reviewDraft={editingReviewTransfer}
                 dirty={transferDirty}
@@ -1468,7 +1378,7 @@ export function TransactionList({
                 onRateChange={handleTransferRateChange}
                 onUseMarket={() => suggestedRate && handleTransferRateChange(formatCalculatedAmount(suggestedRate, { maximumFractionDigits: 12 }))}
                 onSwap={handleSwapTransfer}
-                onChange={patch => setFormData(prev => ({ ...prev, ...patch }))}
+                onChange={handleTransferPatch}
                 onPriceChange={manualPrice => {
                   manuallyEditedTransferFieldsRef.current.manual_price = true
                   setFormData(prev => ({ ...prev, manual_price: manualPrice }))
@@ -1516,7 +1426,7 @@ export function TransactionList({
                             required
                           >
                             <option value="">Select Account</option>
-                            {accounts.filter(acc => !isLocked(acc.id)).map(acc => (
+                            {accounts.filter(acc => !isLocked(acc.id) && acc.type !== 'investment').map(acc => (
                               <option key={acc.id} value={acc.id}>{acc.name}</option>
                             ))}
                           </Select>
@@ -1533,7 +1443,7 @@ export function TransactionList({
                         required
                       >
                         <option value="">Select Account</option>
-                        {accounts.filter(acc => !isLocked(acc.id)).map(acc => (
+                        {accounts.filter(acc => !isLocked(acc.id) && acc.type !== 'investment').map(acc => (
                           <option key={acc.id} value={acc.id}>{acc.name}</option>
                         ))}
                       </Select>

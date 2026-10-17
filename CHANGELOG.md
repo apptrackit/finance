@@ -6,13 +6,19 @@ Intermediate package/UI version bumps are grouped under the next published GitHu
 
 ## Unreleased
 
+### Added
+
+- Added direct cash-linked investment purchases and sales with exact settlement, confirmed execution currency/included fees, guarded event replay, stale-edit protection and bounded retry receipts. Migration 019 preserves legacy facts and makes unsupported standalone posting read-only; see `docs/investment-trades.md`.
+
 ### Changed
 
 - Investment account setup separates ETF/stock/crypto/manual categories from pricing, preserves stored quantities across portfolio consumers, and records explicit dated openings/corrections without fake cash movements. Missing legacy cost/history stays unavailable; manually priced unit holdings use their saved fiat price.
 - Dashboard uses a shared period picker, a responsive balance/activity summary, compact transaction filters, and a combined review queue with explicit confirmation actions. Transaction rows show neutral transfers, daily cash-flow totals, and native/converted amounts; privacy masking and loading states follow the new layout.
-- Investment purchases store reciprocal links between the cash ledger and investment history. Linked creation, edits, and deletion batch both records, balances, and audit entries atomically; deletion from either side reverses the pair once. History, portfolio reads, MCP activity, and JSON exports preserve the investment-side link. Inconsistent legacy links and unsupported investment-source transfers are rejected before changing balances.
+- Investment purchases store reciprocal links between the cash ledger and investment history. Linked creation, edits, and deletion batch both records, balances, and audit entries atomically; deletion from either side reverses the pair once. History, portfolio reads, MCP activity, and JSON exports preserve the investment-side link. Inconsistent legacy links are rejected before changing balances; the explicit sale workflow added above extends the original purchase-only foundation.
 
 ### Migration and upgrade notes
+
+- Migration 019 adds explicit execution/fee/settlement facts, stable order/version and bounded replay receipts. Existing financial columns/row IDs and source revision are preserved. Apply after 018 before updated Workers/client; standalone investment posting and recurring unit mutations are blocked. See `docs/investment-trades.md`.
 
 - Migration 018 adds holding pricing/unit/provider metadata and exported position anchors. The baseline preserves every existing financial column/rowid and financial-source revision, including locked/archived holdings. Apply it after 017 and before the updated Workers/client; this is an intermediate investment epic step, not the completed rework.
 - Migration 017 adds the nullable investment-side cash link and backfills unambiguous active and archived history without changing financial values or source revision. Standalone trades remain unlinked; ambiguous or invalid legacy relationships are preserved for explicit repair. Apply the migration before deploying the updated API, client, or MCP.
@@ -55,6 +61,8 @@ Intermediate package/UI version bumps are grouped under the next published GitHu
 - Removed shared browser API-key authentication and persistent service-worker caching of financial API responses. Updated installations clear the former API cache; offline app-shell navigation does not provide authenticated financial data. [#117](https://github.com/apptrackit/finance/pull/117)
 
 ### Migration and upgrade notes
+
+- Migration 019 adds explicit execution/fee/settlement facts, stable order/version and bounded replay receipts. Existing financial columns/row IDs and source revision are preserved. Apply after 018 before updated Workers/client; standalone investment posting and recurring unit mutations are blocked. See `docs/investment-trades.md`.
 
 - **Breaking authentication change:** configure Access on the entire private API hostname and the frontend before deploying. Set `API_AUTH_MODE=private`, an explicit HTTPS `API_URL`, `API_ACCESS_TEAM_DOMAIN`, `API_ACCESS_AUD`, `API_ACCESS_ALLOWED_EMAIL`, and exact `ALLOWED_ORIGINS`; client `VITE_API_AUTH_MODE` must match. Configure credentialed CORS, unauthenticated OPTIONS preflight, and Access session cookies. See the [API Access upgrade guide](https://github.com/apptrackit/finance/blob/main/docs/api-access.md). [#117](https://github.com/apptrackit/finance/pull/117)
 - Prefer frontend/API HTTPS hostnames on the same site. An explicitly configured Access-protected workers.dev API is supported, but cross-site cookies require SameSite=None and can still be blocked by browsers; preview URLs remain disabled. Local frontends using a private remote API need their exact loopback origin allowed and the same cookie considerations. [#117](https://github.com/apptrackit/finance/pull/117)
@@ -100,6 +108,8 @@ Intermediate package/UI version bumps are grouped under the next published GitHu
 - Removed saved last-page startup behavior and the `finance_last_view` browser preference. Page URLs now preserve explicit views, and fresh launches open Dashboard. [#97](https://github.com/apptrackit/finance/pull/97)
 
 ### Migration and upgrade notes
+
+- Migration 019 adds explicit execution/fee/settlement facts, stable order/version and bounded replay receipts. Existing financial columns/row IDs and source revision are preserved. Apply after 018 before updated Workers/client; standalone investment posting and recurring unit mutations are blocked. See `docs/investment-trades.md`.
 
 - Apply `016-account-archive.sql` before updating API/MCP Workers. It adds `accounts.archived_at` and D1 triggers enforcing archive requirements, read-only archived accounts and ledgers, paused schedules, and account deletion safety for both Workers. [#98](https://github.com/apptrackit/finance/pull/98)
 - Restoring an account does not reactivate its recurring schedules; resume them explicitly after review. Accounts with pending work or a nonzero balance/holding must resolve those items before archiving. [#98](https://github.com/apptrackit/finance/pull/98)
@@ -150,6 +160,8 @@ Intermediate package/UI version bumps are grouped under the next published GitHu
 
 ### Migration and upgrade notes
 
+- Migration 019 adds explicit execution/fee/settlement facts, stable order/version and bounded replay receipts. Existing financial columns/row IDs and source revision are preserved. Apply after 018 before updated Workers/client; standalone investment posting and recurring unit mutations are blocked. See `docs/investment-trades.md`.
+
 - Apply these migrations in order before updating API/MCP Workers:
   - `013-mcp-review-corrections.sql`: expiring draft correction proposals, replay records, review queue indexing, and revision triggers that ignore draft-only changes.
   - `014-mcp-transfer-review-corrections.sql`: expiring transfer-pair correction proposals and replay records.
@@ -193,6 +205,8 @@ Intermediate package/UI version bumps are grouped under the next published GitHu
 - Retired budget management across the API, client, and MCP, including its navigation entry and MCP budget reporting.
 
 ### Migration and upgrade notes
+
+- Migration 019 adds explicit execution/fee/settlement facts, stable order/version and bounded replay receipts. Existing financial columns/row IDs and source revision are preserved. Apply after 018 before updated Workers/client; standalone investment posting and recurring unit mutations are blocked. See `docs/investment-trades.md`.
 
 - **Back up any budget data you need before upgrading.** Migration `012-remove-budgets.sql` permanently drops the budget tables and removes the saved budget navigation preference.
 - Update MCP forecast publishers for the 91-point daily path and dated movement validation. Use the pinned Node 22 LTS runtime for local builds, tests, and deployment.
