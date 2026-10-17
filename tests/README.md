@@ -28,7 +28,7 @@ npm run test:integration -- -t 'rolls back'
 | Workflow validation | Invalid Actions syntax, expressions, and shell commands |
 | CI passed | One stable check that requires every preceding job to succeed |
 
-The workflow runs on pull requests and pushes to `main`, merge queues, and manual dispatch. It cancels superseded runs, uses timeouts and read-only repository permissions, pins Actions to commits, and uploads JUnit reports for seven days. Failed integration tests print the harness's Worker logs. Reports use synthetic fixtures only.
+The workflow runs on pull requests and pushes to `main` and `epic/**`, merge queues, and manual dispatch. It cancels superseded runs, uses timeouts and read-only repository permissions, pins Actions to commits, and uploads JUnit reports for seven days. Failed integration tests print the harness's Worker logs. Reports use synthetic fixtures only.
 
 Require **CI passed** in GitHub branch protection or a ruleset to make these checks block merging. Adding the workflow does not itself change repository protection settings. The original four check names are retained for existing rules.
 
@@ -50,6 +50,8 @@ The financial scenarios assert both API responses and persisted balances/rows. T
 - Data preservation during upgrades, budget retirement, immutable forecast records and financial revision triggers.
 
 ## Adding a regression
+
+The investment rework's [accounting contract](../docs/investment-accounting.md) has reusable [synthetic examples](fixtures/investment-accounting-v1.json), checked by `api/src/tests/investment-accounting-contract.test.ts` in the normal API suite. These checks verify worked arithmetic, coverage expectations and the existing shared FX contract; they do not certify that legacy investment endpoints implement the future rules. Future investment implementations should run their adapters against the same expected results. Use `npm test -w api -- src/tests/investment-accounting-contract.test.ts` for a focused check.
 
 Choose a unit test for a pure calculation or validation rule. Choose integration when correctness depends on SQL, migrations, multiple writes, bindings, authentication, or API/MCP agreement. Reproduce the failure before fixing it; assert the resulting financial state, including what must remain unchanged on failure. Avoid tests that reimplement the production SQL in a mock.
 
