@@ -435,3 +435,5 @@ curl --fail-with-body \
 For investment execution and migration 019, see [Direct cash investment trades](docs/investment-trades.md).
 
 For implementation conventions, financial invariants, and change-specific checks, see [AGENTS.md](AGENTS.md). For historical changes and upgrade context, see [CHANGELOG.md](CHANGELOG.md).
+
+For dated manual appraisals, whole-asset ownership/cash events and migration 020, see [Manual investment values](docs/manual-investment-valuations.md).

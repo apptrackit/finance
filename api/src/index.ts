@@ -1,3 +1,7 @@
+import { ManualValuationRepository } from './repositories/manual-valuation.repository'
+import { ManualValuationService } from './services/manual-valuation.service'
+import { ManualValuationController } from './controllers/manual-valuation.controller'
+import { ManualValuationSchema } from './validators/manual-valuation.validator'
 import { Hono, Context } from 'hono'
 import { Bindings } from './types/environment.types'
 import { APP_VERSION } from './config/constants'
@@ -119,7 +123,8 @@ function createDependencies(db: D1Database) {
     financialOutlookController,
     dataExportController,
     transactionHistoryController,
-    investmentTradeController
+    investmentTradeController,
+    manualValuationController: new ManualValuationController(new ManualValuationService(new ManualValuationRepository(db)))
   }
 }
 
@@ -138,6 +143,7 @@ app.onError((err, c) => {
     HOLDING_POSITION_MISMATCH: 'Opening quantity and later activity do not match the current holding. Reconcile the opening or record an explicit correction.',
     HOLDING_OPENING_DATE: 'The trade date must be after the end-of-day opening position. Correct the opening date before backdating this trade.',
     TRADE_CASH_CURRENCY: 'This cash currency is protected by recorded trade settlements. Create a separate cash account for a different currency.',
+    MANUAL_ASSET_OWNED: 'Confirm a known unowned opening or record full disposal before archiving this asset; zero value alone does not establish disposal.',
     ACCOUNT_ARCHIVE_NONZERO: 'The balance or holding must be zero before archiving.',
     ACCOUNT_ARCHIVE_PENDING: 'Confirm or decline all pending and review transactions before archiving.',
     ACCOUNT_DELETE_LINKED: 'This account has linked transfers. Archive it to preserve both sides and their history.',
@@ -228,6 +234,9 @@ app.post('/investment-transactions', (c) => getControllers(c).investmentTransact
 app.delete('/investment-transactions/:id', (c) => getControllers(c).investmentTransactionController.delete(c))
 
 // Transfers
+app.get('/accounts/:id/valuations', c => getControllers(c).manualValuationController.history(c))
+app.put('/accounts/:id/valuations', validateBody(ManualValuationSchema), c => getControllers(c).manualValuationController.save(c))
+
 app.post('/investment-trades', validateBody(InvestmentTradeSchema), c => getControllers(c).investmentTradeController.save(c))
 app.put('/investment-trades/:id', validateBody(InvestmentTradeSchema), c => getControllers(c).investmentTradeController.save(c))
 app.delete('/investment-trades/:id', c => getControllers(c).investmentTradeController.delete(c))

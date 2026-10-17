@@ -12,7 +12,7 @@ import { HoldingsList } from './HoldingsList'
 import { InvestmentDetailModal } from './InvestmentDetailModal'
 
 export function Investments() {
-  const { investments } = useOutletContext<FinancePageContext>()
+  const { investments, finance } = useOutletContext<FinancePageContext>()
   const { data, status, refresh: fetchData, currencyDisplay, setCurrencyDisplay } = investments
   const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null)
   const { privacyMode } = usePrivacy()
@@ -113,6 +113,7 @@ export function Investments() {
         exchangeRates={exchangeRates}
         privacyMode={privacyMode}
         onClose={() => setSelectedAccountId(null)}
+        onValuationSaved={() => { void finance.handleDataChange() }}
       />
     </div>
     </FinanceDataBoundary>

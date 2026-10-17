@@ -78,3 +78,5 @@ Current quantity/value and metadata work end to end. Legacy invested-capital/gai
 Do not deploy an intermediate epic as the completed investment redesign. Child PRs target `epic/123-investment-rework`; stop at each for review, then integrate the completed epic into main only with explicit user authorization.
 
 The next foundation, [direct cash investment trades](investment-trades.md), implements #128 and migration 019. It extends anchor boundaries with durable event-order boundaries, records confirmed executions and blocks unsupported cash/schedule paths from treating units as money. Dated manual values, performance and the full redesign remain later children.
+
+The next foundation, [dated manual investment values](manual-investment-valuations.md), implements #129 and migration 020: independent appraisals, explicit total-asset ownership/events and guarded history. Performance and full page/detail redesign remain later epic children.

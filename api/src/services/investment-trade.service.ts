@@ -1,3 +1,5 @@
+import { valuationAt } from '../../../shared/manual-valuation'
+import type { ManualValuation } from '../../../shared/manual-valuation'
 import { AppError } from '../errors/codes'
 import { validLocalDate } from '../../../shared/holding'
 import type { PositionAnchor } from '../../../shared/holding'
@@ -40,11 +42,11 @@ export class InvestmentTradeService {
     if (a.archived_at != null) throw new AppError('ACCOUNT_ARCHIVED','Restore both accounts before changing a trade.',409)
     if (a.is_locked) throw new AppError('ACCOUNT_LOCKED','Unlock both accounts before changing a trade.',409)
     if ((a.type === 'investment') !== holding) throw AppError.validation('A trade needs one cash account and one investment holding')
-    if (holding && a.asset_type === 'manual') throw AppError.validation('Total-value manual assets need an acquisition/disposal event, not a unit trade')
     return a
   }
   private timeline(state: TradeState, account: Account, before: InvestmentTransaction | undefined,
     after: InvestmentTransaction | undefined, today: string): { balance: number; baseline?: PositionAnchor } {
+    if (account.asset_type === 'manual') throw AppError.validation('Use the manual ownership timeline')
     const oldEvents = state.trades.filter(t => t.account_id === account.id)
     const savedAnchor = account.holding_position?.anchor
     const baseline: PositionAnchor = savedAnchor ?? {
@@ -76,6 +78,43 @@ export class InvestmentTradeService {
     if (unitInteger(balance) !== quantity) throw AppError.validation('Result exceeds supported quantity precision')
     return { balance, ...(!savedAnchor ? { baseline } : {}) }
   }
+  private manualTimeline(op: TradeOperation, account: Account, today: string) {
+    const before = op.before?.trade, after = op.after?.trade
+    const anchor = account.holding_position?.anchor
+    if (!anchor) throw reconcile('Confirm an opening position in Accounts before acquiring or disposing of a manual asset.')
+    const included = (t: InvestmentTransaction) => anchor.kind === 'opening' ? t.date > anchor.effective_date
+      : (t.effective_order ?? 0) > (anchor.trade_order_boundary ?? anchor.trade_rowid_boundary)
+    for (const t of [before,after].filter((t): t is InvestmentTransaction => !!t && t.account_id === account.id)) {
+      if (!included(t) || t.date < anchor.effective_date) throw reconcile('This asset event crosses the saved opening/observation boundary.')
+      if (t.quantity !== 1 || !t.asset_event) throw AppError.validation('Manual assets support one whole ITEM only; partial disposal is unsupported')
+    }
+    const oldEvents = op.state.trades.filter(t => t.account_id === account.id && included(t))
+    const replay = (events: InvestmentTransaction[]) => {
+      let owned: boolean | null = anchor.owned ?? (anchor.balance > 0 ? true : null)
+      for (const t of events.sort((a,b) => a.date.localeCompare(b.date) || (a.effective_order??0)-(b.effective_order??0) || a.id.localeCompare(b.id))) {
+        if (!t.asset_event || t.quantity !== 1 || t.date < anchor.effective_date || t.date > today) throw reconcile('Resolve unsupported legacy manual activity before changing ownership.')
+        if (owned === null) throw reconcile('A legacy zero value does not establish ownership. Confirm a known opening in Accounts first.')
+        if (t.asset_event === 'acquisition' ? owned : !owned) throw new AppError('MANUAL_ASSET_OWNED',t.asset_event==='acquisition'?'This asset is already owned on the event date.':'The complete asset must be owned before its disposal.',409)
+        owned = t.asset_event === 'acquisition'
+      }
+      return owned
+    }
+    replay([...oldEvents])
+    const nextEvents = oldEvents.filter(t => t.id !== before?.id)
+    if (after?.account_id === account.id) nextEvents.push(after)
+    const owned = replay(nextEvents)
+    const removed = before?.asset_event === 'acquisition' ? op.state.valuations.filter(v => v.source_trade_id === before.id && v.source === 'acquisition') : []
+    op.removeValuations = [...(op.removeValuations??[]),...removed.map(v => v.id)]
+    const values = op.state.valuations.filter(v => v.account_id === account.id && !removed.includes(v))
+    if (after?.account_id === account.id && after.asset_event === 'acquisition' && !values.some(v => v.effective_date === after.date)) {
+      const v: ManualValuation = { id:crypto.randomUUID(),source_trade_id:after.id,account_id:account.id,effective_date:after.date,kind:'total',amount:after.price,
+        currency:after.execution_currency!,source:'acquisition',version:1,created_at:op.now,updated_at:op.now }
+      values.push(v); op.addValuations = [...(op.addValuations??[]),v]
+    }
+    const latest = valuationAt(values,today)
+    if (owned && !latest) throw reconcile('A current manual appraisal is required before restoring ownership.')
+    op.balances.set(account.id,owned ? latest!.amount : 0)
+  }
   async save(input: TradeInput, clientDate?: string, id?: string): Promise<TradeResult> {
     const parsed = InvestmentTradeSchema.safeParse(input)
     if (!parsed.success) throw AppError.validation(parsed.error.issues.map(i => i.message).join('; '))
@@ -85,7 +124,7 @@ export class InvestmentTradeService {
     if (t.holding_account_id === t.cash_account_id) throw AppError.validation('Choose different cash and holding accounts')
     if ((t.fee_status === 'known') !== (t.fee_amount != null)) throw AppError.validation('Enter the included fee, including zero, or explicitly choose unknown')
     const facts = settlementDetails(t)
-    if (!Number.isFinite(facts.gross_amount) || facts.gross_amount <= 0 || facts.gross_amount > 1e12) throw AppError.validation('Gross execution amount exceeds the supported range')
+    if (!Number.isFinite(facts.gross_amount) || facts.gross_amount < 0 || facts.gross_amount > 1e12) throw AppError.validation('Gross execution amount exceeds the supported range')
     const hash = await this.hash([id ?? null,t.holding_account_id,t.cash_account_id,t.type,t.quantity,t.price,t.execution_currency,t.cash_amount,t.fee_status,t.fee_amount??null,t.date,t.notes??null,t.expected_version??null])
     const now = Date.now()
     for (let attempt=0; attempt<5; attempt++) {
@@ -100,12 +139,17 @@ export class InvestmentTradeService {
       if (existing && t.expected_version !== existing.trade_version) throw conflict()
       const holding = this.account(state,t.holding_account_id,true)
       const cash = this.account(state,t.cash_account_id,false)
+      const total = holding.asset_type === 'manual'
+      const zeroDisposal = total && t.type === 'sell' && t.price === 0 && t.cash_amount === 0 && t.fee_status === 'known' && t.fee_amount === 0
+      if (!zeroDisposal && (t.price === 0 || t.cash_amount === 0)) throw AppError.validation('A positive price and cash settlement are required, except a confirmed zero-proceeds full manual disposal')
+      if (total && (t.quantity !== 1 || t.execution_currency !== holding.currency)) throw AppError.validation('A manual acquisition/disposal uses exactly one ITEM and a total executed price in the asset valuation currency')
+      if (existing && ((existing.asset_event != null) !== total || (total && existing.account_id !== holding.id))) throw AppError.validation('Keep manual asset events on their original holding; do not convert unit trades into appraisals')
       if (!(tradeCurrencies as readonly string[]).includes(cash.currency)) throw AppError.validation('This cash currency has no supported settlement precision')
       if (t.execution_currency === cash.currency) {
         if (t.fee_status !== 'known') throw AppError.validation('Confirm the included fee, including zero, for a same-currency trade')
         const expected = roundSettlement(facts.gross_amount + (t.type === 'buy' ? t.fee_amount! : -t.fee_amount!))
-        if (expected <= 0 || Math.abs(expected-t.cash_amount)>1e-8) throw AppError.validation('Exact cash must equal the settled gross amount plus the buy fee or minus the sale fee')
-      } else if (t.fee_status === 'known' && !facts.implied_settlement_rate) throw AppError.validation('The known included fee must leave positive gross settlement cash')
+        if ((!zeroDisposal && expected <= 0) || Math.abs(expected-t.cash_amount)>1e-8) throw AppError.validation('Exact cash must equal the settled gross amount plus the buy fee or minus the sale fee')
+      } else if (!zeroDisposal && t.fee_status === 'known' && !facts.implied_settlement_rate) throw AppError.validation('The known included fee must leave positive gross settlement cash')
       const before = existing ? await this.pair(state,existing) : undefined
       const tradeId = existing?.id ?? crypto.randomUUID()
       const cashId = before?.cash.id ?? crypto.randomUUID()
@@ -113,6 +157,7 @@ export class InvestmentTradeService {
         date:t.date,notes:t.notes??undefined,created_at:existing?.created_at??now,linked_transaction_id:cashId,
         execution_currency:t.execution_currency,gross_amount:facts.gross_amount,fee_status:t.fee_status,
         fee_amount:t.fee_amount??null,fee_currency:t.fee_status==='known'?cash.currency:null,cash_amount:t.cash_amount,cash_currency:cash.currency,
+        asset_event:total?(t.type==='buy'?'acquisition':'disposal'):null,
         effective_order:existing?.effective_order??Number.MAX_SAFE_INTEGER,trade_version:existing?(existing.trade_version??0)+1:1 }
       const cashRow = { id:cashId,account_id:cash.id,amount:t.type==='buy'?-t.cash_amount:t.cash_amount,
         date:t.date,description:`${t.type==='buy'?'Buy':'Sell'} ${holding.name}${t.notes?` - ${t.notes}`:''}`,linked_transaction_id:tradeId }
@@ -120,6 +165,7 @@ export class InvestmentTradeService {
       const op: TradeOperation = { key:t.idempotency_key,hash,now,state,result,before,after:{ trade,cash:cashRow },balances:new Map(),anchors:[] }
       for (const holdingId of new Set([holding.id,...(existing?[existing.account_id]:[])])) {
         const a = this.account(state,holdingId,true)
+        if (a.asset_type === 'manual') { this.manualTimeline(op,a,today); continue }
         const position = this.timeline(state,a,existing,trade,today)
         op.balances.set(a.id,position.balance)
         if (position.baseline) op.anchors.push({ accountId:a.id,anchor:position.baseline })
@@ -134,7 +180,7 @@ export class InvestmentTradeService {
     const links = await this.repo.cashLinks(trade.id)
     if (!trade.linked_transaction_id || links.length!==1 || links[0].id!==trade.linked_transaction_id) throw reconcile('This legacy record has no consistent cash pair. Keep it read-only until its unit impact and cash history are reconciled.')
     const cash = links[0]
-    if ((cash.status??'posted')!=='posted' || cash.date!==trade.date || (trade.type==='buy'?cash.amount>=0:cash.amount<=0)) throw reconcile('The linked cash and trade records disagree; reconcile the pair first')
+    if ((cash.status??'posted')!=='posted' || cash.date!==trade.date || (trade.type==='buy'?cash.amount>=0:cash.amount<0 || (cash.amount===0 && !(trade.asset_event==='disposal' && trade.cash_amount===0 && trade.price===0 && trade.fee_amount===0)))) throw reconcile('The linked cash and trade records disagree; reconcile the pair first')
     this.account(state,trade.account_id,true)
     const a = this.account(state,cash.account_id,false)
     if ((trade.cash_amount!=null && trade.cash_amount!==Math.abs(cash.amount)) || (trade.cash_currency!=null && trade.cash_currency!==a.currency)) throw reconcile('Recorded settlement cash no longer matches the linked cash ledger')
@@ -151,11 +197,12 @@ export class InvestmentTradeService {
       const before = await this.pair(state,trade)
       const holding = this.account(state,trade.account_id,true)
       const cash = this.account(state,before.cash.account_id,false)
-      const position = this.timeline(state,holding,trade,undefined,this.today(clientDate))
+      const position = holding.asset_type === 'manual' ? null : this.timeline(state,holding,trade,undefined,this.today(clientDate))
       const op: TradeOperation = { key:crypto.randomUUID(),hash:await this.hash(['delete',trade.id]),now:Date.now(),state,
         result:{trade_id:trade.id,cash_transaction_id:before.cash.id,type:trade.type,deleted:true},before,
-        balances:new Map([[holding.id,position.balance],[cash.id,addExact(cash.balance,-before.cash.amount)]]),
-        anchors:position.baseline?[{accountId:holding.id,anchor:position.baseline}]:[] }
+        balances:new Map([[holding.id,position?.balance??holding.balance],[cash.id,addExact(cash.balance,-before.cash.amount)]]),
+        anchors:position?.baseline?[{accountId:holding.id,anchor:position.baseline}]:[] }
+      if (holding.asset_type === 'manual') this.manualTimeline(op,holding,this.today(clientDate))
       if (await this.repo.commit(op)) return
     }
     throw conflict()

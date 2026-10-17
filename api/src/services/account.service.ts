@@ -53,7 +53,11 @@ export class AccountService {
       account = this.normalizeHolding(account)
       if (account.manual_price != null) account.manual_price_date = dto.manual_price_date ?? date
       if (account.manual_price_date && (!validLocalDate(account.manual_price_date) || account.manual_price_date > today)) throw AppError.validation('Manual price date cannot be in the future')
-      await this.accountRepo.createHolding(account, this.anchor(account.balance, 'opening', date, now, dto.opening))
+      if (account.asset_type !== 'manual' && dto.opening?.owned !== undefined) throw AppError.validation('Explicit ownership belongs to total manual assets')
+      if (account.asset_type === 'manual' && dto.opening?.owned === false && account.balance !== 0) throw AppError.validation('An unowned asset must start at zero current value')
+      if (account.asset_type === 'manual' && account.balance === 0 && dto.opening?.owned !== true && (dto.opening?.cost_amount??0) > 0) throw AppError.validation('An unowned opening has no remaining cost. Mark an owned zero-value asset as owned, or leave its cost unknown.')
+      await this.accountRepo.createHolding(account, this.anchor(account.balance, 'opening', date, now,
+        account.asset_type === 'manual' ? { ...dto.opening, balance:account.balance, date, owned:dto.opening?.owned??account.balance!==0 } : dto.opening))
       return (await this.accountRepo.findById(id))!
     }
     if (dto.opening || dto.manual_price != null || dto.pricing_method) throw AppError.validation('Holding metadata belongs to investment accounts')
@@ -62,10 +66,18 @@ export class AccountService {
   }
 
   async updateAccount(id: string, dto: UpdateAccountDto, clientDate?: string): Promise<Account> {
+    const revision = await this.accountRepo.financialRevision()
     const existing = await this.requireActive(id)
     const now = Date.now()
     if (dto.type && dto.type !== existing.type && (dto.type === 'investment' || existing.type === 'investment')) throw new AppError('HOLDING_HISTORY_METADATA', 'Create a separate account to change between cash and investment', 409)
     if (existing.type === 'investment') {
+      if ((existing.asset_type === 'manual' && dto.balance !== undefined && dto.balance !== existing.balance)
+        || (dto.manual_price !== undefined && dto.manual_price !== existing.manual_price)
+        || (dto.manual_price_date !== undefined && dto.manual_price_date !== existing.manual_price_date)) {
+        throw AppError.validation('Use Update value in the holding details to save a dated appraisal. Buying/selling uses a linked cash transfer.')
+      }
+      if (existing.asset_type === 'manual' && dto.opening && await this.accountRepo.hasManualAssetEvents(id)) throw AppError.validation('An opening cannot replace recorded manual acquisition/disposal events')
+      if (existing.asset_type === 'manual' && dto.opening && (dto.opening.owned === false || (dto.opening.balance === 0 && dto.opening.owned !== true)) && (existing.balance !== 0 || existing.manual_ownership === 'owned')) throw AppError.validation('A zero opening would discard an owned asset; record its full disposal instead')
       if (dto.adjustWithTransaction || dto.splitTransactions?.length) throw AppError.validation('Use a dated position correction, not an income/expense adjustment, for a holding')
       if (dto.balance !== undefined && dto.balance !== existing.balance && dto.expected_balance === undefined) throw new AppError('HOLDING_POSITION_CONFLICT', 'Refresh and provide the saved quantity/value before correcting a holding', 409)
       if ((dto.expected_balance !== undefined && dto.expected_balance !== existing.balance) || (dto.expected_updated_at !== undefined && dto.expected_updated_at !== existing.updated_at)) throw new AppError('HOLDING_POSITION_CONFLICT', 'Holding changed; refresh before saving', 409)
@@ -84,9 +96,17 @@ export class AccountService {
       if (dto.manual_price !== undefined && dto.manual_price != null && (next.asset_type === 'manual' || next.pricing_method !== 'manual' || !validHoldingNumber(dto.manual_price))) throw AppError.validation('A manual unit price requires a manually priced ETF, stock or crypto holding')
       let anchor: PositionAnchor | null = null
       if (dto.opening) {
+        if (existing.asset_type !== 'manual' && dto.opening.owned !== undefined) throw AppError.validation('Explicit ownership belongs to total manual assets')
         if (await this.accountRepo.hasFutureInvestmentActivity(id, today)) throw AppError.validation('Resolve future-dated legacy investment activity before confirming an opening')
         if (!validLocalDate(dto.opening.date) || dto.opening.date > today) throw AppError.validation('Opening date must be on or before today')
-        anchor = this.anchor(dto.opening.balance, 'opening', dto.opening.date, now, dto.opening)
+        if (existing.asset_type === 'manual' && dto.opening.owned === false && dto.opening.balance !== 0) throw AppError.validation('An unowned opening must have zero current value')
+        if (existing.asset_type === 'manual' && (dto.opening.owned === false || (dto.opening.owned == null && dto.opening.balance === 0)) && (dto.opening.cost_amount??0) > 0) throw AppError.validation('An unowned opening has no remaining cost. Confirm ownership for a zero-value asset with remaining cost.')
+        anchor = this.anchor(dto.opening.balance, 'opening', dto.opening.date, now, existing.asset_type === 'manual' ? {...dto.opening,owned:dto.opening.owned??dto.opening.balance!==0} : dto.opening)
+        if (existing.asset_type === 'manual') {
+          const current = anchor.owned ? existing.manual_valuation?.observation?.amount ?? existing.balance : 0
+          if (!validHoldingNumber(current)) throw AppError.validation('Record a valid current appraisal before confirming this asset ownership')
+          next = {...next,balance:current}
+        }
       } else if (next.balance !== existing.balance) {
         const date = dto.correction_date ?? today
         if (!validLocalDate(date) || date !== today) throw AppError.validation('A current position correction must use today; supply a dated opening to reconcile earlier history')
@@ -94,7 +114,7 @@ export class AccountService {
       }
       if (dto.manual_price !== undefined && dto.manual_price !== existing.manual_price) next = { ...next, manual_price_date: dto.manual_price == null ? null : dto.manual_price_date ?? today }
       if (next.manual_price_date && (!validLocalDate(next.manual_price_date) || next.manual_price_date > today)) throw AppError.validation('Manual price date cannot be in the future')
-      if (!await this.accountRepo.updateHolding(existing, next, anchor)) throw new AppError('HOLDING_POSITION_CONFLICT', 'Holding changed or became protected; refresh before saving', 409)
+      if (!await this.accountRepo.updateHolding(existing, next, anchor, revision)) throw new AppError('HOLDING_POSITION_CONFLICT', 'Holding changed or became protected; refresh before saving', 409)
       return (await this.accountRepo.findById(id))!
     }
     if (dto.opening || dto.manual_price != null || dto.pricing_method) throw AppError.validation('Holding metadata belongs to investment accounts')
@@ -208,7 +228,7 @@ export class AccountService {
     if (!validHoldingNumber(balance)) throw AppError.validation('Invalid opening quantity/value')
     if (opening?.cost_amount != null && (!Number.isFinite(opening.cost_amount) || opening.cost_amount < 0 || opening.cost_amount > 1e12 || !opening.cost_currency)) throw AppError.validation('Known opening cost needs a valid amount and fiat currency')
     return { id: crypto.randomUUID(), kind, effective_date: date, balance,
-      cost_amount: opening?.cost_amount ?? null, cost_currency: opening?.cost_currency ?? null, trade_rowid_boundary: 0, created_at: now }
+      owned: opening?.owned??null, cost_amount: opening?.cost_amount ?? null, cost_currency: opening?.cost_currency ?? null, trade_rowid_boundary: 0, created_at: now }
   }
 
   async lockAccount(id: string): Promise<Account> {

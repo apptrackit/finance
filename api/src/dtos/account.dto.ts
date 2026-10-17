@@ -10,6 +10,7 @@ export interface SplitTransactionDto {
 }
 
 export interface HoldingOpeningDto {
+  owned?: boolean
   balance: number
   date: string
   cost_amount?: number | null

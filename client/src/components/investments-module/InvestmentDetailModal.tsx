@@ -1,3 +1,7 @@
+import { Modal } from '../common/modal'
+import { useHasUnsavedChanges } from '../../navigation/UnsavedChanges'
+import { useAlert } from '../../context/AlertContext'
+import { ManualValuations } from './ManualValuations'
 import { usesMarketPricing } from '../../../../shared/holding'
 import type { Account, Category, Transaction } from './types'
 import { formatValue, calculatePosition } from './utils'
@@ -11,6 +15,7 @@ type Props = {
   exchangeRates: Record<string, number>
   privacyMode: string
   onClose: () => void
+  onValuationSaved?: () => void
 }
 
 export function InvestmentDetailModal({
@@ -20,8 +25,15 @@ export function InvestmentDetailModal({
   quotes,
   exchangeRates,
   privacyMode,
-  onClose
+  onClose,
+  onValuationSaved = () => {}
 }: Props) {
+  const dirty = useHasUnsavedChanges()
+  const { confirm } = useAlert()
+  const close = () => {
+    if (!dirty) onClose()
+    else void confirm({title:'Discard unfinished appraisal?',message:'Your unsaved appraisal will be lost.',confirmText:'Discard',cancelText:'Keep editing'}).then(discard => {if(discard)onClose()})
+  }
   if (!account) return null
 
   const transactions = allTransactions.filter(tx => tx.account_id === account.id)
@@ -34,25 +46,11 @@ export function InvestmentDetailModal({
   }
 
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-card w-full max-w-6xl rounded-2xl shadow-2xl border border-border overflow-hidden flex flex-col max-h-[90vh]">
-        <div className="p-6 border-b border-border flex justify-between items-start">
-          <div>
-            <div className="flex items-center gap-3">
-              <h2 className="font-bold text-2xl">{account.symbol || account.name}</h2>
-              <span className={`text-sm px-3 py-1 rounded-full font-medium ${
-                account.asset_type === 'crypto' 
-                  ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400' 
-                  : account.asset_type === 'manual' 
-                  ? 'bg-gray-100 text-gray-700 dark:bg-gray-900/30 dark:text-gray-400' 
-                  : 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
-              }`}>
-                {account.asset_type?.toUpperCase()}
-              </span>
-            </div>
-            <p className="text-sm text-muted-foreground mt-1">{account.name}</p>
-            
-            <div className="flex gap-6 mt-4">
+    <Modal isOpen onClose={close} title={account.symbol || account.name} placement="centered"
+      className="flex min-h-0 flex-col max-w-[calc(100%-2rem)] sm:max-w-6xl max-h-[90dvh] overflow-hidden"
+      contentClassName="flex min-h-0 flex-1 flex-col p-0 sm:p-0">
+      <div className="shrink-0 border-b border-border p-4 sm:px-6">
+            <div className="flex flex-wrap gap-4">
               <div>
                 <div className="text-xs text-muted-foreground">Current Value</div>
                 <div className={`text-lg font-bold ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
@@ -75,21 +73,14 @@ export function InvestmentDetailModal({
               )}
               <div>
                 <div className="text-xs text-muted-foreground">Total Return</div>
-                <div className={`text-lg font-bold ${position.priceFetchError ? 'text-yellow-600 dark:text-yellow-400' : (position.gainLoss ?? 0) >= 0 ? 'text-green-600' : 'text-red-600'} ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
+                <div className={`text-lg font-bold ${position.priceFetchError ? 'text-yellow-600 dark:text-yellow-400' : position.gainLoss === null ? 'text-muted-foreground' : (position.gainLoss ?? 0) >= 0 ? 'text-green-600' : 'text-red-600'} ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
                   {privacyMode === 'hidden' ? '••••••' : position.priceFetchError ? '⚠️ Error fetching price' : position.gainLoss === null || position.gainLossPercent === null ? 'Return unavailable' : `${(position.gainLoss ?? 0) >= 0 ? '+' : ''}${formatValue(Math.abs(position.gainLoss), undefined, 'USD')} (${position.gainLossPercent >= 0 ? '+' : ''}${position.gainLossPercent.toFixed(2)}%)`}
                 </div>
               </div>
             </div>
-          </div>
-          <button 
-            onClick={onClose} 
-            className="p-2 hover:bg-secondary rounded-lg transition-colors text-2xl leading-none"
-          >
-            ×
-          </button>
-        </div>
-        
-        <div className="flex-1 overflow-y-auto p-6 space-y-6">
+      </div>
+        <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-6 space-y-6">
+          {!usesMarketPricing(account) && <ManualValuations key={account.id} account={account} hidden={privacyMode==='hidden'} onSaved={onValuationSaved} />}
           {privacyMode !== 'hidden' && usesMarketPricing(account) && account.symbol && (
             <div className="bg-secondary/20 rounded-xl p-4">
               <InvestmentChart 
@@ -106,7 +97,7 @@ export function InvestmentDetailModal({
               {transactions.length === 0 ? (
                 <div className="p-12 text-center bg-secondary/20 rounded-xl">
                   <p className="text-muted-foreground">No transactions yet</p>
-                  <p className="text-sm text-muted-foreground mt-1">Go to Dashboard to add income, expense, or swap transactions</p>
+                  <p className="text-sm text-muted-foreground mt-1">Record a purchase or sale with a cash transfer on Dashboard.</p>
                 </div>
               ) : (
                 [...transactions]
@@ -136,7 +127,7 @@ export function InvestmentDetailModal({
                               day: 'numeric', 
                               year: 'numeric',
                             })}
-                            {tx.description && ` • ${tx.description}`}
+                            {privacyMode !== 'hidden' && tx.description && ` • ${tx.description}`}
                           </div>
                         </div>
                       </div>
@@ -144,7 +135,7 @@ export function InvestmentDetailModal({
                         <div className={`text-xl font-bold ${tx.amount > 0 ? 'text-green-600' : 'text-red-600'} ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
                           {privacyMode === 'hidden' ? '••••••' : (
                             tx.quantity !== undefined 
-                              ? `${tx.quantity > 0 ? '+' : ''}${Math.abs(tx.quantity).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 12 })} ${account.currency}`
+                              ? `${tx.quantity > 0 ? '+' : ''}${Math.abs(tx.quantity).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 12 })} ${tx.asset_event ? 'ITEM' : account.currency}`
                               : `${tx.amount > 0 ? '+' : ''}$${Math.abs(tx.amount).toFixed(2)}`
                           )}
                         </div>
@@ -160,7 +151,6 @@ export function InvestmentDetailModal({
             </div>
           </div>
         </div>
-      </div>
-    </div>
+    </Modal>
   )
 }

@@ -6,6 +6,7 @@ export class InvestmentTransactionMapper {
   static toResponseDto(transaction: InvestmentTransaction): InvestmentTransactionResponseDto {
     return {
       coverage:tradeCoverage(transaction),
+      asset_event:transaction.asset_event ?? null,
       trade_version:transaction.trade_version ?? 0,
       execution_currency: transaction.execution_currency ?? null, gross_amount: transaction.gross_amount ?? null,
       fee_amount: transaction.fee_amount ?? null, fee_currency: transaction.fee_currency ?? null, fee_status: transaction.fee_status ?? null,

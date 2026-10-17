@@ -119,6 +119,44 @@ function mockRates(rate = 0.2) {
   vi.mocked(apiFetch).mockImplementation(async () => ({ ok: true, json: async () => ({ rate }) }) as Response)
 }
 
+it.each(['buy','sell'] as const)('keeps a same-fiat manual %s as 1 ITEM plus separate cash, including zero disposal proceeds',async type=>{
+  mockRates();localStorage.clear()
+  const user=userEvent.setup()
+  const added=renderTransfers({composerOnly:true,openRequest:1,transactions:[],accounts:[...transferAccounts,
+    {id:'manual',name:'Whole manual asset',balance:type==='buy'?0:500,currency:'HUF',quote_currency:'HUF',type:'investment',asset_type:'manual'}]})
+  await user.click(screen.getByRole('button',{name:'Transfer'}))
+  const dialog=screen.getByRole('dialog')
+  await user.selectOptions(within(dialog).getByRole('combobox',{name:'From account'}),type==='buy'?'source':'manual')
+  await user.selectOptions(within(dialog).getByRole('combobox',{name:'To account'}),type==='buy'?'manual':'source')
+  await user.type(within(dialog).getByLabelText('Whole asset (1 ITEM)'),'1')
+  await user.type(within(dialog).getByLabelText(type==='buy'?'Amount to Send (HUF)':'Amount to Receive (HUF)'),type==='buy'?'100':'0')
+  await user.type(within(dialog).getByLabelText('Executed total asset price'),type==='buy'?'100':'0')
+  await user.type(within(dialog).getByLabelText('Fee (HUF)'),'0')
+  await user.click(within(dialog).getByRole('button',{name:type==='buy'?'Record purchase':'Record sale'}))
+  await waitFor(()=>expect(added).toHaveBeenCalledOnce())
+  const save=vi.mocked(apiFetch).mock.calls.find(([url,o])=>url==='/api/investment-trades'&&o?.method==='POST')
+  expect(JSON.parse(String(save?.[1]?.body))).toMatchObject({type,quantity:1,cash_amount:type==='buy'?100:0,price:type==='buy'?100:0,execution_currency:'HUF'})
+})
+
+it.each([0,180])('edits a whole-asset disposal with %s proceeds using its unit direction rather than the cash sign',async proceeds=>{
+  mockRates()
+  const user=userEvent.setup()
+  const added=renderTransfers({accounts:[...transferAccounts,{id:'manual',name:'Whole manual asset',balance:0,currency:'HUF',quote_currency:'HUF',type:'investment',asset_type:'manual'}],transactions:[
+    {id:'cash-sale',account_id:'source',amount:proceeds,linked_transaction_id:'sale',date:'2020-01-01'},
+    {id:'sale',account_id:'manual',amount:-proceeds,quantity:-1,price:proceeds,asset_event:'disposal',execution_currency:'HUF',fee_status:'known',fee_amount:0,trade_version:1,linked_transaction_id:'cash-sale',date:'2020-01-01'},
+  ]})
+  expect(screen.getByText('1 ITEM')).toBeInTheDocument()
+  await user.click(screen.getAllByRole('button',{name:'Edit transfer'})[0])
+  const dialog=screen.getByRole('dialog')
+  expect(within(dialog).getByLabelText('Whole asset (1 ITEM)')).toHaveValue('1')
+  expect(within(dialog).getByLabelText('Amount to Receive (HUF)')).toHaveValue(String(proceeds))
+  await user.type(within(dialog).getByLabelText('Note (optional)'),'Corrected note')
+  await user.click(within(dialog).getByRole('button',{name:'Save changes'}))
+  await waitFor(()=>expect(added).toHaveBeenCalledOnce())
+  const save=vi.mocked(apiFetch).mock.calls.find(([url,o])=>url==='/api/investment-trades/sale'&&o?.method==='PUT')
+  expect(JSON.parse(String(save?.[1]?.body))).toMatchObject({type:'sell',quantity:1,cash_amount:proceeds,price:proceeds,expected_version:1})
+})
+
 describe('TransactionList redesigned transfers', () => {
   it('records a sale with exact proceeds and preserves the draft and request key after a failed save', async () => {
     mockRates()

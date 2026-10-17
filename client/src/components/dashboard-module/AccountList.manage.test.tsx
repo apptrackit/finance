@@ -564,7 +564,9 @@ it('masks saved manual prices in a locked private holding editor', async () => {
   render(<AccountList manage accounts={[{ id: 'private-manual', name: 'Private holding', type: 'investment', asset_type: 'etf', pricing_method: 'manual', balance: 2,
     currency: 'SHARE', quote_currency: 'EUR', manual_price: 81882.25, is_locked: true }]} onAccountAdded={refresh} />)
   fireEvent.click(screen.getByRole('button', { name: 'View Private holding' }))
-  expect(screen.getByLabelText('Manual price per unit')).toHaveValue('••••••')
+  expect(screen.queryByLabelText('Manual price per unit')).not.toBeInTheDocument()
+  expect(screen.getByText(/Use Update value in Investments/)).toBeInTheDocument()
+  expect(screen.queryByDisplayValue(/81882/)).not.toBeInTheDocument()
   expect(screen.getByLabelText('Quantity')).toHaveValue('••••••')
   expect(screen.getByRole('button', { name: 'Save changes' })).toBeDisabled()
 })
