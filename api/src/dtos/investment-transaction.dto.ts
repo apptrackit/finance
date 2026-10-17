@@ -1,3 +1,4 @@
+import type { TradeFacts } from '../../../shared/investment-trade'
 import { InvestmentTransactionType } from '../models/InvestmentTransaction'
 
 export interface CreateInvestmentTransactionDto {
@@ -10,7 +11,8 @@ export interface CreateInvestmentTransactionDto {
   notes?: string
 }
 
-export interface InvestmentTransactionResponseDto {
+export interface InvestmentTransactionResponseDto extends TradeFacts {
+  coverage?: { status:string;reasons:string[] }
   id: string
   account_id: string
   type: InvestmentTransactionType

@@ -28,7 +28,7 @@ export class InvestmentTransactionController {
   async delete(c: Context) {
     try {
       const id = c.req.param('id')
-      await this.investmentTransactionService.deleteInvestmentTransaction(id)
+      await this.investmentTransactionService.deleteInvestmentTransaction(id,c.req.header('X-Client-Date'))
       return c.json({ success: true })
     } catch (error: any) {
       if (error instanceof AppError || error.message?.includes('ACCOUNT_')) throw error

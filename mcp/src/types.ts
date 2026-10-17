@@ -1,3 +1,4 @@
+import type { TradeFacts } from '../../shared/investment-trade'
 import type { HoldingFields } from '../../shared/holding'
 export type Env = {
   DB: D1Database
@@ -98,7 +99,7 @@ export type RecurringScheduleRow = {
   end_date?: string | null
 }
 
-export type InvestmentTransactionRow = {
+export type InvestmentTransactionRow = TradeFacts & {
   id: string
   account_id: string
   type: 'buy' | 'sell'

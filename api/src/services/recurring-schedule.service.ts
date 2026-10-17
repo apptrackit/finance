@@ -72,10 +72,12 @@ export class RecurringScheduleService {
       throw new Error('Account not found')
     }
 
+    if (account.type === 'investment') throw AppError.validation('Investment trades require confirmed execution and cash amounts; recurring investment posting is unsupported')
     if (account.archived_at != null) throw new AppError('ACCOUNT_ARCHIVED', 'Restore this account before creating schedules.', 409)
 
     if (dto.to_account_id) {
       const toAccount = await this.accountRepo.findById(dto.to_account_id)
+      if (toAccount?.type === 'investment') throw AppError.validation('Recurring investment posting is unsupported; record a linked trade')
       if (toAccount?.archived_at != null) throw new AppError('ACCOUNT_ARCHIVED', 'Restore this account before creating schedules.', 409)
       if (!toAccount) {
         throw new Error('To account not found')
@@ -110,6 +112,13 @@ export class RecurringScheduleService {
     const existing = await this.recurringRepo.findById(id)
     if (!existing) {
       throw new Error('Recurring schedule not found')
+    }
+
+    if (dto.is_active !== false) {
+      for (const accountId of [dto.account_id ?? existing.account_id,dto.to_account_id ?? existing.to_account_id].filter((id): id is string => !!id)) {
+        const account = await this.accountRepo.findById(accountId)
+        if (account?.type === 'investment') throw AppError.validation('Pause this legacy investment schedule and record confirmed linked trades instead')
+      }
     }
 
     // Validate frequency-specific fields if being updated
@@ -258,6 +267,7 @@ export class RecurringScheduleService {
       return false
     }
 
+    if (account.type === 'investment') return false
     if (account.is_locked || account.archived_at != null) {
       console.warn(`Skipping recurring schedule ${schedule.id}: account ${schedule.account_id} is locked`)
       return false
@@ -298,6 +308,7 @@ export class RecurringScheduleService {
       return false
     }
 
+    if (fromAccount.type === 'investment' || toAccount.type === 'investment') return false
     if (fromAccount.is_locked || toAccount.is_locked || fromAccount.archived_at != null || toAccount.archived_at != null) {
       console.warn(`Skipping recurring transfer ${schedule.id}: one or more accounts are locked`)
       return false

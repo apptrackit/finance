@@ -6,6 +6,8 @@ import { Input } from '../common/input'
 import { Label } from '../common/label'
 import { formatCalculatedAmount, parseAmount } from '../../lib/amount'
 import { cn } from '../../lib/utils'
+import { tradeCurrencies } from '../../../../shared/investment-trade'
+import { Select } from '../common/select'
 
 export type TransferAccount = {
   id: string
@@ -26,6 +28,9 @@ export type TransferFormData = {
   date: string
   description: string
   manual_price: string
+  execution_currency?: string
+  fee_status?: 'known' | 'unknown'
+  fee_amount?: string
 }
 
 type TransferFormProps = {
@@ -60,7 +65,8 @@ export function TransferForm(props: TransferFormProps) {
   const { accounts, data, editing, reviewDraft, dirty, submitting } = props
   const from = accounts.find(account => account.id === data.account_id)
   const to = accounts.find(account => account.id === data.to_account_id)
-  const sameCurrency = !!from && !!to && from.currency === to.currency
+  const holding = from?.type === 'investment' ? from : to?.type === 'investment' ? to : undefined
+  const sameCurrency = !holding && !!from && !!to && from.currency === to.currency
   const sameAccount = !!from && from.id === to?.id
   const sent = parseAmount(data.amount)
   const received = sameCurrency ? sent : parseAmount(data.amount_to)
@@ -69,13 +75,15 @@ export function TransferForm(props: TransferFormProps) {
   const ready = from && to && !sameAccount && selectable.includes(from) && selectable.includes(to)
     && sent !== null && sent > 0 && received !== null && received > 0 && data.date
     && (!editing || dirty)
+    && (!holding || (parseAmount(data.manual_price) ?? 0) > 0 && !!data.execution_currency
+      && (data.fee_status === 'unknown' || parseAmount(data.fee_amount || '') !== null))
   const overBalance = from && sent !== null && sent > props.availableBalance(from)
   const deviation = props.suggestedRate && rate !== null && rate > 0 ? (rate / props.suggestedRate - 1) * 100 : null
   const displayAmount = (account: TransferAccount, value: number) => props.hideBalance(account)
     ? '••••••'
-    : formatCalculatedAmount(value, { maximumFractionDigits: account.type === 'investment' ? 8 : 2 })
-  const amountLabel = (account: TransferAccount | undefined, receiving: boolean) => receiving && account?.type === 'investment'
-    ? 'Shares to Receive'
+    : formatCalculatedAmount(value, { maximumFractionDigits: account.type === 'investment' ? 12 : 2 })
+  const amountLabel = (account: TransferAccount | undefined, receiving: boolean) => account?.type === 'investment'
+    ? `Units to ${receiving ? 'Buy' : 'Sell'}`
     : `Amount to ${receiving ? 'Receive' : 'Send'}${account ? ` (${account.currency})` : ''}`
 
   const accountCard = (account: TransferAccount | undefined, receiving: boolean) => {
@@ -117,15 +125,15 @@ export function TransferForm(props: TransferFormProps) {
   }
 
   return (
-    <fieldset disabled={submitting} className="finance-transfer-form min-w-0">
-      <div className="space-y-5 px-5 pb-6 pt-5 sm:px-6">
+    <fieldset disabled={submitting} className="finance-transfer-form contents">
+      <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-5 pb-6 pt-5 sm:px-6">
         {props.typeSelector}
         <div>
           {accountCard(from, false)}
           <div className="flex min-h-12 items-center gap-3 px-1.5 py-2">
             <Button type="button" variant="outline" aria-label="Swap accounts" title="Swap accounts" onClick={props.onSwap}
               disabled={!from || !to || sameAccount} className="h-8 w-8 shrink-0 rounded-full p-0"><ArrowDownUp className="h-[15px] w-[15px]" /></Button>
-            {sameCurrency ? <span className="text-xs text-muted-foreground">Same currency, no conversion</span> : from && to ? (
+            {holding ? <span className="text-xs text-muted-foreground">Enter exact units and actual cash {from?.type === 'investment' ? 'received' : 'paid'}, including any fee.</span> : sameCurrency ? <span className="text-xs text-muted-foreground">Same currency, no conversion</span> : from && to ? (
               <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2.5 gap-y-1.5">
                 {reviewDraft ? <p className="text-xs text-muted-foreground">Enter both amounts explicitly. Effective rate: {sent && received ? `${props.hideBalance(from) || props.hideBalance(to) ? '••••••' : formatCalculatedAmount(received / sent, { maximumFractionDigits: 10 })} ${to.currency} per ${from.currency}` : 'enter both amounts'}.</p> : <>
                   <div className="flex h-8 max-w-full items-center gap-1.5 rounded-lg border border-border bg-background px-2 text-xs tabular-nums text-muted-foreground focus-within:border-primary focus-within:ring-[3px] focus-within:ring-primary/15">
@@ -146,10 +154,21 @@ export function TransferForm(props: TransferFormProps) {
           </div>
           {accountCard(to, true)}
         </div>
-        {to?.type === 'investment' && <div className="space-y-1.5">
-          <Label htmlFor="transfer_price">Price per Share in {to.quote_currency || 'trading currency'} (optional - leave blank to auto-fetch)</Label>
-          <AmountInput id="transfer_price" value={data.manual_price} onValueChange={props.onPriceChange} placeholder="Auto-fetch from market data" />
-          <p className="text-xs text-muted-foreground">For old dates (before 2020), enter the price manually for accuracy.</p>
+        {holding && <div className="space-y-3 rounded-xl border border-border p-3">
+          <div className="grid grid-cols-2 gap-3"><div className="space-y-1.5">
+            <Label htmlFor="transfer_price">Executed unit price</Label>
+            <AmountInput id="transfer_price" value={data.manual_price} onValueChange={props.onPriceChange} placeholder="From your trade confirmation" required />
+          </div><div className="space-y-1.5"><Label htmlFor="trade_execution_currency">Execution currency</Label>
+            <Select id="trade_execution_currency" value={data.execution_currency || ''} onChange={e => props.onChange({ execution_currency:e.target.value })} required>
+              <option value="">Choose currency</option>{tradeCurrencies.map(c => <option key={c}>{c}</option>)}
+            </Select></div></div>
+          <div className="grid grid-cols-2 gap-3"><div className="space-y-1.5"><Label htmlFor="trade_fee_status">Included fee</Label>
+            <Select id="trade_fee_status" value={data.fee_status || 'known'} onChange={e => props.onChange({ fee_status:e.target.value as 'known'|'unknown' })}>
+              <option value="known">Known amount</option><option value="unknown">Breakdown unknown</option>
+            </Select></div>{data.fee_status !== 'unknown' && <div className="space-y-1.5"><Label htmlFor="trade_fee_amount">Fee ({from?.type === 'investment' ? to?.currency : from?.currency})</Label>
+              <AmountInput id="trade_fee_amount" value={data.fee_amount || ''} onValueChange={v => props.onChange({ fee_amount:v })} placeholder="Enter 0 if none" required />
+            </div>}</div>
+          <p className="text-xs text-muted-foreground">The fee is already included in actual cash. It creates no extra expense. Confirm the execution price; a market quote is not a past fill.</p>
         </div>}
         <div className="grid grid-cols-[repeat(auto-fit,minmax(150px,1fr))] gap-3">
           <div className="space-y-1.5"><Label htmlFor="transfer_date">Date</Label><Input id="transfer_date" type="date" value={data.date} onChange={event => props.onChange({ date: event.target.value })} required className="min-w-0 rounded-[10px] bg-background" /></div>
@@ -159,13 +178,13 @@ export function TransferForm(props: TransferFormProps) {
           <AlertCircle className="h-4 w-4 shrink-0" /><span>{sameAccount ? 'From and To must be different accounts.' : props.error || (from && (props.hideBalance(from) ? 'Amount exceeds the available balance.' : `Amount is ${displayAmount(from, sent! - props.availableBalance(from))} ${from.currency} more than the available balance.`))}</span>
         </div>}
       </div>
-      <div className="flex flex-wrap items-center justify-end gap-2.5 border-t border-border/50 px-5 py-3.5 sm:px-6">
+      <div className="flex shrink-0 flex-wrap items-center justify-end gap-2.5 border-t border-border/50 px-5 py-3.5 sm:px-6">
         <div className={cn('mr-auto flex items-center gap-2 text-xs text-muted-foreground', editing && dirty && 'max-[400px]:basis-full')}>
           {editing && dirty && <><span className="h-1.5 w-1.5 rounded-full bg-amber-500" />Unsaved changes<button type="button" onClick={props.onRevert} className="text-foreground underline underline-offset-2">Revert</button></>}
         </div>
         <Button type="button" variant="outline" onClick={props.onCancel} className="h-9 px-3.5">Cancel</Button>
         <Button type="submit" disabled={!ready || submitting} className="h-9 max-w-full px-4 font-semibold shadow-none">
-          {submitting ? 'Processing…' : editing ? 'Save changes' : from && sent && !props.hideBalance(from) ? `Transfer ${formatCalculatedAmount(sent, { maximumFractionDigits: from.type === 'investment' ? 8 : 2 })} ${from.currency}` : 'Transfer'}
+          {submitting ? 'Processing…' : editing ? 'Save changes' : holding ? from?.type === 'investment' ? 'Record sale' : 'Record purchase' : from && sent && !props.hideBalance(from) ? `Transfer ${formatCalculatedAmount(sent, { maximumFractionDigits: from.type === 'investment' ? 12 : 2 })} ${from.currency}` : 'Transfer'}
         </Button>
       </div>
     </fieldset>

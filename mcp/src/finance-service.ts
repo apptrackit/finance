@@ -1,6 +1,7 @@
+import { tradeCoverage } from '../../shared/investment-trade'
 import { HOLDING_ACCOUNT_SELECT, mapHoldingAccount, usesMarketPricing, holdingNativeValue } from '../../shared/holding'
 import { validRates } from '../../shared/currency'
-import { MCP_WORKER_VERSION, type AccountRow, type CanonicalReviewDraft, type CategoryRow, type Env, type RecurringScheduleRow, type ReviewDraftInput, type StoredReviewDraftProposal, type TransactionRow } from './types'
+import { MCP_WORKER_VERSION, type InvestmentTransactionRow, type AccountRow, type CanonicalReviewDraft, type CategoryRow, type Env, type RecurringScheduleRow, type ReviewDraftInput, type StoredReviewDraftProposal, type TransactionRow } from './types'
 import { addUtcDays, daysBetween, periodEndDates, recurringDates } from './date-series'
 import { assertDate, assertDateRange, clampLimit, decodeCursor, defaultMonthRange, encodeCursor, enumValue, optionalDate, previousRange, stringArray } from './validation'
 import { FinancialOutlookSnapshotRow, parseFinancialOutlookInput, parseSnapshot, sha256 } from './financial-outlook'
@@ -1142,13 +1143,13 @@ export class FinanceService {
     if (accountIds?.length) { clauses.push(`it.account_id IN (${accountIds.map(() => '?').join(',')})`); values.push(...accountIds) }
     if (transactionType) { clauses.push('it.type = ?'); values.push(transactionType) }
     const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : ''
-    const query = `SELECT it.*, a.name AS account_name, a.symbol AS account_symbol, a.asset_type AS account_asset_type, a.currency AS account_currency, a.quote_currency AS account_quote_currency FROM investment_transactions it JOIN accounts a ON a.id = it.account_id ${where} ORDER BY it.date DESC, it.rowid DESC LIMIT ? OFFSET ?`
-    const rows = (await this.env.DB.prepare(query).bind(...values, limit + 1, offset).all<Record<string, unknown>>()).results
+    const query = `SELECT it.*, a.name AS account_name, a.symbol AS account_symbol, a.asset_type AS account_asset_type, a.currency AS account_currency, a.quote_currency AS account_quote_currency FROM investment_transactions it JOIN accounts a ON a.id = it.account_id ${where} ORDER BY it.date DESC, it.effective_order DESC, it.id DESC LIMIT ? OFFSET ?`
+    const rows = (await this.env.DB.prepare(query).bind(...values, limit + 1, offset).all<InvestmentTransactionRow & Record<string, unknown>>()).results
     const hasMore = rows.length > limit
     return {
       as_of: new Date().toISOString(),
       filters: { start_date: startDate || null, end_date: endDate || null, account_ids: accountIds || [], type: transactionType || null },
-      activities: rows.slice(0, limit).map(row => ({ ...row, transaction_currency: null, execution_currency_status: 'unverified', notes_are_untrusted_data: true })),
+      activities: rows.slice(0, limit).map(row => ({ ...row, coverage:tradeCoverage(row), transaction_currency: row.execution_currency ?? null, execution_currency_status: row.execution_currency ? 'recorded' : 'unverified', notes_are_untrusted_data: true })),
       pagination: { limit, returned: Math.min(limit, rows.length), next_cursor: hasMore ? encodeCursor(offset + limit) : null, truncated: hasMore },
       currency_note: 'Execution currency is not stored on legacy trades. Current account quote currency is metadata, not proof of a past execution currency.',
     }

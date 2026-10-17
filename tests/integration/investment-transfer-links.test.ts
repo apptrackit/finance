@@ -15,11 +15,12 @@ describe('reciprocal investment transfers', () => {
       f.db.prepare(`INSERT INTO accounts (id, name, type, balance, currency, quote_currency, asset_type)
         VALUES ('other-holding', 'Other holding', 'investment', 0, 'SHARE', 'EUR', 'stock')`),
     ])
+    await f.db.batch(['holding','other-holding'].map(id => f.db.prepare("INSERT INTO investment_position_anchors (id,account_id,kind,effective_date,balance,created_at,trade_order_boundary) SELECT ?,id,'opening','2026-01-01',balance,1,0 FROM accounts WHERE id = ?").bind(`opening:${id}`,id)))
   })
   const input = { from_account_id: 'cash', to_account_id: 'holding', amount_from: 100,
-    amount_to: 0.125, price: 400, date: '2026-01-15', description: 'Synthetic purchase' }
+    amount_to: 0.125, price: 400, execution_currency:'EUR', fee_status:'unknown', fee_amount:null, idempotency_key:crypto.randomUUID(), date: '2026-01-15', description: 'Synthetic purchase' }
   async function purchase() {
-    const response = await f.request('/transfers', 'POST', input)
+    const response = await f.request('/transfers', 'POST', { ...input,idempotency_key:crypto.randomUUID() })
     expect(response.status, await response.clone().text()).toBe(201)
     return response.json() as Promise<Pair>
   }
@@ -56,7 +57,7 @@ describe('reciprocal investment transfers', () => {
     const before = await state()
     await f.db.prepare(`CREATE TRIGGER reject_pair BEFORE INSERT ON ${table}
       BEGIN SELECT RAISE(ABORT, 'injected create failure'); END`).run()
-    expect((await f.request('/transfers', 'POST', input)).status).toBeGreaterThanOrEqual(400)
+    expect((await f.request('/transfers', 'POST', { ...input,idempotency_key:crypto.randomUUID() })).status).toBeGreaterThanOrEqual(400)
     expect(await state()).toEqual(before)
     await f.db.prepare('DROP TRIGGER reject_pair').run()
     await purchase()
@@ -115,18 +116,19 @@ describe('reciprocal investment transfers', () => {
     const repository = new InvestmentTransactionRepository(f.db)
     const cash = (await new TransactionRepository(f.db).findById(pair.outgoing_transaction_id))!
     const trade = (await repository.findById(pair.incoming_transaction_id))!
-    const next = { cashAccountId: 'cash', investmentAccountId: 'holding', cashAmount: -150,
-      quantity: 0.25, price: 500, date: cash.date, description: cash.description ?? null, notes: trade.notes ?? null }
+    const snapshot = await repository.trades.state(['holding'])
+    const staleDelete = () => repository.trades.commit({key:crypto.randomUUID(),hash:'synthetic stale claim',now:Date.now(),state:snapshot,
+      result:{trade_id:trade.id,cash_transaction_id:cash.id,type:trade.type,deleted:true},before:{trade,cash},balances:new Map(),anchors:[]})
     await f.request('/accounts/holding/lock', 'PATCH')
     const locked = await state()
-    expect(await repository.transfers.update(cash, trade, next, Date.now())).toBe(false)
-    expect(await repository.transfers.delete(cash, trade, Date.now())).toBe(false)
+    expect(await staleDelete()).toBe(false)
+    expect(await staleDelete()).toBe(false)
     expect(await state()).toEqual(locked)
     await f.request('/accounts/holding/unlock', 'PATCH')
     expect((await f.request(`/transactions/${pair.outgoing_transaction_id}`, 'PUT', { amount: 175, amount_to: 0.375 })).status).toBe(200)
     const changed = await state()
-    expect(await repository.transfers.update(cash, trade, next, Date.now())).toBe(false)
-    expect(await repository.transfers.delete(cash, trade, Date.now())).toBe(false)
+    expect(await staleDelete()).toBe(false)
+    expect(await staleDelete()).toBe(false)
     expect(await state()).toEqual(changed)
   })
 
@@ -193,16 +195,13 @@ describe('reciprocal investment transfers', () => {
     }
   })
 
-  it('keeps standalone investment records unlinked', async () => {
-    const response = await f.request('/transactions', 'POST', { account_id: 'holding', amount: 0.25, price: 400, date: '2026-01-15' })
-    expect(response.status).toBe(201)
-    const trades = await (await f.request('/investment-transactions')).json() as { id: string; linked_transaction_id: string | null }[]
-    expect(trades).toHaveLength(1)
-    expect(trades[0].linked_transaction_id).toBeNull()
-    expect((await state()).cash).toEqual([])
-    expect((await f.request(`/investment-transactions/${trades[0].id}`, 'DELETE')).status).toBe(200)
-    expect(await f.db.prepare("SELECT balance FROM accounts WHERE id = 'holding'").first('balance')).toBe(2)
-    expect(await f.db.prepare("SELECT balance FROM accounts WHERE id = 'cash'").first('balance')).toBe(1000)
+  it('keeps existing standalone investment records readable without introducing a cash leg', async () => {
+    await f.db.prepare("INSERT INTO investment_transactions (id,account_id,type,quantity,price,total_amount,date) VALUES ('standalone','holding','buy',0.25,400,100,'2026-01-15')").run()
+    const before = await state()
+    expect((await f.request('/transactions','POST',{account_id:'holding',amount:0.25,price:400,date:'2026-01-15'})).status).toBe(400)
+    expect((await f.request('/investment-transactions/standalone','DELETE')).status).toBe(409)
+    expect(await state()).toEqual(before)
+    expect(await (await f.request('/investment-transactions')).json()).toEqual([expect.objectContaining({id:'standalone',linked_transaction_id:null})])
   })
 
   it('does not allow manually attaching another cash movement to an investment record', async () => {
@@ -231,12 +230,12 @@ describe('reciprocal investment transfers', () => {
   it('preserves sale signs when editing and deleting an existing linked sale', async () => {
     await f.db.batch([
       f.db.prepare("INSERT INTO transactions (id, account_id, amount, date, linked_transaction_id) VALUES ('sale-cash', 'cash', 120, '2026-01-15', 'sale')"),
-      f.db.prepare(`INSERT INTO investment_transactions (id, account_id, type, quantity, price, total_amount, date, linked_transaction_id)
-        VALUES ('sale', 'holding', 'sell', 0.125, 400, 50, '2026-01-15', 'sale-cash')`),
+      f.db.prepare(`INSERT INTO investment_transactions (id, account_id, type, quantity, price, total_amount, date, linked_transaction_id,effective_order)
+        VALUES ('sale', 'holding', 'sell', 0.125, 400, 50, '2026-01-15', 'sale-cash',1)`),
       f.db.prepare("UPDATE accounts SET balance = balance + 120 WHERE id = 'cash'"),
       f.db.prepare("UPDATE accounts SET balance = balance - 0.125 WHERE id = 'holding'"),
     ])
-    expect((await f.request('/transactions/sale-cash', 'PUT', { amount: 150, amount_to: 0.25 })).status).toBe(200)
+    expect((await f.request('/transactions/sale-cash', 'PUT', { amount: 150, amount_to: 0.25,execution_currency:'EUR',fee_status:'unknown',fee_amount:null })).status).toBe(200)
     expect(await f.db.prepare("SELECT amount FROM transactions WHERE id = 'sale-cash'").first('amount')).toBe(150)
     expect(await f.db.prepare("SELECT balance FROM accounts WHERE id = 'cash'").first('balance')).toBe(1150)
     expect(await f.db.prepare("SELECT balance FROM accounts WHERE id = 'holding'").first('balance')).toBe(1.75)

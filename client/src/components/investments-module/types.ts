@@ -1,3 +1,4 @@
+import type { TradeFacts } from '../../../../shared/investment-trade'
 import type { HoldingFields } from '../../../../shared/holding'
 export type Account = HoldingFields & {
   id: string
@@ -15,7 +16,7 @@ export type Account = HoldingFields & {
   updated_at: number
 }
 
-export type Transaction = {
+export type Transaction = TradeFacts & {
   id: string
   account_id: string
   category_id?: string

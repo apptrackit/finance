@@ -1,3 +1,4 @@
+import type { TradeFacts } from '../../../../shared/investment-trade'
 import { usesMarketPricing } from '../../../../shared/holding'
 import { API_BASE_URL, apiFetch } from '../../config'
 import { isValidRate, validRates } from '../../../../shared/currency'
@@ -11,7 +12,7 @@ export type InvestmentSnapshot = {
   exchangeRates: Record<string, number>
 }
 
-type InvestmentTrade = {
+type InvestmentTrade = TradeFacts & {
   id: string; account_id: string; type: 'buy' | 'sell'; quantity: number
   price: number; total_amount: number; date: string; notes?: string | null
   linked_transaction_id?: string | null
@@ -57,12 +58,12 @@ export async function readInvestmentSnapshot(signal: AbortSignal): Promise<Inves
   const accounts = allAccounts.filter(item => item.type === 'investment' && item.archived_at == null)
   const accountById = new Map(accounts.map(item => [item.id, item]))
   const transactions: Transaction[] = trades.filter(item => accountById.has(item.account_id)).map(item => ({
-    id: item.id, account_id: item.account_id,
+    ...item, id: item.id, account_id: item.account_id,
     amount: item.type === 'buy' ? item.total_amount : -item.total_amount,
     quantity: item.type === 'buy' ? item.quantity : -item.quantity,
     price: item.price, date: item.date, is_recurring: false,
     linked_transaction_id: item.linked_transaction_id ?? undefined,
-    description: accountById.get(item.account_id)!.holding_position
+    description: item.execution_currency ? `${item.type === 'buy' ? 'Buy' : 'Sell'} ${item.quantity} units @ ${item.price} ${item.execution_currency}${item.notes ? ` · ${item.notes}` : ''}` : accountById.get(item.account_id)!.holding_position
       ? `${item.notes || `${item.quantity} units @ ${item.price}`} · execution currency unverified`
       : description(item, accountById.get(item.account_id)!.quote_currency || 'trading currency'),
   }))

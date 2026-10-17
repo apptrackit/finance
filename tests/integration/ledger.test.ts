@@ -205,7 +205,7 @@ describe('compiled API and MCP Workers sharing D1', () => {
 
   it('preserves fractional investment quantities and linked cash when a purchase is deleted', async () => {
     await f.db.prepare("INSERT INTO accounts (id, name, type, balance, currency, quote_currency, symbol, asset_type) VALUES ('investment', 'Test asset', 'investment', 2, 'TEST', 'EUR', 'TEST', 'stock')").run()
-    const response = await f.request('/transfers', 'POST', { from_account_id: 'cash', to_account_id: 'investment', amount_from: 20000, amount_to: 0.125, price: 400, date: '2026-01-15' })
+    const response = await f.request('/transfers', 'POST', { from_account_id: 'cash', to_account_id: 'investment', amount_from: 20000, amount_to: 0.125, price: 400, execution_currency:'EUR', fee_status:'unknown', fee_amount:null, idempotency_key:crypto.randomUUID(), date: '2026-01-15' })
     expect(response.status).toBe(201)
     const transfer = await response.json() as { outgoing_transaction_id: string; incoming_transaction_id: string }
     expect(await f.db.prepare("SELECT balance FROM accounts WHERE id = 'investment'").first('balance')).toBe(2.125)

@@ -66,11 +66,11 @@ export class AccountRepository {
 
   private anchorStatement(a: Account, anchor: PositionAnchor, auditId?: string): D1PreparedStatement {
     return this.db.prepare(`INSERT INTO investment_position_anchors
-      (id, account_id, kind, effective_date, balance, cost_amount, cost_currency, trade_rowid_boundary, created_at)
-      SELECT ?, ?, ?, ?, ?, ?, ?, COALESCE((SELECT MAX(rowid) FROM investment_transactions WHERE account_id = ?), 0), ?
+      (id, account_id, kind, effective_date, balance, cost_amount, cost_currency, trade_rowid_boundary, created_at, trade_order_boundary)
+      SELECT ?, ?, ?, ?, ?, ?, ?, COALESCE((SELECT MAX(rowid) FROM investment_transactions WHERE account_id = ?), 0), ?, COALESCE((SELECT MAX(effective_order) FROM investment_transactions WHERE account_id = ?), 0)
       ${auditId ? 'WHERE EXISTS (SELECT 1 FROM audit_log WHERE id = ?)' : ''}`)
       .bind(anchor.id, a.id, anchor.kind, anchor.effective_date, anchor.balance, anchor.cost_amount, anchor.cost_currency,
-        a.id, anchor.created_at, ...(auditId ? [auditId] : []))
+        a.id, anchor.created_at, a.id, ...(auditId ? [auditId] : []))
   }
 
   async createHolding(a: Account, anchor: PositionAnchor): Promise<void> {

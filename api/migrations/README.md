@@ -38,3 +38,5 @@ The initial schema (`001-init.sql`) is applied during the first deployment. All 
 ## Holding metadata upgrade
 
 Migration 018 follows the reciprocal-link foundation in 017. It adds independent holding metadata and observed position anchors without rewriting balances or ledger rows. See [holding setup and migration notes](../../docs/investment-holdings.md) for compatibility, export/source-revision rules and verification boundaries. Apply before deploying its consumers.
+
+Migration **019-investment-trade-facts.sql** extends 018 with nullable execution/fee/settlement facts, stable legacy row order, mutation versions and bounded replay receipts. All pre-existing columns/row IDs and the source revision survive the baseline. Apply before the updated Workers/client. See [trade compatibility and verification](../../docs/investment-trades.md).
