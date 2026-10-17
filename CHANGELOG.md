@@ -62,8 +62,6 @@ Intermediate package/UI version bumps are grouped under the next published GitHu
 
 ### Migration and upgrade notes
 
-- Migration 019 adds explicit execution/fee/settlement facts, stable order/version and bounded replay receipts. Existing financial columns/row IDs and source revision are preserved. Apply after 018 before updated Workers/client; standalone investment posting and recurring unit mutations are blocked. See `docs/investment-trades.md`.
-
 - **Breaking authentication change:** configure Access on the entire private API hostname and the frontend before deploying. Set `API_AUTH_MODE=private`, an explicit HTTPS `API_URL`, `API_ACCESS_TEAM_DOMAIN`, `API_ACCESS_AUD`, `API_ACCESS_ALLOWED_EMAIL`, and exact `ALLOWED_ORIGINS`; client `VITE_API_AUTH_MODE` must match. Configure credentialed CORS, unauthenticated OPTIONS preflight, and Access session cookies. See the [API Access upgrade guide](https://github.com/apptrackit/finance/blob/main/docs/api-access.md). [#117](https://github.com/apptrackit/finance/pull/117)
 - Prefer frontend/API HTTPS hostnames on the same site. An explicitly configured Access-protected workers.dev API is supported, but cross-site cookies require SameSite=None and can still be blocked by browsers; preview URLs remain disabled. Local frontends using a private remote API need their exact loopback origin allowed and the same cookie considerations. [#117](https://github.com/apptrackit/finance/pull/117)
 - Deploy the updated API before the matching client in the same upgrade: the client depends on the new history and session endpoints. Refresh the frontend/PWA afterward. Remove obsolete `API_SECRET` and `VITE_API_KEY` entries from existing local files and set the new modes explicitly; old keys no longer authorize requests and missing settings never enable public access. [#116](https://github.com/apptrackit/finance/pull/116), [#117](https://github.com/apptrackit/finance/pull/117)
@@ -108,8 +106,6 @@ Intermediate package/UI version bumps are grouped under the next published GitHu
 - Removed saved last-page startup behavior and the `finance_last_view` browser preference. Page URLs now preserve explicit views, and fresh launches open Dashboard. [#97](https://github.com/apptrackit/finance/pull/97)
 
 ### Migration and upgrade notes
-
-- Migration 019 adds explicit execution/fee/settlement facts, stable order/version and bounded replay receipts. Existing financial columns/row IDs and source revision are preserved. Apply after 018 before updated Workers/client; standalone investment posting and recurring unit mutations are blocked. See `docs/investment-trades.md`.
 
 - Apply `016-account-archive.sql` before updating API/MCP Workers. It adds `accounts.archived_at` and D1 triggers enforcing archive requirements, read-only archived accounts and ledgers, paused schedules, and account deletion safety for both Workers. [#98](https://github.com/apptrackit/finance/pull/98)
 - Restoring an account does not reactivate its recurring schedules; resume them explicitly after review. Accounts with pending work or a nonzero balance/holding must resolve those items before archiving. [#98](https://github.com/apptrackit/finance/pull/98)
@@ -160,8 +156,6 @@ Intermediate package/UI version bumps are grouped under the next published GitHu
 
 ### Migration and upgrade notes
 
-- Migration 019 adds explicit execution/fee/settlement facts, stable order/version and bounded replay receipts. Existing financial columns/row IDs and source revision are preserved. Apply after 018 before updated Workers/client; standalone investment posting and recurring unit mutations are blocked. See `docs/investment-trades.md`.
-
 - Apply these migrations in order before updating API/MCP Workers:
   - `013-mcp-review-corrections.sql`: expiring draft correction proposals, replay records, review queue indexing, and revision triggers that ignore draft-only changes.
   - `014-mcp-transfer-review-corrections.sql`: expiring transfer-pair correction proposals and replay records.
@@ -205,8 +199,6 @@ Intermediate package/UI version bumps are grouped under the next published GitHu
 - Retired budget management across the API, client, and MCP, including its navigation entry and MCP budget reporting.
 
 ### Migration and upgrade notes
-
-- Migration 019 adds explicit execution/fee/settlement facts, stable order/version and bounded replay receipts. Existing financial columns/row IDs and source revision are preserved. Apply after 018 before updated Workers/client; standalone investment posting and recurring unit mutations are blocked. See `docs/investment-trades.md`.
 
 - **Back up any budget data you need before upgrading.** Migration `012-remove-budgets.sql` permanently drops the budget tables and removes the saved budget navigation preference.
 - Update MCP forecast publishers for the 91-point daily path and dated movement validation. Use the pinned Node 22 LTS runtime for local builds, tests, and deployment.
