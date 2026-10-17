@@ -12,12 +12,14 @@ import { SettingsRepository } from './repositories/settings.repository'
 import { FinancialOutlookRepository } from './repositories/financial-outlook.repository'
 import { DataExportRepository } from './repositories/data-export.repository'
 import { TransactionHistoryRepository } from './repositories/transaction-history.repository'
+import { TransactionSplitRepository } from './repositories/transaction-split.repository'
 
 // Services
 import { TransactionHistoryService } from './services/transaction-history.service'
 import { AccountService } from './services/account.service'
 import { CategoryService } from './services/category.service'
 import { TransactionService } from './services/transaction.service'
+import { TransactionSplitService } from './services/transaction-split.service'
 import { InvestmentTransactionService } from './services/investment-transaction.service'
 import { TransferService } from './services/transfer.service'
 import { DashboardService } from './services/dashboard.service'
@@ -32,6 +34,7 @@ import { TransactionHistoryController } from './controllers/transaction-history.
 import { AccountController } from './controllers/account.controller'
 import { CategoryController } from './controllers/category.controller'
 import { TransactionController } from './controllers/transaction.controller'
+import { TransactionSplitController } from './controllers/transaction-split.controller'
 import { InvestmentTransactionController } from './controllers/investment-transaction.controller'
 import { TransferController } from './controllers/transfer.controller'
 import { DashboardController } from './controllers/dashboard.controller'
@@ -56,6 +59,7 @@ import { logger } from './utils/logger'
 import { UpdateNavigationSettingsSchema } from './validators/settings.validator'
 import { CreateAccountSchema, UpdateAccountSchema } from './validators/account.validator'
 import { CreateTransactionSchema, UpdateTransactionSchema } from './validators/transaction.validator'
+import { SaveSplitSchema } from './validators/transaction-split.validator'
 import { CreateCategorySchema, UpdateCategorySchema } from './validators/category.validator'
 import { CreateTransferSchema } from './validators/transfer.validator'
 import { CreateRecurringScheduleSchema, UpdateRecurringScheduleSchema } from './validators/recurring-schedule.validator'
@@ -73,11 +77,13 @@ function createDependencies(db: D1Database) {
   const financialOutlookRepo = new FinancialOutlookRepository(db)
   const dataExportRepo = new DataExportRepository(db)
   const transactionHistoryRepo = new TransactionHistoryRepository(db)
+  const transactionSplitRepo = new TransactionSplitRepository(db)
 
   // Initialize services
   const accountService = new AccountService(accountRepo, transactionRepo)
   const categoryService = new CategoryService(categoryRepo)
   const transactionService = new TransactionService(transactionRepo, accountRepo, investmentTransactionRepo)
+  const transactionSplitService = new TransactionSplitService(transactionSplitRepo, accountRepo)
   const investmentTransactionService = new InvestmentTransactionService(investmentTransactionRepo, accountRepo)
   const transferService = new TransferService(accountRepo, transactionRepo, investmentTransactionRepo)
   const dashboardService = new DashboardService(accountRepo, transactionRepo, recurringScheduleRepo, categoryRepo)
@@ -92,6 +98,7 @@ function createDependencies(db: D1Database) {
   const accountController = new AccountController(accountService)
   const categoryController = new CategoryController(categoryService)
   const transactionController = new TransactionController(transactionService)
+  const transactionSplitController = new TransactionSplitController(transactionSplitService)
   const investmentTransactionController = new InvestmentTransactionController(investmentTransactionService)
   const transferController = new TransferController(transferService)
   const dashboardController = new DashboardController(dashboardService)
@@ -106,6 +113,7 @@ function createDependencies(db: D1Database) {
     accountController,
     categoryController,
     transactionController,
+    transactionSplitController,
     investmentTransactionController,
     transferController,
     dashboardController,
@@ -202,6 +210,9 @@ app.delete('/accounts/:id', (c) => getControllers(c).accountController.delete(c)
 app.get('/transactions', (c) => getControllers(c).transactionController.getAll(c))
 app.post('/transactions', validateBody(CreateTransactionSchema), (c) => getControllers(c).transactionController.create(c))
 app.get('/transactions/upcoming', (c) => getControllers(c).transactionController.getUpcoming(c))
+app.post('/transactions/splits', validateBody(SaveSplitSchema), (c) => getControllers(c).transactionSplitController.create(c))
+app.put('/transactions/splits/:id', validateBody(SaveSplitSchema), (c) => getControllers(c).transactionSplitController.update(c))
+app.delete('/transactions/splits/:id', (c) => getControllers(c).transactionSplitController.delete(c))
 app.post('/transactions/:id/confirm', (c) => getControllers(c).transactionController.confirm(c))
 app.post('/transactions/:id/decline', (c) => getControllers(c).transactionController.decline(c))
 app.put('/transactions/:id', validateBody(UpdateTransactionSchema), (c) => getControllers(c).transactionController.update(c))
