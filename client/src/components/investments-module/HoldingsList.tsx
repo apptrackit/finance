@@ -60,8 +60,9 @@ export function HoldingsList({
         ) : (
           positions.map(position => {
             const quote = position.account.symbol ? quotes[position.account.symbol] : null
-            const priceChange = quote?.regularMarketChangePercent || 0
+            const priceChange = quote?.regularMarketChangePercent ?? null
             
+            const priceLabel = quote?.as_of ? `${quote.status === 'stale' ? 'Stale price' : quote.status === 'last_close' ? 'Last close' : 'Price as of'} ${quote.as_of}` : null
             return (
               <div 
                 key={position.account.id} 
@@ -81,9 +82,9 @@ export function HoldingsList({
                   <div>
                     <div className="font-semibold text-lg flex items-center gap-2">
                       {position.account.symbol || position.account.name}
-                      {usesMarketPricing(position.account) && !position.priceFetchError && quote && (
+                      {usesMarketPricing(position.account) && !position.priceFetchError && priceChange !== null && quote && (
                         <span className={`text-xs px-2 py-0.5 rounded-full ${priceChange >= 0 ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'}`}>
-                          {priceChange >= 0 ? '+' : ''}{priceChange.toFixed(2)}%
+                          {privacyMode === 'hidden' ? '••••' : `${priceChange >= 0 ? '+' : ''}${priceChange.toFixed(2)}%`}
                         </span>
                       )}
                     </div>
@@ -95,6 +96,7 @@ export function HoldingsList({
                 </div>
                 
                 <div className="text-right">
+                  {priceLabel && <p className="text-xs text-muted-foreground max-w-56">{priceLabel}</p>}
                   <div className={`text-xl font-bold ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
                     {privacyMode === 'hidden' ? '••••••' : formatValue(position.displayValue, position.account, position.quoteCurrency)}
                   </div>

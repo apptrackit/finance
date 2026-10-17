@@ -1,3 +1,4 @@
+import type { ClientQuote } from '../../lib/market-data'
 import type { TradeFacts } from '../../../../shared/investment-trade'
 import type { HoldingFields } from '../../../../shared/holding'
 export type Account = HoldingFields & {
@@ -29,13 +30,7 @@ export type Transaction = TradeFacts & {
   linked_transaction_id?: string
 }
 
-export type MarketQuote = {
-  symbol: string
-  regularMarketPrice?: number
-  shortName?: string
-  currency?: string
-  regularMarketChangePercent?: number
-}
+export type MarketQuote = ClientQuote
 
 export type Category = {
   id: string

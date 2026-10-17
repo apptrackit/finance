@@ -25,12 +25,14 @@ type HoldingInput = HoldingFields & { type: string; balance: number; currency: s
 export const isTotalValueHolding = (a: Pick<HoldingInput, 'asset_type'>) => a.asset_type === 'manual'
 export const usesMarketPricing = (a: Pick<HoldingInput, 'asset_type' | 'pricing_method'>) =>
   !isTotalValueHolding(a) && a.pricing_method !== 'manual'
-export function holdingNativeValue(a: HoldingInput, quote?: { regularMarketPrice?: number; currency?: string }): { value: number | null; currency: string } {
+export function holdingNativeValue(a: HoldingInput, quote?: { regularMarketPrice?: number | null; currency?: string | null }): { value: number | null; currency: string; reason?: string } {
   if (isTotalValueHolding(a)) return { value: a.balance, currency: a.currency }
   const market = usesMarketPricing(a)
   const price = market ? quote?.regularMarketPrice : a.manual_price
   const currency = (market ? a.quote_currency || quote?.currency : a.quote_currency) || ''
-  const value = a.balance === 0 ? 0 : typeof price === 'number' && Number.isFinite(price) && price >= 0 && currency ? a.balance * price : null
+  const currencyMismatch = market && a.quote_currency && quote?.currency && a.quote_currency !== quote.currency
+  if (currencyMismatch && a.balance !== 0) return {value:null,currency,reason:'quote_currency_mismatch'}
+  const value = a.balance === 0 ? 0 : currencyMismatch ? null : typeof price === 'number' && Number.isFinite(price) && (market ? price > 0 : price >= 0) && currency ? a.balance * price : null
   return { value: value !== null && Number.isFinite(value) ? value : null, currency }
 }
 export function positionFromObservation(a: HoldingInput, activity: number, afterAnchor: number, anchor: PositionAnchor | null): HoldingPosition {

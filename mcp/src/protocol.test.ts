@@ -98,6 +98,10 @@ describe('MCP protocol surface', () => {
     expect(body.result.tools.every(tool => !tool.annotations.destructiveHint)).toBe(true)
     expect(body.result.tools.every(tool => tool.description.includes('Use'))).toBe(true)
     expect(body.result.tools.every(tool => tool.inputSchema && tool.outputSchema)).toBe(true)
+    const portfolioSchema=body.result.tools.find(tool=>tool.name==='get_portfolio')!.outputSchema as {properties:Record<string,{type:unknown}>;required:string[]}
+    expect(portfolioSchema.properties.total_invested.type).toEqual(['number','null'])
+    expect(portfolioSchema.properties.total_gain_loss.type).toEqual(['number','null'])
+    expect(portfolioSchema.required).toContain('gain_loss_coverage')
     expect(() => JSON.stringify(body.result.tools)).not.toThrow()
   })
 

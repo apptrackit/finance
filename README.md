@@ -60,11 +60,11 @@ Migration 017 backfills unambiguous existing investment links without changing f
 
 Market-priced holdings distinguish share/coin quantity from cash value. Their buy/sell history lives in `investment_transactions`; current portfolio valuation uses quantities, market quotes, and currency conversion. Manual assets use a separately managed value. Individual account trend charts keep the account's native currency, while aggregate views use the selected reporting currency.
 
-Market quotes and exchange rates come from external services and may be unavailable or delayed. Investment and conversion behavior differs between some API, client, and MCP paths; contributors should follow the [financial rules in AGENTS.md](AGENTS.md#financial-rules-to-preserve) when changing calculations.
+Market quotes and exchange rates come from external services and may be unavailable or delayed. The epic’s [market input contract](docs/investment-market-data.md) implements shared API/MCP quote normalization, bounded caching, actual source/session timestamps and dated ECB FX without a paid provider. Investment and conversion behavior differs between some API, client, and MCP paths; contributors should follow the [financial rules in AGENTS.md](AGENTS.md#financial-rules-to-preserve) when changing calculations.
 
 The investment rework's [versioned accounting contract](docs/investment-accounting.md) records these implementation gaps and specifies opening quantities, exact cash/fees, remaining cost basis, manual valuations, historical FX, and estimated return calculations. Its [synthetic worked examples](tests/fixtures/investment-accounting-v1.json) are checked by the API suite. This is the specification for the remaining epic work, not a change to current runtime behavior.
 
-The epic’s [holding model and account setup](docs/investment-holdings.md) implement explicit ETF/category/pricing selection, dated openings and safe current-position corrections. Migration 018 preserves existing balances and records while marking incomplete history. Full trade, manual-history and return calculations remain separate epic work.
+The epic’s [holding model and account setup](docs/investment-holdings.md) implement explicit ETF/category/pricing selection, dated openings and safe current-position corrections. Migration 018 preserves existing balances and records while marking incomplete history. Cash-linked trades and dated manual values are implemented in their own epic steps; verified cost/return calculations remain later work.
 
 ### Recurring schedules
 
@@ -135,7 +135,7 @@ Cloudflare Pages serves direct page paths using its SPA fallback (do not add a t
 | API | Cloudflare Workers, Hono, Zod, TypeScript |
 | MCP | Separate Cloudflare Worker with JSON-RPC tool handling and Access JWT verification |
 | Storage | Cloudflare D1 (SQLite), ordered SQL migrations, audit records |
-| Market data | Yahoo Finance via `yahoo-finance2`; exchange rates from `open.er-api.com` |
+| Market data | Yahoo Finance HTTP adapter; current FX from `open.er-api.com`; dated ECB FX via Frankfurter |
 | Verification | Vitest, Testing Library/jsdom, TypeScript, client ESLint, GitHub Actions |
 
 ```text

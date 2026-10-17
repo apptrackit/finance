@@ -8,6 +8,7 @@ export const EXPORT_TABLES = [
 ] as const
 
 export const EXPORT_EXCLUSIONS = {
+  market_data_cache: 'Reconstructible bounded provider quote/history/FX/search cache; no user financial records.',
   investment_trade_operations: 'Bounded expiring trade replay receipts; durable trades, settlements and audits are included.',
   mcp_draft_proposals: 'Expiring proposal capabilities; completed drafts are in transactions.',
   mcp_draft_correction_proposals: 'Expiring correction capabilities; completed runs are included.',

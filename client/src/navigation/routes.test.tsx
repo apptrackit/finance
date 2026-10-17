@@ -314,7 +314,7 @@ it('groups sidebar cash/investments and sorts both by converted monetary value',
     ])
     if (path === '/v6/latest/HUF') return Response.json({ rates: { HUF: 1, EUR: 1 / 400, USD: 1 / 360 } })
     if (path === '/investment-transactions') return Response.json([])
-    if (path === '/market/quote') return Response.json({ regularMarketPrice: url.includes('HIGH') ? 200 : 1, currency: 'USD' })
+    if (path === '/market/quote') return Response.json({ regularMarketPrice: url.includes('HIGH') ? 200 : 1, currency: url.includes('HIGH') ? 'EUR' : 'USD' })
     return baseFetch(input, options)
   })
   open('/dashboard')

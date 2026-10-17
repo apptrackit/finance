@@ -1,68 +1,21 @@
-import { Context } from 'hono'
+import type { Context } from 'hono'
+import { MarketError } from '../../../shared/market-data'
+import { AppError } from '../errors/codes'
 import { MarketDataService } from '../services/market-data.service'
 
 export class MarketDataController {
-  constructor(private marketDataService: MarketDataService) {}
-
-  async search(c: Context) {
-    try {
-      const query = c.req.query('q')
-      if (!query) {
-        return c.json({ error: 'Query parameter "q" is required' }, 400)
-      }
-      const result = await this.marketDataService.searchSymbol(query)
-      return c.json(result)
-    } catch (error: any) {
-      console.error('Yahoo Finance Search Error:', error)
-      
-      // Check if it's a rate limit error
-      if (error.code === 429 || error.message?.includes('Too Many Requests')) {
-        return c.json({ error: 'Yahoo Finance rate limit exceeded. Please try again in a moment.' }, 429)
-      }
-      
-      return c.json({ error: 'Failed to fetch market data' }, 500)
+  constructor(private readonly service: MarketDataService) {}
+  private async read(c: Context, run: () => Promise<unknown>) {
+    c.header('Cache-Control','no-store')
+    try { return c.json(await run()) } catch (error) {
+      if (error instanceof MarketError) throw new AppError(error.kind === 'invalid' ? 'VALIDATION_ERROR' : error.kind === 'rate_limited' ? 'MARKET_RATE_LIMITED' : 'MARKET_DATA_UNAVAILABLE',error.message,error.kind === 'invalid' ? 400 : error.kind === 'rate_limited' ? 429 : 502)
+      throw error
     }
   }
-
-  async quote(c: Context) {
-    try {
-      const symbol = c.req.query('symbol')
-      if (!symbol) {
-        return c.json({ error: 'Query parameter "symbol" is required' }, 400)
-      }
-      const result = await this.marketDataService.getQuote(symbol)
-      return c.json(result)
-    } catch (error: any) {
-      console.error('Yahoo Finance Quote Error:', error)
-      
-      if (error.code === 429 || error.message?.includes('Too Many Requests')) {
-        return c.json({ error: 'Yahoo Finance rate limit exceeded. Please try again in a moment.' }, 429)
-      }
-      
-      return c.json({ error: 'Failed to fetch quote data' }, 500)
-    }
-  }
-
-  async chart(c: Context) {
-    try {
-      const symbol = c.req.query('symbol')
-      const range = c.req.query('range') || '1mo'
-      const interval = c.req.query('interval') || '1d'
-
-      if (!symbol) {
-        return c.json({ error: 'Query parameter "symbol" is required' }, 400)
-      }
-
-      const result = await this.marketDataService.getChart(symbol, range, interval)
-      return c.json(result)
-    } catch (error: any) {
-      console.error('Yahoo Finance Chart Error:', error)
-      
-      if (error.code === 429 || error.message?.includes('Too Many Requests')) {
-        return c.json({ error: 'Yahoo Finance rate limit exceeded. Please try again in a moment.' }, 429)
-      }
-      
-      return c.json({ error: 'Failed to fetch chart data' }, 500)
-    }
-  }
+  search(c: Context) { return this.read(c,() => this.service.search(c.req.query('q') || '',c.req.raw.signal)) }
+  quote(c: Context) { return this.read(c,() => this.service.quote(c.req.query('symbol') || '',c.req.raw.signal)) }
+  quotes(c: Context) { return this.read(c,() => this.service.quotes((c.req.query('symbols') || '').split(','),c.req.raw.signal)) }
+  chart(c: Context) { return this.read(c,() => this.service.getChart(c.req.query('symbol') || '',c.req.query('range') || '1mo',c.req.query('interval') || '1d',c.req.raw.signal)) }
+  history(c: Context) { return this.read(c,() => this.service.history(c.req.query('symbol') || '',c.req.query('from') || '',c.req.query('to') || '',c.req.raw.signal,c.req.header('X-Client-Date'))) }
+  fx(c: Context) { return this.read(c,() => this.service.fx(c.req.query('from') || '',c.req.query('to') || '',(c.req.query('currencies') || '').split(','),c.req.raw.signal,c.req.header('X-Client-Date'))) }
 }

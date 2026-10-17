@@ -14,7 +14,7 @@ export type ValuedAccount = HoldingFields & {
   asset_type?: string
 }
 
-export type AccountQuote = { regularMarketPrice?: number; currency?: string }
+export type AccountQuote = { regularMarketPrice?: number | null; currency?: string | null }
 export type AccountSortValues = Record<string, number | null | undefined>
 
 // Use the same converted values as ordering. A missing valuation invalidates
