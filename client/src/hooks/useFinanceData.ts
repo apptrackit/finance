@@ -1,3 +1,4 @@
+import { readMarketQuotes, type ClientQuote } from '../lib/market-data'
 import type { TradeFacts } from '../../../shared/investment-trade'
 import { usesMarketPricing } from '../../../shared/holding'
 import type { HoldingFields } from '../../../shared/holding'
@@ -88,13 +89,7 @@ export type Category = {
   type: 'income' | 'expense'
 }
 
-type MarketQuote = {
-  symbol: string
-  regularMarketPrice?: number
-  shortName?: string
-  currency?: string
-  regularMarketChangePercent?: number
-}
+type MarketQuote = ClientQuote
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -265,18 +260,12 @@ export function useFinanceData(
       }
 
       const symbolsToFetch = investmentAccounts
-        .filter(acc => usesMarketPricing(acc) && acc.symbol)
+        .filter(acc => usesMarketPricing(acc) && acc.balance !== 0 && acc.symbol)
         .map(acc => acc.symbol!)
       const uniqueSymbols = [...new Set(symbolsToFetch)]
 
-      const quotesArray = await Promise.all(uniqueSymbols.map(async symbol => {
-        const data = await readJson(`${API_BASE_URL}/market/quote?symbol=${encodeURIComponent(symbol)}`)
-        if (!isRecord(data) || !isNumber(data.regularMarketPrice)) {
-          throw new Error('Invalid market quote')
-        }
-        return { symbol, data: data as MarketQuote }
-      }))
-      const quotes: Record<string, MarketQuote> = Object.fromEntries(quotesArray.map(({ symbol, data }) => [symbol, data]))
+      const quotes = await readMarketQuotes(uniqueSymbols)
+      if (uniqueSymbols.some(symbol => !quotes[symbol] || quotes[symbol].regularMarketPrice == null || quotes[symbol].status === 'stale')) throw new Error('Investment prices unavailable')
 
       // A rate outage makes only required foreign conversions unavailable.
       // Same-currency values do not depend on the rate service.

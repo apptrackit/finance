@@ -20,7 +20,7 @@ describe('account value ordering', () => {
       { ...cash('Manual asset', 200, 'USD'), type: 'investment', asset_type: 'manual', symbol: 'IGNORED' },
       { ...cash('Crypto', 0.01, 'BTC'), type: 'investment', asset_type: 'crypto', symbol: 'BTC-USD' },
     ]
-    const quotes = { LOW: { regularMarketPrice: 1, currency: 'USD' }, HIGH: { regularMarketPrice: 200, currency: 'USD' }, 'BTC-USD': { regularMarketPrice: 10000, currency: 'USD' } }
+    const quotes = { LOW: { regularMarketPrice: 1, currency: 'USD' }, HIGH: { regularMarketPrice: 200, currency: 'EUR' }, 'BTC-USD': { regularMarketPrice: 10000, currency: 'USD' } }
     const values = Object.fromEntries(accounts.map(account => [account.id, accountValueForOrdering(account, quotes, 'HUF', rates).value]))
     expect(values).toEqual({ 'Many units': 36000, 'Valuable holding': 160000, 'Manual asset': 72000, Crypto: 36000 })
     expect(sortAccountsByValue(accounts, values).map(account => account.id)).toEqual(['Valuable holding', 'Manual asset', 'Crypto', 'Many units'])
@@ -32,6 +32,11 @@ describe('account value ordering', () => {
     expect(values).toEqual({ Foreign: null, Debt: -100, Zero: 0, 'No quote': null })
     expect(sortAccountsByValue(accounts, values).map(account => account.id)).toEqual(['Zero', 'Debt', 'Foreign', 'No quote'])
     expect(accountValueForOrdering(accounts[0], {}, 'HUF', { EUR: 0 })).toMatchObject({ value: null, missingCurrencies: ['EUR'] })
+  })
+
+  it('withholds a quote that conflicts with the recorded listing currency', () => {
+    const account = { ...cash('Stock', 2, 'SHARE'), type: 'investment', symbol: 'TEST', quote_currency: 'EUR' }
+    expect(accountValueForOrdering(account, {TEST:{regularMarketPrice:100,currency:'USD'}}, 'HUF', rates).value).toBeNull()
   })
 
   it('uses stable name/id ties and treats invalid sort values as unavailable', () => {

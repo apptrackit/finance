@@ -1,3 +1,6 @@
+import { MarketReader } from '../../shared/market-reader'
+import { D1MarketCache } from '../../shared/market-cache'
+import type { Quote } from '../../shared/market-data'
 import { tradeCoverage } from '../../shared/investment-trade'
 import { HOLDING_ACCOUNT_SELECT, mapHoldingAccount, usesMarketPricing, holdingNativeValue } from '../../shared/holding'
 import { validRates } from '../../shared/currency'
@@ -11,7 +14,7 @@ import { TransferDraftService } from './transfer-drafts'
 import { TransferReviewCorrectionService } from './transfer-review-corrections'
 
 type Rates = { values: Record<string, number>; available: boolean }
-type LiveQuote = { price: number; currency: string; marketState: string | null }
+type LiveQuote = Quote
 type DuplicateCandidate = Pick<TransactionRow, 'id' | 'date' | 'amount' | 'description' | 'status' | 'pending_kind'>
 type ReviewDraftResultRow = TransactionRow & {
   account_name: string
@@ -117,32 +120,12 @@ export class FinanceService {
     return rate ? amount / rate : 0
   }
 
-  private async liveQuote(symbol: string): Promise<LiveQuote | null> {
-    try {
-      const response = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=1d`, {
-        headers: { 'User-Agent': 'Mozilla/5.0' },
-        signal: AbortSignal.timeout(8_000),
-      })
-      const data = await response.json<any>()
-      const meta = data?.chart?.result?.[0]?.meta
-      if (!response.ok || !Number.isFinite(meta?.regularMarketPrice)) return null
-      return { price: meta.regularMarketPrice, currency: String(meta.currency || 'USD'), marketState: meta.marketState || null }
-    } catch {
-      return null
-    }
-  }
-
   private async liveQuotes(accounts: AccountRow[]) {
-    const quotes = new Map<string, LiveQuote | null>()
-    let next = 0
-    const worker = async () => {
-      while (next < accounts.length) {
-        const account = accounts[next++]
-        quotes.set(account.id, await this.liveQuote(account.symbol!))
-      }
-    }
-    await Promise.all(Array.from({ length: Math.min(4, accounts.length) }, worker))
-    return quotes
+    const reader = new MarketReader(new D1MarketCache(this.env.DB))
+    const symbols = [...new Set(accounts.map(a => a.symbol!).filter(Boolean))]
+    const quotes: Record<string,Quote> = {}
+    for (let i = 0; i < symbols.length; i += 50) Object.assign(quotes,await reader.quotes(symbols.slice(i,i+50)))
+    return new Map(accounts.map(a => [a.id,quotes[a.symbol!] ?? null]))
   }
 
   private conversionWarnings(accounts: AccountRow[], target: string, rates: Rates) {
@@ -1097,7 +1080,7 @@ export class FinanceService {
     let valueComplete = true
     const holdings = investmentAccounts.map(account => {
       const live = quotes.get(account.id)
-      const quote = live ? { regularMarketPrice: live.price, currency: live.currency } : undefined
+      const quote = live && live.price !== null && live.currency ? { regularMarketPrice: live.price, currency: live.currency } : undefined
       const native = holdingNativeValue(account, quote)
       const missingFx = native.currency !== currency && !rates.values[native.currency]
       const value = native.value === null || (!native.currency && native.value !== 0) || (missingFx && native.value !== 0)
@@ -1106,6 +1089,7 @@ export class FinanceService {
         valueComplete = false
         warnings.push(native.value === null ? `Price unavailable for ${account.symbol || account.name}` : `Exchange rate unavailable for ${native.currency}; ${account.name} excluded from ${currency} totals`)
       } else total += value
+      if (live?.status === 'stale') warnings.push(`Stale price for ${account.symbol}; last observation ${live.as_of}.`)
       if (account.manual_valuation?.status === 'stale') warnings.push(`Manual valuation for ${account.name} is ${account.manual_valuation.age_days} days old (as of ${account.manual_valuation.as_of}); 90-day update reminder.`)
       const activityQuantity = account.holding_position?.activity_quantity ?? 0
       if (account.holding_position?.history_status !== 'reconciled') warnings.push(`Opening history needs reconciliation for ${account.name}`)
@@ -1117,10 +1101,10 @@ export class FinanceService {
         manual_price: account.manual_price ?? null, manual_price_date: account.manual_price_date ?? null,
         holding_position: account.holding_position, manual_valuation: account.manual_valuation, manual_ownership: account.manual_ownership,
         quantity: account.asset_type === 'manual' ? null : account.balance, activity_quantity: activityQuantity,
-        native_value: native.value, native_currency: native.currency, value, currency,
+        native_value: native.value, native_currency: native.currency, valuation_reason:native.reason??null, value, currency,
         native_net_invested: null, investment_currency: null, net_invested: null,
         gain_loss: null, gain_loss_percent: null, cost_basis_status: 'unavailable',
-        quote: live ? { price: live.price, currency: live.currency, market_state: live.marketState } : null }
+        quote: live ? { ...live, market_state: live.marketState } : null }
     })
     const withAllocation = holdings.map(holding => ({ ...holding, allocation_percent: valueComplete && total > 0 && holding.value !== null ? round(holding.value / total * 100) : null }))
     return { as_of: new Date().toISOString(), currency, total_value: round(total), total_invested: null,

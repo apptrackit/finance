@@ -76,6 +76,7 @@ export const calculatePosition = (
 
   // Keep native values available even when the portfolio conversion fails.
   const nativeValue = holdingNativeValue(account, account.symbol ? quotes[account.symbol] : undefined)
+  if (nativeValue.reason === 'quote_currency_mismatch') currentPrice = 0
   const displayValue = nativeValue.value
   quoteCurrency = nativeValue.currency || quoteCurrency
   priceFetchError = displayValue === null

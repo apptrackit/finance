@@ -1,3 +1,4 @@
+import { readMarketQuotes } from '../../lib/market-data'
 import type { TradeFacts } from '../../../../shared/investment-trade'
 import { usesMarketPricing } from '../../../../shared/holding'
 import { API_BASE_URL, apiFetch } from '../../config'
@@ -67,20 +68,8 @@ export async function readInvestmentSnapshot(signal: AbortSignal): Promise<Inves
       ? `${item.notes || `${item.quantity} units @ ${item.price}`} · execution currency unverified`
       : description(item, accountById.get(item.account_id)!.quote_currency || 'trading currency'),
   }))
-  const symbols = [...new Set(accounts.filter(item => usesMarketPricing(item) && item.symbol).map(item => item.symbol!))]
-  const quotePromise = Promise.all(symbols.map(async symbol => {
-    try {
-      const response = await apiFetch(`${API_BASE_URL}/market/quote?symbol=${encodeURIComponent(symbol)}`, { throwOnError: true, signal })
-      const value: unknown = await response.json()
-      if (!record(value) || !finite(value.regularMarketPrice) || (value.currency !== undefined && typeof value.currency !== 'string')) {
-        throw new Error('Invalid market quote')
-      }
-      return [symbol, { ...value, symbol } as MarketQuote] as const
-    } catch {
-      // Unavailable prices remain explicitly unavailable in calculatePosition.
-      return null
-    }
-  }))
+  const symbols = [...new Set(accounts.filter(item => usesMarketPricing(item) && item.balance !== 0 && item.symbol).map(item => item.symbol!))]
+  const quotePromise = readMarketQuotes(symbols,signal)
   const ratesPromise = (async () => {
     try {
       const response = await fetch('https://open.er-api.com/v6/latest/USD', { signal })
@@ -90,7 +79,7 @@ export async function readInvestmentSnapshot(signal: AbortSignal): Promise<Inves
       return validRates(value.rates)
     } catch { return {} }
   })()
-  const [quoteEntries, exchangeRates] = await Promise.all([quotePromise, ratesPromise])
+  const [quotes, exchangeRates] = await Promise.all([quotePromise, ratesPromise])
   signal.throwIfAborted()
-  return { accounts, transactions, categories, quotes: Object.fromEntries(quoteEntries.filter(entry => entry !== null)), exchangeRates }
+  return { accounts, transactions, categories, quotes, exchangeRates }
 }

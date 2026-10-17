@@ -1,3 +1,4 @@
+import { readMarketQuotes, type ClientQuote } from '../../lib/market-data'
 import { usesMarketPricing } from '../../../../shared/holding'
 import { holdingFormDefaults, localAccountDate } from './account-form'
 import type { HoldingFields } from '../../../../shared/holding'
@@ -57,13 +58,7 @@ const currencySymbols: Record<string, string> = {
   MXN: 'MX$',
 }
 
-type MarketQuote = {
-  symbol: string
-  regularMarketPrice?: number
-  shortName?: string
-  currency?: string
-  regularMarketChangePercent?: number
-}
+type MarketQuote = ClientQuote
 
 export function AccountList({ accounts, onAccountAdded, loading, manage = false, editAccountId, addRequest = false, initialInvestment = false, requestKey = '', sortValues }: {
   accounts: Account[]; initialInvestment?: boolean; onAccountAdded: () => void; loading?: boolean; manage?: boolean; editAccountId?: string; addRequest?: boolean; requestKey?: string; sortValues?: AccountSortValues
@@ -175,31 +170,20 @@ export function AccountList({ accounts, onAccountAdded, loading, manage = false,
 
   // Fetch market quotes for investment accounts
   useEffect(() => {
+    const controller = new AbortController()
     const fetchQuotes = async () => {
-      const investmentAccounts = activeAccounts.filter(a => a.type === 'investment' && a.symbol && usesMarketPricing(a))
+      const investmentAccounts = activeAccounts.filter(a => a.type === 'investment' && a.balance !== 0 && a.symbol && usesMarketPricing(a))
       if (investmentAccounts.length === 0) return
 
       const symbols = [...new Set(investmentAccounts.map(a => a.symbol!))]
-      const newQuotes: Record<string, MarketQuote> = {}
-
-      await Promise.all(symbols.map(async (symbol) => {
-        try {
-          const res = await apiFetch(`${API_BASE_URL}/market/quote?symbol=${encodeURIComponent(symbol)}`)
-          if (res.ok) {
-            const data = await res.json()
-            newQuotes[symbol] = data
-          }
-        } catch (error) {
-          console.error(`Failed to fetch quote for ${symbol}:`, error)
-        }
-      }))
-
-      setQuotes(newQuotes)
+      const nextQuotes = await readMarketQuotes(symbols,controller.signal)
+      if (!controller.signal.aborted) setQuotes(nextQuotes)
     }
 
     if (accounts.length > 0) {
-      fetchQuotes()
+      void fetchQuotes().catch(() => {})
     }
+    return () => controller.abort()
   }, [accounts])
 
   const missingCurrencies = new Set<string>()
@@ -267,7 +251,7 @@ export function AccountList({ accounts, onAccountAdded, loading, manage = false,
     const assetType = asset.quoteType === 'CRYPTOCURRENCY' ? 'crypto' : asset.quoteType === 'ETF' ? 'etf' : 'stock'
     // For crypto, currency is the crypto symbol (e.g., BTC). For stocks, use 'SHARE'
     const currency = assetType === 'crypto' ? asset.symbol.split('-')[0] : 'SHARE'
-    const initialQuoteCurrency = typeof asset.currency === 'string' ? asset.currency.toUpperCase() : 'USD'
+    const initialQuoteCurrency = typeof asset.currency === 'string' ? asset.currency.toUpperCase() : ''
     setFormData({
       ...formData,
       name: asset.shortname || asset.longname || asset.symbol,
@@ -908,7 +892,7 @@ export function AccountList({ accounts, onAccountAdded, loading, manage = false,
               {sortAccountsByValue(activeAccounts.filter(a => a.type === 'investment'), orderingValues).map(account => {
                 const percentage = allocation(accountValues[account.id], totalInvestmentUSD)
                 const quote = account.symbol ? quotes[account.symbol] : null
-                const priceChange = quote?.regularMarketChangePercent || 0
+                const priceChange = quote?.regularMarketChangePercent ?? null
                 
                 return (
                   <div
@@ -946,7 +930,7 @@ export function AccountList({ accounts, onAccountAdded, loading, manage = false,
                             <span className="inline-flex items-center justify-center h-4 sm:h-5 px-1.5 sm:px-2 rounded-full bg-blue-500/20 text-blue-600 dark:text-blue-400 text-[10px] sm:text-xs font-medium">
                               {privacyMode === 'hidden' ? '••••' : percentage === null ? 'Unavailable' : `${percentage.toFixed(1)}%`}
                             </span>
-                            {account.asset_type !== 'manual' && priceChange !== 0 && (
+                            {usesMarketPricing(account) && priceChange !== null && (
                               <span className={`inline-flex items-center justify-center h-4 sm:h-5 px-1.5 sm:px-2 rounded-full text-[10px] sm:text-xs font-medium ${
                                 priceChange >= 0 
                                   ? 'bg-green-500/20 text-green-600 dark:text-green-400' 
@@ -966,7 +950,7 @@ export function AccountList({ accounts, onAccountAdded, loading, manage = false,
                             </p>
                             {quote?.regularMarketPrice && (
                               <p className="text-[10px] sm:text-xs text-muted-foreground">
-                                @ {currencySymbols[(account.quote_currency || quote.currency || 'USD').toUpperCase()] || (account.quote_currency || quote.currency || 'USD')} {quote.regularMarketPrice.toFixed(2)}
+                                @ {currencySymbols[(quote.currency || account.quote_currency || '').toUpperCase()] || (quote.currency || account.quote_currency || '')} {quote.regularMarketPrice.toFixed(2)}
                               </p>
                             )}
                           </div>

@@ -102,7 +102,7 @@ describe('sidebar account shares', () => {
       { id: 'manual', name: 'Manual asset', type: 'investment', balance: 100000, currency: 'HUF', asset_type: 'manual' },
       { id: 'archived', name: 'Archived bank', type: 'cash', balance: 0, currency: 'EUR', archived_at: 1 },
     ]
-    const converted = Object.fromEntries(accounts.map(account => [account.id, accountValueForOrdering(account, { TEST: { regularMarketPrice: 150, currency: 'USD' } }, 'HUF', { HUF: 1, EUR: 1 / 400, USD: 1 / 360 }).value]))
+    const converted = Object.fromEntries(accounts.map(account => [account.id, accountValueForOrdering(account, { TEST: { regularMarketPrice: 150, currency: 'EUR' } }, 'HUF', { HUF: 1, EUR: 1 / 400, USD: 1 / 360 }).value]))
     open({ accounts, values: converted })
     for (const [name, percentage, basis] of [['Local bank', 60, 'cash balances'], ['Euro bank', 40, 'cash balances'], ['Stock', 75, 'investment values'], ['Manual asset', 25, 'investment values']] as const) {
       const row = screen.getByRole('link', { name: new RegExp(`^${name},`) })

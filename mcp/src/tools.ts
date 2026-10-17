@@ -462,11 +462,11 @@ export const TOOL_DEFINITIONS = [
   {
     name: 'get_portfolio',
     title: 'Get investment portfolio',
-    description: 'Use this when the user asks for current investment holdings, allocation, valuation, invested amount, or gain/loss. Uses live quotes when available and returns valuation warnings; use get_investment_activity for individual buys and sells.',
+    description: 'Use this when the user asks for current investment holdings, allocation, valuation, invested amount, or gain/loss. Uses shared cached quotes with actual source times and missing/stale warnings. Unverified cost/returns remain null; use get_investment_activity for individual buys and sells.',
     inputSchema: { type: 'object', properties: { currency: CURRENCY }, additionalProperties: false },
-    outputSchema: output(['as_of', 'currency', 'total_value', 'total_invested', 'total_gain_loss', 'total_gain_loss_percent', 'holdings', 'warnings', 'valuation_status'], {
-      as_of: { type: 'string' }, currency: { type: 'string' }, total_value: { type: 'number' }, total_invested: { type: 'number' },
-      total_gain_loss: { type: 'number' }, total_gain_loss_percent: { type: ['number', 'null'] }, holdings: RECORDS, warnings: WARNINGS, valuation_status: { type: 'string' },
+    outputSchema: output(['as_of', 'currency', 'total_value', 'total_invested', 'total_gain_loss', 'total_gain_loss_percent', 'holdings', 'warnings', 'valuation_status', 'gain_loss_coverage'], {
+      as_of: { type: 'string' }, currency: { type: 'string' }, total_value: { type: 'number' }, total_invested: { type: ['number', 'null'] },
+      total_gain_loss: { type: ['number', 'null'] }, total_gain_loss_percent: { type: ['number', 'null'] }, holdings: RECORDS, warnings: WARNINGS, valuation_status: { type: 'string' }, gain_loss_coverage:RECORD,
     }),
     annotations: READ_ONLY,
     _meta: { 'openai/toolInvocation/invoking': 'Valuing portfolio…', 'openai/toolInvocation/invoked': 'Portfolio ready' },

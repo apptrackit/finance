@@ -1,295 +1,77 @@
-import { useState, useEffect, useMemo } from 'react'
-import { 
-  XAxis, 
-  YAxis, 
-  CartesianGrid, 
-  Tooltip, 
-  ResponsiveContainer,
-  ComposedChart,
-  Area,
-  Scatter
-} from 'recharts'
-import { format } from 'date-fns'
-import { Loader2, TrendingUp, TrendingDown } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import { Area, CartesianGrid, ComposedChart, ResponsiveContainer, Scatter, Tooltip, XAxis, YAxis } from 'recharts'
+import { Loader2 } from 'lucide-react'
+import type { PriceHistory } from '../../../../shared/market-data'
 import { API_BASE_URL, apiFetch } from '../../config'
 
-type Transaction = {
-  id: string
-  account_id: string
-  category_id?: string
-  amount: number
-  description?: string
-  date: string
-  is_recurring: boolean
-  linked_transaction_id?: string
-}
-
-type ChartDataPoint = {
-  date: string
-  open: number
-  high: number
-  low: number
-  close: number
-  volume: number
-  buyPoint?: number
-  sellPoint?: number
-  transaction?: Transaction
-}
-
-type InvestmentChartProps = {
-  symbol: string
-  transactions?: Transaction[]
-}
-
-type TimeRange = '1d' | '5d' | '1mo' | '6mo' | '1y' | '5y' | 'max'
-
-const RANGES: { label: string; value: TimeRange; interval: string }[] = [
-  { label: '1D', value: '1d', interval: '5m' },
-  { label: '5D', value: '5d', interval: '15m' },
-  { label: '1M', value: '1mo', interval: '1d' },
-  { label: '6M', value: '6mo', interval: '1d' },
-  { label: '1Y', value: '1y', interval: '1wk' },
-  { label: '5Y', value: '5y', interval: '1mo' },
-  { label: 'All', value: 'max', interval: '3mo' },
+type Trade = { id: string; date: string; amount: number; quantity?: number; execution_currency?: string | null }
+const RANGES = [
+  {label:'1D',value:'1d'}, {label:'5D',value:'5d'}, {label:'1M',value:'1mo'},
+  {label:'6M',value:'6mo'}, {label:'1Y',value:'1y'}, {label:'5Y',value:'5y'}, {label:'10Y',value:'max'},
 ]
-
-export function InvestmentChart({ symbol, transactions = [] }: InvestmentChartProps) {
-  const [range, setRange] = useState<TimeRange>('1mo')
-  const [data, setData] = useState<ChartDataPoint[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [hoveredPrice, setHoveredPrice] = useState<number | null>(null)
-
-  useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true)
-      setError(null)
+export function InvestmentChart({symbol,transactions=[]}: {symbol:string;transactions?:Trade[]}) {
+  const [range,setRange]=useState('1mo')
+  const [retry,setRetry]=useState(0)
+  const [snapshot,setSnapshot]=useState<{key:string;value:PriceHistory}|null>(null)
+  const [loading,setLoading]=useState(true)
+  const [error,setError]=useState<string|null>(null)
+  const key=`${symbol}:${range}`
+  useEffect(()=>{
+    const controller=new AbortController()
+    setLoading(true);setError(null)
+    void (async()=>{
       try {
-        const selectedRange = RANGES.find(r => r.value === range)
-        const url = `${API_BASE_URL}/market/chart?symbol=${encodeURIComponent(symbol)}&range=${range}&interval=${selectedRange?.interval || '1d'}`
-        
-        const res = await apiFetch(url)
-        
-        if (!res.ok) {
-          const errorData = await res.json().catch(() => ({}))
-          console.error('Chart API error, status:', res.status)
-          throw new Error(errorData.error || `Failed to fetch chart data: ${res.status}`)
-        }
-        
-        const json = await res.json()
-        
-        let points: ChartDataPoint[] = []
-        
-        if (json.quotes && Array.isArray(json.quotes)) {
-          const quotes = json.quotes
-          const txMap = new Map<number, Transaction>()
-          
-          // Map each transaction to the closest data point
-          if (quotes.length > 0) {
-            const firstQuoteTime = new Date(quotes[0].date).getTime()
-            const lastQuoteTime = new Date(quotes[quotes.length - 1].date).getTime()
-            
-            transactions.forEach(tx => {
-              const txTime = new Date(tx.date).getTime()
-              
-              // Only consider transactions within the chart's time range
-              if (txTime >= firstQuoteTime && txTime <= lastQuoteTime) {
-                let closestIdx = -1
-                let minDiff = Infinity
-                
-                quotes.forEach((q: any, i: number) => {
-                  const qTime = new Date(q.date).getTime()
-                  const diff = Math.abs(qTime - txTime)
-                  if (diff < minDiff) {
-                    minDiff = diff
-                    closestIdx = i
-                  }
-                })
-                
-                if (closestIdx !== -1) {
-                  txMap.set(closestIdx, tx)
-                }
-              }
-            })
-          }
-
-          points = quotes.map((q: any, i: number) => {
-            const tx = txMap.get(i)
-            
-            return {
-              date: q.date,
-              open: q.open,
-              high: q.high,
-              low: q.low,
-              close: q.close,
-              volume: q.volume,
-              buyPoint: tx && tx.amount > 0 ? q.close : undefined,
-              sellPoint: tx && tx.amount < 0 ? q.close : undefined,
-              transaction: tx
-            }
-          }).filter((p: any) => p.close !== null)
-        }
-        
-        setData(points)
-      } catch (err: any) {
-        setError(err.message || 'Could not load chart data')
-      } finally {
-        setLoading(false)
-      }
-    }
-
-    fetchData()
-  }, [symbol, range, transactions])
-
-  // Compute EMA (Exponential Moving Average) smoothed baseline for the price chart
-  const chartData = useMemo(() => {
-    if (data.length === 0) return data
-    const span = Math.max(3, Math.min(Math.round(data.length * 0.3), 20))
-    const k = 2 / (span + 1)
-    let ema = data[0].close
-    return data.map((point, i) => {
-      if (i === 0) return { ...point, smoothed: ema }
-      ema = point.close * k + ema * (1 - k)
-      return { ...point, smoothed: ema }
-    })
-  }, [data])
-
-  const currentPrice = data.length > 0 ? data[data.length - 1].close : 0
-  const startPrice = data.length > 0 ? data[0].close : 0
-  const priceChange = currentPrice - startPrice
-  const percentChange = (priceChange / startPrice) * 100
-  const isPositive = priceChange >= 0
-
-  const CustomTooltip = ({ active, payload }: any) => {
-    if (active && payload && payload.length) {
-      const point = payload[0].payload
-      return (
-        <div className="bg-card/95 backdrop-blur border border-border p-3 rounded-lg shadow-xl text-xs">
-          <p className="font-medium mb-1">{format(new Date(point.date), 'MMM d, yyyy HH:mm')}</p>
-          <p className="text-foreground font-bold">
-            ${point.close.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-          </p>
-          {point.transaction && (
-            <div className="mt-1 pt-1 border-t border-border/50">
-              <p className={`font-medium ${point.transaction.amount > 0 ? 'text-green-500' : 'text-red-500'}`}>
-                {point.transaction.amount > 0 ? 'BUY' : 'SELL'}: ${Math.abs(point.transaction.amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                {point.transaction.description && <span className="text-muted-foreground text-xs"> • {point.transaction.description}</span>}
-              </p>
-            </div>
-          )}
-        </div>
-      )
-    }
-    return null
-  }
-
-  return (
-    <div className="space-y-4">
-      {/* Header with Price and Range Controls */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <div className="text-2xl font-bold">
-            ${(hoveredPrice ?? currentPrice).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-          </div>
-          <div className={`flex items-center gap-1 text-sm ${isPositive ? 'text-green-500' : 'text-red-500'}`}>
-            {isPositive ? <TrendingUp className="h-4 w-4" /> : <TrendingDown className="h-4 w-4" />}
-            <span>{priceChange > 0 ? '+' : ''}{priceChange.toFixed(2)} ({percentChange.toFixed(2)}%)</span>
-            <span className="text-muted-foreground ml-1">
-              {RANGES.find(r => r.value === range)?.label}
-            </span>
-          </div>
-        </div>
-        
-        <div className="flex bg-secondary/50 p-1 rounded-lg overflow-x-auto">
-          {RANGES.map((r) => (
-            <button
-              key={r.value}
-              onClick={() => setRange(r.value)}
-              className={`px-3 py-1 text-xs font-medium rounded-md transition-all whitespace-nowrap ${
-                range === r.value
-                  ? 'bg-background shadow-sm text-foreground'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
-              }`}
-            >
-              {r.label}
-            </button>
-          ))}
-        </div>
+        const response=await apiFetch(`${API_BASE_URL}/market/chart?symbol=${encodeURIComponent(symbol)}&range=${range}&interval=1d`,{throwOnError:true,signal:controller.signal})
+        const value=await response.json() as PriceHistory
+        if (!value || value.symbol!==symbol.toUpperCase() || !Array.isArray(value.points) || !value.currency
+          || value.points.some(p=> !Number.isFinite(p.close) || p.close<=0 || !/^\d{4}-\d{2}-\d{2}$/.test(p.date))) throw new Error('Invalid price history')
+        if(!controller.signal.aborted) setSnapshot({key,value})
+      } catch {if(!controller.signal.aborted) setError('Price history could not be refreshed.')} finally {if(!controller.signal.aborted) setLoading(false)}
+    })()
+    return ()=>controller.abort()
+  },[key,symbol,range,retry])
+  const history=snapshot?.key===key?snapshot.value:null
+  const points=useMemo(()=>history?.points.map(point=>{
+    const trades=transactions.filter(t=>t.date===point.date)
+    return {...point,trades,buyPoint:trades.some(t=>(t.quantity??t.amount)>0)?point.close:undefined,
+      sellPoint:trades.some(t=>(t.quantity??t.amount)<0)?point.close:undefined}
+  })??[],[history,transactions])
+  const first=points.at(0),last=points.at(-1)
+  const splitInRange=history?.events.some(event=>event.type==='split')??false
+  const change=first&&last&&!splitInRange?last.close-first.close:null
+  const rawPercent=change!==null&&first?change/first.close*100:null
+  const percent=rawPercent!==null&&Number.isFinite(rawPercent)?rawPercent:null
+  const money=(n:number)=>`${n.toLocaleString(undefined,{maximumFractionDigits:history?.category==='crypto'?6:2})} ${history?.currency||''}`
+  return <div className="space-y-3">
+    <div className="flex flex-wrap items-center justify-between gap-3">
+      <div>
+        <p className="text-xl font-semibold">{last?money(last.close):'Price unavailable'}</p>
+        {change!==null && percent!==null && <p className="text-xs text-muted-foreground">{change>=0?'+':''}{money(change)} ({percent.toFixed(2)}%) · selected range</p>}
+        {splitInRange && <p className="text-xs text-muted-foreground">Range change unavailable across split events.</p>}
       </div>
-
-      {/* Chart Area */}
-      <div className="h-[300px] w-full relative">
-        {loading ? (
-          <div className="absolute inset-0 flex items-center justify-center bg-card/50 backdrop-blur-sm z-10">
-            <Loader2 className="h-8 w-8 animate-spin text-primary" />
-          </div>
-        ) : error ? (
-          <div className="absolute inset-0 flex items-center justify-center text-muted-foreground text-sm">
-            {error}
-          </div>
-        ) : (
-          <ResponsiveContainer width="100%" height="100%">
-            <ComposedChart
-              data={chartData}
-              onMouseMove={(e: any) => {
-                if (e.activePayload) {
-                  setHoveredPrice(e.activePayload[0].payload.close)
-                }
-              }}
-              onMouseLeave={() => setHoveredPrice(null)}
-            >
-              <defs>
-                <linearGradient id="colorPrice" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor={isPositive ? 'hsl(var(--primary))' : '#ef4444'} stopOpacity={0.3}/>
-                  <stop offset="95%" stopColor={isPositive ? 'hsl(var(--primary))' : '#ef4444'} stopOpacity={0}/>
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" opacity={0.4} />
-              <XAxis 
-                dataKey="date" 
-                hide 
-              />
-              <YAxis 
-                domain={['auto', 'auto']} 
-                hide 
-              />
-              <Tooltip content={<CustomTooltip />} />
-              
-              <Area
-                type="monotone"
-                dataKey="smoothed"
-                stroke="hsl(var(--muted-foreground))"
-                strokeWidth={1.5}
-                strokeDasharray="6 3"
-                fillOpacity={0}
-                fill="none"
-                dot={false}
-                activeDot={false}
-              />
-              <Area
-                type="monotone"
-                dataKey="close"
-                stroke={isPositive ? 'hsl(var(--primary))' : '#ef4444'}
-                strokeWidth={2}
-                fillOpacity={1}
-                fill="url(#colorPrice)"
-              />
-              
-              <Scatter
-                dataKey="buyPoint"
-                fill="hsl(var(--primary))"
-                shape="circle"
-              />
-              
-              <Scatter
-                dataKey="sellPoint"
-                fill="#ef4444"
-                shape="circle"
-              />
-            </ComposedChart>
-          </ResponsiveContainer>
-        )}
+      <div className="flex max-w-full overflow-x-auto rounded-lg bg-secondary/50 p-1">
+        {RANGES.map(r=><button key={r.value} onClick={()=>setRange(r.value)} className={`rounded px-2 py-1 text-xs ${range===r.value?'bg-background shadow-sm':'text-muted-foreground'}`}>{r.label}</button>)}
       </div>
     </div>
-  )
+    {history && <p className="text-xs text-muted-foreground">Yahoo Finance · daily unadjusted close · {history.currency} · {history.status==='stale'||error?'Saved history; refresh unavailable':'Retrieved'} {history.retrieved_at}{last?.provisional?' · current session provisional':''}</p>}
+    {history?.requires_event_review && <p className="text-xs text-muted-foreground">Corporate events occur in this range. Price history alone does not establish complete portfolio returns.</p>}
+    {error && <div className="flex gap-2 text-sm" role="alert">{error}<button className="text-primary underline" onClick={()=>setRetry(n=>n+1)}>Retry</button></div>}
+    <div className="h-[300px] w-full" aria-label="Daily instrument price history">
+      {loading?<div className="flex h-full items-center justify-center"><Loader2 className="h-6 w-6 animate-spin" aria-label="Loading price history"/></div>:points.length===0?<p className="p-6 text-sm text-muted-foreground">No known daily closes in this range.</p>:
+        <ResponsiveContainer width="100%" height="100%">
+          <ComposedChart data={points}>
+            <CartesianGrid vertical={false} stroke="hsl(var(--border))"/>
+            <XAxis dataKey="date" tick={{fontSize:10}} minTickGap={35}/>
+            <YAxis hide domain={['auto','auto']}/>
+            <Tooltip content={({active,payload})=>{
+              const point=active&&payload?.[0]?.payload as typeof points[number]|undefined
+              return point?<div className="rounded border border-border bg-card p-3 text-xs shadow-lg"><p>{point.date}</p><p>{money(point.close)}</p>{point.trades.map(t=><p key={t.id}>{(t.quantity??t.amount)>0?'Buy':'Sell'}{t.execution_currency?` · execution in ${t.execution_currency}`:''}</p>)}</div>:null
+            }}/>
+            <Area type="linear" dataKey="close" stroke="hsl(var(--primary))" fill="hsl(var(--primary) / 0.1)" connectNulls={false}/>
+            <Scatter dataKey="buyPoint" fill="hsl(var(--primary))"/>
+            <Scatter dataKey="sellPoint" fill="hsl(var(--destructive))"/>
+          </ComposedChart>
+        </ResponsiveContainer>}
+    </div>
+  </div>
 }

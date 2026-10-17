@@ -88,7 +88,7 @@ function createDependencies(db: D1Database) {
   const investmentTransactionService = new InvestmentTransactionService(investmentTransactionRepo, accountRepo)
   const transferService = new TransferService(accountRepo, transactionRepo, investmentTransactionRepo)
   const dashboardService = new DashboardService(accountRepo, transactionRepo, recurringScheduleRepo, categoryRepo)
-  const marketDataService = new MarketDataService()
+  const marketDataService = new MarketDataService(db)
   const recurringScheduleService = new RecurringScheduleService(recurringScheduleRepo, transactionRepo, accountRepo)
   const settingsService = new SettingsService(settingsRepo)
   const financialOutlookService = new FinancialOutlookService(financialOutlookRepo)
@@ -253,6 +253,9 @@ app.get('/financial-outlook-snapshots', (c) => getControllers(c).financialOutloo
 
 // Market Data
 app.get('/market/search', (c) => getControllers(c).marketDataController.search(c))
+app.get('/market/quotes', (c) => getControllers(c).marketDataController.quotes(c))
+app.get('/market/history', (c) => getControllers(c).marketDataController.history(c))
+app.get('/market/fx-history', (c) => getControllers(c).marketDataController.fx(c))
 app.get('/market/quote', (c) => getControllers(c).marketDataController.quote(c))
 app.get('/market/chart', (c) => getControllers(c).marketDataController.chart(c))
 

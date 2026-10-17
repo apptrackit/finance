@@ -1,5 +1,7 @@
 import '@testing-library/jest-dom'
-import { vi } from 'vitest'
+import { beforeEach, vi } from 'vitest'
+import { clearMarketReadCache } from '../lib/market-data'
+beforeEach(clearMarketReadCache)
 
 // Node 26 exposes an unavailable global localStorage that can shadow jsdom's.
 const stored = new Map<string, string>()
