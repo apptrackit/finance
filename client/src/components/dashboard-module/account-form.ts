@@ -14,6 +14,7 @@ export type AccountFormData = {
   opening_balance?: string
   opening_cost?: string
   opening_cost_currency?: string
+  manual_owned?: boolean
   confirm_opening?: boolean
   adjustWithTransaction: boolean
   exclude_from_net_worth: boolean

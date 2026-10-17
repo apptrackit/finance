@@ -39,9 +39,9 @@ it('exports every durable table and transaction state with stored links and fina
   expect(response.headers.get('cache-control')).toBe('no-store')
   const exported = await response.json() as DataExport
   expect(isDataExport(exported)).toBe(true)
-  expect(exported).toMatchObject({ exportVersion: 1, schemaVersion: '019-investment-trade-facts', manifest: { restoreSupported: false } })
+  expect(exported).toMatchObject({ exportVersion: 1, schemaVersion: '020-manual-investment-valuations', manifest: { restoreSupported: false } })
   expect(new Date(exported.exportedAt).toISOString()).toBe(exported.exportedAt)
-  expect(exported.migrations).toHaveLength(19)
+  expect(exported.migrations).toHaveLength(20)
   for (const table of EXPORT_TABLES) {
     const stored = (await f.db.prepare(`SELECT * FROM ${table} ORDER BY ${table === 'app_settings' ? 'key' : 'id'}`).all()).results
     expect(exported.data[table], table).toEqual(stored)

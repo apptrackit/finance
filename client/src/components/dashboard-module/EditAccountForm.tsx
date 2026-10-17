@@ -78,7 +78,7 @@ export function EditAccountForm(props: Props) {
             <span className="text-xs tabular-nums text-muted-foreground">Saved: {hidden ? '••••••' : formatAmount(props.savedBalance, amountOptions)} {props.savedCurrency}</span>
           </div>
           <div className="flex h-[52px] items-center gap-2.5 rounded-xl border border-border bg-background px-4 focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/15">
-            {readOnly && hidden ? <Input id="edit-balance" value="••••••" readOnly className="border-0 bg-transparent p-0 text-[26px]" /> : <AmountInput id="edit-balance" value={value.balance} onValueChange={next => update('balance', next)} allowNegative placeholder="0"
+            {readOnly && hidden ? <Input id="edit-balance" value="••••••" readOnly className="border-0 bg-transparent p-0 text-[26px]" /> : <AmountInput id="edit-balance" value={value.balance} onValueChange={next => update('balance', next)} readOnly={holding && !quantity} allowNegative placeholder="0"
               className="h-auto min-w-0 flex-1 rounded-none border-0 bg-transparent p-0 text-[26px] font-semibold tracking-tight tabular-nums hover:bg-transparent focus-visible:bg-transparent focus-visible:ring-0" />}
             <span className="text-[15px] font-medium text-muted-foreground">{value.currency}</span>
           </div>
@@ -96,6 +96,7 @@ export function EditAccountForm(props: Props) {
               : 'The balance is replaced directly. No transaction is created and past totals won’t reflect the difference.'}</p>
           </div>}
         </div>
+        {holding && !quantity && <p className="text-xs text-muted-foreground">Update this asset’s dated value in Investments → holding details.</p>}
         {changed && holding && <p className="text-xs text-muted-foreground">Saving records a current position correction, with no cash movement or invented purchase. Earlier history remains unverified.</p>}
         {holding && <HoldingAccountFields value={value} onChange={onChange} editing metadataLocked={props.metadataLocked} hideAmounts={readOnly && hidden} />}
         <div className="space-y-2">

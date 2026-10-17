@@ -333,7 +333,7 @@ export function AccountList({ accounts, onAccountAdded, loading, manage = false,
         payload.asset_type = formData.asset_type
         payload.pricing_method = formData.asset_type === 'manual' ? 'manual' : formData.pricing_method || 'market'
         if (formData.exchange) payload.exchange = formData.exchange
-        if (formData.manual_price?.trim()) {
+        if (!editingId && formData.manual_price?.trim()) {
           const price = parseAmount(formData.manual_price)
           if (price === null) throw new Error('Enter a complete manual unit price')
           payload.manual_price = price
@@ -344,12 +344,12 @@ export function AccountList({ accounts, onAccountAdded, loading, manage = false,
           const openingBalance = editingId ? parseAmount(formData.opening_balance || '') : payload.balance
           if (openingBalance === null) throw new Error('Enter a complete opening quantity/value')
           let date = formData.opening_date || ''
-          if (!editingId && openingBalance === 0 && date === localAccountDate()) {
+          if (!editingId && openingBalance === 0 && date === localAccountDate() && !(formData.asset_type === 'manual' && formData.manual_owned === true)) {
             const prior = new Date(`${date}T12:00:00`); prior.setDate(prior.getDate() - 1)
             date = `${prior.getFullYear()}-${String(prior.getMonth() + 1).padStart(2, '0')}-${String(prior.getDate()).padStart(2, '0')}`
           }
           if (!date) throw new Error('Choose the opening date')
-          payload.opening = { balance: openingBalance, date }
+          payload.opening = { balance: openingBalance, date, ...(formData.asset_type==='manual' && formData.manual_owned !== undefined ? {owned:formData.manual_owned} : {}) }
           if (formData.opening_cost?.trim()) {
             const cost = parseAmount(formData.opening_cost)
             if (cost === null) throw new Error('Enter a complete opening cost or leave it blank')
@@ -357,7 +357,7 @@ export function AccountList({ accounts, onAccountAdded, loading, manage = false,
             payload.opening.cost_currency = formData.opening_cost_currency || formData.quote_currency || formData.currency
           }
         }
-        if (editingId && !formData.manual_price?.trim() && editingAccount?.manual_price != null) payload.manual_price = null
+
         if (editingId) {
           payload.expected_balance = savedFormData ? parseAmount(savedFormData.balance) : undefined
           payload.expected_updated_at = typeof savedHoldingVersion.current === 'number' ? savedHoldingVersion.current : undefined
@@ -428,6 +428,7 @@ export function AccountList({ accounts, onAccountAdded, loading, manage = false,
       symbol: account.symbol || '',
       asset_type: account.asset_type || 'stock',
       pricing_method: account.pricing_method || (account.asset_type === 'manual' ? 'manual' : 'market'),
+      manual_owned:account.manual_ownership === 'owned',
       exchange: account.exchange || '', manual_price: account.manual_price == null ? '' : formatAmount(account.manual_price, { maximumFractionDigits: 12 }),
       manual_price_date: account.manual_price_date || localAccountDate(),
       opening_date: anchor?.kind === 'opening' ? anchor.effective_date : localAccountDate(),

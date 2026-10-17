@@ -1,3 +1,5 @@
+import { manualValuationStatus } from '../../../shared/manual-valuation'
+import { validLocalDate } from '../../../shared/holding'
 import { Context } from 'hono'
 import { AccountService } from '../services/account.service'
 import { AccountMapper } from '../mappers/account.mapper'
@@ -10,7 +12,9 @@ export class AccountController {
 
   async getAll(c: Context) {
     const accounts = await this.accountService.getAllAccounts()
-    return c.json(accounts.map(AccountMapper.toResponseDto))
+    const day = c.req.header('X-Client-Date')
+    return c.json(accounts.map(a => AccountMapper.toResponseDto({ ...a, ...(a.manual_valuation && day && validLocalDate(day)
+      ? { manual_valuation: manualValuationStatus(a.manual_valuation.observation,day) } : {}) })))
   }
 
   async create(c: Context<{ Bindings: Bindings }>) {

@@ -15,6 +15,7 @@ export type TransferAccount = {
   balance: number
   currency: string
   type: 'cash' | 'investment'
+  asset_type?: string
   quote_currency?: string
   is_locked?: boolean
   archived_at?: number | null
@@ -66,6 +67,8 @@ export function TransferForm(props: TransferFormProps) {
   const from = accounts.find(account => account.id === data.account_id)
   const to = accounts.find(account => account.id === data.to_account_id)
   const holding = from?.type === 'investment' ? from : to?.type === 'investment' ? to : undefined
+  const total = holding?.asset_type === 'manual'
+  const zeroDisposal = total && from?.type === 'investment' && parseAmount(data.manual_price)===0 && parseAmount(data.amount_to)===0
   const sameCurrency = !holding && !!from && !!to && from.currency === to.currency
   const sameAccount = !!from && from.id === to?.id
   const sent = parseAmount(data.amount)
@@ -73,17 +76,18 @@ export function TransferForm(props: TransferFormProps) {
   const rate = parseAmount(props.exchangeRate)
   const selectable = accounts.filter(account => !account.is_locked && account.archived_at == null && (!reviewDraft || account.type === 'cash'))
   const ready = from && to && !sameAccount && selectable.includes(from) && selectable.includes(to)
-    && sent !== null && sent > 0 && received !== null && received > 0 && data.date
+    && sent !== null && sent > 0 && received !== null && (received > 0 || zeroDisposal) && data.date
+    && (!total || (from?.type==='investment'?sent:received)===1)
     && (!editing || dirty)
-    && (!holding || (parseAmount(data.manual_price) ?? 0) > 0 && !!data.execution_currency
+    && (!holding || ((parseAmount(data.manual_price) ?? -1) > 0 || zeroDisposal) && !!data.execution_currency
       && (data.fee_status === 'unknown' || parseAmount(data.fee_amount || '') !== null))
-  const overBalance = from && sent !== null && sent > props.availableBalance(from)
+  const overBalance = from && from.asset_type !== 'manual' && sent !== null && sent > props.availableBalance(from)
   const deviation = props.suggestedRate && rate !== null && rate > 0 ? (rate / props.suggestedRate - 1) * 100 : null
   const displayAmount = (account: TransferAccount, value: number) => props.hideBalance(account)
     ? '••••••'
     : formatCalculatedAmount(value, { maximumFractionDigits: account.type === 'investment' ? 12 : 2 })
   const amountLabel = (account: TransferAccount | undefined, receiving: boolean) => account?.type === 'investment'
-    ? `Units to ${receiving ? 'Buy' : 'Sell'}`
+    ? account.asset_type === 'manual' ? 'Whole asset (1 ITEM)' : `Units to ${receiving ? 'Buy' : 'Sell'}`
     : `Amount to ${receiving ? 'Receive' : 'Send'}${account ? ` (${account.currency})` : ''}`
 
   const accountCard = (account: TransferAccount | undefined, receiving: boolean) => {
@@ -91,7 +95,7 @@ export function TransferForm(props: TransferFormProps) {
     const delta = receiving ? received : sent
     const field = receiving ? 'to_account_id' : 'account_id'
     const amountId = receiving ? 'transfer_amount_to' : 'transfer_amount'
-    const after = account && delta !== null && delta > 0
+    const after = account && account.asset_type !== 'manual' && delta !== null && delta > 0
       ? props.availableBalance(account) + (receiving ? delta : -delta)
       : null
     return (
@@ -115,7 +119,7 @@ export function TransferForm(props: TransferFormProps) {
             onValueChange={receiving ? props.onReceivedChange : props.onAmountChange} placeholder="0" required
             disabled={submitting || (receiving && sameCurrency)}
             className={cn(compactInput, 'h-9 min-w-0 flex-1 rounded-none p-0 text-[28px] font-semibold tracking-tight tabular-nums disabled:opacity-100')} />
-          <span className="text-[15px] font-medium text-muted-foreground">{account?.currency}</span>
+          <span className="text-[15px] font-medium text-muted-foreground">{account?.asset_type==='manual'?'ITEM':account?.currency}</span>
         </div>
         <p className={cn('min-h-4 text-xs tabular-nums text-muted-foreground', !receiving && after !== null && after < 0 && 'text-amber-600 dark:text-amber-300')}>
           {account && after !== null && <>{reviewDraft ? 'If confirmed' : 'After transfer'} <span className="ml-1">{displayAmount(account, after)} {account.currency}</span></>}
@@ -133,7 +137,7 @@ export function TransferForm(props: TransferFormProps) {
           <div className="flex min-h-12 items-center gap-3 px-1.5 py-2">
             <Button type="button" variant="outline" aria-label="Swap accounts" title="Swap accounts" onClick={props.onSwap}
               disabled={!from || !to || sameAccount} className="h-8 w-8 shrink-0 rounded-full p-0"><ArrowDownUp className="h-[15px] w-[15px]" /></Button>
-            {holding ? <span className="text-xs text-muted-foreground">Enter exact units and actual cash {from?.type === 'investment' ? 'received' : 'paid'}, including any fee.</span> : sameCurrency ? <span className="text-xs text-muted-foreground">Same currency, no conversion</span> : from && to ? (
+            {holding ? <span className="text-xs text-muted-foreground">{total?'Enter exactly 1 ITEM for the complete asset, and actual cash':'Enter exact units and actual cash'} {from?.type === 'investment' ? 'received' : 'paid'}, including any fee.</span> : sameCurrency ? <span className="text-xs text-muted-foreground">Same currency, no conversion</span> : from && to ? (
               <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2.5 gap-y-1.5">
                 {reviewDraft ? <p className="text-xs text-muted-foreground">Enter both amounts explicitly. Effective rate: {sent && received ? `${props.hideBalance(from) || props.hideBalance(to) ? '••••••' : formatCalculatedAmount(received / sent, { maximumFractionDigits: 10 })} ${to.currency} per ${from.currency}` : 'enter both amounts'}.</p> : <>
                   <div className="flex h-8 max-w-full items-center gap-1.5 rounded-lg border border-border bg-background px-2 text-xs tabular-nums text-muted-foreground focus-within:border-primary focus-within:ring-[3px] focus-within:ring-primary/15">
@@ -156,7 +160,7 @@ export function TransferForm(props: TransferFormProps) {
         </div>
         {holding && <div className="space-y-3 rounded-xl border border-border p-3">
           <div className="grid grid-cols-2 gap-3"><div className="space-y-1.5">
-            <Label htmlFor="transfer_price">Executed unit price</Label>
+            <Label htmlFor="transfer_price">{total?'Executed total asset price':'Executed unit price'}</Label>
             <AmountInput id="transfer_price" value={data.manual_price} onValueChange={props.onPriceChange} placeholder="From your trade confirmation" required />
           </div><div className="space-y-1.5"><Label htmlFor="trade_execution_currency">Execution currency</Label>
             <Select id="trade_execution_currency" value={data.execution_currency || ''} onChange={e => props.onChange({ execution_currency:e.target.value })} required>

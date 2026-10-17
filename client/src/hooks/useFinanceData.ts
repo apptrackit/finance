@@ -65,7 +65,7 @@ const formatInvestmentTransactionDescription = (transaction: InvestmentTransacti
 }
 
 const mapInvestmentTransaction = (transaction: InvestmentTransaction) => ({
-  trade_version:transaction.trade_version, execution_currency:transaction.execution_currency, gross_amount:transaction.gross_amount, fee_amount:transaction.fee_amount,
+  asset_event:transaction.asset_event, trade_version:transaction.trade_version, execution_currency:transaction.execution_currency, gross_amount:transaction.gross_amount, fee_amount:transaction.fee_amount,
   fee_status:transaction.fee_status, fee_currency:transaction.fee_currency, cash_amount:transaction.cash_amount, cash_currency:transaction.cash_currency, effective_order:transaction.effective_order,
   id: transaction.id,
   account_id: transaction.account_id,

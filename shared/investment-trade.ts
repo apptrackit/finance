@@ -2,6 +2,7 @@ import { validHoldingNumber } from './holding'
 
 export const tradeCurrencies = ['HUF', 'EUR', 'USD', 'GBP', 'CHF', 'PLN', 'CZK', 'RON', 'MXN'] as const
 export type TradeFacts = {
+  asset_event?: 'acquisition' | 'disposal' | null
   execution_currency?: string | null; gross_amount?: number | null
   fee_amount?: number | null; fee_currency?: string | null; fee_status?: 'known' | 'unknown' | null
   cash_amount?: number | null; cash_currency?: string | null; effective_order?: number | null; trade_version?: number

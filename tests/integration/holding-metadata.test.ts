@@ -37,7 +37,7 @@ it('upgrades 017 without changing any old application column/rowid, source revis
     f.db.prepare("UPDATE accounts SET archived_at = 1, updated_at = 1 WHERE id = 'closed'"),
   ])
   const snapshots = []
-  for (const table of EXPORT_TABLES.filter(table => !['investment_position_anchors','investment_trade_sequence'].includes(table))) {
+  for (const table of EXPORT_TABLES.filter(table => !['investment_position_anchors','investment_trade_sequence','investment_valuations'].includes(table))) {
     const columns = (await f.db.prepare(`PRAGMA table_info(${table})`).all<{ name: string }>()).results.map(column => column.name)
     const rows = (await f.db.prepare(`SELECT rowid, ${columns.join(',')} FROM ${table} ORDER BY rowid`).all()).results
     snapshots.push({ table, columns, rows })
@@ -186,15 +186,15 @@ it('preserves lock/archive protections on new metadata and anchor writers', asyn
   expect((await f.request(`/accounts/${a.id}`, 'PUT', { name: 'Restored holding' })).status).toBe(200)
 })
 
-it('rejects even one minimum unit of opening mismatch and preserves known manual cost on value correction', async () => {
+it('rejects even one minimum unit of opening mismatch and preserves known manual cost on appraisal', async () => {
   await migrate(f.db)
   const tiny = await create(holding({ asset_type: 'crypto', currency: 'BTC', balance: 1e-12, opening: { balance: 1e-12, date: '2026-01-10' } }))
   expect((await f.request(`/accounts/${tiny.id}`, 'PUT', { opening: { balance: 0, date: '2026-01-10' }, expected_balance: 1e-12 })).status).toBe(409)
   const total = await create(holding({ asset_type: 'manual', currency: 'HUF', quote_currency: undefined, balance: 500, manual_price: null, opening: { balance: 500, date: '2026-01-10', cost_amount: 400, cost_currency: 'HUF' } }))
   const before = await counts()
-  const updated = await f.request(`/accounts/${total.id}`, 'PUT', { balance: 600, expected_balance: 500 })
+  const updated = await f.request(`/accounts/${total.id}/valuations`, 'PUT', { effective_date: date, amount:600,expected_version:0,expected_id:null })
   expect(updated.status).toBe(200)
-  expect(await updated.json()).toMatchObject({ balance: 600, holding_position: { anchor: { kind: 'correction', cost_amount: 400, cost_currency: 'HUF' } } })
+  expect(await account(total.id)).toMatchObject({ balance: 600, holding_position: { anchor: { kind: 'opening', cost_amount: 400, cost_currency: 'HUF' } } })
   expect(await counts()).toMatchObject({ cash: before.cash, trades: before.trades })
 })
 

@@ -523,11 +523,11 @@ export function TransactionList({
         if (isLocked(sourceAccount.id) || isLocked(toAccount.id)) {
           throw new Error('Unlock or restore both accounts before transferring')
         }
-        const isSameCurrency = sourceAccount && toAccount
+        const isSameCurrency = sourceAccount.type !== 'investment' && toAccount.type !== 'investment'
           && sourceAccount.currency === toAccount.currency
         const receivedDraft = parseAmount(formData.amount_to)
         const parsedAmountTo = isSameCurrency ? amount : receivedDraft
-        if (parsedAmountTo === null || parsedAmountTo <= 0) {
+        if (parsedAmountTo === null || (parsedAmountTo < 0 || (parsedAmountTo === 0 && !(sourceAccount.type === 'investment' && sourceAccount.asset_type === 'manual')))) {
           throw new Error('Please enter a valid amount to receive greater than 0')
         }
         const amountTo = parsedAmountTo
@@ -547,7 +547,7 @@ export function TransactionList({
           if (sourceAccount.type === 'investment' && toAccount.type === 'investment') throw new Error('Choose one cash account and one holding')
           const executedPrice = parseAmount(formData.manual_price)
           const fee = tradeDraft.fee_status === 'known' ? parseAmount(tradeDraft.fee_amount) : null
-          if (executedPrice === null || executedPrice <= 0) throw new Error('Enter the executed unit price')
+          if (executedPrice === null || executedPrice < 0 || (executedPrice === 0 && !(holding.asset_type === 'manual' && sourceAccount.type === 'investment'))) throw new Error('Enter the executed unit price')
           if (tradeDraft.fee_status === 'known' && fee === null) throw new Error('Enter the included fee, including zero')
           const body = { ...(editingId ? { expected_version:originalTradeVersion.current } : {}),holding_account_id:holding.id, cash_account_id:sourceAccount.type === 'investment' ? toAccount.id : sourceAccount.id,
             type:sourceAccount.type === 'investment' ? 'sell' : 'buy', quantity:sourceAccount.type === 'investment' ? amount : amountTo,
@@ -690,8 +690,8 @@ export function TransactionList({
     resetTransferRateState()
 
     if (tx.linked_transaction_id && relatedTx) {
-      const outgoing = tx.amount < 0 ? tx : relatedTx
-      const incoming = tx.amount < 0 ? relatedTx : tx
+      const outgoing = (tx.quantity !== undefined ? tx.quantity < 0 : tx.amount < 0) ? tx : relatedTx
+      const incoming = outgoing.id === tx.id ? relatedTx : tx
       const transferNote = isMcpReviewTransaction(outgoing)
         ? outgoing.description || ''
         : (outgoing.description || '').split(' - ').slice(1).join(' - ')
@@ -717,7 +717,7 @@ export function TransactionList({
         account_id: outgoing.account_id,
         to_account_id: incoming.account_id,
         category_id: '',
-        amount: formatNumber(outgoing.amount),
+        amount: formatNumber(outgoingAccount?.type === 'investment' && outgoing.quantity !== undefined ? outgoing.quantity : outgoing.amount),
         amount_to: formatNumber(incomingValue),
         description: transferNote,
         date: outgoing.date,
@@ -1066,7 +1066,7 @@ export function TransactionList({
   }
   const handleSwapTransfer = () => {
     if (!fromAccount || !toAccount || isSubmitting) return
-    const sameCurrency = fromAccount.currency === toAccount.currency
+    const sameCurrency = fromAccount.type !== 'investment' && toAccount.type !== 'investment' && fromAccount.currency === toAccount.currency
     const sent = sameCurrency ? formData.amount : formData.amount_to
     const received = formData.amount
     const sentValue = parseAmount(sent)
@@ -1169,7 +1169,7 @@ export function TransactionList({
         if (related) {
           // Found the pair.
           // We prefer to show the outgoing one (negative) as the main one
-          if (tx.amount < 0) {
+          if (tx.quantity !== undefined ? tx.quantity < 0 : tx.amount < 0) {
              processed.push({ ...tx, relatedTx: related })
              skipIds.add(related.id)
           } else {
@@ -1200,11 +1200,11 @@ export function TransactionList({
     )
   }
 
-  const nativeAmount = (value: number, accountId: string, signed = true) => {
+  const nativeAmount = (value: number, accountId: string, signed = true, unitLabel?: string) => {
     const account = accounts.find(a => a.id === accountId)
     if (privacyMode === 'hidden' || (account?.type === 'investment' && shouldHideInvestment())) return '••••••'
-    const digits = account?.type === 'investment' ? 8 : account?.currency === 'HUF' ? 0 : 2
-    return `${signed ? value > 0 ? '+' : value < 0 ? '−' : '' : ''}${formatCalculatedAmount(Math.abs(value), { minimumFractionDigits: digits === 2 ? 2 : 0, maximumFractionDigits: digits }).replace('.', ',')} ${getAccountCurrency(accountId)}`
+    const digits = account?.type === 'investment' ? 12 : account?.currency === 'HUF' ? 0 : 2
+    return `${signed ? value > 0 ? '+' : value < 0 ? '−' : '' : ''}${formatCalculatedAmount(Math.abs(value), { minimumFractionDigits: digits === 2 ? 2 : 0, maximumFractionDigits: digits }).replace('.', ',')} ${unitLabel || getAccountCurrency(accountId)}`
   }
   const convertedAmount = (value: number | null) => value === null ? 'Total unavailable' : privacyMode === 'hidden' ? '••••••' : `${value > 0 ? '+' : value < 0 ? '−' : ''}${formatCalculatedAmount(Math.abs(value), { maximumFractionDigits: masterCurrency === 'HUF' ? 0 : 2 }).replace('.', ',')} ${masterCurrency}`
   const convertCash = (tx: Transaction) => {
@@ -1296,8 +1296,8 @@ export function TransactionList({
         <p className="mt-0.5 truncate text-xs text-muted-foreground">{sortOrder !== 'date' && `${format(parseISO(tx.date), 'MMM d, yyyy')} · `}{transfer ? 'Transfer' : `${getCategoryName(tx.category_id)} · ${getAccountName(tx.account_id)}`}</p>
       </div>
       <div className="max-w-full text-right tabular-nums">
-        <p className={cn('text-sm font-semibold', !transfer && tx.amount > 0 ? 'text-success' : 'text-foreground')}>{nativeAmount(account?.type === 'investment' && tx.quantity !== undefined ? tx.quantity : tx.amount, tx.account_id, !transfer)}</p>
-        {related ? <p className="text-xs text-muted-foreground">→ {nativeAmount(related.quantity ?? related.amount, related.account_id, false)}</p> : !transfer && account?.type === 'cash' && account.currency !== masterCurrency && <p className="text-xs text-muted-foreground">{privacyMode === 'hidden' ? '••••••' : converted === null ? 'Conversion unavailable' : `≈ ${convertedAmount(Math.abs(converted)).replace(/^\+/, '')}`}</p>}
+        <p className={cn('text-sm font-semibold', !transfer && tx.amount > 0 ? 'text-success' : 'text-foreground')}>{nativeAmount(account?.type === 'investment' && tx.quantity !== undefined ? tx.quantity : tx.amount, tx.account_id, !transfer, tx.asset_event ? 'ITEM' : undefined)}</p>
+        {related ? <p className="text-xs text-muted-foreground">→ {nativeAmount(related.quantity ?? related.amount, related.account_id, false, related.asset_event ? 'ITEM' : undefined)}</p> : !transfer && account?.type === 'cash' && account.currency !== masterCurrency && <p className="text-xs text-muted-foreground">{privacyMode === 'hidden' ? '••••••' : converted === null ? 'Conversion unavailable' : `≈ ${convertedAmount(Math.abs(converted)).replace(/^\+/, '')}`}</p>}
       </div>
       {!isLocked(tx.account_id) && !(related && isLocked(related.account_id)) && <div className={cn("items-center sm:flex sm:opacity-0 sm:group-hover:opacity-100 sm:focus-within:opacity-100", activeTxId === tx.id ? "flex" : "hidden")}>
         <Button size="icon" variant="ghost" className="h-11 w-9 sm:h-8 sm:w-8" aria-label={transfer ? 'Edit transfer' : 'Edit transaction'} onClick={event => { event.stopPropagation(); handleEdit(tx) }}><Pencil className="h-3.5 w-3.5" /></Button>

@@ -600,7 +600,7 @@ export class FinanceService {
         quote_currency: account.quote_currency ?? null, pricing_method: account.pricing_method ?? null,
         unit: account.unit ?? null, provider: account.provider ?? null, exchange: account.exchange ?? null,
         manual_price: account.manual_price ?? null, manual_price_date: account.manual_price_date ?? null,
-        holding_position: account.holding_position ?? null,
+        holding_position: account.holding_position ?? null, manual_valuation: account.manual_valuation ?? null, manual_ownership: account.manual_ownership ?? null,
         excluded_from_cash_balance: bool(account.exclude_from_cash_balance),
         excluded_from_net_worth: bool(account.exclude_from_net_worth),
         archived_at: account.archived_at ?? null,
@@ -1106,6 +1106,7 @@ export class FinanceService {
         valueComplete = false
         warnings.push(native.value === null ? `Price unavailable for ${account.symbol || account.name}` : `Exchange rate unavailable for ${native.currency}; ${account.name} excluded from ${currency} totals`)
       } else total += value
+      if (account.manual_valuation?.status === 'stale') warnings.push(`Manual valuation for ${account.name} is ${account.manual_valuation.age_days} days old (as of ${account.manual_valuation.as_of}); 90-day update reminder.`)
       const activityQuantity = account.holding_position?.activity_quantity ?? 0
       if (account.holding_position?.history_status !== 'reconciled') warnings.push(`Opening history needs reconciliation for ${account.name}`)
       // #131 owns cost/return calculations. Do not keep the old fabricated USD
@@ -1114,7 +1115,7 @@ export class FinanceService {
         pricing_method: account.pricing_method ?? null, unit: account.unit ?? null, quote_currency: account.quote_currency ?? null,
         provider: account.provider ?? null, exchange: account.exchange ?? null,
         manual_price: account.manual_price ?? null, manual_price_date: account.manual_price_date ?? null,
-        holding_position: account.holding_position,
+        holding_position: account.holding_position, manual_valuation: account.manual_valuation, manual_ownership: account.manual_ownership,
         quantity: account.asset_type === 'manual' ? null : account.balance, activity_quantity: activityQuantity,
         native_value: native.value, native_currency: native.currency, value, currency,
         native_net_invested: null, investment_currency: null, net_invested: null,

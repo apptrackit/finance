@@ -16,7 +16,7 @@ it('upgrades 018 preserving every existing column/row ID, revision and trade ord
     f.db.prepare("UPDATE accounts SET archived_at=1 WHERE id='closed'"),
   ])
   const snapshots = []
-  for (const table of EXPORT_TABLES.filter(t => t!=='investment_trade_sequence')) {
+  for (const table of EXPORT_TABLES.filter(t => !['investment_trade_sequence','investment_valuations'].includes(t))) {
     const columns=(await f.db.prepare(`PRAGMA table_info(${table})`).all<{name:string}>()).results.map(c => c.name)
     snapshots.push({table,columns,rows:(await f.db.prepare(`SELECT rowid,${columns.join(',')} FROM ${table} ORDER BY rowid`).all()).results})
   }

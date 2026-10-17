@@ -1,3 +1,4 @@
+import type { ManualValuation } from '../../../shared/manual-valuation'
 import type { Account } from '../models/Account'
 import type { InvestmentTransaction } from '../models/InvestmentTransaction'
 import type { Transaction } from '../models/Transaction'
@@ -6,12 +7,13 @@ import { AccountRepository } from './account.repository'
 import { TransactionRepository } from './transaction.repository'
 import { AppError } from '../errors/codes'
 
-export type TradeState = { revision: number; accounts: Account[]; trades: InvestmentTransaction[] }
+export type TradeState = { revision: number; accounts: Account[]; trades: InvestmentTransaction[]; valuations: ManualValuation[] }
 export type TradeResult = { trade_id: string; cash_transaction_id: string; type: 'buy' | 'sell'; deleted?: boolean }
 export type TradeOperation = {
   key: string; hash: string; now: number; state: TradeState; result: TradeResult
   before?: { trade: InvestmentTransaction; cash: Transaction }
   after?: { trade: InvestmentTransaction; cash: Transaction }
+  removeValuations?: string[]; addValuations?: ManualValuation[]
   balances: Map<string, number>; anchors: { accountId: string; anchor: PositionAnchor }[]
 }
 export class InvestmentTradeRepository {
@@ -40,7 +42,9 @@ export class InvestmentTradeRepository {
     const trades = (await this.db.prepare(`SELECT * FROM investment_transactions WHERE account_id IN (${holdingIds.map(() => '?').join(',')}) ORDER BY date, effective_order, id LIMIT 10001`)
       .bind(...holdingIds).all<InvestmentTransaction>()).results
     if (trades.length > 10000) throw AppError.validation('Trade history exceeds the supported 10,000-row mutation limit')
-    return { revision: revision!, accounts, trades }
+    const valuations = (await this.db.prepare(`SELECT * FROM investment_valuations WHERE account_id IN (${holdingIds.map(() => '?').join(',')}) ORDER BY effective_date LIMIT 10001`).bind(...holdingIds).all<ManualValuation>()).results
+    if (valuations.length > 10000) throw AppError.validation('Valuation history exceeds the supported 10,000-row mutation limit')
+    return { revision: revision!, accounts, trades, valuations }
   }
   async commit(op: TradeOperation): Promise<boolean> {
     const token = crypto.randomUUID()
@@ -57,12 +61,15 @@ export class InvestmentTradeRepository {
       (id,account_id,kind,effective_date,balance,trade_rowid_boundary,trade_order_boundary,created_at)
       SELECT ?, ?, 'observed', ?, ?, COALESCE((SELECT MAX(rowid) FROM investment_transactions WHERE account_id = ?),0), ?, ? WHERE ${guard}`)
       .bind(anchor.id, accountId, anchor.effective_date, anchor.balance, accountId, anchor.trade_order_boundary ?? 0, op.now, token))
+    for (const id of op.removeValuations ?? []) statements.push(this.db.prepare(`DELETE FROM investment_valuations WHERE id = ? AND source = 'acquisition' AND ${guard}`).bind(id,token))
+    for (const v of op.addValuations ?? []) statements.push(this.db.prepare(`INSERT INTO investment_valuations (id,account_id,effective_date,kind,amount,currency,source,version,created_at,updated_at,source_trade_id)
+      SELECT ?,?,?,?,?,?,'acquisition',1,?,?,? WHERE ${guard}`).bind(v.id,v.account_id,v.effective_date,v.kind,v.amount,v.currency,v.created_at,v.updated_at,v.source_trade_id??null,token))
     for (const [id, balance] of op.balances) statements.push(this.db.prepare(`UPDATE accounts SET balance = ?, updated_at = ? WHERE id = ? AND ${guard}`)
       .bind(balance, op.now, id, token))
     if (op.after) {
       const { trade: t, cash: c } = op.after
       const tradeColumns = ['account_id','type','quantity','price','total_amount','date','notes','linked_transaction_id',
-        'execution_currency','gross_amount','fee_amount','fee_currency','fee_status','cash_amount','cash_currency','trade_version'] as const
+        'execution_currency','gross_amount','fee_amount','fee_currency','fee_status','cash_amount','cash_currency','trade_version','asset_event'] as const
       const values = tradeColumns.map(k => t[k] ?? null)
       if (op.before) {
         statements.push(this.db.prepare(`UPDATE investment_transactions SET ${tradeColumns.map(k => `${k} = ?`).join(',')} WHERE id = ? AND ${guard}`).bind(...values, t.id, token))
@@ -88,7 +95,7 @@ export class InvestmentTradeRepository {
     } : null
     for (const [entity,id] of [['transaction',op.result.cash_transaction_id],['investment_transaction',op.result.trade_id]]) {
       statements.push(this.db.prepare(`INSERT INTO audit_log (id,action,entity,entity_id,details,created_at) SELECT ?,?,?,?,?,? WHERE ${guard}`)
-        .bind(crypto.randomUUID(),action,entity,id,JSON.stringify({ before:snapshot(op.before),after:snapshot(op.after) }),op.now,token))
+        .bind(crypto.randomUUID(),action,entity,id,JSON.stringify({ before:snapshot(op.before),after:snapshot(op.after), removed_valuations:op.state.valuations.filter(v => op.removeValuations?.includes(v.id)), added_valuations:op.addValuations }),op.now,token))
     }
     const results = await this.db.batch(statements)
     return (results[1].meta.changes ?? 0) > 0

@@ -33,6 +33,7 @@ const holdingFields = {
   manual_price: z.number().refine(validHoldingNumber, 'Use a nonnegative price with at most 12 decimal and 15 significant digits').nullable().optional(),
   manual_price_date: dateSchema.nullable().optional(),
   opening: z.object({
+    owned: z.boolean().optional(),
     balance: z.number().refine(validHoldingNumber, 'Use a nonnegative opening amount with at most 12 decimal and 15 significant digits'),
     date: dateSchema,
     cost_amount: z.number().finite().min(0).max(1e12).nullable().optional(),

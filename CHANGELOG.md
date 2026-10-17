@@ -8,6 +8,8 @@ Intermediate package/UI version bumps are grouped under the next published GitHu
 
 ### Added
 
+- Dated manual total/per-unit appraisal history, guarded corrections, step charts and 90-day reminders. Explicit whole-asset acquisitions/disposals remain linked cash events; a zero appraisal preserves ownership.
+
 - Added direct cash-linked investment purchases and sales with exact settlement, confirmed execution currency/included fees, guarded event replay, stale-edit protection and bounded retry receipts. Migration 019 preserves legacy facts and makes unsupported standalone posting read-only; see `docs/investment-trades.md`.
 
 ### Changed
@@ -17,6 +19,8 @@ Intermediate package/UI version bumps are grouped under the next published GitHu
 - Investment purchases store reciprocal links between the cash ledger and investment history. Linked creation, edits, and deletion batch both records, balances, and audit entries atomically; deletion from either side reverses the pair once. History, portfolio reads, MCP activity, and JSON exports preserve the investment-side link. Inconsistent legacy links are rejected before changing balances; the explicit sale workflow added above extends the original purchase-only foundation.
 
 ### Migration and upgrade notes
+
+- Migration 020 adds manual observations, nullable opening ownership and explicit asset event markers while preserving all existing financial columns/row IDs and source revision. Apply after 019 before the updated Workers/client; see `docs/manual-investment-valuations.md`.
 
 - Migration 019 adds explicit execution/fee/settlement facts, stable order/version and bounded replay receipts. Existing financial columns/row IDs and source revision are preserved. Apply after 018 before updated Workers/client; standalone investment posting and recurring unit mutations are blocked. See `docs/investment-trades.md`.
 

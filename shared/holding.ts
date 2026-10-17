@@ -1,9 +1,11 @@
+import { manualValuationStatus } from './manual-valuation'
+import type { ManualValuation, ManualValuationStatus } from './manual-valuation'
 /** Shared read semantics; no market requests or investment writes. */
 export type HoldingCategory = 'etf' | 'stock' | 'crypto' | 'manual'
 export type PricingMethod = 'market' | 'manual'
 export type PositionAnchor = {
   id: string; kind: 'opening' | 'observed' | 'correction'; effective_date: string
-  balance: number; cost_amount: number | null; cost_currency: string | null
+  owned?: boolean | null; balance: number; cost_amount: number | null; cost_currency: string | null
   trade_rowid_boundary: number; trade_order_boundary?: number | null; created_at: number
 }
 export type HoldingPosition = {
@@ -15,6 +17,8 @@ export type HoldingFields = {
   pricing_method?: PricingMethod | null; unit?: string | null
   provider?: 'yahoo' | null; exchange?: string | null
   manual_price?: number | null; manual_price_date?: string | null
+  manual_valuation?: ManualValuationStatus | null
+  manual_ownership?: 'owned' | 'unowned' | 'disposed' | 'unknown' | null
   holding_position?: HoldingPosition | null
 }
 type HoldingInput = HoldingFields & { type: string; balance: number; currency: string; asset_type?: string | null; quote_currency?: string | null; symbol?: string | null }
@@ -42,20 +46,37 @@ export function positionFromObservation(a: HoldingInput, activity: number, after
 }
 // Current balances and old ledger rows remain authoritative facts. An observed
 // anchor is not a historical acquisition, even if the activity residual is zero.
+export const MANUAL_OWNERSHIP_SQL = `COALESCE((SELECT CASE WHEN t.asset_event = 'acquisition' THEN 'owned' ELSE 'disposed' END
+  FROM investment_transactions t WHERE t.account_id = a.id AND t.asset_event IS NOT NULL
+    AND (CASE WHEN p.kind = 'opening' THEN t.date > p.effective_date ELSE t.effective_order > COALESCE(p.trade_order_boundary,p.trade_rowid_boundary,0) END)
+  ORDER BY t.date DESC, t.effective_order DESC, t.id DESC LIMIT 1),
+  CASE WHEN p.owned = 1 THEN 'owned' WHEN p.owned = 0 THEN 'unowned' WHEN p.balance > 0 THEN 'owned' WHEN p.kind = 'opening' THEN 'unowned' ELSE 'unknown' END)`
 export const HOLDING_ACCOUNT_SELECT = `SELECT a.*,
-  CASE WHEN a.balance != 0 OR EXISTS (SELECT 1 FROM investment_transactions h WHERE h.account_id = a.id)
+  CASE WHEN a.asset_type = 'manual' THEN ${MANUAL_OWNERSHIP_SQL} END AS _manual_ownership,
+  (SELECT json_object('id',v.id,'account_id',v.account_id,'effective_date',v.effective_date,'kind',v.kind,
+    'amount',v.amount,'currency',v.currency,'source',v.source,'source_trade_id',v.source_trade_id,'version',v.version,'created_at',v.created_at,'updated_at',v.updated_at)
+    FROM investment_valuations v WHERE v.account_id = a.id ORDER BY v.effective_date DESC LIMIT 1) AS _valuation,
+  CASE WHEN a.balance != 0 OR EXISTS (SELECT 1 FROM investment_valuations v WHERE v.account_id = a.id) OR EXISTS (SELECT 1 FROM investment_transactions h WHERE h.account_id = a.id)
     OR EXISTS (SELECT 1 FROM transactions c WHERE c.account_id = a.id)
     OR EXISTS (SELECT 1 FROM investment_position_anchors h WHERE h.account_id = a.id AND h.balance != 0) THEN 1 ELSE 0 END AS _has_history,
   COALESCE((SELECT SUM(CASE WHEN t.type = 'buy' THEN t.quantity ELSE -t.quantity END) FROM investment_transactions t WHERE t.account_id = a.id), 0) AS _activity,
   COALESCE((SELECT SUM(CASE WHEN t.type = 'buy' THEN t.quantity ELSE -t.quantity END) FROM investment_transactions t WHERE t.account_id = a.id AND t.date > p.effective_date), 0) AS _after_anchor,
   CASE WHEN p.id IS NOT NULL THEN json_object('id', p.id, 'kind', p.kind, 'effective_date', p.effective_date, 'balance', p.balance,
-    'cost_amount', p.cost_amount, 'cost_currency', p.cost_currency, 'trade_rowid_boundary', p.trade_rowid_boundary, 'trade_order_boundary', p.trade_order_boundary, 'created_at', p.created_at) END AS _anchor
+    'owned', p.owned, 'cost_amount', p.cost_amount, 'cost_currency', p.cost_currency, 'trade_rowid_boundary', p.trade_rowid_boundary, 'trade_order_boundary', p.trade_order_boundary, 'created_at', p.created_at) END AS _anchor
  FROM accounts a LEFT JOIN investment_position_anchors p ON p.rowid =
    (SELECT x.rowid FROM investment_position_anchors x WHERE x.account_id = a.id ORDER BY x.rowid DESC LIMIT 1)`
-export function mapHoldingAccount<T extends HoldingInput>(raw: T & { _activity?: number; _after_anchor?: number; _anchor?: string | null; _has_history?: number }): T {
-  const { _activity, _after_anchor, _anchor, _has_history, ...account } = raw
+export function mapHoldingAccount<T extends HoldingInput>(raw: T & { _activity?: number; _after_anchor?: number; _anchor?: string | null; _has_history?: number; _valuation?: string | null; _manual_ownership?: HoldingFields['manual_ownership'] }, today = new Date().toISOString().slice(0,10)): T {
+  const { _activity, _after_anchor, _anchor, _has_history, _valuation, _manual_ownership, ...account } = raw
   const a = account as T
-  if (a.type === 'investment') a.holding_position = { ...positionFromObservation(a, _activity ?? 0, _after_anchor ?? 0, _anchor ? JSON.parse(_anchor) as PositionAnchor : null), has_history: Boolean(_has_history) }
+  if (a.type === 'investment') {
+    const anchor = _anchor ? JSON.parse(_anchor) as PositionAnchor : null
+    if (anchor?.owned != null) anchor.owned = Boolean(anchor.owned)
+    a.holding_position = { ...positionFromObservation(a, _activity ?? 0, _after_anchor ?? 0, anchor), has_history: Boolean(_has_history) }
+  }
+  if (a.type === 'investment' && !usesMarketPricing(a)) {
+    a.manual_valuation = manualValuationStatus(_valuation ? JSON.parse(_valuation) as ManualValuation : null, today)
+    a.manual_ownership = _manual_ownership ?? null
+  }
   return a
 }
 export function validLocalDate(date: string): boolean {
