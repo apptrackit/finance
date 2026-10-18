@@ -30,7 +30,7 @@ export class TransactionController {
       const body = await c.req.json<CreateTransactionDto>()
       const result = await this.transactionService.createTransaction(body, this.getClientDate(c))
 
-      await new AuditRepository(c.env.DB).log('CREATE', 'transaction', result.id, { account_id: body.account_id, amount: body.amount })
+      if (!result.auditRecorded) await new AuditRepository(c.env.DB).log('CREATE', 'transaction', result.id, { account_id: body.account_id, amount: body.amount })
       return c.json(TransactionMapper.toResponseDto(result), 201)
     } catch (error: any) {
       if (error instanceof AppError || error.message?.includes('ACCOUNT_')) throw error
@@ -102,7 +102,7 @@ export class TransactionController {
     try {
       const id = c.req.param('id')
       const transaction = await this.transactionService.confirmTransaction(id, this.getClientDate(c))
-      if (!transaction.linked_transaction_id) await new AuditRepository(c.env.DB).log('UPDATE', 'transaction', id, { status: 'posted' })
+      if (!transaction.auditRecorded && !transaction.linked_transaction_id) await new AuditRepository(c.env.DB).log('UPDATE', 'transaction', id, { status: 'posted' })
       return c.json(TransactionMapper.toResponseDto(transaction))
     } catch (error: any) {
       if (error instanceof AppError || error.message?.includes('ACCOUNT_')) throw error
@@ -115,7 +115,7 @@ export class TransactionController {
     try {
       const id = c.req.param('id')
       const transaction = await this.transactionService.declineTransaction(id)
-      if (!transaction.linked_transaction_id) await new AuditRepository(c.env.DB).log('UPDATE', 'transaction', id, { status: 'cancelled' })
+      if (!transaction.auditRecorded && !transaction.linked_transaction_id) await new AuditRepository(c.env.DB).log('UPDATE', 'transaction', id, { status: 'cancelled' })
       return c.json(TransactionMapper.toResponseDto(transaction))
     } catch (error: any) {
       if (error instanceof AppError || error.message?.includes('ACCOUNT_')) throw error

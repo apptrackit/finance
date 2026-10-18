@@ -2,6 +2,7 @@ import { validLocalDate, validHoldingNumber } from '../../../shared/holding'
 import type { PositionAnchor } from '../../../shared/holding'
 import type { HoldingOpeningDto } from '../dtos/account.dto'
 import { Account } from '../models/Account'
+import type { Transaction } from '../models/Transaction'
 import { AccountRepository } from '../repositories/account.repository'
 import { TransactionRepository } from '../repositories/transaction.repository'
 import { CreateAccountDto, UpdateAccountDto } from '../dtos/account.dto'
@@ -119,79 +120,29 @@ export class AccountService {
     }
     if (dto.opening || dto.manual_price != null || dto.pricing_method) throw AppError.validation('Holding metadata belongs to investment accounts')
 
-    // Get the current account data if we're potentially adjusting balance with a transaction
-    let oldAccount: Account | null = null
-    if (dto.balance !== undefined && dto.adjustWithTransaction) {
-      oldAccount = await this.accountRepo.findById(id)
+    if ((dto.expected_balance !== undefined && dto.expected_balance !== existing.balance)
+      || (dto.expected_updated_at !== undefined && dto.expected_updated_at !== existing.updated_at)) {
+      throw new AppError('HISTORY_CHANGED', 'Cash account changed; refresh before correcting it.', 409)
     }
-
-    // Update account details
-    const updates: Partial<Account> = {
-      ...dto,
-      updated_at: now
-    }
-    delete (updates as any).adjustWithTransaction
-    delete (updates as any).splitTransactions
-    delete (updates as any).expected_balance
-    delete (updates as any).expected_updated_at
-    delete (updates as any).correction_date
-
-    const currency = dto.currency?.trim()
-    if (currency) {
-      updates.currency = currency.toUpperCase()
-    } else {
-      delete (updates as any).currency
-    }
-
-    const quoteCurrency = dto.quote_currency?.trim()
-    if (quoteCurrency) {
-      updates.quote_currency = quoteCurrency.toUpperCase()
-    } else {
-      delete (updates as any).quote_currency
-    }
-
-    await this.accountRepo.update(id, updates)
-
-    // If adjustWithTransaction is true and balance changed, create transactions
-    if (dto.adjustWithTransaction && oldAccount && dto.balance !== undefined) {
-      const oldBalance = oldAccount.balance
-      const newBalance = dto.balance
-      const difference = newBalance - oldBalance
-
-      // Only create transactions if there's actually a difference
-      if (difference !== 0) {
-        // Check if we have split transactions
-        if (dto.splitTransactions && dto.splitTransactions.length > 0) {
-          // Create multiple transactions based on the split
-          for (const split of dto.splitTransactions) {
-            await this.transactionRepo.create({
-              id: split.id,
-              account_id: id,
-              category_id: split.category_id,
-              amount: split.amount,
-              description: split.description,
-              date: split.date,
-              is_recurring: false
-            })
-          }
-        } else {
-          // Create a single adjustment transaction (original behavior)
-          const transactionId = crypto.randomUUID()
-          const description = difference > 0
-            ? `Balance adjustment: +${Math.abs(difference)}`
-            : `Balance adjustment: -${Math.abs(difference)}`
-
-          await this.transactionRepo.create({
-            id: transactionId,
-            account_id: id,
-            amount: difference,
-            description,
-            date: new Date().toISOString().split('T')[0],
-            is_recurring: false
-          })
+    const after: Account = { ...existing, ...dto, updated_at: now, currency: dto.currency?.trim().toUpperCase() || existing.currency }
+    const difference = after.balance - existing.balance
+    const rows: Transaction[] = []
+    if (dto.adjustWithTransaction && difference !== 0) {
+      if (dto.splitTransactions?.length) {
+        if (Math.abs(dto.splitTransactions.reduce((sum, t) => sum + t.amount, 0) - difference) > 1e-8) {
+          throw AppError.validation('Split adjustments must add up to the balance difference')
         }
+        for (const split of dto.splitTransactions) rows.push({ ...split, account_id: id })
+      } else {
+        rows.push({
+          id: crypto.randomUUID(), account_id: id, amount: difference,
+          description: `Balance adjustment: ${difference > 0 ? '+' : '-'}${Math.abs(difference)}`,
+          date: this.today(clientDate),
+        })
       }
     }
+    if (rows.some(t => t.date > this.today(clientDate))) throw AppError.validation('Balance adjustment transactions cannot be future-dated')
+    await this.transactionRepo.cashLedger.commit({ before: [], after: rows, accounts: [existing], now, correction: { before: existing, after, revision } })
 
     // Return updated account
     const updatedAccount = await this.accountRepo.findById(id)

@@ -115,6 +115,8 @@ export function InvestmentChart({
   const markers = trades
     .filter((t) => t.price != null && t.execution_currency === history?.currency)
     .map((t) => ({ ...t, time: Date.parse(`${t.date}T00:00:00Z`), executionPrice: t.price }))
+  const buys = markers.filter((t) => (t.quantity ?? t.amount) > 0)
+  const sells = markers.filter((t) => (t.quantity ?? t.amount) < 0)
   const dates = [...new Set([...points.map((p) => p.date), ...trades.map((t) => t.date)])].sort()
   const first = points.at(0),
     last = points.at(-1),
@@ -278,6 +280,9 @@ export function InvestmentChart({
                 }}
               />
               <Area
+                // Recharts prioritizes item-level data when scatter series are
+                // present. Keep closes in that same axis-domain collection.
+                data={points}
                 type="linear"
                 dataKey="close"
                 stroke="hsl(var(--primary))"
@@ -285,20 +290,24 @@ export function InvestmentChart({
                 isAnimationActive={false}
                 connectNulls={false}
               />
-              <Scatter
-                name="Buy executions"
-                data={markers.filter((t) => (t.quantity ?? t.amount) > 0)}
-                dataKey="executionPrice"
-                fill="hsl(var(--primary))"
-                isAnimationActive={false}
-              />
-              <Scatter
-                name="Sell executions"
-                data={markers.filter((t) => (t.quantity ?? t.amount) < 0)}
-                dataKey="executionPrice"
-                fill="hsl(var(--destructive))"
-                isAnimationActive={false}
-              />
+              {buys.length > 0 && (
+                <Scatter
+                  name="Buy executions"
+                  data={buys}
+                  dataKey="executionPrice"
+                  fill="hsl(var(--primary))"
+                  isAnimationActive={false}
+                />
+              )}
+              {sells.length > 0 && (
+                <Scatter
+                  name="Sell executions"
+                  data={sells}
+                  dataKey="executionPrice"
+                  fill="hsl(var(--destructive))"
+                  isAnimationActive={false}
+                />
+              )}
               {currentCost !== null && (
                 <ReferenceLine
                   y={currentCost}

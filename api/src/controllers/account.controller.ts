@@ -28,7 +28,6 @@ export class AccountController {
     const id = c.req.param('id')
     const body = c.get('validatedBody') as UpdateAccountDto
     const account = await this.accountService.updateAccount(id, body, c.req.header('X-Client-Date'))
-    if (account.type !== 'investment') await new AuditRepository(c.env.DB).log('UPDATE', 'account', id, { name: body.name, balance: body.balance })
     return c.json(AccountMapper.toResponseDto(account))
   }
 

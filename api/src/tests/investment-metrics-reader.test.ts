@@ -55,3 +55,12 @@ it('keeps API complete totals distinct from MCP partial totals, including all-mi
  expect(partial.by_currency.HUF.coverage).toMatchObject({holdings_total:2,value_covered:1,gain_covered:0})
  expect(partial.by_currency.HUF.total_gain).toBeNull()
 })
+
+it('withholds old-opening cost when the fetched corporate-action window cannot cover that opening',async()=>{
+ const a=account();Object.assign(a.holding_position!.anchor!,{effective_date:'2000-01-01',balance:2,cost_amount:10,cost_currency:'USD'})
+ const r=reader([a]),result=await r.reader.read({currencies:['USD'],date:'2026-10-16',includeOverview:true})
+ const h=result.by_currency.USD.holdings[0]
+ expect(h.value).toBe(22)
+ expect(h.remaining_basis).toBeNull();expect(h.average_cost).toBeNull();expect(h.native.remaining_basis).toBeNull()
+ expect(h.coverage.cost).toContain('unverified_corporate_actions')
+})

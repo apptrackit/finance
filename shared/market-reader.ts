@@ -42,7 +42,9 @@ export class MarketReader {
       const saved = await this.cached<Quote>(key)
       if (saved && saved.expires_at > now) return quoteFreshness(saved.data,now)
       try {
-        const from = new Date(now - 32 * DAY).toISOString().slice(0,10)
+        // Cover a clamped calendar month, its opening close and the history
+        // reader's four-day carry margin, so the default chart reuses this call.
+        const from = new Date(now - 40 * DAY).toISOString().slice(0,10)
         const bundle = await this.provider.series(symbol,from,now,abort)
         abort.throwIfAborted()
         if (bundle.quote.price === null) throw new MarketError('unavailable','Missing quote')
