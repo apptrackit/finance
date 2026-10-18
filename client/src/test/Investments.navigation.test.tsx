@@ -14,9 +14,11 @@ vi.mock('../components/settings-module/Settings', () => ({ default: () => <h2>Se
 const holding = { id: 'holding', name: 'Synthetic holding', type: 'investment', balance: 0.1,
   currency: 'SHARE', quote_currency: 'USD', asset_type: 'stock', symbol: 'TEST', updated_at: 1 }
 const trade = { id: 'buy', account_id: 'holding', type: 'buy', quantity: 0.1, price: 100, total_amount: 10, date: '2026-10-01' }
+const browserStorage = window.localStorage
 const fetchMock = vi.fn<typeof fetch>()
 beforeEach(() => {
   vi.stubGlobal('scrollTo', vi.fn())
+  vi.stubGlobal('localStorage', browserStorage)
   localStorage.clear()
   fetchMock.mockImplementation(async input => {
     const path = new URL(String(input), 'http://localhost').pathname.replace(/^\/api/, '')
