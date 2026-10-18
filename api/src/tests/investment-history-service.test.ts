@@ -64,3 +64,10 @@ it('requests the provider quote currency for a legacy holding with missing quote
  await service.read({...request,currency:'USD'})
  expect(market.fx.mock.calls[0][2]).toEqual(expect.arrayContaining(['HUF','USD']))
 })
+
+it('reads corporate-action coverage back to the supported anchor, not just the selected price range',async()=>{
+ const {service,market,request,facts}=setup(1)
+ facts.anchors[0].effective_date='2025-02-01'
+ await service.read(request)
+ expect(market.history.mock.calls[0][1]).toBe('2025-02-01')
+})

@@ -33,12 +33,20 @@ export class InvestmentHistoryService {
   const positionDays=(Math.round((Date.parse(to)-Date.parse(prior))/DAY)+1)*facts.accounts.length
   if(positionDays>75_000)throw new AppError('INVESTMENT_HISTORY_LIMIT','This range exceeds 75,000 daily holding positions; choose a shorter range.',422)
   const symbols=[...new Set(facts.accounts.filter(a=>a.asset_type!=='manual'&&a.pricing_method!=='manual'&&a.symbol).flatMap(a=>{try{return [marketSymbol(a.symbol!)]}catch{return []}}))]
+  const sourceStarts=Object.fromEntries(symbols.map(symbol=>{
+   const starts=facts.accounts.filter(a=>a.symbol?.trim().toUpperCase()===symbol).map(a=>supportedStart(facts.anchors.filter(p=>p.account_id===a.id),to))
+   // Corporate actions before the selected range still affect owned units.
+   // Use the supported position boundary, reusing the metrics source cache.
+   return [symbol,[horizon,[addDays(prior,-4),...starts].sort()[0]].sort().at(-1)!]
+  }))
+  const sourceDays=symbols.reduce((sum,symbol)=>sum+Math.max(0,Math.round((Date.parse(to)-Date.parse(sourceStarts[symbol]))/DAY)+1),0)
+  if(sourceDays>150_000)throw new AppError('INVESTMENT_HISTORY_LIMIT','Historical source coverage exceeds the supported work limit; fewer holdings or a newer reconciled position boundary is required.',422)
   const prices:Record<string,PriceHistory>={},quotes:Record<string,Quote>={}
   // Fetch a whole window per unique symbol with bounded concurrency. A history
   // read also warms its quote cache, avoiding one request per holding per date.
   let next=0
   await Promise.all(Array.from({length:Math.min(4,symbols.length)},async()=>{
-   while(next<symbols.length){const symbol=symbols[next++];try{prices[symbol]=await this.market.history(symbol,[addDays(prior,-4),new Date(now-3660*DAY).toISOString().slice(0,10)].sort().at(-1)!,to,signal,today)}catch{signal.throwIfAborted()}}
+   while(next<symbols.length){const symbol=symbols[next++];try{prices[symbol]=await this.market.history(symbol,sourceStarts[symbol],to,signal,today)}catch{signal.throwIfAborted()}}
   }))
   for(let i=0;i<symbols.length;i+=50)Object.assign(quotes,await this.market.quotes(symbols.slice(i,i+50),signal))
   const currentFx: {rates:Record<string,number>;as_of:string|null}=await (async()=>{

@@ -114,6 +114,16 @@ describe('historical portfolio reconstruction',()=>{
   expect(out.points.find(p=>p.date==='2026-01-05')?.performance_issues[0].reasons).toContain('unsupported_event')
   expect(out.summary.gain).toBeNull()
  })
+ it('keeps pre-range splits and uncovered pre-horizon ownership from becoming verified historical units',()=>{
+  const input=base({from:'2026-01-05',accounts:[account('split',1,{pricing_method:'market',symbol:'TEST',quote_currency:'HUF'})],anchors:[anchor('split',{balance:1})],
+   prices:{TEST:{symbol:'TEST',provider:'yahoo',category:'stock',currency:'HUF',timezone:'UTC',exchange:null,from:'2026-01-01',to:'2026-01-06',retrieved_at:'2026-01-10T10:00:00Z',status:'ok',reason:null,price_kind:'unadjusted',events:[{date:'2026-01-02',type:'split',ratio:2}],requires_event_review:true,points:[4,5,6].map(day=>({date:`2026-01-0${day}`,period_start:`2026-01-0${day}T09:00:00Z`,close:100,provider_close:100,provisional:false}))}}})
+  expect(calculatePortfolioHistory(input).points.every(p=>p.value===null)).toBe(true)
+  input.prices.TEST.events=[];input.prices.TEST.from='2026-01-04'
+  expect(calculatePortfolioHistory(input).points.every(p=>p.value===null)).toBe(true)
+  // A later independent close-of-day observation can establish new units.
+  input.anchors.push(anchor('split',{id:'reconciled',kind:'correction',effective_date:'2026-01-04',balance:1,record_order:2}))
+  expect(calculatePortfolioHistory(input).summary).toMatchObject({gain:0,estimated_return_percent:0})
+ })
  it('all-empty dates have zero amounts and no fictitious return percentage',()=>{
   expect(calculatePortfolioHistory(base()).summary).toMatchObject({gain:0,estimated_return_percent:null,status:'complete',reasons:['inactive_range']})
  })

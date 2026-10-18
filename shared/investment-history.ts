@@ -124,7 +124,8 @@ function holdingSeries(input:Context,a:MetricAccount,dates:string[],cutoffs:Map<
    heldDuringDay ||= q!==0
    if(sameDay)event=true
   }
-  for(const action of history?.events??[])if(action.date===date&&heldDuringDay){
+  if(usesMarketPricing(a)&&history&&date<history.from&&q!==0)unsupportedUnits=true
+  for(const action of history?.events??[])if(action.date===date&&heldDuringDay&&(!anchor||action.date>anchor.effective_date)){
    event=true;unsupportedCash=true;invested=null;performance.add('unsupported_event')
    if(action.type==='split')unsupportedUnits=true
   }
