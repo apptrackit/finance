@@ -67,7 +67,7 @@ export function AccountList({ accounts, onAccountAdded, loading, manage = false,
   const isLocked = (id: string) => accounts.find(a => a.id === id)?.is_locked ?? false
   const [isAdding, setIsAdding] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
-  const savedHoldingVersion = useRef<number | undefined>(undefined)
+  const savedAccountVersion = useRef<number | undefined>(undefined)
   const [savedFormData, setSavedFormData] = useState<AccountFormData | null>(null)
   const [formData, setFormData] = useState<AccountFormData>({
     ...holdingFormDefaults(),
@@ -342,10 +342,10 @@ export function AccountList({ accounts, onAccountAdded, loading, manage = false,
           }
         }
 
-        if (editingId) {
-          payload.expected_balance = savedFormData ? parseAmount(savedFormData.balance) : undefined
-          payload.expected_updated_at = typeof savedHoldingVersion.current === 'number' ? savedHoldingVersion.current : undefined
-        }
+      }
+      if (editingId) {
+        payload.expected_balance = savedFormData ? parseAmount(savedFormData.balance) : undefined
+        payload.expected_updated_at = typeof savedAccountVersion.current === 'number' ? savedAccountVersion.current : undefined
       }
 
       if (editingId) {
@@ -357,7 +357,7 @@ export function AccountList({ accounts, onAccountAdded, loading, manage = false,
             setPendingAdjustment({
               payload,
               accountId: editingId,
-              oldBalance: account.balance,
+              oldBalance: payload.expected_balance ?? account.balance,
               newBalance: payload.balance
             })
             setShowChoiceModal(true)
@@ -400,7 +400,7 @@ export function AccountList({ accounts, onAccountAdded, loading, manage = false,
   }
 
   const handleEdit = (account: Account) => {
-    savedHoldingVersion.current = account.updated_at
+    savedAccountVersion.current = account.updated_at
     const anchor = account.holding_position?.anchor
     const draft: AccountFormData = {
       ...holdingFormDefaults(),

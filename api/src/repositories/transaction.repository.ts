@@ -1,3 +1,4 @@
+import { CashLedgerRepository } from './cash-ledger.repository'
 import {
   Transaction,
   TransactionPendingKind,
@@ -16,7 +17,10 @@ export type RawTransactionRow = Omit<Transaction, 'exclude_from_estimate' | 'pen
 type D1Value = string | number | null
 
 export class TransactionRepository {
-  constructor(private db: D1Database) {}
+  readonly cashLedger: CashLedgerRepository
+  constructor(private db: D1Database) {
+    this.cashLedger = new CashLedgerRepository(db)
+  }
 
   private static parseReviewFlags(value?: string | null): string[] {
     if (!value) return []
@@ -233,13 +237,15 @@ export class TransactionRepository {
   async confirmPendingAndApplyBalance(transaction: Transaction, now: number, today: string): Promise<boolean> {
     const confirmationToken = `confirming:${crypto.randomUUID()}`
 
-    const [claimResult, balanceResult, postResult, cleanupResult] = await this.db.batch([
+    const [claimResult, balanceResult, auditResult, postResult, cleanupResult] = await this.db.batch([
       this.db.prepare(
-        "UPDATE transactions SET status = ?, updated_at = ? WHERE id = ? AND status = 'pending' AND linked_transaction_id IS NULL AND date <= ? AND EXISTS (SELECT 1 FROM accounts WHERE id = ?)"
-      ).bind(confirmationToken, now, transaction.id, today, transaction.account_id),
+        "UPDATE transactions SET status = ?, updated_at = ? WHERE id = ? AND status = 'pending' AND linked_transaction_id IS NULL AND date <= ? AND account_id = ? AND amount = ? AND date = ? AND updated_at IS ? AND EXISTS (SELECT 1 FROM accounts WHERE id = ? AND type != 'investment' AND COALESCE(is_locked,0) = 0 AND archived_at IS NULL)"
+      ).bind(confirmationToken, now, transaction.id, today, transaction.account_id, transaction.amount, transaction.date, transaction.updated_at ?? null, transaction.account_id),
       this.db.prepare(
         'UPDATE accounts SET balance = balance + ?, updated_at = ? WHERE id = ? AND EXISTS (SELECT 1 FROM transactions WHERE id = ? AND status = ?)'
       ).bind(transaction.amount, now, transaction.account_id, transaction.id, confirmationToken),
+      this.db.prepare("INSERT INTO audit_log(id,action,entity,entity_id,details,created_at) SELECT ?,'UPDATE','transaction',id,?,? FROM transactions WHERE id=? AND status=?")
+        .bind(crypto.randomUUID(), JSON.stringify({ status: 'posted' }), now, transaction.id, confirmationToken),
       this.db.prepare(
         "UPDATE transactions SET status = 'posted', confirmed_at = ?, cancelled_at = NULL, updated_at = ? WHERE id = ? AND status = ? AND EXISTS (SELECT 1 FROM accounts WHERE id = ? AND updated_at = ?)"
       ).bind(now, now, transaction.id, confirmationToken, transaction.account_id, now),
@@ -250,6 +256,7 @@ export class TransactionRepository {
 
     return claimResult.meta.changes === 1
       && balanceResult.meta.changes === 1
+      && auditResult.meta.changes === 1
       && postResult.meta.changes === 1
       && cleanupResult.meta.changes === 0
   }

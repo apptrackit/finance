@@ -202,19 +202,6 @@ export class RecurringScheduleService {
         // A locked or missing account skips execution, not an occurrence.
         if (!processed) continue
 
-        // Update last processed date and decrement remaining_occurrences
-        const updates: Partial<RecurringSchedule> = { last_processed_date: todayStr }
-        
-        if (schedule.remaining_occurrences !== undefined && schedule.remaining_occurrences !== null && schedule.remaining_occurrences > 0) {
-          updates.remaining_occurrences = schedule.remaining_occurrences - 1
-          
-          // If this was the last occurrence, deactivate the schedule
-          if (updates.remaining_occurrences === 0) {
-            updates.is_active = false
-          }
-        }
-        
-        await this.recurringRepo.update(schedule.id, updates)
         console.log(`Processed recurring schedule ${schedule.id} for ${todayStr}`)
       } catch (error) {
         console.error(`Failed to process recurring schedule ${schedule.id}:`, error)
@@ -283,14 +270,7 @@ export class RecurringScheduleService {
       linked_transaction_id: undefined
     }
 
-    await this.transactionRepo.create(transaction)
-
-    // Update account balance
-    await this.accountRepo.updateBalance(
-      schedule.account_id,
-      account.balance + schedule.amount,
-      Date.now()
-    )
+    await this.transactionRepo.cashLedger.commit({ before: [], after: [transaction], accounts: [account], now: Date.now(), schedule })
     return true
   }
 
@@ -354,21 +334,7 @@ export class RecurringScheduleService {
       linked_transaction_id: outgoingId
     }
 
-    await this.transactionRepo.create(outgoing)
-    await this.transactionRepo.create(incoming)
-
-    // Update account balances
-    await this.accountRepo.updateBalance(
-      schedule.account_id,
-      fromAccount.balance - Math.abs(schedule.amount),
-      Date.now()
-    )
-
-    await this.accountRepo.updateBalance(
-      schedule.to_account_id,
-      toAccount.balance + Math.abs(amountTo),
-      Date.now()
-    )
+    await this.transactionRepo.cashLedger.commit({ before: [], after: [outgoing, incoming], accounts: [fromAccount, toAccount], now: Date.now(), schedule })
     return true
   }
 

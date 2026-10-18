@@ -92,28 +92,16 @@ export class TransferService {
       incomingDesc += ` - ${dto.description}`
     }
 
-    // Create outgoing transaction (always in regular transactions - cash out)
-    await this.transactionRepo.create({
-      id: outgoingId,
-      account_id: dto.from_account_id,
-      amount: -totalDeduction,
-      description: outgoingDesc,
-      date: dto.date,
-      linked_transaction_id: incomingId
+    await this.transactionRepo.cashLedger.commit({
+      before: [], accounts: [fromAccount, toAccount], now,
+      after: [{
+        id: outgoingId, account_id: dto.from_account_id, amount: -totalDeduction,
+        description: outgoingDesc, date: dto.date, linked_transaction_id: incomingId,
+      }, {
+        id: incomingId, account_id: dto.to_account_id, amount: dto.amount_to,
+        description: incomingDesc, date: dto.date, linked_transaction_id: outgoingId,
+      }],
     })
-
-    // Update FROM account balance (always cash account)
-    await this.accountRepo.updateBalance(
-      dto.from_account_id,
-      fromAccount.balance - totalDeduction,
-      now
-    )
-
-    await this.transactionRepo.create({
-      id: incomingId, account_id: dto.to_account_id, amount: dto.amount_to,
-      description: incomingDesc, date: dto.date, linked_transaction_id: outgoingId,
-    })
-    await this.accountRepo.updateBalance(dto.to_account_id, toAccount.balance + dto.amount_to, now)
 
     return {
       id: transferId,

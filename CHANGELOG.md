@@ -20,6 +20,8 @@ Intermediate package/UI version bumps are grouped under the next published GitHu
 
 ### Changed
 
+- Final investment validation makes ordinary cash writes, transfers, adjustments, declines and recurring occurrence consumption atomic with balances/audit; stale pending confirmation and correction races cannot overwrite posted facts. Old-opening cost stays unavailable outside verified event coverage. Default monthly history reuses quote inputs; mixed price/trade charts retain daily closes and omit empty execution series. No new migration.
+
 - Holding details now use a responsive side panel/sheet with native execution markers, remaining-cost references, ordered trade history and separate manual appraisal controls. A dedicated Buy/Sell editor previews exact cash and resulting positions, preserves failed drafts/retry keys, and guards linked edits/deletion by saved versions. Confirmation focus, Escape and navigation protection cover these flows. No new migration.
 
 - Investments now combines the portfolio chart, summaries, allocation and sortable responsive holding cards/table. Native 30-day market/manual trends share the bounded overview snapshot; category filters affect only holdings. Coverage recovery actions, session-only view state, privacy, keyboard chart selection and first-holding/trade entry preserve existing accounting and linked cash writes. No new migration.

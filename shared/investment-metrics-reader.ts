@@ -100,10 +100,14 @@ export class InvestmentMetricsReader {
         const anchor=account.holding_position?.anchor
         const events=history?.events.some(e=>!anchor || e.date>anchor.effective_date)??false
         const metric=holdingMetrics(account,trades.filter(t=>t.account_id===account.id),currency,quotes[symbolOf(account)??''],currentConvert,datedConvert,date,events)
-        if (usesMarketPricing(account) && (account.balance!==0 || trades.some(t=>t.account_id===account.id)) && (!history || history.status==='stale')) {
+        const unverifiedActions=!history || history.status!=='ok' || !anchor || history.from>anchor.effective_date || history.to<date
+        if (usesMarketPricing(account) && (account.balance!==0 || trades.some(t=>t.account_id===account.id)) && unverifiedActions) {
           metric.coverage.cost.push('unverified_corporate_actions')
+          metric.coverage.native_cost.push('unverified_corporate_actions')
+          if(account.balance!==0){metric.remaining_basis=null;metric.average_cost=null;metric.native.remaining_basis=null;metric.native.average_cost=null}
           for(const id of Object.keys(metric.trade_realized)) metric.trade_realized[id]=null
           metric.realized_gain=null;metric.unrealized_gain=null;metric.total_gain=null
+          metric.unrealized_gain_percent=null
           metric.native.realized_gain=null;metric.native.unrealized_gain=null;metric.native.total_gain=null
         }
         return metric

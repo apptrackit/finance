@@ -581,3 +581,18 @@ it('prefills a previously confirmed opening rather than replacing its known basi
   expect(screen.getByLabelText('Starting position as of (end of day)')).toHaveValue('2026-01-10')
   expect(screen.getByLabelText('Known remaining cost (optional)')).toHaveValue('30')
 })
+
+ it('pins a cash account correction to the original balance/version across refresh',async()=>{
+  fail=true
+  const original={...accounts[0],balance:1000,updated_at:10}
+  const view=render(<AccountList manage accounts={[original]} onAccountAdded={refresh}/>)
+  fireEvent.click(screen.getByRole('button',{name:'Edit Everyday'}))
+  fireEvent.change(screen.getByLabelText('Name'),{target:{value:'Retained draft'}})
+  view.rerender(<AccountList manage accounts={[{...original,balance:900,updated_at:20}]} onAccountAdded={refresh}/>)
+  fireEvent.click(screen.getByRole('button',{name:'Overwrite balance'}))
+  fireEvent.click(screen.getByRole('button',{name:'Save changes'}))
+  await waitFor(()=>expect(fetchMock.mock.calls.some(([,o])=>o?.method==='PUT')).toBe(true))
+  const call=fetchMock.mock.calls.find(([,o])=>o?.method==='PUT')!
+  expect(JSON.parse(String(call[1]?.body))).toMatchObject({expected_balance:1000,expected_updated_at:10,balance:1000})
+  expect(screen.getByLabelText('Name')).toHaveValue('Retained draft');expect(refresh).not.toHaveBeenCalled()
+ })
