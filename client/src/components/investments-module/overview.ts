@@ -9,6 +9,7 @@ export const categoryLabel=(p:Position)=>categories.find(([key])=>key===category
 export const mask='••••••'
 export const amount=(n:number|null|undefined,currency:string,hidden=false)=>hidden?mask:n==null?'Unavailable':`${n.toLocaleString('hu-HU',{maximumFractionDigits:currency==='HUF'?0:2})} ${currency}`
 export const unitPrice=(n:number|null|undefined,currency:string,hidden=false)=>hidden?mask:n==null?'Unavailable':`${n>0&&n<1e-12?'< ':''}${(n>0&&n<1e-12?1e-12:n).toLocaleString('hu-HU',{maximumFractionDigits:12})} ${currency}`
+export const costPrice=(n:number|null|undefined,currency:string,hidden=false)=>hidden?mask:n==null?'Unavailable':Math.abs(n)<1?unitPrice(n,currency):`${n.toLocaleString('hu-HU',{maximumFractionDigits:4})} ${currency}`
 export const signedAmount=(n:number|null|undefined,currency:string,hidden=false)=>hidden?mask:n==null?'Unavailable':`${n>0?'+':''}${amount(n,currency)}`
 export const percentage=(n:number|null|undefined,hidden=false)=>hidden?mask:n==null?'Unavailable':`${n>0?'+':''}${n.toLocaleString('hu-HU',{maximumFractionDigits:2})}%`
 export const tone=(n:number|null|undefined,hidden=false)=>hidden||n==null||n===0?'text-muted-foreground':n>0?'text-success':'text-destructive'

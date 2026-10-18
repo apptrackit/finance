@@ -20,6 +20,8 @@ Intermediate package/UI version bumps are grouped under the next published GitHu
 
 ### Changed
 
+- Holding details now use a responsive side panel/sheet with native execution markers, remaining-cost references, ordered trade history and separate manual appraisal controls. A dedicated Buy/Sell editor previews exact cash and resulting positions, preserves failed drafts/retry keys, and guards linked edits/deletion by saved versions. Confirmation focus, Escape and navigation protection cover these flows. No new migration.
+
 - Investments now combines the portfolio chart, summaries, allocation and sortable responsive holding cards/table. Native 30-day market/manual trends share the bounded overview snapshot; category filters affect only holdings. Coverage recovery actions, session-only view state, privacy, keyboard chart selection and first-holding/trade entry preserve existing accounting and linked cash writes. No new migration.
 
 - Dashboard investment net worth now honors holding exclusions; Investments retains all active holdings. Known gains remain visible when complete daily return percentages are unavailable, and missing legacy costs/FX remain explicit across API, client and independent MCP.

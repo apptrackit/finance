@@ -18,6 +18,7 @@ export type TradeOperation = {
 }
 export class InvestmentTradeRepository {
   constructor(private db: D1Database) {}
+  async revision() { return this.db.prepare('SELECT revision FROM financial_data_revision WHERE id = 1').first<number>('revision') }
   async hasCapacity(now: number) {
     return (await this.db.prepare('SELECT COUNT(*) AS count FROM investment_trade_operations WHERE expires_at > ?').bind(now).first<number>('count'))! < 1000
   }

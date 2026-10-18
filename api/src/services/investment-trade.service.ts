@@ -121,8 +121,19 @@ export class InvestmentTradeService {
   async preview(input: TradeInput, clientDate?: string, id?: string) {
     return this.execute(input,clientDate,id,true)
   }
+  /** Lazy editor read: verify the reciprocal cash leg rather than infer its account. */
+  async readForEdit(id: string) {
+    const found = await this.repo.findTrade(id)
+    if (!found) throw AppError.notFound('TRANSACTION_NOT_FOUND','Investment trade not found')
+    const state = await this.repo.state([found.account_id])
+    const trade = state.trades.find(t => t.id === found.id)
+    if (!trade) throw conflict()
+    const {cash} = await this.pair(state,trade)
+    if ((await this.repo.revision()) !== state.revision) throw conflict()
+    return {trade,cash_account_id:cash.account_id,source_revision:state.revision}
+  }
   private execute(input: TradeInput, clientDate: string | undefined, id: string | undefined, preview: false): Promise<TradeResult>
-  private execute(input: TradeInput, clientDate: string | undefined, id: string | undefined, preview: true): Promise<{account: Account; trades: InvestmentTransaction[]; trade_id:string;revision:number}>
+  private execute(input: TradeInput, clientDate: string | undefined, id: string | undefined, preview: true): Promise<{account: Account; trades: InvestmentTransaction[]; trade_id:string;revision:number;cash_after:{account_id:string;currency:string;balance:number}}>
   private async execute(input: TradeInput, clientDate: string | undefined, id: string | undefined, preview: boolean) {
     const parsed = InvestmentTradeSchema.safeParse(input)
     if (!parsed.success) throw AppError.validation(parsed.error.issues.map(i => i.message).join('; '))
@@ -188,7 +199,8 @@ export class InvestmentTradeService {
         const account: Account={...holding,balance,
           ...(baseline?{holding_position:{...holding.holding_position!,anchor:baseline}}:{}),
           ...(total?{manual_ownership:t.type==='buy'?'owned' as const:'disposed' as const}:{})}
-        return {account,trades:[...state.trades.filter(row=>row.account_id===holding.id && row.id!==existing?.id),trade],trade_id:trade.id,revision:state.revision}
+        return {account,trades:[...state.trades.filter(row=>row.account_id===holding.id && row.id!==existing?.id),trade],trade_id:trade.id,revision:state.revision,
+          cash_after:{account_id:cash.id,currency:cash.currency,balance:op.balances.get(cash.id)!}}
       }
       if (await this.repo.commit(op)) return result
     }
@@ -204,7 +216,7 @@ export class InvestmentTradeService {
     if ((trade.cash_amount!=null && trade.cash_amount!==Math.abs(cash.amount)) || (trade.cash_currency!=null && trade.cash_currency!==a.currency)) throw reconcile('Recorded settlement cash no longer matches the linked cash ledger')
     return { trade,cash }
   }
-  async remove(id: string, clientDate?: string): Promise<void> {
+  async remove(id: string, clientDate?: string, expectedVersion?: number): Promise<void> {
     for (let attempt=0;attempt<5;attempt++) {
       const found = await this.repo.findTrade(id)
       if (!found) return
@@ -212,6 +224,7 @@ export class InvestmentTradeService {
       const state = await this.repo.state([found.account_id])
       const trade = state.trades.find(t => t.id===found.id)
       if (!trade) continue
+      if (expectedVersion !== undefined && trade.trade_version !== expectedVersion) throw conflict()
       const before = await this.pair(state,trade)
       const holding = this.account(state,trade.account_id,true)
       const cash = this.account(state,before.cash.account_id,false)

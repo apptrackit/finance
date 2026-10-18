@@ -1,7 +1,7 @@
 import { useUnsavedChanges } from '../../navigation/UnsavedChanges'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
-import { Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
+import { Line, LineChart, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import type { ManualValuation } from '../../../../shared/manual-valuation'
 import { validHoldingNumber, validLocalDate } from '../../../../shared/holding'
 import { API_BASE_URL, apiFetch } from '../../config'
@@ -18,14 +18,23 @@ type History = { observations: ManualValuation[]; valuation_at: ManualValuation 
 type Editor = { date: string; amount: string; target: ManualValuation | null; ready: boolean }
 const amountText = (v: number) => formatAmount(v,{maximumFractionDigits:12})
 
-export function ManualValuations({ account, hidden, onSaved }: { account: Account; hidden: boolean; onSaved: () => void }) {
+export function ManualValuations({ account, hidden, onSaved, referenceCost, onBusyChange }: { account: Account; hidden: boolean; onSaved: () => void; referenceCost?: number | null; onBusyChange?:(busy:boolean)=>void }) {
   const { showAlert } = useAlert()
   const [history,setHistory] = useState<History | null>(null)
   const [error,setError] = useState<string | null>(null)
   const [loading,setLoading] = useState(false)
   const [saving,setSaving] = useState(false)
+  const feedback=useRef<HTMLDivElement|null>(null),savingFeedback=useRef<HTMLParagraphElement|null>(null)
+  const updateButton=useRef<HTMLButtonElement|null>(null),completed=useRef(false)
+  useEffect(()=>{
+    if(saving)savingFeedback.current?.focus()
+    else if(error)feedback.current?.focus()
+    else if(completed.current){completed.current=false;updateButton.current?.focus()}
+  },[saving,error])
+  useEffect(()=>{onBusyChange?.(saving)},[saving,onBusyChange])
   const [editor,setEditor] = useState<Editor | null>(null)
   const selection = useRef(0)
+  const selectionRequest=useRef<AbortController|null>(null)
   useUnsavedChanges(Boolean(editor)||saving)
   const protectedAccount = account.is_locked || account.archived_at != null
   const total = account.asset_type === 'manual'
@@ -44,22 +53,24 @@ export function ManualValuations({ account, hidden, onSaved }: { account: Accoun
   useEffect(() => {
     const controller = new AbortController()
     setLoading(true)
-    void read('',controller.signal).then(value => { setHistory(value); setError(null) }).catch(e => {
+    void read('',controller.signal).then(value => { if(!controller.signal.aborted){setHistory(value);setError(null)} }).catch(e => {
       if (!controller.signal.aborted) setError(e instanceof Error?e.message:'Could not load valuation history')
     }).finally(() => { if (!controller.signal.aborted) setLoading(false) })
-    return () => controller.abort()
+    return () => {controller.abort();selectionRequest.current?.abort();++selection.current}
     // A saved appraisal reloads explicitly; account refresh must not overwrite an editor draft.
   },[read])
   const chooseDate = async (date: string) => {
+    selectionRequest.current?.abort()
+    const controller=new AbortController();selectionRequest.current=controller
     const request = ++selection.current
     setEditor(prev => ({ date,amount:prev?.amount??'',target:null,ready:false }))
     if (!validLocalDate(date) || date > localAccountDate()) return
     try {
-      const value = await read(`?at=${encodeURIComponent(date)}&limit=1`)
-      if (request !== selection.current) return
+      const value = await read(`?at=${encodeURIComponent(date)}&limit=1`,controller.signal)
+      if (request !== selection.current||controller.signal.aborted) return
       setEditor(prev => prev && ({...prev,target:value.valuation_at?.effective_date===date?value.valuation_at:null,ready:true}))
       setError(null)
-    } catch (e) { if (request===selection.current) setError(e instanceof Error?e.message:'Could not check the saved observation') }
+    } catch (e) { if (request===selection.current&&!controller.signal.aborted) setError(e instanceof Error?e.message:'Could not check the saved observation') }
   }
   const save = async (event: FormEvent) => {
     event.preventDefault()
@@ -70,7 +81,7 @@ export function ManualValuations({ account, hidden, onSaved }: { account: Accoun
       await apiFetch(`${API_BASE_URL}/accounts/${encodeURIComponent(account.id)}/valuations`,{
         method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({effective_date:editor.date,amount,
           expected_version:editor.target?.version??0,expected_id:editor.target?.id??null}) })
-      setEditor(null); ++selection.current
+      completed.current=true;setEditor(null); ++selection.current
       showAlert({type:'success',message:'Valuation saved. No cash or invested capital changed.'})
       onSaved()
       setHistory(await read()); setError(null)
@@ -99,7 +110,7 @@ export function ManualValuations({ account, hidden, onSaved }: { account: Accoun
         <p className="text-sm text-muted-foreground">{status?.as_of ? `${status.observation?.source === 'baseline' ? 'Last recorded observation' : 'Last valued'} ${status.as_of} · ${status.age_days ?? 'Unknown'} days ago` : 'No dated valuation yet'}{status?.status==='stale'?' · Update suggested (90 days)':''}</p>
         <p className="text-xs text-muted-foreground">{total?'Total asset value':'Price per unit'} in {currency}. Appraisals do not move cash, units or invested capital.</p>
       </div>
-      <Button variant="outline" disabled={Boolean(protectedAccount)||saving||hidden} onClick={() => {setEditor(null);void chooseDate(localAccountDate())}}>Update value</Button>
+      <Button ref={updateButton} variant="outline" disabled={Boolean(protectedAccount)||saving||hidden} onClick={() => {setEditor(null);void chooseDate(localAccountDate())}}>Update value</Button>
     </div>
     {account.manual_ownership && <p className="text-xs text-muted-foreground">Ownership: {account.manual_ownership}. A zero appraisal does not dispose of an owned asset. Appraisals never acquire assets; record a purchase with a cash transfer.</p>}
     {hidden && <p className="text-sm text-muted-foreground">Values hidden. Reveal amounts to update an appraisal.</p>}
@@ -110,20 +121,23 @@ export function ManualValuations({ account, hidden, onSaved }: { account: Accoun
       </div>
       <p className="text-xs text-muted-foreground">{editor.ready?editor.target?'This corrects the saved observation on this date. Its previous value stays in the audit trail.':'This adds a dated observation. A later current appraisal stays current.':'Checking the saved observation…'} A known zero is allowed.</p>
       <div className="flex flex-wrap gap-2"><Button type="submit" disabled={saving||!editor.ready||hidden||parseAmount(editor.amount)===null||!validHoldingNumber(parseAmount(editor.amount)??-1)||Boolean(protectedAccount)}>{saving?'Saving…':'Save valuation'}</Button>
-        <Button type="button" variant="ghost" disabled={saving} onClick={() => {++selection.current;setEditor(null)}}>Cancel</Button>
+        <Button type="button" variant="ghost" disabled={saving} onClick={() => {selectionRequest.current?.abort();++selection.current;setEditor(null)}}>Cancel</Button>
         <Button type="button" variant="ghost" disabled={saving} onClick={() => {void chooseDate(editor.date)}}>Reload saved observation</Button></div>
     </form>}
-    {error && <div role="alert" className="text-sm text-destructive">{error} <button className="underline" onClick={() => { setLoading(true);void read().then(setHistory).then(() => setError(null)).catch(e => setError(e.message)).finally(() => setLoading(false)) }}>Retry history</button></div>}
+    {saving&&<p ref={savingFeedback} tabIndex={-1} role="status" className="text-xs text-muted-foreground">Saving valuation…</p>}
+    {error && <div ref={feedback} tabIndex={-1} role="alert" className="text-sm text-destructive">{error} <button className="underline" onClick={() => { setLoading(true);void read().then(setHistory).then(() => setError(null)).catch(e => setError(e.message)).finally(() => setLoading(false)) }}>Retry history</button></div>}
     {!hidden && points.length>1 && <div className="h-40" role="img" aria-label={`${total?'Total value':'Unit price'} step chart in ${currency}`}>
       <ResponsiveContainer width="100%" height="100%"><LineChart data={points}><XAxis dataKey="time" type="number" scale="time" domain={['dataMin','dataMax']} tickFormatter={value => new Date(Number(value)).toISOString().slice(0,10)} tick={{fontSize:11,fill:'hsl(var(--muted-foreground))'}} minTickGap={50} /><YAxis width={72} tick={{fontSize:11,fill:'hsl(var(--muted-foreground))'}} />
         <Tooltip labelFormatter={value => new Date(Number(value)).toISOString().slice(0,10)} formatter={value => [`${amountText(Number(value))} ${currency}`,total?'Total value':'Unit price']} contentStyle={{background:'hsl(var(--card))',borderColor:'hsl(var(--border))',color:'hsl(var(--foreground))'}} />
+        {referenceCost!=null&&<ReferenceLine y={referenceCost} stroke="hsl(var(--muted-foreground))" strokeDasharray="4 4" ifOverflow="extendDomain" />}
         <Line type="stepAfter" dataKey="value" stroke="hsl(var(--primary))" strokeWidth={2} dot={false} isAnimationActive={false} /></LineChart></ResponsiveContainer>
     </div>}
+    {referenceCost!=null&&<p className="text-xs text-muted-foreground">Current remaining cost reference: {hidden?'••••••':`${amountText(referenceCost)} ${currency}`}. This is not a historical cost series.</p>}
     <div className="max-h-64 overflow-y-auto divide-y divide-border">
       {observations.map(v => <div key={v.id} className="flex flex-wrap items-center justify-between gap-2 py-2 text-sm">
         <div><span>{v.effective_date}</span><span className="ml-2 text-xs text-muted-foreground">{v.source==='baseline'?'Legacy observation · earlier history unknown':v.source==='initial'?'Starting observation':v.source==='acquisition'?'Initial acquisition value':'Appraisal'}</span></div>
         <div className="flex items-center gap-3"><span className="tabular-nums">{hidden?'••••••':`${amountText(v.amount)} ${v.currency}`}</span>
-          <button aria-label={`Correct ${v.effective_date}`} disabled={Boolean(protectedAccount)||saving||hidden} className="text-xs text-primary disabled:opacity-50" onClick={() => {++selection.current;setEditor({date:v.effective_date,amount:amountText(v.amount),target:v,ready:true})}}>Correct<span className="sr-only"> {v.effective_date}</span></button></div>
+          <button aria-label={`Correct ${v.effective_date}`} disabled={Boolean(protectedAccount)||saving||hidden} className="text-xs text-primary disabled:opacity-50" onClick={() => {selectionRequest.current?.abort();++selection.current;setEditor({date:v.effective_date,amount:amountText(v.amount),target:v,ready:true})}}>Correct<span className="sr-only"> {v.effective_date}</span></button></div>
       </div>)}
     </div>
     {loading && <p role="status" className="text-sm text-muted-foreground">Loading valuations…</p>}

@@ -64,7 +64,7 @@ Market quotes and exchange rates come from external services and may be unavaila
 
 The investment rework's [versioned accounting contract](docs/investment-accounting.md) records these implementation gaps and specifies opening quantities, exact cash/fees, remaining cost basis, manual valuations, historical FX, and estimated return calculations. Its [synthetic worked examples](tests/fixtures/investment-accounting-v1.json) are checked by the API suite. This is the specification for the remaining epic work, not a change to current runtime behavior.
 
-The epic’s [holding model and account setup](docs/investment-holdings.md) implement explicit ETF/category/pricing selection, dated openings and safe current-position corrections. Migration 018 preserves existing balances and records while marking incomplete history. Cash-linked trades and dated manual values are implemented in their own epic steps; verified cost/return calculations remain later work.
+The epic’s [holding model and account setup](docs/investment-holdings.md) implement explicit ETF/category/pricing selection, dated openings and safe current-position corrections. Migration 018 preserves existing balances and records while marking incomplete history. Cash-linked trades and dated manual values are implemented in their own epic steps; shared metrics and historical series consume that explicit opening coverage.
 
 ### Recurring schedules
 
@@ -88,7 +88,7 @@ For forecasts, an AI client obtains context with `get_financial_outlook_context`
 
 See the [MCP guide](mcp/README.md) for tools, authentication, setup, and the complete workflow. This project does not require an OpenAI API key or run a model itself.
 
-Investment values, remaining cost, net invested and realized/unrealized gains use [shared accounting rules](docs/investment-metrics.md). Currency modes recompute acquisition-date FX; unknown legacy history stays unavailable. Market Today is a covered daily-close estimate. The combined [portfolio history chart](docs/investment-history.md) reconstructs dated units, prices, FX and appraisals, including sold and archived holdings, and reports covered range gain and daily-linked Estimated return. Missing history stays visible as gaps. The [responsive overview](docs/investment-overview.md) combines this chart with portfolio summaries, allocation and sortable holdings; category filters affect only the table, and unavailable values retain explicit coverage.
+Investment values, remaining cost, net invested and realized/unrealized gains use [shared accounting rules](docs/investment-metrics.md). Currency modes recompute acquisition-date FX; unknown legacy history stays unavailable. Market Today is a covered daily-close estimate. The combined [portfolio history chart](docs/investment-history.md) reconstructs dated units, prices, FX and appraisals, including sold and archived holdings, and reports covered range gain and daily-linked Estimated return. Missing history stays visible as gaps. The [responsive overview](docs/investment-overview.md) combines this chart with portfolio summaries, allocation and sortable holdings; category filters affect only the table, and unavailable values retain explicit coverage. The [holding panel and trade editor](docs/investment-detail.md) add native execution markers, current remaining-cost references, exact cash previews and version-protected linked edits/deletion.
 
 ## Architecture
 

@@ -1,10 +1,10 @@
 # Direct cash investment trades
 
-Epic #123 child #128 implements the trade facts from the [accounting contract](investment-accounting.md). A buy links a cash debit to a unit purchase; a sale links a cash credit to a unit disposal. No broker cash wallet is required. The complete overview/detail redesign and performance calculations remain later children.
+Epic #123 child #128 implements the trade facts from the [accounting contract](investment-accounting.md). A buy links a cash debit to a unit purchase; a sale links a cash credit to a unit disposal. No broker cash wallet is required. The shared metrics, [responsive overview](investment-overview.md) and [holding detail/editor](investment-detail.md) build on this same writer.
 
 ## Recording a trade
 
-Use the existing transaction composer, choose Transfer, and select one cash account and one ETF/stock/crypto holding. Cash → holding records a purchase; holding → cash records a sale. Enter exact units and the actual paid/received cash, then confirm the executed unit price/currency and included fee. Unit amounts are never generated from a current quote or market FX estimate. Unsupported manually priced ETF/stock/crypto holdings use the same unit trade flow. Total-value manual asset acquisition/disposal belongs to #129.
+Use Investments → Record trade or a unit holding’s Buy/Sell actions for the [dedicated editor](investment-detail.md). The existing transaction composer remains available: choose Transfer, and select one cash account and one ETF/stock/crypto holding. Cash → holding records a purchase; holding → cash records a sale. Enter exact units and the actual paid/received cash, then confirm the executed unit price/currency and included fee. Unit amounts are never generated from a current quote or market FX estimate. Unsupported manually priced ETF/stock/crypto holdings use the same unit trade flow. Total-value manual asset acquisition/disposal belongs to #129.
 
 `POST /investment-trades` accepts:
 
@@ -29,6 +29,8 @@ This records gross EUR 100, an exact HUF 40,400 cash debit and an included HUF 4
 Known fees include an explicit zero. Unknown cross-currency breakdown uses `fee_status: "unknown"` and null/omitted fee amount; it does not infer fees from differing amounts. New same-currency trades require a known fee and exact cash equal to settled gross plus the buy fee or minus the sale fee. All supported cash currencies (including HUF) use two settlement decimals, with positive half-up gross settlement rounding. Units/prices retain the declared 12 fractional / 15 significant digit limit and finite 1e12 range; unsupported precision, overflow, underflow and lost unit increments are rejected.
 
 The result names `trade_id`, `cash_transaction_id` and direction. `PUT /investment-trades/:id` accepts either linked ID and the complete replacement payload, plus the saved `expected_version`. It retains both IDs and effective order, increments `trade_version`, and rejects a stale editor. Deletion through either trade/cash endpoint removes the pair and reverses each delta once. A future-dated investment cannot be posted, and no pending investment lifecycle is added. Dates use the valid local-calendar `X-Client-Date`, with UTC fallback.
+
+The lazy `GET /investment-trades/:id` editor read verifies the reciprocal cash account and saved version without a financial mutation. The dedicated editor uses `DELETE /investment-trades/:id?expected_version=N` to reject deletion after a concurrent edit; existing callers may omit that query. See the [detail contract](investment-detail.md).
 
 ## Atomicity, replay and supported history
 

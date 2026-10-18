@@ -23,7 +23,6 @@ export type FinancePageContext = {
   masterCurrency: string
   investments: ReturnType<typeof useInvestmentData>
   outlook: ReturnType<typeof useFinancialOutlookData>
-  recordInvestmentTrade: () => void
 }
 
 function App() {
@@ -40,7 +39,6 @@ function App() {
   const hasUnfinishedChanges = useHasUnsavedChanges()
   const searchShortcut = /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘K' : 'Ctrl K'
   const [transactionRequest, setTransactionRequest] = useState(0)
-  const [tradeEntry,setTradeEntry]=useState(false)
   const dateRange = useMemo(() => {
     const filters = parseDashboardFilters(new URLSearchParams(view === 'dashboard' ? search : ''))
     return { startDate: filters.startDate, endDate: filters.endDate }
@@ -118,8 +116,7 @@ function App() {
   const titles: Record<string, string> = { dashboard: 'Dashboard', accounts: 'Accounts', analytics: 'Analytics', investments: 'Investments', recurring: 'Recurring', settings: 'Settings' }
   const title = titles[view] || 'Finance'
   const canCompose = dataStatus.accounts.loaded && !dataStatus.accounts.error && dataStatus.categories.loaded && !dataStatus.categories.error
-  const newTransaction = () => { if (canCompose) {setTradeEntry(false);setTransactionRequest(request => request + 1)} }
-  const recordInvestmentTrade=()=>{if(canCompose&&!hasUnfinishedChanges){setTradeEntry(true);setTransactionRequest(request=>request+1)}}
+  const newTransaction = () => { if (canCompose) setTransactionRequest(request => request + 1) }
   useEffect(() => {
     const keyDown = (event: KeyboardEvent) => {
       const target = event.target instanceof HTMLElement ? event.target : null
@@ -132,7 +129,7 @@ function App() {
       if (event.key.toLowerCase() === 'n' && !event.ctrlKey && !event.metaKey && !event.altKey &&
         !target?.closest('input, textarea, select, [contenteditable="true"], [role="dialog"], [role="alertdialog"]')) {
         event.preventDefault()
-        if (canCompose && !hasUnfinishedChanges) {setTradeEntry(false);setTransactionRequest(request => request + 1)}
+        if (canCompose && !hasUnfinishedChanges) setTransactionRequest(request => request + 1)
       }
     }
     document.addEventListener('keydown', keyDown)
@@ -186,7 +183,7 @@ function App() {
         {initialLoading && <FinancePageLoader view={view} accounts={dataStatus.accounts.loaded ? finance.accounts : undefined}
           calendar={view === 'dashboard' && parseDashboardFilters(new URLSearchParams(search)).view === 'calendar'} />}
         <div hidden={initialLoading}>
-          <Outlet context={{ finance, masterCurrency, investments, outlook, recordInvestmentTrade } satisfies FinancePageContext} />
+          <Outlet context={{ finance, masterCurrency, investments, outlook } satisfies FinancePageContext} />
         </div>
       </main>
     </div>
@@ -207,7 +204,7 @@ function App() {
     </Modal>
     <SearchPalette isOpen={searchOpen} onClose={() => setSearchOpen(false)} finance={finance} canCompose={canCompose} hasUnfinishedChanges={hasUnfinishedChanges} onNewTransaction={newTransaction}
       destinations={[...availableNav, { key: 'settings', label: 'Settings', icon: <SettingsIcon className="h-4 w-4" /> }]} />
-    <TransactionList composerOnly openRequest={transactionRequest} investmentEntry={tradeEntry} navigationKey={`${pathname}${search}`} accounts={finance.accounts} transactions={[]} upcomingTransactions={[]}
+    <TransactionList composerOnly openRequest={transactionRequest} navigationKey={`${pathname}${search}`} accounts={finance.accounts} transactions={[]} upcomingTransactions={[]}
       availableCategories={finance.categories} onTransactionAdded={finance.handleDataChange} dateRange={dateRange} onDateRangeChange={() => {}}
       currentMonth={new Date()} onMonthChange={() => {}} masterCurrency={masterCurrency} />
   </div>

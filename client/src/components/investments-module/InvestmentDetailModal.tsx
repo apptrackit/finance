@@ -1,170 +1,324 @@
+import { useRef, useState } from 'react'
 import type { HoldingMetrics } from '../../../../shared/investment-metrics'
+import { usesMarketPricing } from '../../../../shared/holding'
 import { Modal } from '../common/modal'
+import { Button } from '../common/button'
 import { useHasUnsavedChanges } from '../../navigation/UnsavedChanges'
 import { useAlert } from '../../context/AlertContext'
 import { ManualValuations } from './ManualValuations'
-import { usesMarketPricing } from '../../../../shared/holding'
-import type { Account, Category, Transaction } from './types'
-import { formatValue, calculatePosition } from './utils'
 import { InvestmentChart } from './InvestmentChart'
-
+import type { HoldingChartCache } from './InvestmentChart'
+import type { Account, MarketQuote, Transaction } from './types'
+import { calculatePosition } from './utils'
+import { amount, costPrice, unitPrice, signedAmount, percentage, tone } from './overview'
 type Props = {
   account: Account | null
-  categories: Category[]
   allTransactions: Transaction[]
-  quotes: Record<string, any>
+  quotes: Record<string, MarketQuote>
   exchangeRates: Record<string, number>
   privacyMode: string
   metrics?: HoldingMetrics
   reportingCurrency?: string
   onClose: () => void
   onValuationSaved?: () => void
+  onTrade: (type: 'buy' | 'sell') => void
+  onEdit: (trade: Transaction) => void
+  canTrade: boolean
+  chartCache: HoldingChartCache
+  revisionKey: string
+  editing: boolean
+  editError: string | null
 }
-
 export function InvestmentDetailModal({
   account,
-  categories,
   allTransactions,
   quotes,
   exchangeRates,
   privacyMode,
-  metrics,reportingCurrency='USD',
+  metrics,
+  reportingCurrency = 'USD',
   onClose,
-  onValuationSaved = () => {}
+  onValuationSaved = () => {},
+  onTrade,
+  onEdit,
+  canTrade,
+  chartCache,
+  revisionKey,
+  editing,
+  editError,
 }: Props) {
-  const dirty = useHasUnsavedChanges()
-  const { confirm } = useAlert()
+  const dirty = useHasUnsavedChanges(),
+    { confirm } = useAlert(),
+    asking = useRef(false)
+  const [count, setCount] = useState(20),
+    [manualBusy, setManualBusy] = useState(false)
   const close = () => {
+    if (asking.current || editing || manualBusy) return
     if (!dirty) onClose()
-    else void confirm({title:'Discard unfinished appraisal?',message:'Your unsaved appraisal will be lost.',confirmText:'Discard',cancelText:'Keep editing'}).then(discard => {if(discard)onClose()})
+    else {
+      asking.current = true
+      void confirm({
+        title: 'Discard unfinished appraisal?',
+        message: 'Your unsaved appraisal will be lost.',
+        confirmText: 'Discard',
+        cancelText: 'Keep editing',
+      }).then((ok) => {
+        asking.current = false
+        if (ok) onClose()
+      })
+    }
   }
   if (!account) return null
-
-  const transactions = allTransactions.filter(tx => tx.account_id === account.id)
-  const position = calculatePosition(account, transactions, quotes, exchangeRates,metrics,reportingCurrency)
-
-  const getCategoryName = (categoryId?: string) => {
-    if (!categoryId) return 'Transfer'
-    const cat = categories.find(c => c.id === categoryId)
-    return cat ? `${cat.icon} ${cat.name}` : 'Unknown'
-  }
-
+  const hidden = privacyMode === 'hidden',
+    total = account.asset_type === 'manual',
+    market = usesMarketPricing(account)
+  const transactions = allTransactions
+    .filter((t) => t.account_id === account.id)
+    .sort(
+      (a, b) =>
+        b.date.localeCompare(a.date) ||
+        (b.effective_order ?? 0) - (a.effective_order ?? 0) ||
+        b.id.localeCompare(a.id),
+    )
+  const p = calculatePosition(account, transactions, quotes, exchangeRates, metrics, reportingCurrency),
+    q = quotes[account.symbol?.trim().toUpperCase() ?? '']
+  const protectedAccount = account.is_locked || account.archived_at != null
+  const stat = (label: string, value: string, sub?: string) => (
+    <div key={label} className="min-w-0 bg-card px-3 py-3">
+      <dt className="text-[11px] text-muted-foreground">{label}</dt>
+      <dd className="mt-1 break-words text-sm font-semibold tabular-nums">{value}</dd>
+      {sub && <p className="mt-1 text-[10px] text-muted-foreground">{sub}</p>}
+    </div>
+  )
   return (
-    <Modal isOpen onClose={close} title={account.symbol || account.name} placement="centered"
-      className="flex min-h-0 flex-col max-w-[calc(100%-2rem)] sm:max-w-6xl max-h-[90dvh] overflow-hidden"
-      contentClassName="flex min-h-0 flex-1 flex-col p-0 sm:p-0">
-      <div className="shrink-0 border-b border-border p-4 sm:px-6">
-            <div className="flex flex-wrap gap-4">
-              <div>
-                <div className="text-xs text-muted-foreground">Current Value</div>
-                <div className={`text-lg font-bold ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
-                  {privacyMode === 'hidden' ? '••••••' : formatValue(position.displayValue, account, position.quoteCurrency)}
-                </div>
-              </div>
-              <div>
-                <div className="text-xs text-muted-foreground">Net Invested</div>
-                <div className={`text-lg font-bold ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
-                  {privacyMode === 'hidden' ? '••••••' : formatValue(position.netInvested, undefined, reportingCurrency)}
-                </div>
-              </div>
-              {position.currentPrice > 0 && (
-                <div>
-                  <div className="text-xs text-muted-foreground">Current Price</div>
-                  <div className={`text-lg font-bold ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
-                  {privacyMode === 'hidden' ? '••••••' : formatValue(position.currentPrice, account, position.quoteCurrency)}
-                  </div>
-                </div>
-              )}
-              <div>
-                <div className="text-xs text-muted-foreground">Total Gain</div>
-                <div className={`text-lg font-bold ${position.priceFetchError ? 'text-yellow-600 dark:text-yellow-400' : position.gainLoss === null ? 'text-muted-foreground' : (position.gainLoss ?? 0) >= 0 ? 'text-green-600' : 'text-red-600'} ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
-                  {privacyMode === 'hidden' ? '••••••' : position.priceFetchError ? '⚠️ Error fetching price' : position.gainLoss === null ? 'Return unavailable' : `${(position.gainLoss ?? 0) >= 0 ? '+' : ''}${formatValue(position.gainLoss, undefined, reportingCurrency)}`}
-                </div>
-              </div>
-            </div>
-      </div>
-        <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-6 space-y-6">
-          <section className="rounded-xl border border-border p-4 space-y-3" aria-label="Accounting metrics">
-            <h3 className="font-semibold">Moving weighted-average cost · {reportingCurrency}</h3>
-            <dl className="grid grid-cols-2 gap-3 sm:grid-cols-3">{[
-              ['Remaining cost basis',position.metrics.remaining_basis],['Average remaining cost',position.metrics.average_cost],
-              ['Net invested',position.metrics.net_invested],['Realized gain',position.metrics.realized_gain],['Unrealized gain',position.metrics.unrealized_gain],
-            ].map(([label,value])=><div key={String(label)}><dt className="text-xs text-muted-foreground">{label}</dt><dd>{privacyMode==='hidden'?'••••••':formatValue(value as number|null,undefined,reportingCurrency)}</dd></div>)}</dl>
-            <p className="text-xs text-muted-foreground">Cost includes fees and uses acquisition-date FX. Net invested is cash paid minus cash received, separate from remaining basis. Imported remaining basis does not prove earlier cash or realized gains.</p>
-            <p className="text-xs text-muted-foreground" title="Daily factors use start-of-day contributions and end-of-day withdrawals, geometrically linked. This is an estimate, not exact intraday performance.">Estimated return: {privacyMode==='hidden'?'••••':position.gainLossPercent===null?'unavailable; complete daily history required':`${position.gainLossPercent.toFixed(2)}%`}</p>
-            <p className="text-xs text-muted-foreground">{position.metrics.coverage.cost.join(', ').replaceAll('_',' ') || 'Cost and cash history covered'}</p>
-          </section>
-          {!usesMarketPricing(account) && <ManualValuations key={account.id} account={account} hidden={privacyMode==='hidden'} onSaved={onValuationSaved} />}
-          {privacyMode !== 'hidden' && usesMarketPricing(account) && account.symbol && (
-            <div className="bg-secondary/20 rounded-xl p-4">
-              <InvestmentChart 
-                symbol={account.symbol}
-                transactions={transactions}
-              />
-            </div>
-          )}
-          
-          <div>
-            <h3 className="font-semibold text-lg mb-4">Transaction History</h3>
-            
-            <div className="space-y-2">
-              {transactions.length === 0 ? (
-                <div className="p-12 text-center bg-secondary/20 rounded-xl">
-                  <p className="text-muted-foreground">No transactions yet</p>
-                  <p className="text-sm text-muted-foreground mt-1">Record a purchase or sale with a cash transfer on Dashboard.</p>
-                </div>
-              ) : (
-                [...transactions]
-                  .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-                  .map(tx => (
-                    <div 
-                      key={tx.id} 
-                      className="p-4 bg-secondary/30 rounded-xl flex justify-between items-center"
-                    >
-                      <div className="flex items-center gap-4">
-                        <div className={`h-10 w-10 rounded-lg flex items-center justify-center font-medium ${
-                          tx.amount > 0
-                            ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' 
-                            : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
-                        }`}>
-                          {tx.amount > 0 ? '↑' : '↓'}
-                        </div>
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <span className="font-semibold">
-                              {getCategoryName(tx.category_id)}
-                            </span>
-                          </div>
-                          <div className={`text-sm text-muted-foreground ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
-                            {new Date(`${tx.date}T00:00:00`).toLocaleDateString('en-US', {
-                              month: 'short', 
-                              day: 'numeric', 
-                              year: 'numeric',
-                            })}
-                            {privacyMode !== 'hidden' && tx.description && ` • ${tx.description}`}
-                          </div>
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <div className={`text-xl font-bold ${tx.amount > 0 ? 'text-green-600' : 'text-red-600'} ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
-                          {privacyMode === 'hidden' ? '••••••' : (
-                            tx.quantity !== undefined 
-                              ? `${tx.quantity > 0 ? '+' : ''}${tx.quantity.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 12 })} ${tx.asset_event ? 'ITEM' : account.currency}`
-                              : `${tx.amount > 0 ? '+' : ''}$${Math.abs(tx.amount).toFixed(2)}`
-                          )}
-                        </div>
-                        {tx.quantity !== undefined && (
-                          <div className="text-sm text-muted-foreground">
-                            {privacyMode === 'hidden' ? '••••••' : tx.execution_currency ? formatValue(Math.abs(tx.amount),undefined,tx.execution_currency) : account.holding_position ? `${Math.abs(tx.amount).toLocaleString(undefined, { maximumFractionDigits: 12 })} · currency unverified` : formatValue(Math.abs(tx.amount), undefined, account.quote_currency || position.quoteCurrency)}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  ))
-              )}
-            </div>
-          </div>
+    <Modal
+      isOpen
+      onClose={close}
+      title={account.symbol || account.name}
+      subtitle={`${account.name} · ${account.asset_type?.toUpperCase() ?? 'Holding'}`}
+      placement="drawer"
+      className="flex min-h-0 max-h-[96dvh] flex-col sm:max-w-[540px] sm:h-[calc(100dvh-2rem)]"
+      contentClassName="flex min-h-0 flex-1 flex-col p-0 sm:p-0"
+    >
+      <div className="min-h-0 flex-1 space-y-5 overflow-y-auto p-4 sm:p-5">
+        <div>
+          <p className="text-xs text-muted-foreground">Holding value · {reportingCurrency}</p>
+          <p className="mt-1 break-words text-3xl font-semibold tracking-tight tabular-nums">
+            {amount(p.currentValue, reportingCurrency, hidden)}
+          </p>
+          <p className={`mt-2 text-sm tabular-nums ${tone(p.gainLoss, hidden)}`}>
+            {signedAmount(p.gainLoss, reportingCurrency, hidden)}{' '}
+            <span className="text-xs font-normal text-muted-foreground">
+              total gain ·{' '}
+              {hidden
+                ? '••••'
+                : p.gainLossPercent === null
+                  ? 'Estimated return unavailable'
+                  : `${percentage(p.gainLossPercent)} estimated`}
+            </span>
+          </p>
         </div>
+        {(protectedAccount || q?.status === 'stale' || p.priceFetchError) && (
+          <p
+            role="status"
+            className="rounded-xl border border-amber-500/25 bg-amber-500/5 p-3 text-xs text-amber-700 dark:text-amber-300"
+          >
+            {protectedAccount ? 'Unlock or restore the holding before changing it. ' : ''}
+            {q?.status === 'stale' ? 'Market price is stale; the last known source is shown. ' : ''}
+            {p.priceFetchError
+              ? 'Current valuation is unavailable; independently known fields remain visible.'
+              : ''}
+          </p>
+        )}
+        <dl className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-border bg-border">
+          {stat(
+            total ? 'Ownership' : 'Quantity',
+            hidden
+              ? '••••••'
+              : total
+                ? (account.manual_ownership ?? 'Unknown')
+                : `${p.actualQuantity.toLocaleString(undefined, { maximumFractionDigits: 12 })} ${account.currency}`,
+          )}
+          {stat(
+            total ? 'Remaining cost' : 'Average remaining cost',
+            costPrice(
+              total ? p.metrics.native.remaining_basis : p.metrics.native.average_cost,
+              p.metrics.native_currency,
+              hidden,
+            ),
+            'Known native basis · includes fees',
+          )}
+          {stat(
+            total ? 'Last valued' : 'Native price',
+            total
+              ? (account.manual_valuation?.as_of ?? 'Unknown')
+              : unitPrice(
+                  market ? (q?.price ?? q?.regularMarketPrice) : (account.manual_price ?? null),
+                  market ? q?.currency || p.quoteCurrency : p.quoteCurrency,
+                  hidden,
+                ),
+            market
+              ? (q?.as_of ?? 'Source time unavailable')
+              : (account.manual_valuation?.as_of ?? account.manual_price_date ?? 'No dated observation'),
+          )}
+          {stat(
+            'Net invested',
+            amount(p.netInvested, reportingCurrency, hidden),
+            'Exact cash paid minus received',
+          )}
+        </dl>
+        <details className="rounded-xl border border-border p-3 text-xs text-muted-foreground">
+          <summary className="min-h-7 cursor-pointer">Accounting and return coverage</summary>
+          <dl className="mt-2 grid grid-cols-2 gap-3">
+            {[
+              ['Remaining basis', p.metrics.remaining_basis],
+              ['Realized gain', p.metrics.realized_gain],
+              ['Unrealized gain', p.metrics.unrealized_gain],
+            ].map(([label, value]) =>
+              stat(String(label), amount(value as number | null, reportingCurrency, hidden)),
+            )}
+          </dl>
+          <p className="mt-3">
+            Moving weighted-average remaining cost uses acquisition-date FX. Imported basis does not prove
+            earlier cash or realized gains. Lifetime Estimated return requires complete daily history.
+          </p>
+          <p className="mt-2">
+            {[...new Set(Object.values(p.metrics.coverage).flat())].join(', ').replaceAll('_', ' ') ||
+              'Current accounting inputs covered'}
+          </p>
+        </details>
+        {!market && (
+          <ManualValuations
+            account={account}
+            hidden={hidden}
+            onSaved={onValuationSaved}
+            referenceCost={total ? p.metrics.native.remaining_basis : p.metrics.native.average_cost}
+            onBusyChange={setManualBusy}
+          />
+        )}
+        {market &&
+          account.symbol &&
+          (hidden ? (
+            <p className="rounded-xl border border-border p-6 text-center text-xs text-muted-foreground">
+              Price chart and executions hidden for privacy.
+            </p>
+          ) : (
+            <InvestmentChart
+              symbol={account.symbol}
+              transactions={transactions}
+              averageCost={p.metrics.native.average_cost}
+              costCurrency={p.metrics.native_currency}
+              cache={chartCache}
+              revisionKey={revisionKey}
+            />
+          ))}
+        <section aria-label="Holding trade history">
+          <div className="flex items-center gap-2">
+            <h3 className="text-sm font-semibold">Trade history</h3>
+            <span className="text-xs text-muted-foreground">{transactions.length}</span>
+          </div>
+          {!transactions.length && (
+            <p className="py-6 text-xs text-muted-foreground">
+              No recorded trades. An opening position may still establish current ownership.
+            </p>
+          )}
+          <ul className="mt-2 divide-y divide-border">
+            {transactions.slice(0, count).map((t, index) => {
+              const buy = (t.quantity ?? t.amount) > 0,
+                label =
+                  t.asset_event === 'acquisition'
+                    ? 'Acquired'
+                    : t.asset_event === 'disposal'
+                      ? 'Disposed'
+                      : buy
+                        ? 'Buy'
+                        : 'Sell'
+              const editable =
+                !!t.linked_transaction_id &&
+                t.trade_version != null &&
+                !!t.execution_currency &&
+                t.cash_amount != null
+              return (
+                <li key={t.id} className="space-y-1 py-3">
+                  <div className="flex min-w-0 items-start gap-2">
+                    <span className="rounded border border-border bg-secondary px-1.5 py-1 text-[10px] font-semibold">
+                      {label}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="break-words text-xs tabular-nums">
+                        {hidden
+                          ? '••••••'
+                          : `${Math.abs(t.quantity ?? 0).toLocaleString(undefined, { maximumFractionDigits: 12 })} ${total ? 'ITEM' : account.currency} @ ${unitPrice(t.price, t.execution_currency ?? 'unverified currency')}`}
+                      </p>
+                      <p className="mt-1 text-[10px] text-muted-foreground">{t.date}</p>
+                    </div>
+                    <p className="break-words text-right text-xs font-semibold tabular-nums">
+                      {amount(t.cash_amount, t.cash_currency ?? 'unverified currency', hidden)}
+                    </p>
+                  </div>
+                  <div className="flex items-center justify-between gap-3 text-[10px] text-muted-foreground">
+                    <p>
+                      Included fee:{' '}
+                      {hidden
+                        ? '••••••'
+                        : t.fee_status === 'known'
+                          ? amount(t.fee_amount, t.fee_currency ?? t.cash_currency ?? '')
+                          : 'Unknown breakdown'}
+                    </p>
+                    {editable ? (
+                      <button
+                        type="button"
+                        aria-label={`Edit ${label.toLowerCase()} on ${t.date}, trade ${index + 1}`}
+                        disabled={editing || !!protectedAccount || dirty || hidden}
+                        onClick={() => onEdit(t)}
+                        className="min-h-10 shrink-0 text-xs font-medium text-primary disabled:opacity-50"
+                      >
+                        Edit trade
+                      </button>
+                    ) : (
+                      <span>Legacy record · read only</span>
+                    )}
+                  </div>
+                </li>
+              )
+            })}
+          </ul>
+          {transactions.length > count && (
+            <Button type="button" variant="ghost" onClick={() => setCount((n) => n + 20)}>
+              Show older trades
+            </Button>
+          )}
+          {editing && (
+            <p role="status" className="text-xs text-muted-foreground">
+              Checking linked cash and saved trade version…
+            </p>
+          )}
+          {editError && (
+            <p role="alert" className="text-xs text-destructive">
+              {editError}
+            </p>
+          )}
+        </section>
+      </div>
+      {!total && (
+        <div className="grid shrink-0 grid-cols-2 gap-3 border-t border-border bg-card p-4">
+          <Button
+            type="button"
+            disabled={!canTrade || !!protectedAccount || hidden || dirty || editing}
+            onClick={() => onTrade('buy')}
+          >
+            Buy
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={!canTrade || !!protectedAccount || hidden || dirty || editing}
+            onClick={() => onTrade('sell')}
+          >
+            Sell
+          </Button>
+        </div>
+      )}
     </Modal>
   )
 }

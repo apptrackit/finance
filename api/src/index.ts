@@ -248,6 +248,7 @@ app.get('/investment-history', c => getControllers(c).investmentHistoryControlle
 app.get('/investment-metrics', c => getControllers(c).investmentMetricsController.read(c))
 app.post('/investment-trades/preview', validateBody(InvestmentTradeSchema), c => getControllers(c).investmentMetricsController.preview(c))
 app.post('/investment-trades', validateBody(InvestmentTradeSchema), c => getControllers(c).investmentTradeController.save(c))
+app.get('/investment-trades/:id', c => getControllers(c).investmentTradeController.read(c))
 app.put('/investment-trades/:id', validateBody(InvestmentTradeSchema), c => getControllers(c).investmentTradeController.save(c))
 app.delete('/investment-trades/:id', c => getControllers(c).investmentTradeController.delete(c))
 app.get('/transfers/exchange-rate', (c) => getControllers(c).transferController.getExchangeRate(c))
