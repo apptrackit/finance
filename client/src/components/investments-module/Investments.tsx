@@ -7,6 +7,7 @@ import { FinanceDataBoundary } from '../common/FinanceDataStatus'
 import { usePrivacy } from '../../context/PrivacyContext'
 import type { PortfolioStats } from './types'
 import { calculatePosition } from './utils'
+import { PortfolioHistoryChart } from './PortfolioHistoryChart'
 import { PortfolioSummary } from './PortfolioSummary'
 import { HoldingsList } from './HoldingsList'
 import { InvestmentDetailModal } from './InvestmentDetailModal'
@@ -81,6 +82,8 @@ export function Investments() {
           USD
         </button>
       </div>
+
+      <PortfolioHistoryChart history={investments.history} hidden={privacyMode==='hidden'} currency={currencyDisplay}/>
 
       {/* Portfolio Summary */}
       <PortfolioSummary

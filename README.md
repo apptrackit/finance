@@ -88,7 +88,7 @@ For forecasts, an AI client obtains context with `get_financial_outlook_context`
 
 See the [MCP guide](mcp/README.md) for tools, authentication, setup, and the complete workflow. This project does not require an OpenAI API key or run a model itself.
 
-Investment values, remaining cost, net invested and realized/unrealized gains use [shared accounting rules](docs/investment-metrics.md). Currency modes recompute acquisition-date FX; unknown legacy history stays unavailable. Market Today is a covered daily-close estimate, and complete daily-linked return percentages await the historical portfolio series.
+Investment values, remaining cost, net invested and realized/unrealized gains use [shared accounting rules](docs/investment-metrics.md). Currency modes recompute acquisition-date FX; unknown legacy history stays unavailable. Market Today is a covered daily-close estimate. The combined [portfolio history chart](docs/investment-history.md) reconstructs dated units, prices, FX and appraisals, including sold and archived holdings, and reports covered range gain and daily-linked Estimated return. Missing history stays visible as gaps.
 
 ## Architecture
 

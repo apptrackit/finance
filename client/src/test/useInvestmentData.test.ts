@@ -1,12 +1,12 @@
 import {act,renderHook,waitFor} from '@testing-library/react'
 import {afterEach,beforeEach,expect,it,vi} from 'vitest'
 import {useInvestmentData} from '../hooks/useInvestmentData'
-import {investmentFixture,syntheticBuy,syntheticSell} from './investment-fixture'
+import {historyFixture,investmentFixture,syntheticBuy,syntheticSell} from './investment-fixture'
 let snapshot=investmentFixture(),failure=false
 const fetcher=vi.fn<typeof fetch>()
 beforeEach(()=>{
  snapshot=investmentFixture();failure=false;fetcher.mockClear()
- fetcher.mockImplementation(async input=>String(input).includes('/categories')?Response.json([]):failure?Response.json({}, {status:503}):Response.json(snapshot))
+ fetcher.mockImplementation(async input=>String(input).includes('/categories')?Response.json([]):failure?Response.json({}, {status:503}):Response.json(String(input).includes('/investment-history')?historyFixture(new URL(String(input),'http://localhost').searchParams):snapshot))
  vi.stubGlobal('fetch',fetcher)
 })
 afterEach(()=>vi.unstubAllGlobals())
@@ -53,4 +53,10 @@ it('invalidates hidden snapshots and discards aborted late responses',async()=>{
  await act(async()=>{release(Response.json(investmentFixture([],[])));await refreshing!})
  expect(result.current.data).toBe(previous);expect(result.current.status.stale).toBe(true)
  fetcher.mockImplementation(base);rerender({active:true,key:2});await waitFor(()=>expect(result.current.status.stale).toBe(false))
+})
+
+it('rejects missing revision metadata instead of pairing current values with unguarded history',async()=>{
+ snapshot={...investmentFixture(),source_revision:undefined} as unknown as typeof snapshot
+ const {result}=renderHook(()=>useInvestmentData(true,1));await waitFor(()=>expect(result.current.status.error).toBe(true))
+ expect(result.current.data).toBeNull();expect(fetcher.mock.calls.some(([url])=>String(url).includes('/investment-history'))).toBe(false)
 })

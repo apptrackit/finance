@@ -30,7 +30,7 @@ Instrument price change uses normalized native previous-session close and source
 
 **Market Today is a daily-close estimate, not exact local-midnight/intraday valuation.** Its prior price is the completed daily observation for the previous calendar date (bounded weekend carry for exchange assets); source markets can close in different time zones. Missing weekday observations, provisional prior closes, unknown prior positions, unsupported events and missing FX exclude the holding. The response states this boundary. Manual valuation jumps never enter Market Today.
 
-The pure `estimatedReturn` function implements range gain and daily geometric linking: contributions at the start, withdrawals at the end, preserving same-day round trips, inactive days, missing active days and complete losses. Holding/portfolio **Estimated return** percentages remain explicitly null (`daily_history_required`) until #132 supplies the complete historical portfolio series. No gain/net-invested shortcut is displayed. The full overview/detail visual redesign remains #133/#134.
+The pure `estimatedReturn` function implements range gain and daily geometric linking: contributions at the start, withdrawals at the end, preserving same-day round trips, inactive days, missing active days and complete losses. The current-metrics response keeps lifetime **Estimated return** percentages explicitly null (`daily_history_required`). The [portfolio history read](investment-history.md) supplies separately bounded range gain and daily-linked percentages with its own coverage; selected-range percentages must not be paired with lifetime gain headlines. No gain/net-invested shortcut is displayed. The full overview/detail visual redesign remains #133/#134.
 
 ## Verification
 

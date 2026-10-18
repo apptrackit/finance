@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { usePortfolioHistory } from './usePortfolioHistory'
 import { useLoadableData } from './useLoadableData'
 import { readInvestmentSnapshot, type InvestmentSnapshot } from '../components/investments-module/data'
 
@@ -26,5 +27,6 @@ export function useInvestmentData(active: boolean, refreshKey: number) {
     }
   }, [active, refreshKey, refresh, invalidate])
   useEffect(() => () => { controller.current?.abort() }, [])
-  return { data, status, refresh, currencyDisplay, setCurrencyDisplay }
+  const history=usePortfolioHistory(active && status.loaded && !status.loading && !status.stale,data,currencyDisplay,refreshKey)
+  return { data, status, refresh, currencyDisplay, setCurrencyDisplay, history }
 }

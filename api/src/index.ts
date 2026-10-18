@@ -1,3 +1,5 @@
+import {InvestmentHistoryController} from './controllers/investment-history.controller'
+import {createInvestmentHistoryService} from './services/investment-history.service'
 import { InvestmentMetricsController } from './controllers/investment-metrics.controller'
 import { ManualValuationRepository } from './repositories/manual-valuation.repository'
 import { ManualValuationService } from './services/manual-valuation.service'
@@ -128,6 +130,7 @@ function createDependencies(db: D1Database) {
     transactionHistoryController,
     investmentTradeController,
     investmentMetricsController,
+    investmentHistoryController:new InvestmentHistoryController(createInvestmentHistoryService(db)),
     manualValuationController: new ManualValuationController(new ManualValuationService(new ManualValuationRepository(db)))
   }
 }
@@ -241,6 +244,7 @@ app.delete('/investment-transactions/:id', (c) => getControllers(c).investmentTr
 app.get('/accounts/:id/valuations', c => getControllers(c).manualValuationController.history(c))
 app.put('/accounts/:id/valuations', validateBody(ManualValuationSchema), c => getControllers(c).manualValuationController.save(c))
 
+app.get('/investment-history', c => getControllers(c).investmentHistoryController.read(c))
 app.get('/investment-metrics', c => getControllers(c).investmentMetricsController.read(c))
 app.post('/investment-trades/preview', validateBody(InvestmentTradeSchema), c => getControllers(c).investmentMetricsController.preview(c))
 app.post('/investment-trades', validateBody(InvestmentTradeSchema), c => getControllers(c).investmentTradeController.save(c))

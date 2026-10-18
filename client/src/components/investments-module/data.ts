@@ -1,9 +1,13 @@
 import type { CurrencyMetrics, InvestmentMetricsSnapshot } from '../../../../shared/investment-metrics'
+import {isoDate} from '../../../../shared/market-data'
 import type { TradeFacts } from '../../../../shared/investment-trade'
 import { API_BASE_URL, apiFetch } from '../../config'
 import type { Account, Category, MarketQuote, Transaction } from './types'
 
 export type InvestmentSnapshot = {
+  sourceRevision: number
+  asOf: string
+  date: string
   accounts: Account[]
   transactions: Transaction[]
   categories: Category[]
@@ -55,7 +59,8 @@ export async function readInvestmentSnapshot(signal: AbortSignal): Promise<Inves
     readArray('/categories',category,signal),
   ])
   const snapshot: InvestmentMetricsSnapshot = await response.json()
-  if (!Array.isArray(snapshot.accounts) || !snapshot.accounts.every(account) || !Array.isArray(snapshot.trades) || !snapshot.trades.every(trade)
+  if (!Number.isSafeInteger(snapshot.source_revision) || snapshot.source_revision<0 || !isoDate(snapshot.date)
+    || typeof snapshot.as_of!=='string' || !Number.isFinite(Date.parse(snapshot.as_of)) || !Array.isArray(snapshot.accounts) || !snapshot.accounts.every(account) || !Array.isArray(snapshot.trades) || !snapshot.trades.every(trade)
     || !snapshot.by_currency?.HUF || !snapshot.by_currency?.USD || !snapshot.current_fx?.rates || !snapshot.quotes) throw new Error('Invalid investment metrics response')
   const allAccounts=snapshot.accounts as Account[],trades=snapshot.trades as InvestmentTrade[]
   const accounts = allAccounts.filter(item => item.type === 'investment' && item.archived_at == null)
@@ -71,5 +76,5 @@ export async function readInvestmentSnapshot(signal: AbortSignal): Promise<Inves
       : description(item, accountById.get(item.account_id)!.quote_currency || 'trading currency'),
   }))
   signal.throwIfAborted()
-  return { accounts, transactions, categories, quotes:snapshot.quotes, exchangeRates:snapshot.current_fx.rates,metrics:snapshot.by_currency }
+  return { sourceRevision:snapshot.source_revision,asOf:snapshot.as_of,date:snapshot.date,accounts, transactions, categories, quotes:snapshot.quotes, exchangeRates:snapshot.current_fx.rates,metrics:snapshot.by_currency }
 }
