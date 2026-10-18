@@ -1,4 +1,4 @@
-import {DAY,calendarDate,isoDate} from './market-data'
+import {DAY,isoDate} from './market-data'
 export const portfolioRanges=['1m','3m','6m','1y','ytd','all'] as const
 export type PortfolioRange=typeof portfolioRanges[number]
 export const addDays=(date:string,days:number)=>new Date(Date.parse(date)+days*DAY).toISOString().slice(0,10)
@@ -28,8 +28,10 @@ export function zonedTime(date:string,clock:string,zone:string):number {
  const desired=Date.parse(`${date}T${clock}Z`)
  if(!Number.isFinite(desired)) throw new Error('Invalid local time')
  let candidate=desired
+ const visited:number[]=[]
  const f=formatter(zone)
  for(let i=0;i<4;i++) {
+  visited.push(candidate)
   const p=f.formatToParts(candidate),get=(key:string)=>p.find(p=>p.type===key)!.value
   const actual=Date.parse(`${get('year')}-${get('month')}-${get('day')}T${get('hour')}:${get('minute')}:${get('second')}Z`)
   const delta=desired-actual
@@ -38,7 +40,8 @@ export function zonedTime(date:string,clock:string,zone:string):number {
  }
  // A DST jump can omit midnight. The first valid instant of that date is a
  // safe boundary; do not shift the user's calendar date through UTC parsing.
- if(calendarDate(candidate,zone)===date)return candidate
+ const sameDate=[...visited,candidate].filter(time=>zonedDate(time,zone)===date)
+ if(sameDate.length)return Math.min(...sameDate)
  throw new Error('Local calendar boundary unavailable')
 }
 export const dayCutoff=(date:string,zone:string)=>zonedTime(addDays(date,1),'00:00:00',zone)-1

@@ -134,6 +134,8 @@ describe('calendar ranges and bounded sampling',()=>{
   expect(rangeStart('3m','2026-05-31','2020-01-01')).toBe('2026-02-28');expect(rangeStart('ytd','2026-06-01','2020-01-01')).toBe('2026-01-01')
   expect(dayCutoff('2026-03-29','Europe/Budapest')-dayCutoff('2026-03-28','Europe/Budapest')).toBe(23*3600000)
   expect(dayCutoff('2026-10-25','Europe/Budapest')-dayCutoff('2026-10-24','Europe/Budapest')).toBe(25*3600000)
+  expect(dayCutoff('2018-11-03','America/Sao_Paulo')).toBe(Date.parse('2018-11-04T03:00:00Z')-1)
+  expect(dayCutoff('2018-11-04','America/Sao_Paulo')-dayCutoff('2018-11-03','America/Sao_Paulo')).toBe(23*3600000)
  })
  it('retains cash events, isolated extrema, gap transitions and their neighbors',()=>{
   const points=Array.from({length:500},(_,i)=>({date:addDays('2025-01-01',i),value:i>=190&&i<=200?null:i===120?99999:i,net_invested:i,contribution:0,withdrawal:0,provisional:false,event:i===85,issues:[],performance_issues:[]}))
