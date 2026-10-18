@@ -20,6 +20,8 @@ Intermediate package/UI version bumps are grouped under the next published GitHu
 
 ### Changed
 
+- Investments now combines the portfolio chart, summaries, allocation and sortable responsive holding cards/table. Native 30-day market/manual trends share the bounded overview snapshot; category filters affect only holdings. Coverage recovery actions, session-only view state, privacy, keyboard chart selection and first-holding/trade entry preserve existing accounting and linked cash writes. No new migration.
+
 - Dashboard investment net worth now honors holding exclusions; Investments retains all active holdings. Known gains remain visible when complete daily return percentages are unavailable, and missing legacy costs/FX remain explicit across API, client and independent MCP.
 
 - Investment account setup separates ETF/stock/crypto/manual categories from pricing, preserves stored quantities across portfolio consumers, and records explicit dated openings/corrections without fake cash movements. Missing legacy cost/history stays unavailable; manually priced unit holdings use their saved fiat price.

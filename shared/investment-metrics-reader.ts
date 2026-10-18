@@ -7,29 +7,33 @@ import { DAY, dailyPriceAt, datedFxAt, marketSymbol } from './market-data'
 import type { FxHistory, PriceHistory, Quote } from './market-data'
 import { convertCurrency, validRates } from './currency'
 import {addExact,tradeCurrencies} from './investment-trade'
+import {holdingTrends} from './investment-overview'
+import type {ManualValuation} from './manual-valuation'
 import { afterAnchor, estimatedReturn, holdingMetrics, portfolioMetrics, positionUnits } from './investment-metrics'
 import type { DatedConversion, HoldingMetrics, MetricAccount, MetricTrade } from './investment-metrics'
 
 export class MetricsReadError extends Error {
   constructor(readonly code:'conflict'|'limit',message:string) {super(message)}
 }
-export type MetricFacts = { accounts: MetricAccount[]; trades: MetricTrade[]; revision: number }
+export type MetricFacts = { accounts: MetricAccount[]; trades: MetricTrade[]; revision: number; valuations?:ManualValuation[] }
 export class InvestmentMetricsRepository {
   constructor(private db: D1Database) {}
   async revision() { return (await this.db.prepare('SELECT revision FROM financial_data_revision WHERE id=1').first<{revision:number}>())?.revision??0 }
-  async read(scope: 'investments'|'net_worth'='investments'): Promise<MetricFacts> {
+  async read(scope: 'investments'|'net_worth'='investments',includeOverview=false): Promise<MetricFacts> {
     const included=scope==='net_worth'?' AND COALESCE(a.exclude_from_net_worth,0)=0':''
     const rows=await this.db.batch([
       this.db.prepare('SELECT revision FROM financial_data_revision WHERE id=1'),
       this.db.prepare(`${HOLDING_ACCOUNT_SELECT} WHERE a.type='investment' AND a.archived_at IS NULL${included} ORDER BY a.id LIMIT 101`),
       this.db.prepare(`SELECT it.* FROM investment_transactions it JOIN accounts a ON a.id=it.account_id WHERE a.type='investment' AND a.archived_at IS NULL${included} ORDER BY it.date,it.effective_order,it.id LIMIT 10001`),
+      ...(includeOverview?[this.db.prepare(`SELECT v.* FROM investment_valuations v JOIN accounts a ON a.id=v.account_id WHERE a.type='investment' AND a.archived_at IS NULL${included} ORDER BY v.account_id,v.effective_date LIMIT 20001`)]:[]),
     ])
     const accounts=rows[1].results as MetricAccount[], trades=rows[2].results as MetricTrade[]
     if (accounts.length>100 || trades.length>10000) throw new MetricsReadError('limit','Investment metrics limit exceeded (100 holdings / 10000 trades); no partial history was published')
-    return {accounts:accounts.map(a=>mapHoldingAccount(a)),trades,revision:(rows[0].results[0] as {revision:number}|undefined)?.revision??0}
+    if(includeOverview&&rows[3].results.length>20000)throw new MetricsReadError('limit','Valuation history limit exceeded; no overview was truncated')
+    return {valuations:includeOverview?rows[3].results as ManualValuation[]:undefined,accounts:accounts.map(a=>mapHoldingAccount(a)),trades,revision:(rows[0].results[0] as {revision:number}|undefined)?.revision??0}
   }
 }
-export type MetricsReadOptions = { currencies: string[]; date?: string; scope?: 'investments'|'net_worth'; partial?: boolean; signal?: AbortSignal }
+export type MetricsReadOptions = { currencies: string[]; date?: string; scope?: 'investments'|'net_worth'; partial?: boolean; signal?: AbortSignal; includeOverview?:boolean }
 export class InvestmentMetricsReader {
   constructor(private repo: InvestmentMetricsRepository,private market: MarketReader,private clock=()=>Date.now()) {}
   async read(options: MetricsReadOptions, preview?: {account: MetricAccount; trades: MetricTrade[]; revision:number}) {
@@ -37,7 +41,7 @@ export class InvestmentMetricsReader {
     const now=this.clock(),utc=new Date(now).toISOString().slice(0,10)
     const date=validLocalDate(options.date??'') && Math.abs(Date.parse(options.date!)-Date.parse(utc))<=DAY?options.date!:utc
     const prior=new Date(Date.parse(date)-DAY).toISOString().slice(0,10)
-    const facts=await this.repo.read(options.scope)
+    const facts=await this.repo.read(options.scope,options.includeOverview)
     if (preview) {
       if (facts.revision!==preview.revision) throw new MetricsReadError('conflict','Investment records changed before preview; refresh and retry')
       facts.accounts=facts.accounts.filter(a=>a.id===preview.account.id).map(()=>preview.account)
@@ -46,7 +50,7 @@ export class InvestmentMetricsReader {
     const accounts=facts.accounts.filter(a=>options.scope!=='net_worth' || !a.exclude_from_net_worth)
     const ids=new Set(accounts.map(a=>a.id)),trades=facts.trades.filter(t=>ids.has(t.account_id))
     const symbolOf=(a:MetricAccount)=>{try{return a.symbol?marketSymbol(a.symbol):null}catch{return null}}
-    const symbols=[...new Set(accounts.filter(a=>usesMarketPricing(a) && a.symbol && (a.balance!==0 || trades.some(t=>t.account_id===a.id))).map(symbolOf).filter((s):s is string=>s!==null))]
+    const symbols=[...new Set(accounts.filter(a=>usesMarketPricing(a) && a.symbol && (options.includeOverview || a.balance!==0 || trades.some(t=>t.account_id===a.id))).map(symbolOf).filter((s):s is string=>s!==null))]
     const quotes: Record<string,Quote>={},histories: Record<string,PriceHistory>={}
     for(let i=0;i<symbols.length;i+=50) Object.assign(quotes,await this.market.quotes(symbols.slice(i,i+50),signal))
     // Historical prices are only used for event coverage and the prior daily
@@ -56,8 +60,9 @@ export class InvestmentMetricsReader {
       while(next<symbols.length) {
         const symbol=symbols[next++]
         const starts=accounts.filter(a=>symbolOf(a)===symbol).map(a=>a.holding_position?.anchor?.effective_date).filter((v):v is string=>!!v)
-        const earliest=[prior,...starts].sort()[0]
-        const from=earliest<new Date(now-3659*DAY).toISOString().slice(0,10)?prior:earliest
+        const trendStart=options.includeOverview?new Date(Date.parse(date)-29*DAY).toISOString().slice(0,10):prior
+        const earliest=[trendStart,...starts].sort()[0]
+        const from=earliest<new Date(now-3659*DAY).toISOString().slice(0,10)?trendStart:earliest
         try { histories[symbol]=await this.market.history(symbol,from,date,signal,date) } catch { signal.throwIfAborted() }
       }
     }))
@@ -117,6 +122,7 @@ export class InvestmentMetricsReader {
     signal.throwIfAborted()
     if (await this.repo.revision()!==facts.revision) throw new MetricsReadError('conflict','Investment records changed while calculating metrics; refresh and retry')
     return {as_of:new Date(now).toISOString(),date,scope:options.scope??'investments',source_revision:facts.revision,
+      ...(options.includeOverview?{overview:{trends:holdingTrends(accounts,facts.valuations??[],histories,date)}}:{}),
       accounts,trades,current_fx:{base:'USD',as_of:ratesAsOf,rates},quotes,by_currency:byCurrency}
   }
   private today(accounts:MetricAccount[],trades:MetricTrade[],holdings:HoldingMetrics[],quotes:Record<string,Quote>,histories:Record<string,PriceHistory>,currency:string,date:string,prior:string,convert:DatedConversion) {

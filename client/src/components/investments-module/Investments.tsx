@@ -1,131 +1,48 @@
-import { sumAvailable } from '../../../../shared/currency'
-import { MissingExchangeRates } from '../common/MissingExchangeRates'
-import { useState } from 'react'
-import { useOutletContext } from 'react-router'
-import type { FinancePageContext } from '../../App'
-import { FinanceDataBoundary } from '../common/FinanceDataStatus'
-import { usePrivacy } from '../../context/PrivacyContext'
-import type { PortfolioStats } from './types'
-import { calculatePosition } from './utils'
-import { PortfolioHistoryChart } from './PortfolioHistoryChart'
-import { PortfolioSummary } from './PortfolioSummary'
-import { HoldingsList } from './HoldingsList'
-import { InvestmentDetailModal } from './InvestmentDetailModal'
-
+import {useState} from 'react'
+import {Link,useOutletContext} from 'react-router'
+import {Eye,EyeOff,Plus,RefreshCw} from 'lucide-react'
+import type {FinancePageContext} from '../../App'
+import {FinanceDataBoundary} from '../common/FinanceDataStatus'
+import {Button} from '../common/button'
+import {usePrivacy} from '../../context/PrivacyContext'
+import {calculatePosition} from './utils'
+import {PortfolioHistoryChart} from './PortfolioHistoryChart'
+import {PortfolioSummary} from './PortfolioSummary'
+import {PortfolioAllocation} from './PortfolioAllocation'
+import {InvestmentAttention} from './InvestmentAttention'
+import {HoldingsList} from './HoldingsList'
+import {InvestmentDetailModal} from './InvestmentDetailModal'
 export function Investments() {
-  const { investments, finance } = useOutletContext<FinancePageContext>()
-  const { data, status, refresh: fetchData, currencyDisplay, setCurrencyDisplay } = investments
-  const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null)
-  const { privacyMode } = usePrivacy()
-  const investmentAccounts = data?.accounts ?? []
-  const selectedAccount = investmentAccounts.find(account => account.id === selectedAccountId) ?? null
-  const allTransactions = data?.transactions ?? []
-  const categories = data?.categories ?? []
-  const quotes = data?.quotes ?? {}
-  const exchangeRates = data?.exchangeRates ?? {}
-  const refreshing = status.loading
-  const metrics=data?.metrics[currencyDisplay]
-
-  const getAccountTransactions = (accountId: string) => {
-    return allTransactions.filter(tx => tx.account_id === accountId)
-  }
-
-  const calculatePortfolioStats = (): PortfolioStats => {
-    const positions = investmentAccounts.map(acc => 
-      calculatePosition(acc, getAccountTransactions(acc.id), quotes, exchangeRates,metrics?.holdings.find(h=>h.account_id===acc.id),currencyDisplay)
-    )
-    
-    // Sort positions by current value (descending, most to least)
-    const sortedPositions = [...positions].sort((a, b) => (b.currentValue ?? -Infinity) - (a.currentValue ?? -Infinity))
-    
-    const totalValue = sumAvailable(positions.map(pos => pos.currentValue))
-    const totalInvested = sumAvailable(positions.map(pos => pos.netInvested))
-    const totalGainLoss = metrics?.total_gain ?? sumAvailable(positions.map(p=>p.gainLoss))
-    const totalGainLossPercent = metrics?.estimated_return_percent ?? null
-    
-    return { totalValue, totalInvested, totalGainLoss, totalGainLossPercent, positions: sortedPositions }
-  }
-
-  const stats = calculatePortfolioStats()
-
-  const convertDisplayCurrency = (value: number | null) => value
-
-  const missingCurrencies = [...new Set([
-    ...stats.positions.flatMap(position => position.missingCurrencies),
-  ])].sort()
-
-  return (
-    <FinanceDataBoundary label="Investments" datasets={[{ label: 'Investment portfolio', status }]}>
-    <div className="space-y-6">
-      <MissingExchangeRates currencies={missingCurrencies} targetCurrency={currencyDisplay}
-        onRetry={() => { void fetchData() }} retrying={refreshing} />
-      {/* Currency Toggle */}
-      <div className="flex justify-end gap-2">
-        <button
-          onClick={() => setCurrencyDisplay('HUF')}
-          className={`px-3 py-1 rounded-lg text-sm font-medium transition-colors ${
-            currencyDisplay === 'HUF'
-              ? 'bg-primary text-primary-foreground'
-              : 'bg-secondary text-muted-foreground hover:bg-secondary/80'
-          }`}
-        >
-          HUF
-        </button>
-        <button
-          onClick={() => setCurrencyDisplay('USD')}
-          className={`px-3 py-1 rounded-lg text-sm font-medium transition-colors ${
-            currencyDisplay === 'USD'
-              ? 'bg-primary text-primary-foreground'
-              : 'bg-secondary text-muted-foreground hover:bg-secondary/80'
-          }`}
-        >
-          USD
-        </button>
-      </div>
-
-      <PortfolioHistoryChart history={investments.history} hidden={privacyMode==='hidden'} currency={currencyDisplay}/>
-
-      {/* Portfolio Summary */}
-      <PortfolioSummary
-        stats={stats}
-        loading={false}
-        privacyMode={privacyMode}
-        displayCurrency={currencyDisplay}
-        convertToDisplayCurrency={convertDisplayCurrency}
-        investmentAccountsCount={investmentAccounts.length}
-      />
-
-      {metrics && <div className="rounded-xl border border-border bg-card p-4 text-sm space-y-2">
-        <p>All active investment holdings · {currencyDisplay}. Net-worth exclusions apply on Dashboard and MCP.</p>
-        <p title={metrics.market_today.boundary}>Market Today: {privacyMode==='hidden'?'••••••':`${metrics.market_today.gain===null?'Unavailable':metrics.market_today.gain.toLocaleString(undefined,{maximumFractionDigits:2})} ${currencyDisplay}`} · {metrics.market_today.covered_holdings}/{metrics.market_today.total_holdings} holdings covered.</p>
-        <p className="text-xs text-muted-foreground">Flow-adjusted estimate from the prior daily close, including FX movement. Manual values, stale quotes and missing inputs are omitted.</p>
-        {metrics.market_today.excluded.length>0 && <details><summary>Market Today coverage</summary><ul>{metrics.market_today.excluded.map(e=><li key={e.account_id}>{investmentAccounts.find(a=>a.id===e.account_id)?.name}: {e.reasons.join(', ').replaceAll('_',' ')}</li>)}</ul></details>}
-      </div>}
-      {/* Holdings List */}
-      <HoldingsList
-        positions={stats.positions}
-        quotes={quotes}
-        loading={false}
-        refreshing={refreshing}
-        privacyMode={privacyMode}
-        onRefresh={fetchData}
-        onOpenDetail={account => setSelectedAccountId(account.id)}
-      />
-
-      {/* Investment Detail Modal */}
-      <InvestmentDetailModal
-        account={selectedAccount}
-        categories={categories}
-        allTransactions={allTransactions}
-        quotes={quotes}
-        exchangeRates={exchangeRates}
-        privacyMode={privacyMode}
-        onClose={() => setSelectedAccountId(null)}
-        metrics={metrics?.holdings.find(h=>h.account_id===selectedAccountId)}
-        reportingCurrency={currencyDisplay}
-        onValuationSaved={() => { void finance.handleDataChange() }}
-      />
-    </div>
-    </FinanceDataBoundary>
-  )
+ const {investments,finance,recordInvestmentTrade}=useOutletContext<FinancePageContext>()
+ const {data,status,refresh,currencyDisplay,setCurrencyDisplay,overviewView,updateOverview}=investments
+ const {privacyMode,togglePrivacyMode}=usePrivacy(),hidden=privacyMode==='hidden'
+ const [selected,setSelected]=useState<string|null>(null)
+ const accounts=data?.accounts??[],trades=data?.transactions??[],quotes=data?.quotes??{},metrics=data?.metrics[currencyDisplay]
+ const positions=accounts.map(a=>calculatePosition(a,trades.filter(t=>t.account_id===a.id),quotes,data?.exchangeRates??{},metrics?.holdings.find(h=>h.account_id===a.id),currencyDisplay))
+ const eligible=finance.accounts.filter(a=>!a.is_locked&&a.archived_at==null)
+ const canTrade=eligible.some(a=>a.type==='investment')&&eligible.some(a=>a.type==='cash')
+  &&finance.dataStatus.accounts.loaded&&!finance.dataStatus.accounts.error&&finance.dataStatus.categories.loaded&&!finance.dataStatus.categories.error
+ const opening=accounts.find(a=>a.id===selected)??null
+ const refreshing=status.loading||investments.history.loading
+ return <FinanceDataBoundary label="Investments" datasets={[{label:'Investment portfolio',status}]}>
+  <div className="@container space-y-4">
+   <header className="flex flex-wrap items-center justify-end gap-2 sm:gap-3 lg:justify-start">
+    <h1 className="mr-auto hidden text-2xl font-semibold tracking-tight lg:block">Investments</h1>
+    <p className="order-last w-full text-right text-[10px] text-muted-foreground lg:order-none lg:w-auto">{status.stale?'Saved snapshot':'As of'} {data?.asOf?new Date(data.asOf).toLocaleString(undefined,{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}):'unavailable'}</p>
+    <Button type="button" variant="outline" size="icon" disabled={status.loading} onClick={()=>{void refresh()}} aria-label="Refresh prices" className="h-10 w-10"><RefreshCw className={`h-4 w-4 ${refreshing?'animate-spin motion-reduce:animate-none':''}`}/></Button>
+    <Button type="button" variant="outline" size="icon" onClick={togglePrivacyMode} aria-label={hidden?'Show investment values':'Hide investment values'} aria-pressed={hidden} className="hidden h-10 w-10 lg:inline-flex">{hidden?<EyeOff className="h-4 w-4"/>:<Eye className="h-4 w-4"/>}</Button>
+    <div role="group" aria-label="Investment reporting currency" className="flex rounded-lg border border-border p-0.5">{(['HUF','USD'] as const).map(c=><button key={c} type="button" aria-pressed={currencyDisplay===c} onClick={()=>setCurrencyDisplay(c)} className={`min-h-9 rounded-md px-3 text-xs font-semibold ${c===currencyDisplay?'bg-secondary text-foreground':'text-muted-foreground'}`}>{c}</button>)}</div>
+    {canTrade?<Button type="button" onClick={recordInvestmentTrade} className="h-10"><Plus className="h-4 w-4"/>Record trade</Button>:<Link to="/accounts" state={{addAccount:true,investment:accounts.length===0}} className="inline-flex min-h-10 items-center rounded-lg bg-primary px-3 text-xs font-semibold text-primary-foreground">{accounts.length===0?'Add first holding':'Set up trade accounts'}</Link>}
+   </header>
+   <details className="text-[11px] text-muted-foreground"><summary className="cursor-pointer">All active investment holdings · {currencyDisplay} · About this view</summary><p className="mt-2">This page includes all active holdings. Net-worth exclusions apply in net-worth views. Buy and sell directly with a cash account.{!canTrade&&accounts.length>0?' An unlocked cash account and holding are needed to record a trade.':''}</p></details>
+   <div className="grid min-w-0 items-stretch gap-4 @min-[900px]:grid-cols-[minmax(0,1fr)_320px]">
+    <InvestmentAttention positions={positions} quotes={quotes} refreshing={status.loading} onRefresh={()=>{void refresh()}} onOpen={a=>setSelected(a.id)} className="order-2 @min-[900px]:order-first @min-[900px]:col-span-2"/>
+    <div className="order-1 min-w-0"><PortfolioHistoryChart history={investments.history} hidden={hidden} currency={currencyDisplay} currentValue={metrics?.total_value}/></div>
+    <div className="order-3 grid min-w-0 gap-4 sm:grid-cols-2 @min-[900px]:grid-cols-1"><PortfolioSummary metrics={metrics} hidden={hidden} currency={currencyDisplay}/><PortfolioAllocation positions={positions} view={overviewView} onChange={updateOverview} onOpen={a=>setSelected(a.id)} hidden={hidden} currency={currencyDisplay}/></div>
+   </div>
+   <HoldingsList positions={positions} quotes={quotes} trends={data?.trends} privacyMode={privacyMode} view={overviewView} onViewChange={updateOverview} refreshing={status.loading} onOpenDetail={a=>setSelected(a.id)}/>
+   <InvestmentDetailModal account={opening} categories={data?.categories??[]} allTransactions={trades} quotes={quotes} exchangeRates={data?.exchangeRates??{}} privacyMode={privacyMode}
+    onClose={()=>setSelected(null)} metrics={metrics?.holdings.find(h=>h.account_id===selected)} reportingCurrency={currencyDisplay} onValuationSaved={()=>{void finance.handleDataChange()}}/>
+  </div>
+ </FinanceDataBoundary>
 }

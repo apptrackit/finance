@@ -123,6 +123,7 @@ export function TransactionList({
   availableCategories,
   composerOnly = false,
   openRequest = 0,
+  investmentEntry = false,
   searchRequest,
   searchRequestKey,
   navigationKey = '',
@@ -144,6 +145,7 @@ export function TransactionList({
   availableCategories?: Category[],
   composerOnly?: boolean,
   openRequest?: number,
+  investmentEntry?: boolean,
   searchRequest?: string,
   searchRequestKey?: string,
   navigationKey?: string,
@@ -470,9 +472,17 @@ export function TransactionList({
   useEffect(() => {
     if (openRequest > lastOpenRequest.current) {
       lastOpenRequest.current = openRequest
-      if (!isAdding) handleOpenForm()
+      if (!isAdding) {
+        handleOpenForm()
+        if(investmentEntry){
+          const eligible=accounts.filter(a=>!a.is_locked&&a.archived_at==null)
+          const holding=eligible.find(a=>a.type==='investment'),cash=eligible.find(a=>a.type==='cash')
+          setFormData(v=>({...v,type:'transfer',account_id:cash?.id??'',to_account_id:holding?.id??'',category_id:''}))
+          setTradeDraft({execution_currency:holding?.quote_currency||(holding?.asset_type==='manual'?holding.currency:''),fee_status:'known',fee_amount:''})
+        }
+      }
     }
-  }, [openRequest, isAdding, handleOpenForm])
+  }, [openRequest, isAdding, handleOpenForm,investmentEntry,accounts])
 
   // Handle type change with saved defaults
   const handleTypeChange = (newType: 'expense' | 'income' | 'transfer') => {

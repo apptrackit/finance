@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import {initialOverview} from '../components/investments-module/overview'
+import type {OverviewView} from '../components/investments-module/overview'
 import { usePortfolioHistory } from './usePortfolioHistory'
 import { useLoadableData } from './useLoadableData'
 import { readInvestmentSnapshot, type InvestmentSnapshot } from '../components/investments-module/data'
@@ -9,7 +11,8 @@ export function useInvestmentData(active: boolean, refreshKey: number) {
   const { data, status, load, invalidate } = useLoadableData<InvestmentSnapshot | null>(null, false)
   const [currencyDisplay, setCurrencyDisplay] = useState<'HUF' | 'USD'>('HUF')
   const controller = useRef<AbortController | null>(null)
-  const previousKey = useRef(refreshKey)
+  const [overviewView,setOverviewView]=useState(initialOverview)
+  const updateOverview=useCallback((patch:Partial<OverviewView>)=>setOverviewView(v=>({...v,...patch})),[])
   const refresh = useCallback(async () => {
     controller.current?.abort()
     const next = new AbortController()
@@ -18,15 +21,13 @@ export function useInvestmentData(active: boolean, refreshKey: number) {
   }, [load])
 
   useEffect(() => {
-    const changed = previousKey.current !== refreshKey
-    previousKey.current = refreshKey
     if (active) void refresh()
-    else if (changed) {
+    else {
       controller.current?.abort()
       invalidate()
     }
   }, [active, refreshKey, refresh, invalidate])
   useEffect(() => () => { controller.current?.abort() }, [])
   const history=usePortfolioHistory(active && status.loaded && !status.loading && !status.stale,data,currencyDisplay,refreshKey)
-  return { data, status, refresh, currencyDisplay, setCurrencyDisplay, history }
+  return { data, status, refresh, currencyDisplay, setCurrencyDisplay, history, overviewView, updateOverview }
 }

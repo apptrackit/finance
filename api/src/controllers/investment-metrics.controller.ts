@@ -21,7 +21,9 @@ export class InvestmentMetricsController {
     }
   }
   async read(c:Context) {
-    return this.respond(c,()=>createInvestmentMetricsReader(this.db).read(this.options(c)))
+    const overview=c.req.query('overview')
+    if(overview!==undefined&&overview!=='1'&&overview!=='0')throw AppError.validation('overview must be 1 or 0')
+    return this.respond(c,()=>createInvestmentMetricsReader(this.db).read({...this.options(c),includeOverview:overview==='1'}))
   }
   async preview(c:Context) {
     c.header('Cache-Control','no-store')

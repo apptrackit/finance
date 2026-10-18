@@ -168,6 +168,7 @@ export type MarketTodayMetrics = {
 }
 export type CurrencyMetrics = ReturnType<typeof portfolioMetrics> & {currency:string;holdings:HoldingMetrics[];market_today:MarketTodayMetrics}
 export type InvestmentMetricsSnapshot = {
+  overview?: {trends:Record<string,import('./investment-overview').HoldingTrend>}
   as_of:string;date:string;scope:'investments'|'net_worth';source_revision:number
   accounts:MetricAccount[];trades:MetricTrade[];quotes:Record<string,Quote>
   current_fx:{base:string;as_of:string|null;rates:Record<string,number>};by_currency:Record<string,CurrencyMetrics>

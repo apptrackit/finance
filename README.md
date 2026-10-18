@@ -28,7 +28,7 @@ The latest published release is [v3.3](https://github.com/apptrackit/finance/rel
 | Transactions | Income and expenses, categories and icons, linked transfers, search and date filters, bulk entry, split adjustments, and recent-change indicators. |
 | Upcoming transactions | One-time future income and expenses, projected cash balances, and explicit confirmation or decline without changing the posted balance early. |
 | Recurring schedules | Daily, weekly, monthly, and yearly options; transaction and transfer schedules; pause/resume, end dates, occurrence limits, and a calendar view. |
-| Investments | ETF/stock/crypto/manual holdings, normalized free Yahoo sources, dated manual values, exact linked cash trades and previews, moving weighted-average cost and covered gain/loss metrics. |
+| Investments | Responsive portfolio history, allocation and sortable ETF/stock/crypto/manual holdings with native trends, coverage alerts, normalized free sources, dated manual values and exact linked cash trades. |
 | Analytics | Configurable widgets for cash trends, AI financial forecasts, income/expense trends and breakdowns, individual account trends, Money Map, and top expenses. |
 | AI financial forecasts | Saved HUF forecasts with 7/30/90-day ranges, daily cash paths, report history, source-data freshness, and privacy-aware narratives. |
 | MCP review | Prepare income, expense, or cash transfer drafts in conversation; list and correct ordinary drafts or transfer pairs; review and confirm or decline them in the app. |
@@ -88,7 +88,7 @@ For forecasts, an AI client obtains context with `get_financial_outlook_context`
 
 See the [MCP guide](mcp/README.md) for tools, authentication, setup, and the complete workflow. This project does not require an OpenAI API key or run a model itself.
 
-Investment values, remaining cost, net invested and realized/unrealized gains use [shared accounting rules](docs/investment-metrics.md). Currency modes recompute acquisition-date FX; unknown legacy history stays unavailable. Market Today is a covered daily-close estimate. The combined [portfolio history chart](docs/investment-history.md) reconstructs dated units, prices, FX and appraisals, including sold and archived holdings, and reports covered range gain and daily-linked Estimated return. Missing history stays visible as gaps.
+Investment values, remaining cost, net invested and realized/unrealized gains use [shared accounting rules](docs/investment-metrics.md). Currency modes recompute acquisition-date FX; unknown legacy history stays unavailable. Market Today is a covered daily-close estimate. The combined [portfolio history chart](docs/investment-history.md) reconstructs dated units, prices, FX and appraisals, including sold and archived holdings, and reports covered range gain and daily-linked Estimated return. Missing history stays visible as gaps. The [responsive overview](docs/investment-overview.md) combines this chart with portfolio summaries, allocation and sortable holdings; category filters affect only the table, and unavailable values retain explicit coverage.
 
 ## Architecture
 
