@@ -7,6 +7,7 @@ import { AccountRepository } from '../repositories/account.repository'
 import { TransactionRepository } from '../repositories/transaction.repository'
 import { CreateAccountDto, UpdateAccountDto } from '../dtos/account.dto'
 import { AppError } from '../errors/codes'
+import { addDecimal } from '../../../shared/decimal-balance'
 
 const FIAT = new Set(['HUF', 'EUR', 'USD', 'GBP', 'CHF', 'PLN', 'CZK', 'RON', 'MXN'])
 
@@ -125,11 +126,17 @@ export class AccountService {
       throw new AppError('HISTORY_CHANGED', 'Cash account changed; refresh before correcting it.', 409)
     }
     const after: Account = { ...existing, ...dto, updated_at: now, currency: dto.currency?.trim().toUpperCase() || existing.currency }
-    const difference = after.balance - existing.balance
+    let difference = 0, splitTotal = 0
+    try {
+      if (dto.adjustWithTransaction) {
+        difference = addDecimal(after.balance, -existing.balance)
+        if (dto.splitTransactions?.length) splitTotal = addDecimal(...dto.splitTransactions.map(t => t.amount))
+      }
+    } catch(error) { throw AppError.validation((error as Error).message) }
     const rows: Transaction[] = []
     if (dto.adjustWithTransaction && difference !== 0) {
       if (dto.splitTransactions?.length) {
-        if (Math.abs(dto.splitTransactions.reduce((sum, t) => sum + t.amount, 0) - difference) > 1e-8) {
+        if (splitTotal !== difference) {
           throw AppError.validation('Split adjustments must add up to the balance difference')
         }
         for (const split of dto.splitTransactions) rows.push({ ...split, account_id: id })

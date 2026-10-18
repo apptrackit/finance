@@ -1,4 +1,6 @@
 import { AppError } from '../errors/codes'
+import { addDecimal } from '../../../shared/decimal-balance'
+import { recoverCashBalance } from './decimal-balance.repository'
 import type { Account } from '../models/Account'
 import type { Transaction } from '../models/Transaction'
 import type { RecurringSchedule } from '../models/RecurringSchedule'
@@ -51,28 +53,70 @@ export type CashMutation = {
   now: number
   correction?: { before: Account; after: Account; revision: number }
   schedule?: RecurringSchedule
+  transfer_pair_id?: string
 }
 /** Cash rows, their balance deltas, audit and optional schedule consumption are
- * one D1 batch. Relative deltas commute with trades; row/identity guards reject
- * stale editors without overwriting the other writer's balance. */
+ * one D1 batch. Decimal deltas use guarded account snapshots and bounded
+ * retries to preserve concurrent trades; row guards keep stale editors pinned. */
 export class CashLedgerRepository {
   constructor(private db: D1Database) {}
   async commit(op: CashMutation): Promise<void> {
+    let accounts = op.accounts
+    for (let attempt = 0; attempt < 5; attempt++) {
+      if (await this.commitAttempt({ ...op, accounts })) return
+      if (op.correction) break
+      // Refresh only commutative account snapshots. The original row/schedule
+      // guards remain pinned, so this never retries a stale ledger edit.
+      const fresh: Account[] = []
+      for (const a of accounts) {
+        const row = await this.db
+          .prepare('SELECT * FROM accounts WHERE id=?')
+          .bind(a.id)
+          .first<Account>()
+        if (
+          !row ||
+          row.type !== a.type ||
+          row.currency !== a.currency ||
+          row.is_locked ||
+          row.archived_at != null
+        ) {
+          throw new AppError(
+            'HISTORY_CHANGED',
+            'Cash records changed or became protected; refresh before saving.',
+            409,
+          )
+        }
+        fresh.push({ ...a, balance: row.balance, updated_at: row.updated_at })
+      }
+      accounts = fresh
+    }
+    throw new AppError(
+      'HISTORY_CHANGED',
+      'Cash records changed or became protected; refresh before saving.',
+      409,
+    )
+  }
+  private async commitAttempt(op: CashMutation): Promise<boolean> {
     const claim = crypto.randomUUID(),
       guard = 'EXISTS (SELECT 1 FROM audit_log WHERE id = ?)'
     const conditions: string[] = [],
       bindings: Value[] = []
     const accounts = [...new Map(op.accounts.map((a) => [a.id, a])).values()]
     if (
-      [...op.before, ...op.after].some((t) => !accounts.some((a) => a.id === t.account_id)) ||
+      [...op.before, ...op.after].some(
+        (t) => !accounts.some((a) => a.id === t.account_id),
+      ) ||
       new Set(op.before.map((t) => t.id)).size !== op.before.length ||
       new Set(op.after.map((t) => t.id)).size !== op.after.length
-    ) throw AppError.validation('Cash mutations require distinct rows and every affected account snapshot')
+    )
+      throw AppError.validation(
+        'Cash mutations require distinct rows and every affected account snapshot',
+      )
     for (const a of accounts) {
       conditions.push(
-        "EXISTS (SELECT 1 FROM accounts WHERE id=? AND type=? AND currency=? AND type IN ('cash','checking','savings','credit') AND COALESCE(is_locked,0)=0 AND archived_at IS NULL)",
+        "EXISTS (SELECT 1 FROM accounts WHERE id=? AND type=? AND currency=? AND balance IS ? AND updated_at IS ? AND type IN ('cash','checking','savings','credit') AND COALESCE(is_locked,0)=0 AND archived_at IS NULL)",
       )
-      bindings.push(a.id, a.type, a.currency)
+      bindings.push(a.id, a.type, a.currency, a.balance, a.updated_at ?? null)
     }
     for (const t of op.before) {
       const expected = values(t, op.now)
@@ -100,7 +144,9 @@ export class CashLedgerRepository {
     // New row IDs are protected by their primary key. A duplicate insert aborts
     // the complete batch, including this claim and all balance changes.
     if (op.correction) {
-      conditions.push('(SELECT revision FROM financial_data_revision WHERE id=1)=?')
+      conditions.push(
+        '(SELECT revision FROM financial_data_revision WHERE id=1)=?',
+      )
       bindings.push(op.correction.revision)
     }
     if (op.schedule) {
@@ -127,12 +173,66 @@ export class CashLedgerRepository {
       conditions.push(
         `EXISTS (SELECT 1 FROM recurring_schedules WHERE ${fields.map((f) => `${f} IS ?`).join(' AND ')})`,
       )
-      bindings.push(...fields.map((f) => (f === 'is_active' ? (s.is_active ? 1 : 0) : (s[f] ?? null))))
+      bindings.push(
+        ...fields.map((f) =>
+          f === 'is_active' ? (s.is_active ? 1 : 0) : (s[f] ?? null),
+        ),
+      )
+    }
+    const deltas = new Map<string, number[]>()
+    for (const [rows, sign] of [
+      [op.before, -1],
+      [op.after, 1],
+    ] as const)
+      for (const t of rows)
+        if ((t.status ?? 'posted') === 'posted')
+          deltas.set(t.account_id, [
+            ...(deltas.get(t.account_id) ?? []),
+            sign * t.amount,
+          ])
+    const recoveryRevision = accounts.some(
+      (a) => Number(a.balance.toPrecision(15)) !== a.balance,
+    )
+      ? await this.db
+          .prepare('SELECT revision FROM financial_data_revision WHERE id=1')
+          .first<number>('revision')
+      : null
+    const balanceChanges: {
+      account_id: string
+      before: number
+      delta: number
+      after: number
+      decimal_recovery?: { value: number; evidence_count: number }
+    }[] = []
+    try {
+      for (const [id, terms] of deltas) {
+        const delta = addDecimal(...terms)
+        if (delta === 0 || id === op.correction?.before.id) continue
+        const a = accounts.find((a) => a.id === id)!
+        const recovery = await recoverCashBalance(this.db, id, a.balance)
+        balanceChanges.push({
+          account_id: id,
+          before: a.balance,
+          delta,
+          after: addDecimal(recovery?.value ?? a.balance, delta),
+          ...(recovery ? { decimal_recovery: recovery } : {}),
+        })
+      }
+    } catch (error) {
+      throw AppError.validation((error as Error).message)
+    }
+    if (balanceChanges.some((c) => c.decimal_recovery)) {
+      conditions.push(
+        '(SELECT revision FROM financial_data_revision WHERE id=1)=?',
+      )
+      bindings.push(recoveryRevision)
     }
     const entity = op.correction ? 'account' : 'transaction',
       entityId = op.correction?.before.id ?? op.after[0]?.id ?? op.before[0]?.id
     if (!entityId || !accounts.length)
-      throw AppError.validation('A cash mutation requires its account and ledger facts')
+      throw AppError.validation(
+        'A cash mutation requires its account and ledger facts',
+      )
     const action =
       op.correction || (op.before.length && op.after.length)
         ? 'UPDATE'
@@ -154,26 +254,21 @@ export class CashLedgerRepository {
             after: op.after,
             account: op.correction,
             schedule_id: op.schedule?.id,
+            transfer_pair_id: op.transfer_pair_id,
+            balance_changes: balanceChanges,
           }),
           op.now,
           ...bindings,
         ),
     ]
-    const deltas = new Map<string, number>()
-    for (const [rows, sign] of [
-      [op.before, -1],
-      [op.after, 1],
-    ] as const)
-      for (const t of rows)
-        if ((t.status ?? 'posted') === 'posted')
-          deltas.set(t.account_id, (deltas.get(t.account_id) ?? 0) + sign * t.amount)
-    for (const [id, delta] of deltas)
-      if (delta !== 0 && id !== op.correction?.before.id)
-        statements.push(
-          this.db
-            .prepare(`UPDATE accounts SET balance=balance+?,updated_at=? WHERE id=? AND ${guard}`)
-            .bind(delta, op.now, id, claim),
-        )
+    for (const change of balanceChanges)
+      statements.push(
+        this.db
+          .prepare(
+            `UPDATE accounts SET balance=?,updated_at=? WHERE id=? AND ${guard}`,
+          )
+          .bind(change.after, op.now, change.account_id, claim),
+      )
     if (op.correction) {
       const a = op.correction.after
       const fields = [
@@ -190,10 +285,13 @@ export class CashLedgerRepository {
       ] as const
       statements.push(
         this.db
-          .prepare(`UPDATE accounts SET ${fields.map((f) => `${f}=?`).join(',')} WHERE id=? AND ${guard}`)
+          .prepare(
+            `UPDATE accounts SET ${fields.map((f) => `${f}=?`).join(',')} WHERE id=? AND ${guard}`,
+          )
           .bind(
             ...fields.map((f) =>
-              f === 'exclude_from_net_worth' || f === 'exclude_from_cash_balance'
+              f === 'exclude_from_net_worth' ||
+              f === 'exclude_from_cash_balance'
                 ? a[f]
                   ? 1
                   : 0
@@ -204,8 +302,14 @@ export class CashLedgerRepository {
           ),
       )
     }
-    for (const t of op.before.filter((t) => !op.after.some((a) => a.id === t.id)))
-      statements.push(this.db.prepare(`DELETE FROM transactions WHERE id=? AND ${guard}`).bind(t.id, claim))
+    for (const t of op.before.filter(
+      (t) => !op.after.some((a) => a.id === t.id),
+    ))
+      statements.push(
+        this.db
+          .prepare(`DELETE FROM transactions WHERE id=? AND ${guard}`)
+          .bind(t.id, claim),
+      )
     for (const t of op.after) {
       if (op.before.some((b) => b.id === t.id))
         statements.push(
@@ -241,7 +345,11 @@ export class CashLedgerRepository {
             crypto.randomUUID(),
             before && after ? 'UPDATE' : after ? 'CREATE' : 'DELETE',
             id,
-            JSON.stringify({ before, after }),
+            JSON.stringify({
+              before,
+              after,
+              transfer_pair_id: op.transfer_pair_id,
+            }),
             op.now,
             claim,
           ),
@@ -249,21 +357,23 @@ export class CashLedgerRepository {
     }
     if (op.schedule) {
       const s = op.schedule,
-        remaining = s.remaining_occurrences == null ? null : s.remaining_occurrences - 1
+        remaining =
+          s.remaining_occurrences == null ? null : s.remaining_occurrences - 1
       statements.push(
         this.db
           .prepare(
             `UPDATE recurring_schedules SET last_processed_date=?,remaining_occurrences=?,is_active=? WHERE id=? AND ${guard}`,
           )
-          .bind(op.after[0].date, remaining, remaining === 0 ? 0 : 1, s.id, claim),
+          .bind(
+            op.after[0].date,
+            remaining,
+            remaining === 0 ? 0 : 1,
+            s.id,
+            claim,
+          ),
       )
     }
     const result = await this.db.batch(statements)
-    if (!result[0].meta.changes)
-      throw new AppError(
-        'HISTORY_CHANGED',
-        'Cash records changed or became protected; refresh before saving.',
-        409,
-      )
+    return (result[0].meta.changes ?? 0) > 0
   }
 }
