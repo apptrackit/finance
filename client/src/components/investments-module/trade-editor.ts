@@ -116,7 +116,10 @@ export function validateTrade(
       return fail('Included fee must leave a positive gross cash settlement.')
   }
   try {
-    if (!total) {
+    // Unsupported stored mirrors may contain recoverable legacy residue. Only
+    // the authoritative preview has the ledger evidence to decide; do not
+    // round the mirror locally or block that preview. New inputs stay strict.
+    if (!total && validHoldingNumber(holding.balance)) {
       const before =
         edit && edit.trade.account_id === holding.id
           ? addExact(holding.balance, edit.trade.type === 'buy' ? -edit.trade.quantity : edit.trade.quantity)

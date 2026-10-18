@@ -134,11 +134,27 @@ it('retains nine-decimal crypto units while recovering narrowly supported old re
       .bind(stored),
     f.db.prepare('UPDATE investment_trade_sequence SET last_order=1'),
   ])
-  const r = await f.request(
-    '/investment-trades',
-    'POST',
-    draft({ quantity: 0.000000001, price: 10000000, cash_amount: 0.01 }),
-  )
+  const input = draft({
+    quantity: 0.000000001,
+    price: 10000000,
+    cash_amount: 0.01,
+  })
+  const beforePreview = await facts()
+  const preview = await f.request('/investment-trades/preview', 'POST', input)
+  expect(preview.status, await preview.clone().text()).toBe(200)
+  const projected = (await preview.json()) as {
+    by_currency: {
+      HUF: { holdings: { account_id: string; quantity: number }[] }
+    }
+    preview_cash_after: { balance: number }
+  }
+  expect(
+    projected.by_currency.HUF.holdings.find((a) => a.account_id === 'holding')
+      ?.quantity,
+  ).toBe(0.312345679)
+  expect(projected.preview_cash_after.balance).toBe(9.99)
+  expect(await facts()).toEqual(beforePreview)
+  const r = await f.request('/investment-trades', 'POST', input)
   expect(r.status, await r.clone().text()).toBe(201)
   const ids = (await r.json()) as { trade_id: string }
   expect(await balance('holding')).toBe(0.312345679)

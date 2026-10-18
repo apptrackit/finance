@@ -8,7 +8,7 @@ Intermediate package/UI version bumps are grouped under the next published GitHu
 
 ### Fixed
 
-- Cash and investment balance changes use decimal arithmetic to prevent floating residue after postings, transfers, edits, pending confirmation and recurring execution. Narrowly verified legacy residue is recovered only within a successful audited mutation; genuine fractional cash/crypto quantities and old ledger facts stay intact. Lost increments reject the complete save. No schema migration is added; see `docs/decimal-balances.md`.
+- Cash and investment balance changes use decimal arithmetic to prevent floating residue after postings, transfers, edits, pending confirmation and recurring execution. Narrowly verified legacy residue is recovered only within a successful audited mutation; genuine fractional cash/crypto quantities and old ledger facts stay intact. The trade editor lets the required server preview check unsupported stored mirrors while retaining strict entered-unit validation. Lost increments reject the complete save. No schema migration is added; see `docs/decimal-balances.md`.
 
 ### Added
 

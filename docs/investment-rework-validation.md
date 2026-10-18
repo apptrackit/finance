@@ -70,7 +70,7 @@ Local full checks: **435 client tests**, **191 API tests**, **51 MCP tests**, **
 
 Browser review uses disposable synthetic accounts with the real API Worker and D1. Instrument/daily-FX responses are synthetic; public current FX is used consistently with the existing browser cash layer. No personal export records enter the browser, fixture code or screenshots. Desktop (1440/1013 px) and mobile (390 px) layouts, dark/light themes, privacy, linked fractional buy/partial sale/edit/delete, failed appraisal retry and stale-refresh recovery were checked. Browser outcomes and screenshots are captured in the Codex verification artifact; accounting correctness is asserted separately by the Worker/D1 suites above.
 
-The #148 follow-up adds decimal arithmetic and real Worker/D1 regression suites. Its MR records current full-suite and exact-head CI results separately from this original checkpoint. This backend change does not alter the reviewed UI flows or add a migration.
+The #148 follow-up adds decimal arithmetic and real Worker/D1 regression suites. Its MR records current full-suite and exact-head CI results separately from this original checkpoint. The trade editor defers unsupported stored mirrors to the required authoritative preview, preserving strict new-input validation, failed drafts and save gating. This adds no migration or layout change.
 
 ## Release order and recovery
 

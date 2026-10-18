@@ -28,6 +28,28 @@ it('requires actual cross-currency confirmation, previews exact cash, and keeps 
  expect(JSON.parse(String(requests[0][1]?.body))).toMatchObject({quantity:0.123456789012,price:50,cash_amount:2500,fee_amount:400,execution_currency:'EUR',cash_account_id:'cash',holding_account_id:'holding',type:'buy'})
  expect(close).toHaveBeenCalledOnce()
 })
+it('requires an authoritative preview for a legacy stored residue and retains the entered units',async()=>{
+ const data=preview();data.by_currency.HUF.holdings[0].quantity=0.435802467012
+ let release:(r:Response)=>void=()=>{}
+ vi.mocked(apiFetch).mockImplementation(async url=>String(url).includes('/preview')?new Promise(resolve=>{release=resolve}):Response.json({trade_id:'saved'}))
+ render(<TradeEditor {...props} accounts={accounts.map(a=>a.id==='holding'?{...a,balance:Number('0.31234567800000006')}:a)}/>);fill()
+ const save=screen.getByRole('button',{name:'Record purchase'})
+ await waitFor(()=>expect(apiFetch).toHaveBeenCalledOnce());expect(save).toBeDisabled()
+ await act(async()=>release(Response.json(data)))
+ await waitFor(()=>expect(save).toBeEnabled());expect(screen.getByRole('region',{name:'Exact trade totals'})).toHaveTextContent('0.435802467012 COIN')
+ fireEvent.click(save);await waitFor(()=>expect(saved).toHaveBeenCalledOnce())
+ const call=vi.mocked(apiFetch).mock.calls.find(([url])=>!String(url).includes('/preview'))!
+ expect(JSON.parse(String(call[1]?.body))).toMatchObject({quantity:0.123456789012})
+})
+it('keeps legacy precision or oversell refusals from the authoritative preview blocked without changing the draft',async()=>{
+ vi.mocked(apiFetch).mockRejectedValue(new ApiRequestError('Synthetic position cannot be reconciled',409,'TRADE_RECONCILIATION_REQUIRED'))
+ render(<TradeEditor {...props} accounts={accounts.map(a=>a.id==='holding'?{...a,balance:0.3123456780001}:a)}/>);fill()
+ await screen.findByRole('button',{name:'Retry preview'})
+ expect(screen.getByRole('button',{name:'Record purchase'})).toBeDisabled()
+ expect(screen.getByLabelText('Quantity')).toHaveValue('0.123456789012')
+ expect(saved).not.toHaveBeenCalled();expect(close).not.toHaveBeenCalled()
+ expect(vi.mocked(apiFetch).mock.calls.every(([url])=>String(url).includes('/preview'))).toBe(true)
+})
 it('preserves failed-save input and request identity, and blocks repeated clicks while the retry is pending',async()=>{
  let writes=0,release:(r:Response)=>void=()=>{}
  vi.mocked(apiFetch).mockImplementation(async url=>{if(String(url).includes('/preview'))return Response.json(preview());if(++writes===1)throw new Error('Synthetic save failed');return new Promise(resolve=>{release=resolve})})
