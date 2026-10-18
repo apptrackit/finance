@@ -54,3 +54,16 @@ it('refuses editor preparation for locked cash and inconsistent reciprocal recor
  await f.db.prepare('UPDATE transactions SET date=? WHERE id=?').bind('2026-01-11',ids.cash_transaction_id).run()
  const inconsistent=await facts();expect((await f.request(`/investment-trades/${ids.trade_id}`)).status).toBe(409);expect(await facts()).toEqual(inconsistent)
 })
+it('recovers the same successful full-sale request after a refresh sees zero units, with no second sale',async()=>{
+ await create()
+ const body=draft({type:'sell',quantity:2,price:60,cash_amount:48000,fee_amount:400,date:'2026-01-11'})
+ const first=await f.request('/investment-trades','POST',body)
+ expect(first.status).toBe(201)
+ const result=await first.json(),before=await facts()
+ const accounts=await (await f.request('/accounts')).json() as {id:string;balance:number}[]
+ expect(accounts.find(a=>a.id==='holding')?.balance).toBe(0)
+ const recovered=await f.request('/investment-trades','POST',body)
+ expect(recovered.status).toBe(201);expect(await recovered.json()).toEqual(result)
+ expect(await facts()).toEqual(before)
+ expect(await f.db.prepare("SELECT balance FROM accounts WHERE id='cash'").first('balance')).toBe(8600)
+})

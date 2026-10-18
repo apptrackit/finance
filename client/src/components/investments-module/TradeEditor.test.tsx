@@ -1,7 +1,7 @@
 import {act,cleanup,fireEvent,render,screen,waitFor} from '@testing-library/react'
 import {afterEach,beforeEach,expect,it,vi} from 'vitest'
 import {TradeEditor} from './TradeEditor'
-import {apiFetch} from '../../config'
+import {apiFetch,ApiRequestError} from '../../config'
 import {investmentFixture} from '../../test/investment-fixture'
 import type {Account} from './types'
 import type {TradeEdit} from './trade-editor'
@@ -14,7 +14,7 @@ function preview(){const data=investmentFixture();Object.assign(data.by_currency
 const props={accounts,quotes:{},rates:{USD:1,EUR:0.9,HUF:400},hidden:false,currency:'HUF',onSaved:saved,onClose:close}
 function fill(){for(const [label,value] of [['Quantity','0,123456789012'],['Executed unit price','50'],['Fee (HUF)','400'],['Actual cash paid (HUF)','2500']])fireEvent.change(screen.getByLabelText(label),{target:{value}});fireEvent.click(screen.getByLabelText(/actual cash settlement, including fees/))}
 beforeEach(()=>{vi.mocked(apiFetch).mockReset();saved.mockReset().mockResolvedValue();close.mockReset();alerts.confirm.mockReset().mockResolvedValue(true);alerts.showAlert.mockReset();vi.mocked(apiFetch).mockImplementation(async url=>Response.json(String(url).includes('/preview')?preview():{trade_id:'saved'}))})
-afterEach(cleanup)
+afterEach(()=>{cleanup();vi.useRealTimers()})
 it('requires actual cross-currency confirmation, previews exact cash, and keeps fractional units in the save',async()=>{
  render(<TradeEditor {...props}/>);fill()
  const button=screen.getByRole('button',{name:'Record purchase'})
@@ -35,7 +35,7 @@ it('preserves failed-save input and request identity, and blocks repeated clicks
  const button=screen.getByRole('button',{name:'Record purchase'});await waitFor(()=>expect(button).toBeEnabled());fireEvent.click(button)
  expect(await screen.findByRole('alert')).toHaveTextContent('Synthetic save failed')
  expect(screen.getByRole('alert')).toHaveFocus()
- expect(screen.getByLabelText('Quantity')).toHaveValue('0.123456789012');expect(saved).not.toHaveBeenCalled();expect(close).not.toHaveBeenCalled()
+ expect(screen.getByLabelText('Quantity')).toHaveValue('0.123456789012');expect(screen.getByLabelText('Quantity')).toBeDisabled();expect(saved).not.toHaveBeenCalled();expect(close).not.toHaveBeenCalled()
  fireEvent.click(button);fireEvent.click(button)
  await waitFor(()=>expect(writes).toBe(2))
  const bodies=vi.mocked(apiFetch).mock.calls.filter(([url])=>!String(url).includes('/preview')).map(([,o])=>JSON.parse(String(o?.body)))
@@ -116,4 +116,50 @@ it('uses authoritative preview units rather than a stale account mirror and reje
  await screen.findByRole('button',{name:'Retry preview'})
  expect(screen.getByRole('button',{name:'Record purchase'})).toBeDisabled()
  expect(screen.getByLabelText('Quantity')).toHaveValue('0.123456789012')
+})
+
+it('recovers a lost successful sale after refresh without previewing or posting a second sale',async()=>{
+ let writes=0
+ const data=preview();data.by_currency.HUF.holdings[0].quantity=0;data.preview_cash_after.balance=1100
+ vi.mocked(apiFetch).mockImplementation(async url=>{if(String(url).includes('/preview'))return Response.json(data);if(++writes===1)throw new Error('Network response lost');return Response.json({trade_id:'already-saved'})})
+ const view=render(<TradeEditor {...props} type="sell" sourceRevision={1}/>)
+ for(const [label,value] of [['Quantity','2'],['Executed unit price','50'],['Fee (HUF)','0'],['Actual cash received (HUF)','100']])fireEvent.change(screen.getByLabelText(label),{target:{value}})
+ fireEvent.click(screen.getByLabelText(/actual cash settlement/))
+ const save=screen.getByRole('button',{name:'Record sale'});await waitFor(()=>expect(save).toBeEnabled());fireEvent.click(save)
+ await screen.findByRole('button',{name:'Retry original save'})
+ view.rerender(<TradeEditor {...props} type="sell" sourceRevision={2} accounts={accounts.map(a=>a.id==='holding'?{...a,balance:0}:a)}/>)
+ expect(screen.getByRole('button',{name:'Retry original save'})).toBeEnabled()
+ expect(screen.getByRole('region',{name:'Exact trade totals'})).not.toHaveTextContent('Position after')
+ expect(screen.queryByText(/sale exceeds/)).not.toBeInTheDocument()
+ fireEvent.click(screen.getByRole('button',{name:'Retry original save'}))
+ await waitFor(()=>expect(saved).toHaveBeenCalledOnce())
+ const bodies=vi.mocked(apiFetch).mock.calls.filter(([url])=>!String(url).includes('/preview')).map(([,o])=>JSON.parse(String(o?.body)))
+ expect(bodies).toHaveLength(2);expect(bodies[0]).toEqual(bodies[1]);expect(close).toHaveBeenCalledOnce()
+ expect(vi.mocked(apiFetch).mock.calls.filter(([url])=>String(url).includes('/preview'))).toHaveLength(1)
+})
+it('blocks unchanged recovery after the receipt window instead of silently creating another trade',async()=>{
+ vi.useFakeTimers()
+ vi.mocked(apiFetch).mockImplementation(async url=>{if(String(url).includes('/preview'))return Response.json(preview());throw new Error('Response lost')})
+ render(<TradeEditor {...props}/>);fill()
+ await act(async()=>{await vi.advanceTimersByTimeAsync(401)})
+ const save=screen.getByRole('button',{name:'Record purchase'});expect(save).toBeEnabled()
+ await act(async()=>{fireEvent.click(save);await Promise.resolve()})
+ expect(screen.getByRole('button',{name:'Retry original save'})).toBeEnabled()
+ await act(async()=>{await vi.advanceTimersByTimeAsync(86_400_000)})
+ expect(screen.getByText(/24-hour retry window has expired/)).toBeVisible()
+ expect(screen.getByRole('button',{name:'Retry original save'})).toBeDisabled()
+ expect(vi.mocked(apiFetch).mock.calls.filter(([url])=>!String(url).includes('/preview'))).toHaveLength(1)
+})
+
+it('allows correcting a definitive validation rejection with a fresh request instead of freezing the draft',async()=>{
+ let writes=0
+ vi.mocked(apiFetch).mockImplementation(async url=>{if(String(url).includes('/preview'))return Response.json(preview());if(++writes===1)throw new ApiRequestError('Known rejection',409,'TRADE_CONFLICT');return Response.json({trade_id:'saved'})})
+ render(<TradeEditor {...props}/>);fill()
+ const save=screen.getByRole('button',{name:'Record purchase'});await waitFor(()=>expect(save).toBeEnabled());fireEvent.click(save)
+ await screen.findByRole('alert');expect(screen.getByLabelText('Quantity')).toBeEnabled()
+ fireEvent.change(screen.getByLabelText('Note (optional)'),{target:{value:'Corrected note'}})
+ await waitFor(()=>expect(screen.getByRole('button',{name:'Record purchase'})).toBeEnabled())
+ fireEvent.click(screen.getByRole('button',{name:'Record purchase'}));await waitFor(()=>expect(saved).toHaveBeenCalledOnce())
+ const bodies=vi.mocked(apiFetch).mock.calls.filter(([url])=>!String(url).includes('/preview')).map(([,o])=>JSON.parse(String(o?.body)))
+ expect(bodies[1].idempotency_key).not.toBe(bodies[0].idempotency_key);expect(bodies[1].notes).toBe('Corrected note')
 })

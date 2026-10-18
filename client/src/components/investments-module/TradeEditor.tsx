@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
-import { API_BASE_URL, apiFetch } from '../../config'
+import { API_BASE_URL, apiFetch, ApiRequestError } from '../../config'
 import { useAlert } from '../../context/AlertContext'
 import { useUnsavedChanges } from '../../navigation/UnsavedChanges'
 import { Modal } from '../common/modal'
@@ -12,6 +12,7 @@ import { Select } from '../common/select'
 import { parseAmount } from '../../lib/amount'
 import { convertCurrency } from '../../../../shared/currency'
 import { roundSettlement, tradeCurrencies } from '../../../../shared/investment-trade'
+import type { TradeInput } from '../../../../shared/investment-trade'
 import { localAccountDate } from '../dashboard-module/account-form'
 import { TradeMetricsPreview, tradePreviewKey } from './TradeMetricsPreview'
 import type { PreviewStatus } from './TradeMetricsPreview'
@@ -31,6 +32,14 @@ type Props = {
   sourceRevision?: number
   onClose: () => void
   onSaved: () => Promise<void>
+}
+type FailedSave = {
+  body: Omit<TradeInput, 'idempotency_key'>
+  key: string
+  signature: string
+  draft: string
+  startedAt: number
+  uncertain: boolean
 }
 export function TradeEditor({
   accounts,
@@ -59,7 +68,19 @@ export function TradeEditor({
   }, [busy, error])
   const [preview, setPreview] = useState<PreviewStatus | null>(null),
     onStatus = useCallback((v: PreviewStatus) => setPreview(v), [])
-  const receipt = useRef<{ signature: string; key: string } | null>(null)
+  const receipt = useRef<{ signature: string; key: string; startedAt: number } | null>(null)
+  const [failedSave, setFailedSave] = useState<FailedSave | null>(null),
+    [retryExpired, setRetryExpired] = useState(false)
+  const draftSnapshot = JSON.stringify(draft)
+  const recovering = failedSave?.draft === draftSnapshot ? failedSave : null
+  useEffect(() => {
+    if (!failedSave) return
+    const timer = setTimeout(
+      () => setRetryExpired(true),
+      Math.max(0, failedSave.startedAt + 86_400_000 - Date.now()),
+    )
+    return () => clearTimeout(timer)
+  }, [failedSave])
   const { confirm, showAlert } = useAlert()
   const holding = holdings.find((a) => a.id === draft.holding),
     cash = cashAccounts.find((a) => a.id === draft.cash),
@@ -68,6 +89,7 @@ export function TradeEditor({
     signature = tradePreviewKey(validation.input, edit?.trade.id, sourceRevision)
   const cashPreview = preview?.cashAfter
   const serverCash =
+    !recovering &&
     preview?.key === signature &&
     cashPreview &&
     cashPreview.account_id === cash?.id &&
@@ -76,20 +98,26 @@ export function TradeEditor({
       ? cashPreview.balance
       : null
   const serverPosition =
-    preview?.key === signature && typeof preview.position === 'number' && Number.isFinite(preview.position)
+    !recovering &&
+    preview?.key === signature &&
+    typeof preview.position === 'number' &&
+    Number.isFinite(preview.position)
       ? preview.position
       : null
   const dirty = JSON.stringify(draft) !== JSON.stringify(initial)
   const ready =
-    !!validation.input &&
-    preview?.key === signature &&
-    preview.ready &&
-    serverCash !== null &&
-    serverPosition !== null &&
     !hidden &&
-    (!edit || dirty)
+    (!edit || dirty) &&
+    (recovering
+      ? !retryExpired
+      : !!validation.input &&
+        preview?.key === signature &&
+        preview.ready &&
+        serverCash !== null &&
+        serverPosition !== null)
   useUnsavedChanges(dirty || busy)
   const patch = (v: Partial<TradeDraft>) => {
+    if (failedSave?.uncertain || busyRef.current || hidden) return
     setDraft((d) => ({ ...d, ...v }))
     setError(null)
   }
@@ -101,8 +129,10 @@ export function TradeEditor({
     else {
       closing.current = true
       void confirm({
-        title: 'Discard unfinished trade?',
-        message: 'Your unsaved trade will be lost.',
+        title: recovering ? 'Close failed trade?' : 'Discard unfinished trade?',
+        message: recovering
+          ? 'Closing loses this retry key. Check trade history for the previous save outcome before starting another trade.'
+          : 'Your unsaved trade will be lost.',
         confirmText: 'Discard',
         cancelText: 'Keep editing',
       }).then((ok) => {
@@ -111,45 +141,67 @@ export function TradeEditor({
       })
     }
   }
-  const save = async (event: FormEvent) => {
-    event.preventDefault()
-    if (busyRef.current || !ready || !validation.input) return
-    busyRef.current = true
-    setBusy(true)
-    setError(null)
-    const body = validation.input,
-      requestSignature = JSON.stringify([edit?.trade.id, body])
-    if (receipt.current?.signature !== requestSignature)
-      receipt.current = { signature: requestSignature, key: crypto.randomUUID() }
-    try {
-      await apiFetch(
-        `${API_BASE_URL}/investment-trades${edit ? `/${encodeURIComponent(edit.trade.id)}` : ''}`,
-        {
-          method: edit ? 'PUT' : 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ...body, idempotency_key: receipt.current.key }),
-        },
-      )
-    } catch (e) {
-      const message = e instanceof Error ? e.message : 'Could not save trade'
-      setError(message)
-      showAlert({ type: 'error', message })
-      busyRef.current = false
-      setBusy(false)
-      return
-    }
-    showAlert({
-      type: 'success',
-      message: edit ? 'Trade and linked cash updated.' : 'Trade recorded with its linked cash movement.',
-    })
-    await onSaved().catch(() =>
+  const save = useCallback(
+    async (event: FormEvent) => {
+      event.preventDefault()
+      if (busyRef.current || !ready || (!recovering && !validation.input)) return
+      const submittedAt = Date.now()
+      if (recovering && submittedAt - recovering.startedAt >= 86_400_000) {
+        setRetryExpired(true)
+        return
+      }
+      busyRef.current = true
+      setBusy(true)
+      setError(null)
+      const body = recovering?.body ?? validation.input!,
+        requestSignature = JSON.stringify([edit?.trade.id, body])
+      if (recovering)
+        receipt.current = {
+          signature: recovering.signature,
+          key: recovering.key,
+          startedAt: recovering.startedAt,
+        }
+      else if (receipt.current?.signature !== requestSignature)
+        receipt.current = { signature: requestSignature, key: crypto.randomUUID(), startedAt: submittedAt }
+      const request = receipt.current!
+      try {
+        await apiFetch(
+          `${API_BASE_URL}/investment-trades${edit ? `/${encodeURIComponent(edit.trade.id)}` : ''}`,
+          {
+            method: edit ? 'PUT' : 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ...body, idempotency_key: request.key }),
+          },
+        )
+      } catch (e) {
+        const message = e instanceof Error ? e.message : 'Could not save trade'
+        setRetryExpired(false)
+        setFailedSave({
+          ...request,
+          body,
+          draft: draftSnapshot,
+          uncertain: !(e instanceof ApiRequestError && e.status >= 400 && e.status < 500 && e.code),
+        })
+        setError(message)
+        showAlert({ type: 'error', message })
+        busyRef.current = false
+        setBusy(false)
+        return
+      }
       showAlert({
-        type: 'warning',
-        message: 'Trade saved. Refresh the page data to see the latest balances.',
-      }),
-    )
-    onClose()
-  }
+        type: 'success',
+        message: edit ? 'Trade and linked cash updated.' : 'Trade recorded with its linked cash movement.',
+      })
+      await onSaved().catch(() =>
+        showAlert({
+          type: 'warning',
+          message: 'Trade saved. Refresh the page data to see the latest balances.',
+        }),
+      )
+      onClose()
+    },
+    [ready, recovering, validation.input, edit, draftSnapshot, showAlert, onSaved, onClose],
+  )
   const remove = async () => {
     if (!edit || busyRef.current || hidden) return
     busyRef.current = true
@@ -221,7 +273,10 @@ export function TradeEditor({
             reversal.
           </p>
         )}
-        <fieldset disabled={busy || hidden} className="min-w-0 space-y-4 p-4 sm:p-5">
+        <fieldset
+          disabled={busy || hidden || !!failedSave?.uncertain}
+          className="min-w-0 space-y-4 p-4 sm:p-5"
+        >
           <div
             role="group"
             aria-label="Trade direction"
@@ -490,16 +545,27 @@ export function TradeEditor({
               balance.
             </p>
           )}
-          {validation.error && <p className="text-xs text-muted-foreground">{validation.error}</p>}
+          {!recovering && validation.error && (
+            <p className="text-xs text-muted-foreground">{validation.error}</p>
+          )}
+          {recovering && (
+            <p className="rounded-lg bg-secondary p-3 text-xs text-muted-foreground">
+              {retryExpired
+                ? 'The 24-hour retry window has expired. Review trade history before starting a new trade.'
+                : failedSave?.uncertain
+                  ? 'The previous save outcome is unconfirmed. Editing is paused while you retry the original request to recover its result or apply it once.'
+                  : 'The previous save was rejected. Retry the original request or correct its details; your draft and request key are preserved.'}
+            </p>
+          )}
           <TradeMetricsPreview
-            input={validation.input}
+            input={recovering ? null : validation.input}
             tradeId={edit?.trade.id}
             hidden={hidden}
             currency={currency}
             refreshKey={sourceRevision}
             onStatus={onStatus}
           />
-          {preview?.key === signature && preview.error && (
+          {!recovering && preview?.key === signature && preview.error && (
             <p role="alert" className="text-sm text-destructive">
               {preview.error}
             </p>
@@ -524,7 +590,7 @@ export function TradeEditor({
               type="button"
               variant="ghost"
               className="mr-auto text-destructive"
-              disabled={busy || hidden}
+              disabled={busy || hidden || !!recovering}
               onClick={() => {
                 void remove()
               }}
@@ -538,11 +604,13 @@ export function TradeEditor({
           <Button type="submit" disabled={busy || !ready}>
             {busy
               ? 'Processing…'
-              : edit
-                ? 'Save changes'
-                : draft.type === 'buy'
-                  ? 'Record purchase'
-                  : 'Record sale'}
+              : recovering
+                ? 'Retry original save'
+                : edit
+                  ? 'Save changes'
+                  : draft.type === 'buy'
+                    ? 'Record purchase'
+                    : 'Record sale'}
           </Button>
         </div>
       </form>
