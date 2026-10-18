@@ -254,7 +254,7 @@ export function useFinanceData(
 
   const fetchInvestmentValue = useCallback(async () => {
     await loadInvestmentValue(async () => {
-      const investmentAccounts = accounts.filter(a => a.type === 'investment' && a.archived_at == null)
+      const investmentAccounts = accounts.filter(a => a.type === 'investment' && a.archived_at == null && !a.exclude_from_net_worth)
       if (investmentAccounts.length === 0) {
         return { conversion: sumConversions([]), currency: masterCurrency, quotes: {} }
       }

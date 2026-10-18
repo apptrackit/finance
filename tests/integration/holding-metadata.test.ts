@@ -76,9 +76,9 @@ it('persists ETF/stock/crypto/manual categories independently of pricing and ret
     expect(mcp.pricing_method).toBe(a.pricing_method)
     expect(mcp.investment_quantity).toBe(a.asset_type === 'manual' ? null : a.balance)
     const p = portfolio.holdings.find(row => row.account_id === a.id)!
-    expect(p.quantity).toBe(a.holding_position.quantity)
+    expect(p.quantity).toBe(a.asset_type==='manual'?1:a.holding_position.quantity)
     expect(p.native_value).toBe(holdingNativeValue(a as any).value)
-    expect(p.net_invested).toBeNull() // A known opening is not evidence of old cash flows.
+    expect(p.net_invested).toBe(a.balance===0?0:null) // Only a zero start proves no earlier funding.
   }
   expect(portfolio.total_value).toBeCloseTo(96526)
   expect(await counts()).toMatchObject({ anchors: 4, trades: 0, cash: 0, audits: 4 })

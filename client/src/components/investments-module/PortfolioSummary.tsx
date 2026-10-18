@@ -50,25 +50,25 @@ export function PortfolioSummary({
       
       <div className="p-6 rounded-2xl bg-card border border-border/50 shadow-sm">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-sm font-medium text-muted-foreground">Total Invested</h3>
+          <h3 className="text-sm font-medium text-muted-foreground">Net Invested</h3>
           <Target className="h-5 w-5 text-muted-foreground" />
         </div>
         <div className={`text-4xl font-bold ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
           {privacyMode === 'hidden' ? '••••••' : formatDisplayCurrency(convertToDisplayCurrency(stats.totalInvested), displayCurrency)}
         </div>
-        <p className="text-xs text-muted-foreground mt-2">Net deposited</p>
+        <p className="text-xs text-muted-foreground mt-2">Confirmed cash paid minus sale proceeds; may be negative</p>
       </div>
       
-      <div className={`p-6 rounded-2xl border shadow-sm ${(stats.totalGainLoss ?? 0) >= 0 ? 'bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-800/30' : 'bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-800/30'}`}>
+      <div className={`p-6 rounded-2xl border shadow-sm ${stats.totalGainLoss===null?'bg-card border-border/50':(stats.totalGainLoss ?? 0) >= 0 ? 'bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-800/30' : 'bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-800/30'}`}>
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-sm font-medium text-muted-foreground">Total Return</h3>
+          <h3 className="text-sm font-medium text-muted-foreground">Total Gain</h3>
           {(stats.totalGainLoss ?? 0) >= 0 ? <TrendingUp className="h-5 w-5 text-green-600" /> : <TrendingDown className="h-5 w-5 text-red-600" />}
         </div>
-        <div className={`text-4xl font-bold ${(stats.totalGainLoss ?? 0) >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'} ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
+        <div className={`text-4xl font-bold ${stats.totalGainLoss===null?'text-muted-foreground':(stats.totalGainLoss ?? 0) >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'} ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
           {privacyMode === 'hidden' ? '••••••' : stats.totalGainLoss === null || convertToDisplayCurrency(stats.totalGainLoss) === null ? 'Unavailable' : `${(stats.totalGainLoss ?? 0) >= 0 ? '+' : '-'}${formatDisplayCurrency(convertToDisplayCurrency(Math.abs(stats.totalGainLoss)), displayCurrency)}`}
         </div>
-        <div className={`text-sm font-medium mt-2 ${(stats.totalGainLoss ?? 0) >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'} ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
-          {privacyMode === 'hidden' ? '••••' : stats.totalGainLossPercent === null ? 'Unavailable' : `${stats.totalGainLossPercent >= 0 ? '+' : ''}${stats.totalGainLossPercent.toFixed(2)}%`}
+        <div title="Estimated return links daily factors, treating contributions at the start and withdrawals at the end of each day. Requires complete daily history." className={`text-sm font-medium mt-2 ${stats.totalGainLoss===null?'text-muted-foreground':(stats.totalGainLoss ?? 0) >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'} ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
+          {privacyMode === 'hidden' ? '••••' : stats.totalGainLossPercent === null ? 'Estimated return: unavailable · daily history required' : `${stats.totalGainLossPercent >= 0 ? '+' : ''}${stats.totalGainLossPercent.toFixed(2)}%`}
         </div>
       </div>
     </div>

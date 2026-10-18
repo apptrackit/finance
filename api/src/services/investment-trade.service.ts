@@ -116,6 +116,14 @@ export class InvestmentTradeService {
     op.balances.set(account.id,owned ? latest!.amount : 0)
   }
   async save(input: TradeInput, clientDate?: string, id?: string): Promise<TradeResult> {
+    return this.execute(input,clientDate,id,false)
+  }
+  async preview(input: TradeInput, clientDate?: string, id?: string) {
+    return this.execute(input,clientDate,id,true)
+  }
+  private execute(input: TradeInput, clientDate: string | undefined, id: string | undefined, preview: false): Promise<TradeResult>
+  private execute(input: TradeInput, clientDate: string | undefined, id: string | undefined, preview: true): Promise<{account: Account; trades: InvestmentTransaction[]; trade_id:string;revision:number}>
+  private async execute(input: TradeInput, clientDate: string | undefined, id: string | undefined, preview: boolean) {
     const parsed = InvestmentTradeSchema.safeParse(input)
     if (!parsed.success) throw AppError.validation(parsed.error.issues.map(i => i.message).join('; '))
     const t = parsed.data
@@ -128,9 +136,11 @@ export class InvestmentTradeService {
     const hash = await this.hash([id ?? null,t.holding_account_id,t.cash_account_id,t.type,t.quantity,t.price,t.execution_currency,t.cash_amount,t.fee_status,t.fee_amount??null,t.date,t.notes??null,t.expected_version??null])
     const now = Date.now()
     for (let attempt=0; attempt<5; attempt++) {
-      const prior = await this.replay(t.idempotency_key,hash,now)
-      if (prior) return prior
-      await this.capacity(now)
+      if (!preview) {
+        const prior = await this.replay(t.idempotency_key,hash,now)
+        if (prior) return prior
+        await this.capacity(now)
+      }
       const found = id ? await this.repo.findTrade(id) : null
       if (id && !found) throw AppError.notFound('TRANSACTION_NOT_FOUND','Investment trade not found')
       const state = await this.repo.state([...new Set([t.holding_account_id,...(found ? [found.account_id] : [])])])
@@ -172,6 +182,14 @@ export class InvestmentTradeService {
       }
       if (before) op.balances.set(before.cash.account_id,addExact(this.account(state,before.cash.account_id,false).balance,-before.cash.amount))
       op.balances.set(cash.id,addExact(op.balances.get(cash.id)??cash.balance,cashRow.amount))
+      if (preview) {
+        const balance=op.balances.get(holding.id)!
+        const baseline=op.anchors.find(a=>a.accountId===holding.id)?.anchor
+        const account: Account={...holding,balance,
+          ...(baseline?{holding_position:{...holding.holding_position!,anchor:baseline}}:{}),
+          ...(total?{manual_ownership:t.type==='buy'?'owned' as const:'disposed' as const}:{})}
+        return {account,trades:[...state.trades.filter(row=>row.account_id===holding.id && row.id!==existing?.id),trade],trade_id:trade.id,revision:state.revision}
+      }
       if (await this.repo.commit(op)) return result
     }
     throw conflict()
