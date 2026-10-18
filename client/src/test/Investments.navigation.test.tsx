@@ -1,4 +1,4 @@
-import {investmentFixture} from './investment-fixture'
+import {historyFixture,investmentFixture} from './investment-fixture'
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { createMemoryRouter, RouterProvider } from 'react-router'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
@@ -27,7 +27,7 @@ beforeEach(() => {
       '/v6/latest/HUF': { rates: { HUF: 1, USD: 0.0025 } }, '/v6/latest/USD': { rates: { USD: 1, HUF: 400 } },
       '/settings/navigation': { visible_menus: { dashboard: true, investments: true, analytics: true, recurring: true }, updated_at: 1 },
     }
-    return Response.json(data[path] ?? [])
+    return Response.json(path==='/investment-history'?historyFixture(new URL(String(input),'http://localhost').searchParams):data[path] ?? [])
   })
   vi.stubGlobal('fetch', fetchMock)
 })

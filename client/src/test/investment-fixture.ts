@@ -15,3 +15,9 @@ export function investmentFixture(accounts=[syntheticHolding],trades=[syntheticB
   return [c,{...portfolioMetrics(holdings),holdings,currency:c,market_today:{...today,currency:c}}]
  }))}
 }
+
+export function historyFixture(query=new URLSearchParams()) {
+ const currency=query.get('currency')??'HUF',range=query.get('range')??'1m',to=query.get('to')??'2026-10-17'
+ const p={date:to,value:currency==='HUF'?6000:15,net_invested:currency==='HUF'?4000:10,contribution:0,withdrawal:0,provisional:true,event:false,coverage:'complete',price_as_of_oldest:to,price_as_of_latest:to,fx_as_of_oldest:to,fx_as_of_latest:to}
+ return {as_of:'2026-10-17T12:00:00Z',source_revision:Number(query.get('expected_revision')??1),currency,timezone:query.get('timezone')??'UTC',range,from:'2026-10-01',to,prior_date:'2026-09-30',scope:'all_investment_holdings_including_archived',points:[{...p,date:'2026-10-01',value:4000},p],opening:{...p,date:'2026-09-30',value:0},summary:{gain:2000,estimated_return_percent:50,start_value:0,end_value:p.value,contribution:4000,withdrawal:0,coverage_start:'2026-09-30',status:'complete',reasons:[]},coverage_ranges:[],holdings:[],sampling:{daily_points:17,returned_points:2,max_points:600,method:'events and extrema'},sources:[],method:{return_label:'Estimated return',flow_timing:'Daily gross flows',price_timing:'Conservative source day close',fx_timing:'Dated ECB',current_endpoint:'Provisional current quotes'}}
+}
