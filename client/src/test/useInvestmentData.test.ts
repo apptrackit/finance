@@ -60,3 +60,11 @@ it('rejects missing revision metadata instead of pairing current values with ung
  const {result}=renderHook(()=>useInvestmentData(true,1));await waitFor(()=>expect(result.current.status.error).toBe(true))
  expect(result.current.data).toBeNull();expect(fetcher.mock.calls.some(([url])=>String(url).includes('/investment-history'))).toBe(false)
 })
+
+it('does not publish malformed overview trends and keeps the last coherent snapshot',async()=>{
+ const {result}=renderHook(()=>useInvestmentData(true,1));await waitFor(()=>expect(result.current.status.loaded).toBe(true))
+ const previous=result.current.data
+ snapshot={...investmentFixture(),overview:{trends:{holding:{points:[{date:'2026-10-10',value:Infinity}]}}}} as unknown as typeof snapshot
+ await act(async()=>{await result.current.refresh()})
+ expect(result.current.status.stale).toBe(true);expect(result.current.data).toBe(previous)
+})

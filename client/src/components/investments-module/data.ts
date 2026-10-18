@@ -5,6 +5,7 @@ import { API_BASE_URL, apiFetch } from '../../config'
 import type { Account, Category, MarketQuote, Transaction } from './types'
 
 export type InvestmentSnapshot = {
+  trends: Record<string,import('../../../../shared/investment-overview').HoldingTrend>
   sourceRevision: number
   asOf: string
   date: string
@@ -28,6 +29,10 @@ const account = (value: unknown): value is Account => record(value) && typeof va
   && ['cash', 'credit', 'investment'].includes(String(value.type))
 const category = (value: unknown): value is Category => record(value) && typeof value.id === 'string'
   && typeof value.name === 'string' && (value.type === 'income' || value.type === 'expense')
+const trend=(value:unknown):boolean=>record(value)&&typeof value.currency==='string'&&['unit_price','total_value'].includes(String(value.kind))
+  &&['linear','step'].includes(String(value.method))&&['ok','stale','missing'].includes(String(value.status))
+  &&Array.isArray(value.points)&&value.points.length<=30&&value.points.every(p=>record(p)&&isoDate(p.date)&&(p.value===null||finite(p.value)&&p.value>=0)
+    &&(p.as_of===null||isoDate(p.as_of))&&typeof p.provisional==='boolean')
 const trade = (value: unknown): value is InvestmentTrade => record(value) && typeof value.id === 'string'
   && typeof value.account_id === 'string' && (value.type === 'buy' || value.type === 'sell')
   && finite(value.quantity) && finite(value.price) && finite(value.total_amount) && typeof value.date === 'string'
@@ -55,13 +60,15 @@ const description = (transaction: InvestmentTrade, quoteCurrency: string) => {
 // must never publish incomplete quantities or a zero-value portfolio.
 export async function readInvestmentSnapshot(signal: AbortSignal): Promise<InvestmentSnapshot> {
   const [response,categories] = await Promise.all([
-    apiFetch(`${API_BASE_URL}/investment-metrics`,{throwOnError:true,signal}),
+    apiFetch(`${API_BASE_URL}/investment-metrics?overview=1`,{throwOnError:true,signal}),
     readArray('/categories',category,signal),
   ])
   const snapshot: InvestmentMetricsSnapshot = await response.json()
   if (!Number.isSafeInteger(snapshot.source_revision) || snapshot.source_revision<0 || !isoDate(snapshot.date)
     || typeof snapshot.as_of!=='string' || !Number.isFinite(Date.parse(snapshot.as_of)) || !Array.isArray(snapshot.accounts) || !snapshot.accounts.every(account) || !Array.isArray(snapshot.trades) || !snapshot.trades.every(trade)
     || !snapshot.by_currency?.HUF || !snapshot.by_currency?.USD || !snapshot.current_fx?.rates || !snapshot.quotes) throw new Error('Invalid investment metrics response')
+  if(snapshot.overview!==undefined&&(!record(snapshot.overview.trends)||!Object.values(snapshot.overview.trends).every(trend)
+    ||snapshot.accounts.some(a=>!Object.hasOwn(snapshot.overview!.trends,a.id))))throw new Error('Invalid overview trends')
   const allAccounts=snapshot.accounts as Account[],trades=snapshot.trades as InvestmentTrade[]
   const accounts = allAccounts.filter(item => item.type === 'investment' && item.archived_at == null)
   const accountById = new Map(accounts.map(item => [item.id, item]))
@@ -76,5 +83,5 @@ export async function readInvestmentSnapshot(signal: AbortSignal): Promise<Inves
       : description(item, accountById.get(item.account_id)!.quote_currency || 'trading currency'),
   }))
   signal.throwIfAborted()
-  return { sourceRevision:snapshot.source_revision,asOf:snapshot.as_of,date:snapshot.date,accounts, transactions, categories, quotes:snapshot.quotes, exchangeRates:snapshot.current_fx.rates,metrics:snapshot.by_currency }
+  return { trends:snapshot.overview?.trends??{},sourceRevision:snapshot.source_revision,asOf:snapshot.as_of,date:snapshot.date,accounts, transactions, categories, quotes:snapshot.quotes, exchangeRates:snapshot.current_fx.rates,metrics:snapshot.by_currency }
 }

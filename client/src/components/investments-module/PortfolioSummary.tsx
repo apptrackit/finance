@@ -1,76 +1,12 @@
-import { Wallet, Target, TrendingUp, TrendingDown } from 'lucide-react'
-import type { PortfolioStats } from './types'
-import { formatDisplayCurrency } from './utils'
-
-type Props = {
-  stats: PortfolioStats
-  loading: boolean
-  privacyMode: string
-  displayCurrency: 'HUF' | 'USD'
-  convertToDisplayCurrency: (value: number | null) => number | null
-  investmentAccountsCount: number
-}
-
-export function PortfolioSummary({
-  stats,
-  loading,
-  privacyMode,
-  displayCurrency,
-  convertToDisplayCurrency,
-  investmentAccountsCount
-}: Props) {
-  if (loading) {
-    return (
-      <div className="grid gap-4 md:grid-cols-3">
-        {[1, 2, 3].map(i => (
-          <div key={i} className="p-6 rounded-2xl bg-card border border-border/50 shadow-sm">
-            <div className="h-4 w-32 bg-muted animate-pulse rounded mb-4" />
-            <div className="h-10 w-40 bg-muted animate-pulse rounded mb-2" />
-            <div className="h-3 w-24 bg-muted animate-pulse rounded" />
-          </div>
-        ))}
-      </div>
-    )
-  }
-
-  return (
-    <div className="grid gap-4 md:grid-cols-3">
-      <div className="p-6 rounded-2xl bg-gradient-to-br from-primary/10 to-primary/5 border border-primary/20 shadow-lg">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-sm font-medium text-muted-foreground">Total Portfolio Value</h3>
-          <Wallet className="h-5 w-5 text-primary" />
-        </div>
-        <div className={`text-4xl font-bold ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
-          {privacyMode === 'hidden' ? '••••••' : formatDisplayCurrency(convertToDisplayCurrency(stats.totalValue), displayCurrency)}
-        </div>
-        <p className="text-xs text-muted-foreground mt-2">
-          {investmentAccountsCount} investment{investmentAccountsCount !== 1 ? 's' : ''}
-        </p>
-      </div>
-      
-      <div className="p-6 rounded-2xl bg-card border border-border/50 shadow-sm">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-sm font-medium text-muted-foreground">Net Invested</h3>
-          <Target className="h-5 w-5 text-muted-foreground" />
-        </div>
-        <div className={`text-4xl font-bold ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
-          {privacyMode === 'hidden' ? '••••••' : formatDisplayCurrency(convertToDisplayCurrency(stats.totalInvested), displayCurrency)}
-        </div>
-        <p className="text-xs text-muted-foreground mt-2">Confirmed cash paid minus sale proceeds; may be negative</p>
-      </div>
-      
-      <div className={`p-6 rounded-2xl border shadow-sm ${stats.totalGainLoss===null?'bg-card border-border/50':(stats.totalGainLoss ?? 0) >= 0 ? 'bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-800/30' : 'bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-800/30'}`}>
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-sm font-medium text-muted-foreground">Total Gain</h3>
-          {(stats.totalGainLoss ?? 0) >= 0 ? <TrendingUp className="h-5 w-5 text-green-600" /> : <TrendingDown className="h-5 w-5 text-red-600" />}
-        </div>
-        <div className={`text-4xl font-bold ${stats.totalGainLoss===null?'text-muted-foreground':(stats.totalGainLoss ?? 0) >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'} ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
-          {privacyMode === 'hidden' ? '••••••' : stats.totalGainLoss === null || convertToDisplayCurrency(stats.totalGainLoss) === null ? 'Unavailable' : `${(stats.totalGainLoss ?? 0) >= 0 ? '+' : '-'}${formatDisplayCurrency(convertToDisplayCurrency(Math.abs(stats.totalGainLoss)), displayCurrency)}`}
-        </div>
-        <div title="Estimated return links daily factors, treating contributions at the start and withdrawals at the end of each day. Requires complete daily history." className={`text-sm font-medium mt-2 ${stats.totalGainLoss===null?'text-muted-foreground':(stats.totalGainLoss ?? 0) >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'} ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
-          {privacyMode === 'hidden' ? '••••' : stats.totalGainLossPercent === null ? 'Estimated return: unavailable · daily history required' : `${stats.totalGainLossPercent >= 0 ? '+' : ''}${stats.totalGainLossPercent.toFixed(2)}%`}
-        </div>
-      </div>
-    </div>
-  )
+import type {CurrencyMetrics} from '../../../../shared/investment-metrics'
+import {amount,signedAmount,percentage,tone} from './overview'
+export function PortfolioSummary({metrics,hidden,currency}:{metrics?:CurrencyMetrics;hidden:boolean;currency:string}) {
+ const today=metrics?.market_today
+ const rows=[{label:'Net invested',value:metrics?.total_invested,percent:null,note:'Exact cash paid minus proceeds · all active holdings',signed:false},
+  {label:'Total gain',value:metrics?.total_gain,percent:metrics?.estimated_return_percent,note:'Realized + unrealized · lifetime, where known',signed:true},
+  {label:'Today',value:today?.gain,percent:today?.estimated_return_percent,note:`${today?.covered_holdings??0}/${today?.total_holdings??0} eligible market holdings · includes FX movement`,signed:true}]
+ return <section aria-label="Portfolio summaries" className="overflow-hidden rounded-2xl border border-border bg-card divide-y divide-border">
+  {rows.map(r=><div key={r.label} className="px-5 py-4"><h2 className="text-xs font-medium text-muted-foreground">{r.label}</h2><div className="mt-1.5 flex flex-wrap items-baseline gap-x-2 gap-y-1"><p className={`max-w-full break-words text-xl font-semibold tracking-tight tabular-nums ${r.signed?tone(r.value,hidden):''}`}>{r.signed?signedAmount(r.value,currency,hidden):amount(r.value,currency,hidden)}</p>{r.label!=='Net invested'&&<span className={`text-xs tabular-nums ${tone(r.percent,hidden)}`}>{hidden?'••••':r.percent==null?'Estimated return unavailable':`${percentage(r.percent)} estimated`}</span>}</div><p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">{r.note}</p></div>)}
+  {today&&<details className="px-5 py-3 text-[11px] text-muted-foreground"><summary className="cursor-pointer">Today coverage</summary><p className="mt-2">{today.boundary} Manual values and stale or missing market inputs are excluded.</p></details>}
+ </section>
 }
