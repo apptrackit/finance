@@ -31,6 +31,7 @@ it('keeps a failed correction draft and its original version through a parent re
   fireEvent.change(screen.getByLabelText('Total value (HUF)'),{target:{value:'90 000,125'}})
   fireEvent.click(screen.getByRole('button',{name:'Save valuation'}))
   await screen.findByRole('alert')
+  await waitFor(()=>expect(screen.getByRole('alert')).toHaveFocus())
   expect(onSaved).not.toHaveBeenCalled()
   expect(screen.getByLabelText('Total value (HUF)')).toHaveValue('90 000.125')
   rerender(<ManualValuations account={{...account,updated_at:2,manual_valuation:{...account.manual_valuation!,observation:{...observation,version:2}}}} hidden={false} onSaved={onSaved}/>)
@@ -42,6 +43,7 @@ it('keeps a failed correction draft and its original version through a parent re
   await waitFor(()=>expect(onSaved).toHaveBeenCalledOnce())
   expect(JSON.parse(String(requests()[1][1]?.body))).toEqual(first)
   expect(screen.queryByRole('form',{name:'Update valuation'})).not.toBeInTheDocument()
+  await waitFor(()=>expect(screen.getByRole('button',{name:'Update value'})).toHaveFocus())
 })
 
 it('does not use a carried earlier value as the correction snapshot for a new date, and permits known zero',async()=>{

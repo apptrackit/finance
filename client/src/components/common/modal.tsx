@@ -20,6 +20,7 @@ export function Modal({ isOpen, onClose, title, subtitle, subtitleClassName, ini
   React.useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && isOpen) {
+        if (document.querySelector('[role="alertdialog"]')) return
         onClose()
       }
     }

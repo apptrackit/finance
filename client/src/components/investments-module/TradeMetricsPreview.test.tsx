@@ -3,7 +3,7 @@ import {afterEach,expect,it,vi} from 'vitest'
 import {TradeMetricsPreview} from './TradeMetricsPreview'
 import {investmentFixture} from '../../test/investment-fixture'
 import {apiFetch} from '../../config'
-vi.mock('../../config',()=>({API_BASE_URL:'/api',apiFetch:vi.fn()}))
+vi.mock('../../config',async importOriginal=>({...await importOriginal<typeof import('../../config')>(),API_BASE_URL:'/api',apiFetch:vi.fn()}))
 afterEach(()=>vi.clearAllMocks())
 const input={holding_account_id:'holding',cash_account_id:'cash',type:'sell' as const,quantity:4,price:120,execution_currency:'USD',cash_amount:476,fee_status:'known' as const,fee_amount:4,date:'2026-01-05',expected_version:3}
 function fixture() {
@@ -13,7 +13,7 @@ function fixture() {
 it('shows the saved-engine preview, sends edit identity and masks all financial output',async()=>{
  vi.mocked(apiFetch).mockResolvedValue(Response.json(fixture()))
  const view=render(<TradeMetricsPreview input={input} tradeId="trade" hidden={false}/>)
- expect(await screen.findByText('Average remaining cost: $101,00')).toBeInTheDocument()
+ expect(await screen.findByText('Average remaining cost: 101 USD')).toBeInTheDocument()
  expect(screen.getByText(/Estimated gain on this sale: 28/)).toBeInTheDocument()
  const [url,options]=vi.mocked(apiFetch).mock.calls[0]
  expect(url).toBe('/api/investment-trades/preview?trade_id=trade')

@@ -25,7 +25,7 @@ A same-date correction updates the existing observation, incrementing its versio
 
 For a correction, supply the exact observation's ID and version. An absent date uses null/0, not the version of a carried earlier observation. The Worker validates the browser's `X-Client-Date` (UTC fallback), rejects future dates, and preserves supported holding precision (12 fractional / 15 significant digits, maximum 1 trillion).
 
-`manual_valuation` in API account reads and MCP account/portfolio reads contains the latest observation, as-of date, age in calendar days, status and `stale_after_days: 90`. The reminder starts at age 90. It does not invalidate a last known appraisal. API account list ages use the client calendar; MCP uses its UTC reporting calendar. Missing legacy cost still produces unavailable investment returns until #131.
+`manual_valuation` in API account reads and MCP account/portfolio reads contains the latest observation, as-of date, age in calendar days, status and `stale_after_days: 90`. The reminder starts at age 90. It does not invalidate a last known appraisal. API account list ages use the client calendar; MCP uses its UTC reporting calendar. Missing legacy cost remains explicit coverage in shared investment metrics; a known current appraisal does not establish historical costs or returns.
 
 ## Ownership and cash events
 

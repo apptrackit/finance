@@ -31,7 +31,7 @@ export class InvestmentMetricsController {
     const state=await this.trades.preview(c.get('validatedBody') as TradeInput,c.req.header('X-Client-Date'),c.req.query('trade_id'))
     return this.respond(c,async()=>{
       const result=await createInvestmentMetricsReader(this.db).read({...options,scope:'investments'},state)
-      return {...result,preview_trade_id:state.trade_id,preview_only:true}
+      return {...result,preview_trade_id:state.trade_id,preview_cash_after:state.cash_after,preview_only:true}
     })
   }
 }

@@ -9,7 +9,7 @@ import {normalizeYahoo} from '../../../../shared/market-provider'
 vi.mock('recharts',()=>({
   ResponsiveContainer:({children}:{children:React.ReactNode})=><div>{children}</div>,
   ComposedChart:({data}:{data:unknown[]})=><div data-testid="instrument-chart" data-points={data.length}/>,
-  Area:()=>null,Scatter:()=>null,Tooltip:()=>null,XAxis:()=>null,YAxis:()=>null,CartesianGrid:()=>null,
+  ReferenceLine:()=>null,Area:()=>null,Scatter:()=>null,Tooltip:()=>null,XAxis:()=>null,YAxis:()=>null,CartesianGrid:()=>null,
 }))
 afterEach(()=>vi.unstubAllGlobals())
 const now=Date.now()
@@ -27,6 +27,8 @@ it('shows native currency/daily bounds and preserves a matching chart on failed 
   expect(await screen.findByRole('alert')).toHaveTextContent('Price history could not be refreshed')
   expect(screen.queryByText(/private error/)).not.toBeInTheDocument()
   fireEvent.click(screen.getByRole('button',{name:'1M'}))
+  expect(screen.getByTestId('instrument-chart')).toHaveAttribute('data-points','3')
+  fireEvent.click(screen.getByRole('button',{name:'Refresh history'}))
   await waitFor(()=>expect(screen.getByText(/Saved history; refresh unavailable/)).toBeInTheDocument())
   expect(screen.getByTestId('instrument-chart')).toHaveAttribute('data-points','3')
 })
@@ -60,4 +62,28 @@ it('withholds a misleading raw range change across stock splits',async()=>{
   render(<InvestmentChart symbol="TEST"/>)
   expect(await screen.findByText('Range change unavailable across split events.')).toBeInTheDocument()
   expect(screen.queryByText(/selected range/)).not.toBeInTheDocument()
+})
+
+it('retains every same-day execution, its actual date/currency and the current remaining-cost reference',async()=>{
+ const date=value.points[1].date
+ const trades=[{id:'buy1',date,amount:100,quantity:1,price:101,execution_currency:'EUR'},
+  {id:'buy2',date,amount:200,quantity:2,price:102,execution_currency:'EUR'},
+  {id:'sell',date,amount:-110,quantity:-1,price:110,execution_currency:'EUR'},
+  {id:'other-currency',date,amount:100,quantity:1,price:99,execution_currency:'USD'}]
+ vi.stubGlobal('fetch',vi.fn<typeof fetch>().mockResolvedValue(Response.json(value)))
+ render(<InvestmentChart symbol="TEST" transactions={trades} averageCost={98.5} costCurrency="EUR"/>)
+ await screen.findByRole('combobox',{name:'Read instrument history by date'})
+ fireEvent.change(screen.getByRole('combobox',{name:'Read instrument history by date'}),{target:{value:date}})
+ const list=screen.getByRole('list',{name:`Executions on ${date}`})
+ expect(list.children).toHaveLength(4)
+ expect(list).toHaveTextContent('101 EUR');expect(list).toHaveTextContent('102 EUR');expect(list).toHaveTextContent('110 EUR');expect(list).toHaveTextContent('99 USD')
+ expect(screen.getByText(/Current average remaining cost: 98,5 EUR/)).toBeVisible()
+})
+it('reuses an owned detail cache until its source key changes',async()=>{
+ const fetcher=vi.fn<typeof fetch>().mockResolvedValue(Response.json(value)),cache=new Map()
+ vi.stubGlobal('fetch',fetcher)
+ const first=render(<InvestmentChart symbol="TEST" cache={cache} revisionKey="one"/>);await screen.findByText(/110 EUR/);first.unmount()
+ const second=render(<InvestmentChart symbol="TEST" cache={cache} revisionKey="one"/>);await screen.findByText(/110 EUR/)
+ expect(fetcher).toHaveBeenCalledTimes(1)
+ second.rerender(<InvestmentChart symbol="TEST" cache={cache} revisionKey="two"/>);await waitFor(()=>expect(fetcher).toHaveBeenCalledTimes(2))
 })

@@ -1,0 +1,33 @@
+# Holding details and direct-cash trade editor
+
+The Investments page owns the selected holding ID, editor and mutation refresh. Desktop uses a side panel; narrow screens use a sheet with sticky Buy/Sell actions for unit holdings. Manual total assets show ownership and Update value instead. Manually priced unit holdings retain their unit trades and their separate per-unit appraisal editor.
+
+## Detail reads and chart
+
+Current quantity, native price/source time, reporting value, remaining average cost, net invested and gains come from the complete overview snapshot. Selecting a holding does not refetch its ledger: the overview already contains bounded, ordered trade facts. The panel shows 20 rows at a time, ordered by date, effective order and ID. Legacy rows without verified execution/cash facts stay readable and cannot open an inferred trade editor.
+
+Instrument price history loads only when a market holding is opened with values visible. Its cache belongs to the App investment-data hook, is bounded to 12 entries and uses source snapshot/symbol/range keys. Returning to a matching detail reuses history; changed financial snapshots and mutations invalidate reuse. Superseded/closed reads abort; failed refreshes preserve the matching last good history. No financial history enters browser storage.
+
+Price charts use native daily unadjusted observations. Each supported execution is a separate marker at its actual date and executed price in the chart currency, including multiple buys/sells on one date. Other-currency and unverified executions remain in the dated list, with their actual currency and no nearest-price substitution. A keyboard date selector and date readout expose every same-day execution. The range list shows at most the latest 100 executions; the ordered holding ledger remains separately paged in the panel. The dashed line is **current remaining native basis per unit**, explicitly not a historical cost series or an all-buys average. Raw split ranges withhold a misleading range-change percentage.
+
+Manual histories remain dated total/per-unit step observations, independently loaded and paged. Their cost reference is current known remaining cost, not a deposit or new appraisal. Corrections pin the saved observation ID/version and retain drafts after failure. A successful appraisal refreshes the overview and account snapshots without cash movement.
+
+## Recording and replacing trades
+
+Record trade on Investments or Buy/Sell in a unit holding opens the dedicated editor. Its saved values are string drafts using AmountInput. It collects the holding, exact units, execution price/currency/date, cash account, included fee and actual settlement. Same-currency cash must equal rounded gross plus the buy fee or minus the sale fee. Cross-currency settlement is entered and explicitly confirmed; displayed current FX is only an estimate. Included fees never create another expense. The existing negative-cash policy remains a warning; overselling is rejected locally and by full API timeline replay.
+
+Quotes never populate execution facts automatically. Use as draft is available only for today's date, requires confirmation of the actual fill, and clears a quote-derived price if the date or currency changes. Past fills require their recorded execution. Manual total-asset events use exactly one ITEM; appraisals remain a separate action. A confirmed zero-proceeds whole-asset disposal is supported without treating a zero appraisal as missing ownership.
+
+A debounced nonmutating preview uses the same API planner/accounting engine as saving. The editor waits for the matching preview, shows authoritative native cash balance after, resulting units/basis and the specific sale gain, and revalidates after source revision changes. API saving always rechecks locks, archives and the whole timeline; a preview is not a reservation. Only successful writes close the editor and refresh shared account/overview/history data. Failed saves retain all fields and the same request key for unchanged retries. An uncertain response pauses editing and hides a prospective second-trade preview; Retry original save recovers the original result (or applies that request once), even if refreshed units/version/locks would block a new trade. A structured 4xx rejection permits corrections with a fresh key. Unchanged recovery is blocked after the 24-hour receipt window, and closing explains that the retry key will be lost and history must be checked. In-flight submissions and duplicate clicks are guarded.
+
+## Pair preparation and deletion
+
+`GET /investment-trades/:id` accepts the investment or cash ID, resolves the reciprocal pair and returns `{trade, cash_account_id, source_revision}` with `Cache-Control: no-store`. It verifies links, posted/date/sign/settlement agreement, active/unlocked accounts and an unchanged revision. It creates no financial rows, audits or receipts. It never infers a missing historical execution currency, fee or cash contribution. The client checks the row version and overview revision before opening the editor and pins that edit snapshot through later refreshes.
+
+`PUT /investment-trades/:id` retains the existing complete replacement/expected-version/request-key contract. Replacements reverse the original legs before applying new facts, including when the cash account changes. The dedicated editor does not move an edit onto another holding.
+
+`DELETE /investment-trades/:id?expected_version=N` checks the editor's saved version before reversing the linked pair. A concurrent edit invalidates the D1 claim; a retry with an older version is refused. Malformed versions fail validation. Existing callers without this optional query retain their previous behavior; the new editor always supplies it. Deletion still replays later events, guards both accounts and reverses each ledger once.
+
+Privacy hides values, quantities, costs, fees, percentages, charts and execution descriptions; reveal is required for mutation. Dirty drafts protect Back/navigation/reload and close/discard actions. Dialogs trap focus, confirmation Escape cancels only the confirmation, failures focus their inline feedback and successful appraisals restore Update value focus. Both themes and reduced-motion chart behavior use app controls/tokens.
+
+This step adds no schema migration, durable table, financial browser preference or MCP investment write. Final whole-epic acceptance and fresh/upgrade release validation remain #135; main and production are unchanged until separately authorized.
