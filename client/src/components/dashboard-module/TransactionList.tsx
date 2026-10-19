@@ -1100,6 +1100,7 @@ export function TransactionList({
   // For transfer preview
   const fromAccount = accounts.find(a => a.id === formData.account_id)
   const toAccount = accounts.find(a => a.id === formData.to_account_id)
+  const selectedAmountUnit = fromAccount?.asset_type === 'manual' ? 'ITEM' : fromAccount?.currency
   const isEditingTransfer = !!editingId && formData.type === 'transfer'
   const isEditingStandardTransaction = !!editingId && formData.type !== 'transfer'
 
@@ -1481,14 +1482,18 @@ export function TransactionList({
                 <div className="grid grid-cols-2 gap-3 overflow-hidden">
                   <div className="col-span-2 space-y-2 min-w-0 rounded-xl border border-border bg-background p-4">
                     <Label htmlFor="amount">{accounts.find(a => a.id === formData.account_id)?.type === 'investment' ? 'Shares' : 'Amount'}</Label>
-                    <AmountInput
-                      id="amount"
-                      className="h-14 border-0 bg-transparent px-0 text-3xl font-semibold shadow-none focus:ring-0"
-                      value={formData.amount} 
-                      onValueChange={amount => setFormData({...formData, amount})}
-                      placeholder="0" 
-                      required 
-                    />
+                    <div className="finance-amount-field flex min-w-0 cursor-text items-baseline gap-2 rounded-lg" onClick={() => document.getElementById('amount')?.focus()}>
+                      <AmountInput
+                        id="amount"
+                        className="finance-amount-input h-14 w-auto min-w-[1ch] max-w-full border-0 bg-transparent px-0 text-3xl font-semibold shadow-none field-sizing-content hover:bg-transparent focus:ring-0 focus-visible:bg-transparent focus-visible:ring-0"
+                        value={formData.amount}
+                        onValueChange={amount => setFormData({...formData, amount})}
+                        placeholder="0"
+                        aria-describedby={selectedAmountUnit ? 'amount-currency' : undefined}
+                        required
+                      />
+                      {selectedAmountUnit && <span id="amount-currency" className="shrink-0 text-base font-medium text-muted-foreground">{selectedAmountUnit}</span>}
+                    </div>
                   </div>
                   <div className="col-span-2 space-y-2 min-w-0">
                     {/* Mobile: collapsible account selector */}
