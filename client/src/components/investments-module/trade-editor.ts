@@ -19,7 +19,7 @@ export type SavedTrade = TradeFacts & {
   notes?: string | null
   linked_transaction_id?: string | null
 }
-export type TradeEdit = { trade: SavedTrade; cash_account_id: string; source_revision: number }
+export type TradeEdit = { trade: SavedTrade; cash_account_id: string; linked_cash?: {amount:number;currency:string}; source_revision: number }
 export type TradeDraft = {
   holding: string
   cash: string
@@ -48,6 +48,8 @@ export function initialTrade(
     a =
       holdings.find((a) => a.id === (t?.account_id ?? holdingId)) ??
       holdings.find((a) => !a.is_locked && a.archived_at == null)
+  const linked=edit?.linked_cash, cashCurrency=cash.find(a=>a.id===edit?.cash_account_id)?.currency
+  const paid=t?.cash_amount ?? (linked && linked.currency===cashCurrency && Number.isFinite(linked.amount) && linked.amount>=0 ? linked.amount : null)
   return {
     holding: a?.id ?? '',
     cash: edit?.cash_account_id ?? cash.find((a) => !a.is_locked && a.archived_at == null)?.id ?? '',
@@ -55,7 +57,7 @@ export function initialTrade(
     quantity: t ? draftNumber(t.quantity) : a?.asset_type === 'manual' ? '1' : '',
     price: t ? draftNumber(t.price) : '',
     currency: t?.execution_currency ?? (a?.asset_type === 'manual' ? a.currency : a?.quote_currency) ?? '',
-    cashAmount: t?.cash_amount != null ? draftNumber(t.cash_amount) : '',
+    cashAmount: paid != null ? draftNumber(paid) : '',
     feeStatus: t?.fee_status ?? 'known',
     fee: t?.fee_amount != null ? draftNumber(t.fee_amount) : '',
     date: t?.date ?? localAccountDate(),

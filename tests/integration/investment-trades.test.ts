@@ -170,7 +170,7 @@ describe('direct cash investment trade writer', () => {
     const before=await state(),cashBefore=await balance('cash'),unitsBefore=await balance('holding')
     const read=await f.request(`/investment-trades/${p.trade_id}`)
     expect(read.status).toBe(200)
-    expect(await read.json()).toMatchObject({trade:{id:p.trade_id,trade_version:0,execution_currency:null,cash_amount:null},cash_account_id:'cash'})
+    expect(await read.json()).toMatchObject({trade:{id:p.trade_id,trade_version:0,execution_currency:null,cash_amount:null},cash_account_id:'cash',linked_cash:{amount:40400,currency:'HUF'}})
     expect(await state()).toEqual(before)
     const replacement=input({expected_version:0})
     const preview=await f.request(`/investment-trades/preview?trade_id=${p.trade_id}`,'POST',replacement)

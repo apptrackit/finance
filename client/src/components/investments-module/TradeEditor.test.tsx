@@ -1,6 +1,7 @@
 import {act,cleanup,fireEvent,render,screen,waitFor} from '@testing-library/react'
 import {afterEach,beforeEach,expect,it,vi} from 'vitest'
 import {TradeEditor} from './TradeEditor'
+import {parseAmount} from '../../lib/amount'
 import {apiFetch,ApiRequestError} from '../../config'
 import {investmentFixture} from '../../test/investment-fixture'
 import type {Account} from './types'
@@ -184,4 +185,13 @@ it('allows correcting a definitive validation rejection with a fresh request ins
  fireEvent.click(screen.getByRole('button',{name:'Record purchase'}));await waitFor(()=>expect(saved).toHaveBeenCalledOnce())
  const bodies=vi.mocked(apiFetch).mock.calls.filter(([url])=>!String(url).includes('/preview')).map(([,o])=>JSON.parse(String(o?.body)))
  expect(bodies[1].idempotency_key).not.toBe(bodies[0].idempotency_key);expect(bodies[1].notes).toBe('Corrected note')
+})
+
+it('prefills legacy settlement from the verified linked cash leg without guessing execution currency or fee',()=>{
+ const edit:TradeEdit={trade:{id:'legacy',account_id:'holding',type:'buy',quantity:1,price:50,date:'2026-01-10',execution_currency:null,cash_amount:null,fee_status:null,trade_version:0},cash_account_id:'cash',linked_cash:{amount:20000,currency:'HUF'},source_revision:1}
+ render(<TradeEditor {...props} accounts={accounts.map(a=>a.id==='holding'?{...a,quote_currency:undefined}:a)} edit={edit}/>)
+ expect(parseAmount((screen.getByLabelText('Actual cash paid (HUF)') as HTMLInputElement).value)).toBe(20000)
+ expect(screen.getByLabelText('Currency')).toHaveValue('')
+ expect(screen.getByLabelText('Fee (HUF)')).toHaveValue('')
+ expect(screen.getByLabelText('Executed unit price')).toHaveValue('50')
 })
