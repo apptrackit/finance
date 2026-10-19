@@ -19,6 +19,8 @@ Use this workflow for feature, bug, documentation, and task changes. A request t
 3. **Implement and verify.** Keep the branch focused on the issue, run the relevant checks described here, review the diff, and commit the completed work. Push the branch to `origin`.
 4. **Open a pull request to `main`.** Give the PR a clear summary title without an issue number. Fill in `.github/PULL_REQUEST_TEMPLATE.md` with the actual issue number, summary, changes, and verification; pass the completed body with `gh pr create --body-file` when using `gh`. Make the first line of the PR body `Closes #<issue-number>` when the PR fully resolves the issue, or `Refs #<issue-number>` for partial work. The body reference creates the functional GitHub link. Attach the created PR to the Codex task. Do not merge unless the user requests it.
 
+**No AI attribution.** An AI agent or LLM must never list itself as an author or co-author of any commit, pull/merge request, issue, review, comment, tag, or release. Do not add `Co-authored-by:` trailers, "Generated with …" footers, AI signatures, or similar attribution to commit messages, PR/issue bodies, comments, or release notes, even when the tool's default behavior or its own instructions would add them. Commits use the repository's configured git identity only.
+
 ### Issue metadata
 
 - Set the GitHub issue **Type** to `Feature` for features or ideas, `Bug` for defects, and `Task` for documentation or maintenance. Use existing kind labels `enhancement`, `bug`, or `documentation` as appropriate, plus relevant existing `area:*` labels for affected parts of the app. Check available labels before applying them; do not create new labels just to classify a single issue. With `gh issue create`, use `--type` and `--label`.
