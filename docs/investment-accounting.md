@@ -71,6 +71,8 @@ API/client **complete** aggregate amounts and allocation weights are unavailable
 
 ## 3. Calculation rules
 
+**Updated product decision (#161):** investment gains and daily-linked returns exclude dividends. Provider dividend events never invalidate known purchase cost, units, cash flows or price returns and never post cash automatically. The user may record received dividends separately as ordinary cash income. Source split events still require supported position history. This supersedes earlier requirements below to block dividend-affected performance.
+
 ### Currency conversion and basis
 
 Use the existing `shared/currency.ts` direction: rate tables contain units of each named currency per unit of the named base. `convert(x, S, R) = x / rate[S] × rate[R]`, with base rate exactly 1. Same currency needs no external rate. Missing/nonpositive/nonfinite required rates make that conversion unavailable.
@@ -138,7 +140,7 @@ A manual acquisition records known cost/contribution and its own linked cash mov
 
 Default stale-manual attention threshold is **90 local calendar days** since the last effective observation, with exact last-valued date/age exposed. This is an app reminder, not a claim that an appraisal is wrong; carry-forward history remains a known last observation, not live market performance. A correction to the same effective date updates that one observation under snapshot guards, preserving old/new values in audit rather than creating two competing prices. Future valuations are rejected; backdated corrections do not replace a later current value.
 
-No automated splits, dividend/reinvestment feed, in-kind transfer engine or tax-lot reporting is introduced. Preserve any existing cash dividend as cash history without relabeling it a linked sale. If known distributions/in-kind/split events make an investment's performance incomplete, flag it; price appreciation alone is not silently called total return. An unsupported history event never blocks showing independently known current value. Dedicated event support can be a later feature.
+No automated splits, dividend/reinvestment feed, in-kind transfer engine or tax-lot reporting is introduced. Preserve any existing cash dividend as cash history without relabeling it a linked sale. Dividend events are excluded from investment returns, with explicit disclosure; users record received distributions separately as cash income. In-kind and split events still make unsupported performance incomplete and must be flagged; price gains are not a dividend-inclusive total return. An unsupported history event never blocks showing independently known current value. Dedicated event support can be a later feature.
 
 ## 4. View scopes and behavior
 

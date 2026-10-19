@@ -170,7 +170,7 @@ export function TradeMetricsPreview({
             </p>
           )}
           <p className="text-xs text-muted-foreground">
-            Uses the saved accounting rules and dated FX. Unknown opening cost stays unavailable. Saving
+            Uses the saved accounting rules and dated FX. Excludes dividends. Unknown opening cost stays unavailable. Saving
             revalidates both accounts and the complete trade timeline.
           </p>
           <button

@@ -104,7 +104,7 @@ export class InvestmentHistoryService {
    holdings:calculated.holdings.map(h=>({account_id:h.account_id,name:h.name,archived:h.archived,summary:h.summary,first_price_as_of:h.points[0]?.price_as_of??null,last_price_as_of:h.points.at(-1)?.price_as_of??null})),
    sampling:{daily_points:calculated.points.length-1,returned_points:sampled.length,max_points:request.maxPoints,method:'daily first; preserve events, neighbors, extrema and gaps'},
    sources:symbols.map(symbol=>({symbol,provider:'yahoo',retrieved_at:prices[symbol]?.retrieved_at??null,status:prices[symbol]?.status??'missing',from:prices[symbol]?.from??prior,to:prices[symbol]?.to??to,timezone:prices[symbol]?.timezone??null})),
-   method:{return_label:'Estimated return',flow_timing:'Contributions at start of day; withdrawals at end; geometrically link daily factors. No annualization.',
+   method:{return_label:'Estimated return',flow_timing:'Contributions at start of day; withdrawals at end; geometrically link daily factors. No annualization. Excludes dividends; record received dividends separately as cash income.',
     price_timing:'Native daily closes are conservatively available at the end of their source calendar day; exact historical session-end times are unavailable. Reporting cutoffs can therefore use the prior source day. Crypto uses UTC daily close. Missing weekdays never carry.',
     fx_timing:'Dated ECB observations; conservative publication-day cutoff, bounded TARGET holiday carry. Never current FX for past values or flows.',
     current_endpoint:'Current local day is provisional at response as_of, using stored current units, current quotes and current FX. Historical dates use dated observations.'}}

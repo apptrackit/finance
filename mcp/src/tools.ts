@@ -462,7 +462,7 @@ export const TOOL_DEFINITIONS = [
   {
     name: 'get_portfolio',
     title: 'Get investment portfolio',
-    description: 'Use this when the user asks for current investment holdings, allocation, valuation, invested amount, or gain/loss. Uses shared cached quotes with actual source times and missing/stale warnings. Unverified cost/returns remain null; use get_investment_activity for individual buys and sells.',
+    description: 'Use this when the user asks for current investment holdings, allocation, valuation, invested amount, or gain/loss. Uses shared cached quotes with actual source times and missing/stale warnings. Gains and daily price returns exclude dividends; received dividends are separate cash income. Unverified cost/returns remain null; use get_investment_activity for individual buys and sells.',
     inputSchema: { type: 'object', properties: { currency: CURRENCY }, additionalProperties: false },
     outputSchema: output(['as_of', 'currency', 'total_value', 'total_invested', 'total_gain_loss', 'total_gain_loss_percent', 'holdings', 'warnings', 'valuation_status', 'gain_loss_coverage'], {
       as_of: { type: 'string' }, currency: { type: 'string' }, total_value: { type: 'number' }, total_invested: { type: ['number', 'null'] },

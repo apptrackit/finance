@@ -9,8 +9,11 @@ import { yahooFixture } from '../../../../tests/fixtures/market-data'
 // jsdom replacement; mocking the chart itself concealed mixed-series domains.
 vi.mock('recharts', async (original) => ({
   ...(await original<typeof import('recharts')>()),
-  ResponsiveContainer: ({ children }: { children: ReactElement<{ width: number; height: number }> }) =>
-    cloneElement(children, { width: 600, height: 240 }),
+  ResponsiveContainer: ({
+    children,
+  }: {
+    children: ReactElement<{ width: number; height: number }>
+  }) => cloneElement(children, { width: 600, height: 240 }),
 }))
 afterEach(() => {
   cleanup()
@@ -49,7 +52,10 @@ it('keeps daily prices in the visible axis domain when execution scatter data is
       ...plot.querySelectorAll('.recharts-yAxis-tick-labels .recharts-cartesian-axis-tick-value'),
     ].map((n) => Number(n.textContent?.replaceAll(',', '')))
     expect(Math.max(...ticks)).toBeGreaterThanOrEqual(110)
-    expect(plot.querySelector('.recharts-area-curve')).toHaveAttribute('d', expect.stringContaining('L'))
+    expect(plot.querySelector('.recharts-area-curve')).toHaveAttribute(
+      'd',
+      expect.stringContaining('L'),
+    )
     expect(plot.querySelectorAll('.recharts-scatter-symbol')).toHaveLength(1)
   })
 })
@@ -70,6 +76,35 @@ it('renders daily history without inventing executions from empty scatter series
     ).not.toBeNull(),
   )
   expect(
-    screen.getByLabelText('Daily instrument price history').querySelectorAll('.recharts-scatter-symbol'),
+    screen
+      .getByLabelText('Daily instrument price history')
+      .querySelectorAll('.recharts-scatter-symbol'),
   ).toHaveLength(0)
 })
+
+it.each(['dividend', 'split'] as const)(
+  'only warns about split position review for %s history',
+  async (type) => {
+    const now = Date.now()
+    const history = normalizeYahoo(
+      yahooFixture(now),
+      'TEST',
+      new Date(now - 30 * 86400000).toISOString().slice(0, 10),
+      now,
+    ).history
+    history.events = [
+      {
+        date: history.points[1].date,
+        type,
+        ...(type === 'split' ? { ratio: 2 } : {}),
+      },
+    ]
+    history.requires_event_review = true
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>().mockResolvedValue(Response.json(history)))
+    render(<InvestmentChart symbol="TEST" />)
+    await screen.findByText(/110 EUR/)
+    expect(screen.getByText(/excludes dividends/)).toBeVisible()
+    if (type === 'split') expect(screen.getByText(/Stock splits occur/)).toBeVisible()
+    else expect(screen.queryByText(/Price history alone/)).not.toBeInTheDocument()
+  },
+)

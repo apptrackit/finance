@@ -176,15 +176,15 @@ export function InvestmentChart({
       </div>
       {history && (
         <p className="text-[10px] text-muted-foreground">
-          Yahoo Finance · daily unadjusted close · {history.currency} ·{' '}
+          Yahoo Finance · daily unadjusted close · excludes dividends · {history.currency} ·{' '}
           {history.status === 'stale' || error ? 'Saved history; refresh unavailable' : 'Retrieved'}{' '}
           {history.retrieved_at}
           {last?.provisional ? ' · current session provisional' : ''}
         </p>
       )}
-      {history?.requires_event_review && (
+      {history?.events.some(event => event.type === 'split') && (
         <p className="text-xs text-muted-foreground">
-          Corporate events occur in this range. Price history alone does not establish complete portfolio
+          Stock splits occur in this range. Price history alone does not establish complete portfolio
           returns.
         </p>
       )}

@@ -107,9 +107,9 @@ describe('historical portfolio reconstruction',()=>{
   const input=base({accounts:[account('loss',1)],anchors:[anchor('loss',{balance:1})],valuations:[value('loss',1,100),value('loss',3,0)]})
   expect(calculatePortfolioHistory(input).summary).toMatchObject({gain:-100,estimated_return_percent:-100,status:'complete'})
  })
- it('does not lose a corporate event when the final units are sold on its date',()=>{
+ it('does not lose a split when the final units are sold on its date',()=>{
   const input=base({accounts:[account('sold',0,{pricing_method:'market',symbol:'TEST',quote_currency:'HUF'})],anchors:[anchor('sold')],trades:[trade('sold',2,'buy',1,100),trade('sold',5,'sell',1,120)],
-   prices:{TEST:{symbol:'TEST',provider:'yahoo',category:'stock',currency:'HUF',timezone:'UTC',exchange:null,from:'2026-01-01',to:'2026-01-06',retrieved_at:'2026-01-10T10:00:00Z',status:'ok',reason:null,price_kind:'unadjusted',events:[{date:'2026-01-05',type:'dividend'}],requires_event_review:true,points:[]}}})
+   prices:{TEST:{symbol:'TEST',provider:'yahoo',category:'stock',currency:'HUF',timezone:'UTC',exchange:null,from:'2026-01-01',to:'2026-01-06',retrieved_at:'2026-01-10T10:00:00Z',status:'ok',reason:null,price_kind:'unadjusted',events:[{date:'2026-01-05',type:'split',ratio:2}],requires_event_review:true,points:[]}}})
   const out=calculatePortfolioHistory(input)
   expect(out.points.find(p=>p.date==='2026-01-05')?.performance_issues[0].reasons).toContain('unsupported_event')
   expect(out.summary.gain).toBeNull()
@@ -144,4 +144,21 @@ describe('calendar ranges and bounded sampling',()=>{
   expect(out.length).toBeLessThanOrEqual(100)
   expect(()=>downsampleHistory(points.map(p=>({...p,event:true})),100)).toThrow('Material history events')
  })
+})
+
+// Dividend dates are source events, not inferred income or reinvested units.
+it.each(['2026-01-03','2026-01-05'])('excludes dividends on %s without losing price returns, even before the selected range',date=>{
+ const input=base({accounts:[account('stock',0,{pricing_method:'market',symbol:'TEST',quote_currency:'HUF'})],anchors:[anchor('stock')],trades:[trade('stock',2,'buy',1,100),trade('stock',5,'sell',1,120)],
+  prices:{TEST:{symbol:'TEST',provider:'yahoo',category:'stock',currency:'HUF',timezone:'UTC',exchange:null,from:'2026-01-01',to:'2026-01-06',retrieved_at:'2026-01-10T10:00:00Z',status:'ok',reason:null,price_kind:'unadjusted',events:[],requires_event_review:false,points:[1,2,3,4,5,6].map(day=>({date:`2026-01-0${day}`,period_start:`2026-01-0${day}T09:00:00Z`,close:day<5?100:120,provider_close:day<5?100:120,provisional:false}))}}})
+ for(const from of ['2026-01-02','2026-01-04']) {
+  input.from=from;input.prices.TEST.events=[]
+  const before=calculatePortfolioHistory(input)
+  input.prices.TEST.events=[{date,type:'dividend'}];input.prices.TEST.requires_event_review=true
+  const saved=JSON.stringify(input),after=calculatePortfolioHistory(input)
+  expect(after.summary).toEqual(before.summary)
+  expect(after.summary).toMatchObject({gain:20,status:'complete'});expect(after.summary.estimated_return_percent).toBeCloseTo(20)
+  expect(after.points.map(p=>[p.value,p.net_invested,p.contribution,p.withdrawal])).toEqual(before.points.map(p=>[p.value,p.net_invested,p.contribution,p.withdrawal]))
+  expect(after.points.every(p=>!p.performance_issues.length)).toBe(true)
+  expect(JSON.stringify(input)).toBe(saved)
+ }
 })

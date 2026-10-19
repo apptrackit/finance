@@ -18,7 +18,7 @@ export function PortfolioHistoryChart({history,hidden,currency,currentValue}:{hi
  return <section aria-label="Portfolio history" className="flex h-full min-w-0 flex-col rounded-2xl border border-border bg-card p-4 sm:p-6 space-y-4">
   <div className="flex flex-wrap items-start justify-between gap-3">
    <div className="min-w-0"><h2 className="text-[13px] font-medium text-muted-foreground">Portfolio value{selected?` · ${selected.date}`:''}</h2><p className="mt-1 break-words text-2xl font-semibold tracking-tight tabular-nums sm:text-[32px]">{money(displayedValue)}</p>
-    <p className="mt-2 text-xs text-muted-foreground">Range gain <span className="font-semibold text-foreground">{money(summary?.gain)}</span> · <span>{percent(summary?.estimated_return_percent)} estimated return</span></p>
+    <p className="mt-2 text-xs text-muted-foreground">Range gain <span className="font-semibold text-foreground">{money(summary?.gain)}</span> · <span>{percent(summary?.estimated_return_percent)} estimated return</span> · Excludes dividends</p>
    </div>
    <div role="group" aria-label="Portfolio history range" className="flex max-w-full overflow-x-auto rounded-lg border border-border bg-background p-0.5">
     {ranges.map(([value,label])=><button type="button" key={value} aria-pressed={range===value} onClick={()=>setRange(value)} className={`min-h-9 shrink-0 rounded-md px-2.5 text-xs ${range===value?'bg-secondary font-semibold':'text-muted-foreground'}`}>{label}</button>)}
@@ -46,7 +46,7 @@ export function PortfolioHistoryChart({history,hidden,currency,currentValue}:{hi
   {data&&<>
    <p className="text-[10px] leading-relaxed text-muted-foreground">{data.from} – {data.to} · {data.timezone} · read {new Date(data.as_of).toLocaleString()}{data.points.at(-1)?.provisional?' · today is provisional':''}</p>
    <details className="text-xs text-muted-foreground"><summary className="cursor-pointer">History method and coverage{summary?.status==='partial'?' · incomplete':''}</summary>
-    <div className="mt-2 space-y-2"><p>History includes sold and archived holdings. Gain excludes contributions and withdrawals. Estimated return links daily factors, assuming contributions at the start and withdrawals at the end of each day. Missing inputs leave gaps.</p><p>{data.method.price_timing}</p><p>{data.method.fx_timing}</p><p>{data.method.current_endpoint}</p>
+    <div className="mt-2 space-y-2"><p>History includes sold and archived holdings. Gain excludes contributions, withdrawals and dividends. Estimated return links daily factors, assuming contributions at the start and withdrawals at the end of each day. Missing inputs leave gaps.</p><p>{data.method.price_timing}</p><p>{data.method.fx_timing}</p><p>{data.method.current_endpoint}</p>
      {summary?.reasons.length!==0&&<p>Range coverage: {summary?.reasons.join(', ').replaceAll('_',' ')}.</p>}
      <p>Unknown legacy history starts at its first supported boundary. Net invested requires known lifetime cash flows; it is not remaining cost basis. All is bounded to the last ten years.</p>
      <ul className="space-y-1">{data.coverage_ranges.slice(0,30).map((c,i)=><li key={i}>{data.holdings.find(h=>h.account_id===c.account_id)?.name??'Holding'} · {c.from} – {c.to} · {c.kind}: {c.reasons.join(', ').replaceAll('_',' ')}</li>)}</ul>

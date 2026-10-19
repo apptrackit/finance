@@ -131,8 +131,9 @@ function holdingSeries(input:Context,a:MetricAccount,dates:string[],cutoffs:Map<
   }
   if(usesMarketPricing(a)&&history&&date<history.from&&q!==0)unsupportedUnits=true
   for(const action of history?.events??[])if(action.date===date&&heldDuringDay&&(!anchor||action.date>anchor.effective_date)){
-   event=true;unsupportedCash=true;invested=null;performance.add('unsupported_event')
-   if(action.type==='split')unsupportedUnits=true
+   event=true
+   // Dividends are outside price returns; never infer cash income from provider events.
+   if(action.type==='split'){unsupportedCash=true;invested=null;performance.add('unsupported_event');unsupportedUnits=true}
   }
   while(valueIndex<values.length&&values[valueIndex].effective_date<=date){valuation=values[valueIndex++];if(valuation.effective_date===date)event=true}
   if(!emit)return undefined

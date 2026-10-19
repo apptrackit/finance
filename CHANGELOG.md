@@ -8,6 +8,7 @@ Intermediate package/UI version bumps are grouped under the next published GitHu
 
 ### Fixed
 
+- Investment price returns explicitly exclude dividends. Dividend events no longer block known purchase costs, gains or history or trigger misleading purchase-review warnings; split and missing-history safeguards remain (#161).
 - Holdings use trailing detail arrows, green/red 30-day price trends, readable source times and supported unrealized return percentages paired with remaining-cost gains. Privacy, missing basis and stale-source coverage remain explicit (#167).
 
 - Investment chart reads isolate provider queues and in-flight work per Worker request, preventing concurrent cross-request I/O failures. Historical FX keeps valid dated rates when a response includes an earlier business-day boundary outside the padded window; missing days remain unavailable (#159).
