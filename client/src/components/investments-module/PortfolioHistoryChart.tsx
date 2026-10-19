@@ -1,4 +1,5 @@
 import {amount} from './overview'
+import {PortfolioHistoryTooltip} from './PortfolioHistoryTooltip'
 import {useId,useState} from 'react'
 import {Area,CartesianGrid,ComposedChart,Line,ResponsiveContainer,Tooltip,XAxis,YAxis} from 'recharts'
 import type {usePortfolioHistory} from '../../hooks/usePortfolioHistory'
@@ -35,7 +36,7 @@ export function PortfolioHistoryChart({history,hidden,currency,currentValue}:{hi
      <YAxis width={64} tick={{fontSize:10}} tickFormatter={n=>Intl.NumberFormat(undefined,{notation:'compact',maximumFractionDigits:1}).format(n)} domain={['auto','auto']}/>
      <Tooltip filterNull={false} content={({active,payload})=>{
       const p=active&&payload?.[0]?.payload as PortfolioHistoryPoint|undefined
-      return p?<div className="rounded-lg border border-border bg-card p-3 text-xs shadow-lg space-y-1"><p>{p.date}{p.provisional?' · provisional':''}</p><p>Portfolio value: {money(p.value)}</p><p>Net invested: {money(p.net_invested)}</p><p>Contributions: {money(p.contribution)} · Withdrawals: {money(p.withdrawal)}</p>{p.price_as_of_oldest&&<p className="text-muted-foreground">Price observations: {p.price_as_of_oldest}{p.price_as_of_latest!==p.price_as_of_oldest?` – ${p.price_as_of_latest}`:''}</p>}{p.fx_as_of_oldest&&<p className="text-muted-foreground">FX observation: {p.fx_as_of_oldest}</p>}</div>:null
+      return p?<PortfolioHistoryTooltip point={p} currency={currency} hidden={hidden}/>:null
      }}/>
      <Area type="linear" dataKey="value" name="Portfolio value" stroke="hsl(var(--primary))" strokeWidth={2} fill={`url(#${id})`} dot={{r:1.5,strokeWidth:0,fill:'hsl(var(--primary))'}} connectNulls={false} isAnimationActive={false}/>
      <Line type="stepAfter" dataKey="net_invested" name="Net invested" stroke="hsl(var(--muted-foreground))" strokeDasharray="5 5" dot={false} connectNulls={false} isAnimationActive={false}/>
