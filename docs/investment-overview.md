@@ -14,7 +14,7 @@ The history chart remains a separate bounded request for the selected calendar r
 
 Values, cash invested, gains, Today and allocation weights come from the shared accounting and FX contracts. Native market unit prices retain small-coin precision and the provider's actual quote currency. Missing conversion rates never become rate 1 or raw foreign totals. Incomplete allocation withholds full-portfolio weights and the proportional bar. Currency allocation groups quote/appraisal currency, not geographical exposure.
 
-Total gain is the known lifetime realized plus unrealized amount. Its Estimated return remains unavailable when complete daily history is absent; the UI does not attach a selected-range percentage to a lifetime gain. The history chart reports its own covered range gain and daily-linked estimate. Today shows eligible market holdings and exposes its coverage; manual appraisals and stale inputs are excluded. See [metrics](investment-metrics.md) and [market inputs](investment-market-data.md).
+Total gain is the known lifetime realized plus unrealized amount. The summary shows **Gain on net invested** as total gain / net invested × 100 only when both amounts are finite and net invested is positive; otherwise it omits the percentage. This simple ratio does not account for cash-flow timing, and withdrawals can make it less useful. It is distinct from Estimated return; the UI does not attach a selected-range percentage to a lifetime gain. The history chart reports its own covered range gain and daily-linked estimate. Today shows eligible market holdings and exposes its coverage; manual appraisals and stale inputs are excluded. See [metrics](investment-metrics.md) and [market inputs](investment-market-data.md).
 
 ## Interaction and retained state
 

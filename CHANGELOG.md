@@ -8,6 +8,8 @@ Intermediate package/UI version bumps are grouped under the next published GitHu
 
 ### Fixed
 
+- Investment summary replaces the unavailable lifetime-return label with a clearly named Gain on net invested percentage when known and positive net invested supports the ratio. Daily-linked chart/Today returns retain their existing method (#171).
+
 - Main/investment-epic integration preserves both existing 017 migration filenames, transaction split exports/history and direct investment trade paths. Split mutations share guarded decimal cash arithmetic so concurrent trades, pending confirmation and fractional payments retain exact balances (#169).
 
 - Investment price returns explicitly exclude dividends. Dividend events no longer block known purchase costs, gains or history or trigger misleading purchase-review warnings; split and missing-history safeguards remain (#161).
