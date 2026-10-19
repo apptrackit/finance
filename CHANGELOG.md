@@ -18,6 +18,10 @@ Intermediate package/UI version bumps are grouped under the next published GitHu
 
 - Dashboard uses a shared period picker, a responsive balance/activity summary, compact transaction filters, and a combined review queue with explicit confirmation actions. Transaction rows show neutral transfers, daily cash-flow totals, and native/converted amounts; privacy masking and loading states follow the new layout.
 
+### Fixed
+
+- Buttons, tabs, switches, menus, selects, checkboxes and other enabled click targets show a pointer cursor again across the app; Tailwind CSS 4 had reset buttons to the default arrow. Disabled controls keep the default cursor. [#157](https://github.com/apptrackit/finance/issues/157)
+
 ## v3.3 — 2026-10-15
 
 [GitHub release](https://github.com/apptrackit/finance/releases/tag/v3.3) · [Compare v3.2…v3.3](https://github.com/apptrackit/finance/compare/v3.2...v3.3)
