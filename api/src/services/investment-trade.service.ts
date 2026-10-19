@@ -1,9 +1,10 @@
 import { valuationAt } from '../../../shared/manual-valuation'
 import type { ManualValuation } from '../../../shared/manual-valuation'
 import { AppError } from '../errors/codes'
+import { addDecimal, recoverLedgerResidue } from '../../../shared/decimal-balance'
 import { validLocalDate } from '../../../shared/holding'
 import type { PositionAnchor } from '../../../shared/holding'
-import { addExact as addExactValue, roundSettlement, settlementDetails, unitInteger as unitIntegerValue, tradeCurrencies } from '../../../shared/investment-trade'
+import { roundSettlement, settlementDetails, unitInteger as unitIntegerValue, tradeCurrencies } from '../../../shared/investment-trade'
 import type { TradeInput } from '../../../shared/investment-trade'
 import { InvestmentTradeSchema } from '../validators/investment-trade.validator'
 import type { Account } from '../models/Account'
@@ -17,8 +18,8 @@ const signed = (t: InvestmentTransaction) => t.type === 'buy' ? t.quantity : -t.
 const unitInteger = (value: number) => {
   try { return unitIntegerValue(value) } catch (e) { throw AppError.validation((e as Error).message) }
 }
-const addExact = (a: number,b: number) => {
-  try { return addExactValue(a,b) } catch (e) { throw AppError.validation((e as Error).message) }
+const addCash = (a: number,b: number) => {
+  try { return addDecimal(a,b) } catch (e) { throw AppError.validation((e as Error).message) }
 }
 export class InvestmentTradeService {
   constructor(private repo: InvestmentTradeRepository) {}
@@ -45,7 +46,7 @@ export class InvestmentTradeService {
     return a
   }
   private timeline(state: TradeState, account: Account, before: InvestmentTransaction | undefined,
-    after: InvestmentTransaction | undefined, today: string): { balance: number; baseline?: PositionAnchor } {
+    after: InvestmentTransaction | undefined, today: string): { balance: number; baseline?: PositionAnchor; recovery?: {account_id:string;before:number;value:number;evidence_count:number} } {
     if (account.asset_type === 'manual') throw AppError.validation('Use the manual ownership timeline')
     const oldEvents = state.trades.filter(t => t.account_id === account.id)
     const savedAnchor = account.holding_position?.anchor
@@ -60,8 +61,19 @@ export class InvestmentTradeService {
         throw reconcile('This trade crosses the saved position boundary. Confirm a dated opening before this trade in Accounts before changing its unit impact.')
       }
     }
+    const storedTicks = (value: number, evidence: InvestmentTransaction[]) => {
+      try { return {ticks:unitIntegerValue(value)} } catch {
+        const recovery = recoverLedgerResidue(value,evidence.map(signed),1e-12)
+        if (!recovery) return {ticks:unitInteger(value)}
+        return {ticks:unitInteger(recovery.value),recovery:{account_id:account.id,before:value,...recovery}}
+      }
+    }
+    const prefix = oldEvents.filter(t => baseline.kind === 'opening' ? t.date <= baseline.effective_date
+      : (t.effective_order ?? 0) <= (baseline.trade_order_boundary ?? baseline.trade_rowid_boundary))
+    const baseTicks = storedTicks(baseline.balance,prefix).ticks
+    const current = storedTicks(account.balance,oldEvents)
     const replay = (events: InvestmentTransaction[]) => {
-      let quantity = unitInteger(baseline.balance)
+      let quantity = baseTicks
       for (const t of events.filter(included).sort((a,b) => a.date.localeCompare(b.date) || (a.effective_order ?? 0)-(b.effective_order ?? 0) || a.id.localeCompare(b.id))) {
         if (!Number.isSafeInteger(t.effective_order) || (t.effective_order ?? 0)<1) throw reconcile('This legacy trade has ambiguous event order; reconcile its history before changing the position.')
         if (t.date < baseline.effective_date || t.date > today) throw reconcile('Resolve legacy activity outside the supported position dates before recording this trade.')
@@ -70,13 +82,13 @@ export class InvestmentTradeService {
       }
       return quantity
     }
-    if (replay(oldEvents) !== unitInteger(account.balance)) throw reconcile('Current units and supported activity do not reconcile. Confirm the opening or a current correction in Accounts first.')
+    if (replay(oldEvents) !== current.ticks) throw reconcile('Current units and supported activity do not reconcile. Confirm the opening or a current correction in Accounts first.')
     const next = oldEvents.filter(t => t.id !== before?.id)
     if (after?.account_id === account.id) next.push(after)
     const quantity = replay(next)
     const balance = Number(quantity)/1e12
     if (unitInteger(balance) !== quantity) throw AppError.validation('Result exceeds supported quantity precision')
-    return { balance, ...(!savedAnchor ? { baseline } : {}) }
+    return { balance, ...(!savedAnchor ? { baseline } : {}), ...(current.recovery ? {recovery:current.recovery} : {}) }
   }
   private manualTimeline(op: TradeOperation, account: Account, today: string) {
     const before = op.before?.trade, after = op.after?.trade
@@ -189,10 +201,17 @@ export class InvestmentTradeService {
         if (a.asset_type === 'manual') { this.manualTimeline(op,a,today); continue }
         const position = this.timeline(state,a,existing,trade,today)
         op.balances.set(a.id,position.balance)
+        if (position.recovery) op.decimalRecoveries = [...(op.decimalRecoveries ?? []),position.recovery]
         if (position.baseline) op.anchors.push({ accountId:a.id,anchor:position.baseline })
       }
-      if (before) op.balances.set(before.cash.account_id,addExact(this.account(state,before.cash.account_id,false).balance,-before.cash.amount))
-      op.balances.set(cash.id,addExact(op.balances.get(cash.id)??cash.balance,cashRow.amount))
+      const cashBases = new Map<string,number>()
+      for (const a of new Map([cash,...(before?[this.account(state,before.cash.account_id,false)]:[])].map(a=>[a.id,a])).values()) {
+        const recovery = await this.repo.cashRecovery(a)
+        cashBases.set(a.id,recovery?.value ?? a.balance)
+        if(recovery) op.decimalRecoveries = [...(op.decimalRecoveries??[]),{account_id:a.id,before:a.balance,...recovery}]
+      }
+      if (before) op.balances.set(before.cash.account_id,addCash(cashBases.get(before.cash.account_id)!,-before.cash.amount))
+      op.balances.set(cash.id,addCash(op.balances.get(cash.id)??cashBases.get(cash.id)!,cashRow.amount))
       if (preview) {
         const balance=op.balances.get(holding.id)!
         const baseline=op.anchors.find(a=>a.accountId===holding.id)?.anchor
@@ -229,10 +248,12 @@ export class InvestmentTradeService {
       const holding = this.account(state,trade.account_id,true)
       const cash = this.account(state,before.cash.account_id,false)
       const position = holding.asset_type === 'manual' ? null : this.timeline(state,holding,trade,undefined,this.today(clientDate))
+      const cashRecovery = await this.repo.cashRecovery(cash)
       const op: TradeOperation = { key:crypto.randomUUID(),hash:await this.hash(['delete',trade.id]),now:Date.now(),state,
         result:{trade_id:trade.id,cash_transaction_id:before.cash.id,type:trade.type,deleted:true},before,
-        balances:new Map([[holding.id,position?.balance??holding.balance],[cash.id,addExact(cash.balance,-before.cash.amount)]]),
-        anchors:position?.baseline?[{accountId:holding.id,anchor:position.baseline}]:[] }
+        balances:new Map([[holding.id,position?.balance??holding.balance],[cash.id,addCash(cashRecovery?.value??cash.balance,-before.cash.amount)]]),
+        anchors:position?.baseline?[{accountId:holding.id,anchor:position.baseline}]:[],
+        decimalRecoveries:[...(cashRecovery?[{account_id:cash.id,before:cash.balance,...cashRecovery}]:[]),...(position?.recovery?[position.recovery]:[])] }
       if (holding.asset_type === 'manual') this.manualTimeline(op,holding,this.today(clientDate))
       if (await this.repo.commit(op)) return
     }

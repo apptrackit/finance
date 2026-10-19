@@ -66,7 +66,7 @@ The investment rework's [versioned accounting contract](docs/investment-accounti
 
 The epic’s [holding model and account setup](docs/investment-holdings.md) implement explicit ETF/category/pricing selection, dated openings and safe current-position corrections. Migration 018 preserves existing balances and records while marking incomplete history. Cash-linked trades and dated manual values are implemented in their own epic steps; shared metrics and historical series consume that explicit opening coverage.
 
-Ordinary cash writes, linked cash-transfer edits/deletions and account adjustments use guarded atomic batches with their balance changes and audit. Cash edits apply relative deltas so concurrent trades are preserved; stale account correction drafts retain their original saved balance/version.
+Ordinary cash writes, pending confirmation, linked cash-transfer edits/deletions and account adjustments use guarded atomic batches with decimal balance arithmetic and audit. Account snapshot guards and bounded retries preserve concurrent trades; stale account correction drafts retain their original saved balance/version. [Decimal balance recovery](docs/decimal-balances.md) handles narrowly verified old arithmetic residue during a successful mutation without rounding genuine fractional cash or crypto units.
 
 ### Recurring schedules
 

@@ -6,6 +6,7 @@ import type { PositionAnchor } from '../../../shared/holding'
 import { AccountRepository } from './account.repository'
 import { TransactionRepository } from './transaction.repository'
 import { AppError } from '../errors/codes'
+import { recoverCashBalance } from './decimal-balance.repository'
 
 export type TradeState = { revision: number; accounts: Account[]; trades: InvestmentTransaction[]; valuations: ManualValuation[] }
 export type TradeResult = { trade_id: string; cash_transaction_id: string; type: 'buy' | 'sell'; deleted?: boolean }
@@ -14,10 +15,12 @@ export type TradeOperation = {
   before?: { trade: InvestmentTransaction; cash: Transaction }
   after?: { trade: InvestmentTransaction; cash: Transaction }
   removeValuations?: string[]; addValuations?: ManualValuation[]
+  decimalRecoveries?: {account_id:string;before:number;value:number;evidence_count:number}[]
   balances: Map<string, number>; anchors: { accountId: string; anchor: PositionAnchor }[]
 }
 export class InvestmentTradeRepository {
   constructor(private db: D1Database) {}
+  cashRecovery(account: Account) { return recoverCashBalance(this.db, account.id, account.balance) }
   async revision() { return this.db.prepare('SELECT revision FROM financial_data_revision WHERE id = 1').first<number>('revision') }
   async hasCapacity(now: number) {
     return (await this.db.prepare('SELECT COUNT(*) AS count FROM investment_trade_operations WHERE expires_at > ?').bind(now).first<number>('count'))! < 1000
@@ -88,6 +91,8 @@ export class InvestmentTradeRepository {
       statements.push(this.db.prepare(`DELETE FROM investment_transactions WHERE id = ? AND ${guard}`).bind(op.before.trade.id,token))
       statements.push(this.db.prepare(`DELETE FROM transactions WHERE id = ? AND ${guard}`).bind(op.before.cash.id,token))
     }
+    for (const recovery of op.decimalRecoveries ?? []) statements.push(this.db.prepare(`INSERT INTO audit_log(id,action,entity,entity_id,details,created_at)
+      SELECT ?,'UPDATE','account',?,?,? WHERE ${guard}`).bind(crypto.randomUUID(),recovery.account_id,JSON.stringify({decimal_recovery:recovery}),op.now,token))
     const action = !op.before ? 'CREATE' : !op.after ? 'DELETE' : 'UPDATE'
     const snapshot = (pair: TradeOperation['before']) => pair ? {
       cash_account_id:pair.cash.account_id, investment_account_id:pair.trade.account_id,
