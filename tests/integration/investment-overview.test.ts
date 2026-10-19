@@ -35,3 +35,16 @@ it('backdated appraisal correction changes the next snapshot and preserves nativ
  expect(after.overview!.trends.holding.points.at(-1)?.value).toBe(120)
  expect(after.accounts[0].balance).toBe(2)
 })
+
+it('loads three bounded reporting ledgers atomically and preserves the default two-currency contract',async()=>{
+ const before=await facts(),r=await f.request('/investment-metrics?overview=1&currencies=HUF,USD,EUR')
+ expect(r.status,await r.clone().text()).toBe(200)
+ const data=await r.json() as InvestmentMetricsSnapshot
+ expect(Object.keys(data.by_currency)).toEqual(['HUF','USD','EUR'])
+ expect(data.by_currency.EUR.holdings[0]).toMatchObject({value:220,remaining_basis:200,unrealized_gain:20})
+ const defaults=await (await f.request('/investment-metrics')).json() as InvestmentMetricsSnapshot
+ expect(Object.keys(defaults.by_currency)).toEqual(['HUF','USD'])
+ expect((await f.request('/investment-metrics?currencies=HUF,USD,EUR,GBP')).status).toBe(400)
+ expect((await f.request('/investment-metrics?currencies=HUF,USD,INVALID')).status).toBe(400)
+ expect(await facts()).toEqual(before)
+})

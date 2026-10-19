@@ -22,6 +22,8 @@ Intermediate package/UI version bumps are grouped under the next published GitHu
 
 ### Added
 
+- EUR reporting alongside HUF/USD throughout Investments, including history, holdings, summaries, details and trade previews, with acquisition-date cost conversion and coherent three-currency reads (#165).
+
 - Combined portfolio value and Net invested history with calendar ranges, dated units/FX/appraisals, sold/archived holdings, range gain and daily-linked Estimated return. Bounded revision-guarded reads preserve gaps and events; unknown legacy history stays unavailable. No new migration.
 
 - Shared derived investment accounting with remaining weighted-average basis, exact net invested, realized/unrealized gains, acquisition-date reporting FX and nonmutating trade previews. Market Today exposes omitted holdings; lifetime percentages require complete daily history; the portfolio history chart reports covered range estimates. No schema migration is added.
