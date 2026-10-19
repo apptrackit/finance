@@ -21,7 +21,7 @@ export function HoldingsList(props:Props) {
  const sorted=(field:OverviewView['sort'])=>view.sort===field?view.direction==='desc'?'descending' as const:'ascending' as const:undefined
  return <section aria-labelledby="holdings-title" className="min-w-0 overflow-hidden rounded-2xl border border-border bg-card" aria-busy={props.refreshing}>
   <div className="flex flex-wrap items-center gap-3 border-b border-border px-4 py-3 sm:px-5">
-   <h2 id="holdings-title" className="text-[15px] font-semibold">Holdings</h2><p className="flex-1 text-xs text-muted-foreground">{rows.length} of {positions.length} holdings</p>
+   <h2 id="holdings-title" className="text-[15px] font-semibold">Holdings</h2><p className="flex-1 text-xs text-muted-foreground">{rows.length} of {positions.length} holdings · Returns exclude dividends</p>
    <Link to="/accounts" state={{addAccount:true,investment:true}} className="inline-flex min-h-10 items-center gap-1 text-xs font-medium text-primary"><Plus className="h-3.5 w-3.5"/>Add holding</Link>
    <div role="group" aria-label="Holding categories" className="flex w-full gap-1.5 overflow-x-auto pb-1 @min-[900px]:w-auto @min-[900px]:pb-0">
     {categories.filter(([key])=>key!=='other'||positions.some(p=>category(p)==='other')).map(([key,label])=><button key={key} type="button" aria-pressed={view.filter===key} onClick={()=>update({filter:key})} className={`inline-flex min-h-10 shrink-0 items-center gap-2 rounded-lg border px-3 text-xs ${view.filter===key?'border-primary/40 bg-primary/10 font-medium text-foreground':'border-border text-muted-foreground hover:bg-secondary'}`}>{label}{' '}<span className="tabular-nums text-muted-foreground">{key==='all'?positions.length:positions.filter(p=>category(p)===key).length}</span></button>)}

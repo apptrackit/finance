@@ -99,7 +99,7 @@ export class InvestmentMetricsReader {
       const holdings=accounts.map(account=>{
         const history=account.symbol?histories[symbolOf(account)??'']:undefined
         const anchor=effectivePositionAnchor(account)
-        const events=history?.events.some(e=>!anchor || e.date>anchor.effective_date)??false
+        const events=history?.events.some(e=>e.type==='split' && (!anchor || e.date>anchor.effective_date))??false
         const metric=holdingMetrics(account,trades.filter(t=>t.account_id===account.id),currency,quotes[symbolOf(account)??''],currentConvert,datedConvert,date,events)
         const unverifiedActions=!history || history.status!=='ok' || !anchor || history.from>anchor.effective_date || history.to<date
         if (usesMarketPricing(account) && (account.balance!==0 || trades.some(t=>t.account_id===account.id)) && unverifiedActions) {
@@ -152,7 +152,7 @@ export class InvestmentMetricsReader {
       if(h.value===null) reasons.push('missing_current_value')
       if((units!==0 || a.balance!==0) && (!q || q.status==='stale' || q.status==='missing' || q.status==='unsupported')) reasons.push('stale_or_missing_quote')
       if(history?.status==='stale') reasons.push('stale_history')
-      if(history?.events.some(e=>e.date>=prior)) reasons.push('unsupported_event')
+      if(history?.events.some(e=>e.type==='split' && e.date>=prior)) reasons.push('unsupported_event')
       let c=0,w=0
       for(const t of today) {
         const cash=t.cash_amount!=null&&t.cash_currency?convert(t.cash_amount,t.cash_currency,currency,date):null
@@ -166,7 +166,7 @@ export class InvestmentMetricsReader {
     const result=count?estimatedReturn(start,[{value:end,contribution,withdrawal}]):{gain:null,percent:null}
     return {gain:result.gain,estimated_return_percent:result.percent,currency,date,prior_date:prior,covered_holdings:count,total_holdings:accounts.length,excluded,
       method:'local_calendar_day_prior_close_with_dated_fx; contributions_at_start_withdrawals_at_end',
-      boundary:'Last available completed daily close at prior calendar date; weekend carry only. Intraday return is an estimate.'}
+      boundary:'Last available completed daily close at prior calendar date; weekend carry only. Intraday return is an estimate. Excludes dividends.'}
   }
 }
 export function createInvestmentMetricsReader(db:D1Database) {

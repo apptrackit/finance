@@ -160,7 +160,7 @@ export function portfolioMetrics(holdings: HoldingMetrics[],partial = false) {
     coverage:{holdings_total:holdings.length,value_covered:holdings.filter(h=>h.value!==null).length,
       invested_covered:holdings.filter(h=>h.net_invested!==null).length,realized_covered:holdings.filter(h=>h.realized_gain!==null).length,unrealized_covered:holdings.filter(h=>h.unrealized_gain!==null).length,
       cost_covered:holdings.filter(h=>h.remaining_basis!==null).length,gain_covered:holdings.filter(h=>h.total_gain!==null).length,
-      method:'moving_weighted_average',return_method:'daily_linked_estimate',return_reason:'daily_history_required'} }
+      dividends:'excluded' as const,method:'moving_weighted_average',return_method:'daily_linked_estimate',return_reason:'daily_history_required'} }
 }
 export type MarketTodayMetrics = {
   gain:number|null;estimated_return_percent:number|null;currency:string;date:string;prior_date:string

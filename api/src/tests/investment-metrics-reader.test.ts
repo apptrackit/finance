@@ -64,3 +64,23 @@ it('withholds old-opening cost when the fetched corporate-action window cannot c
  expect(h.remaining_basis).toBeNull();expect(h.average_cost).toBeNull();expect(h.native.remaining_basis).toBeNull()
  expect(h.coverage.cost).toContain('unverified_corporate_actions')
 })
+
+it.each(['dividend','split'] as const)('distinguishes %s events from missing purchase facts in full and partial reads',async type=>{
+ const a=account();Object.assign(a.holding_position!.anchor!,{cost_amount:20,cost_currency:'USD'})
+ const r=reader([a]);r.market.history=vi.fn(async()=>({...history,events:[{date:'2026-10-16',type,...(type==='split'?{ratio:2}:{})}],requires_event_review:true}))
+ for(const partial of [false,true]) {
+  const result=await r.reader.read({currencies:['USD'],date:'2026-10-16',partial})
+  const h=result.by_currency.USD.holdings[0],today=result.by_currency.USD.market_today
+  expect(result.by_currency.USD.coverage.dividends).toBe('excluded')
+  if(type==='dividend') {
+   expect(h).toMatchObject({quantity:2,value:22,remaining_basis:20,unrealized_gain:2,native:{remaining_basis:20}})
+   expect(h.coverage.cost).not.toContain('unsupported_event')
+   expect(today).toMatchObject({gain:2,covered_holdings:1,excluded:[]})
+  } else {
+   expect(h.remaining_basis).toBeNull();expect(h.coverage.cost).toContain('unsupported_event')
+   expect(today.excluded[0].reasons).toContain('unsupported_event')
+  }
+  if(type==='dividend')expect(today.estimated_return_percent).toBeCloseTo(10)
+  expect(today.boundary).toContain('Excludes dividends')
+ }
+})

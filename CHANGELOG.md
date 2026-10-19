@@ -8,6 +8,8 @@ Intermediate package/UI version bumps are grouped under the next published GitHu
 
 ### Fixed
 
+- Investment price returns explicitly exclude dividends. Dividend events no longer block known purchase costs, gains or history or trigger misleading purchase-review warnings; split and missing-history safeguards remain (#161).
+
 - Investment chart reads isolate provider queues and in-flight work per Worker request, preventing concurrent cross-request I/O failures. Historical FX keeps valid dated rates when a response includes an earlier business-day boundary outside the padded window; missing days remain unavailable (#159).
 
 - Confirm/correct missing payment details on standalone historical investments without changing units or cash; route legacy edits to the dedicated form instead of Income/Expense. Distinguish missing historical FX from unsaved purchase facts and retry rates rather than asking to edit a saved trade again (#150).

@@ -109,7 +109,7 @@ export function InvestmentDetailModal({
           <p className={`mt-2 text-sm tabular-nums ${tone(p.gainLoss, hidden)}`}>
             {signedAmount(p.gainLoss, reportingCurrency, hidden)}{' '}
             <span className="text-xs font-normal text-muted-foreground">
-              total gain ·{' '}
+              total gain · excludes dividends ·{' '}
               {hidden
                 ? '••••'
                 : p.gainLossPercent === null
