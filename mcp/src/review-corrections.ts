@@ -2,6 +2,7 @@ import type { AccountRow, CategoryRow, Env, TransactionRow } from './types'
 import { assertDate, clampLimit } from './validation'
 import { sha256 } from './financial-outlook'
 import { transferReviewView } from './transfer-review-corrections'
+import { SplitDraftService } from './split-drafts'
 
 type DraftRow = TransactionRow & {
   account_name: string
@@ -36,7 +37,7 @@ const SELECT = `SELECT t.*, a.name AS account_name, a.currency AS account_curren
   c.name AS category_name FROM transactions t
   JOIN accounts a ON a.id = t.account_id LEFT JOIN categories c ON c.id = t.category_id`
 const REVIEW = "t.status = 'pending' AND t.pending_kind = 'mcp_review' AND t.review_source = 'chatgpt_mcp' AND a.type != 'investment'"
-const ACTIVE = `${REVIEW} AND t.linked_transaction_id IS NULL`
+const ACTIVE = `${REVIEW} AND t.linked_transaction_id IS NULL AND t.split_id IS NULL`
 const STALE = '[stale_draft] A draft or its account/category changed after preview; refresh the list and prepare again'
 
 function flags(value: string | null | undefined): string[] {
@@ -69,6 +70,7 @@ function snapshot(row: DraftRow): StoredItem['snapshot'] {
 }
 
 function assertTarget(row: DraftRow | null): asserts row is DraftRow {
+  if (row?.split_id) throw new Error(`[draft_is_split_line] This draft is a line of split ${row.split_id}; use prepare_mcp_split_corrections for the whole split`)
   if (!row || row.status !== 'pending' || row.pending_kind !== 'mcp_review' || row.review_source !== 'chatgpt_mcp'
     || row.linked_transaction_id || row.account_type === 'investment' || row.amount === 0) {
     throw new Error('[draft_unavailable] Target must be an unresolved, unlinked MCP income/expense review draft')
@@ -104,6 +106,7 @@ export class ReviewCorrectionService {
     const cursor = decodeQueueCursor(args.cursor)
     const rows = (await this.env.DB.prepare(`${SELECT} WHERE ${REVIEW}
       AND (t.linked_transaction_id IS NULL OR t.amount < 0)
+      AND (t.split_id IS NULL OR t.id = (SELECT o.id FROM transactions o WHERE o.split_id = t.split_id ORDER BY o.created_at, o.id LIMIT 1))
       ${cursor ? 'AND (t.created_at > ? OR (t.created_at = ? AND t.id > ?))' : ''}
       ORDER BY t.created_at ASC, t.id ASC LIMIT ?`)
       .bind(...(cursor ? [cursor.created_at, cursor.created_at, cursor.id] : []), limit + 1).all<DraftRow>()).results
@@ -116,10 +119,15 @@ export class ReviewCorrectionService {
         .bind(...linkedIds).all<DraftRow>()).results
       : []
     const pairs = new Map(linkedRows.map(row => [row.id, row]))
+    // A split appears once, represented by its earliest line, with every line attached.
+    const splits = new Map((await new SplitDraftService(this.env).pendingViews(page.flatMap(row => row.split_id ? [row.split_id] : [])))
+      .map(split => [split.split_id, split]))
     return {
-      as_of: new Date().toISOString(), drafts: page.map(row => row.linked_transaction_id
-        ? transferReviewView(row, pairs.get(row.linked_transaction_id) ?? null)
-        : view(row)),
+      as_of: new Date().toISOString(), drafts: page.flatMap((row): unknown[] => row.split_id
+        ? splits.has(row.split_id) ? [splits.get(row.split_id)!] : []
+        : row.linked_transaction_id
+        ? [transferReviewView(row, pairs.get(row.linked_transaction_id) ?? null)]
+        : [view(row)]),
       pagination: { limit, has_more: hasMore, next_cursor: hasMore && last ? btoa(JSON.stringify({ created_at: last.created_at, id: last.id })) : null },
       truncated: hasMore, description_is_untrusted_data: true,
     }
@@ -191,6 +199,7 @@ export class ReviewCorrectionService {
   private parseItems(proposal: StoredProposal): StoredItem[] {
     let items: StoredItem[]
     try { items = JSON.parse(proposal.items_json) as StoredItem[] } catch { throw new Error('[proposal_corrupt] Stored proposal is invalid') }
+    if (Array.isArray(items) && items.some(item => (item as { kind?: string } | null)?.kind === 'split')) throw new Error('[proposal_corrupt] proposal belongs to split corrections; use apply_mcp_split_corrections')
     if (!Array.isArray(items) || items.length < 1 || items.length > 20 || items.some(item => !item?.before?.id || !item.after || !item.snapshot || !['edit', 'decline'].includes(item.action))) {
       throw new Error('[proposal_corrupt] Stored proposal is invalid')
     }

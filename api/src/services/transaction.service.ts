@@ -25,6 +25,12 @@ export class TransactionService {
     }
   }
 
+  private assertNotSplitLine(transaction: Transaction): void {
+    if (transaction.split_id) {
+      throw new AppError('SPLIT_LINE_EDIT', 'This transaction is part of a split. Edit or delete the whole split instead.', 409)
+    }
+  }
+
   private todayString(today?: string): string {
     return today || new Date().toISOString().slice(0, 10)
   }
@@ -111,6 +117,8 @@ export class TransactionService {
     if (!oldTx) {
       throw new Error('Transaction not found')
     }
+
+    this.assertNotSplitLine(oldTx)
 
     if ((oldTx.status || 'posted') === 'cancelled') {
       throw new Error('Cancelled transaction cannot be edited')
@@ -323,6 +331,7 @@ export class TransactionService {
     const tx = await this.transactionRepo.findById(id)
 
     if (tx) {
+      this.assertNotSplitLine(tx)
       const investmentLink = await this.investmentTransactionRepo.findByCashTransactionId(id)
       if (investmentLink && investmentLink.id !== tx.linked_transaction_id) {
         throw new AppError('INVESTMENT_TRANSFER_CONFLICT', 'Investment transfer links are inconsistent; repair the pair before deleting.', 409)
@@ -389,6 +398,8 @@ export class TransactionService {
       throw new Error('Transaction not found')
     }
 
+    this.assertNotSplitLine(tx)
+
     if (tx.linked_transaction_id) return this.resolveTransferReview(tx, 'confirm', today)
 
     if ((tx.status || 'posted') === 'posted') {
@@ -428,6 +439,8 @@ export class TransactionService {
     if (!tx) {
       throw new Error('Transaction not found')
     }
+
+    this.assertNotSplitLine(tx)
 
     if (tx.linked_transaction_id) return this.resolveTransferReview(tx, 'decline')
 

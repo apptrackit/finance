@@ -126,6 +126,22 @@
     @apply border-border;
   }
 
+  /* Tailwind 4's preflight gives buttons the default cursor. Restore the
+     pointer for enabled click targets; disabled ones keep the default. */
+  button:not(:disabled),
+  [role='button']:not([aria-disabled='true']),
+  select:not(:disabled),
+  summary,
+  input:is([type='checkbox'], [type='radio']):not(:disabled) {
+    cursor: pointer;
+  }
+
+  /* Kept separate so a browser rejecting this vendor pseudo-element cannot drop
+     the rule above. */
+  input[type='date']:not(:disabled)::-webkit-calendar-picker-indicator {
+    cursor: pointer;
+  }
+
   /* Recharts makes each SVG focusable for keyboard navigation. The browser's
      default SVG focus ring appears as a distracting white/blue rectangle after
      a chart is clicked, so chart interaction keeps its tooltip/cursor instead. */
@@ -273,6 +289,8 @@ button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
 :focus-visible { outline:2px solid hsl(var(--primary)); outline-offset:3px; }
 .finance-search-input:focus-visible { outline:none; }
 .finance-transfer-inline-input:focus-visible { outline:none; }
+.finance-amount-input:focus-visible { outline:none; }
+.finance-amount-field:has(.finance-amount-input:focus-visible) { outline:2px solid hsl(var(--primary)); outline-offset:3px; }
 .finance-transfer-form { color-scheme:dark; }
 :root[data-color-mode='light'] .finance-transfer-form { color-scheme:light; }
 @media (min-width: 1024px) {

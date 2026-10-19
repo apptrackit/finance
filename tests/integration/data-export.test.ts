@@ -41,7 +41,7 @@ it('exports every durable table and transaction state with stored links and fina
   expect(isDataExport(exported)).toBe(true)
   expect(exported).toMatchObject({ exportVersion: 1, schemaVersion: '021-market-data-cache', manifest: { restoreSupported: false } })
   expect(new Date(exported.exportedAt).toISOString()).toBe(exported.exportedAt)
-  expect(exported.migrations).toHaveLength(21)
+  expect(exported.migrations).toHaveLength(22)
   for (const table of EXPORT_TABLES) {
     const stored = (await f.db.prepare(`SELECT * FROM ${table} ORDER BY ${table === 'app_settings' ? 'key' : 'id'}`).all()).results
     expect(exported.data[table], table).toEqual(stored)

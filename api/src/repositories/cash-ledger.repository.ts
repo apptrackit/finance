@@ -24,6 +24,7 @@ const columns = [
   'cancelled_at',
   'created_at',
   'updated_at',
+  'split_id',
 ] as const
 function values(t: Transaction, now: number): Value[] {
   return [
@@ -44,13 +45,25 @@ function values(t: Transaction, now: number): Value[] {
     t.cancelled_at ?? null,
     t.created_at ?? now,
     t.updated_at ?? now,
+    t.split_id ?? null,
   ]
+}
+type CashSplit = {
+  id: string
+  description: string | null
+  created_at: number
+  updated_at: number | null
 }
 export type CashMutation = {
   before: Transaction[]
   after: Transaction[]
   accounts: Account[]
   now: number
+  split?: {
+    before: CashSplit | null
+    after: CashSplit | null
+    expected_balance?: { account_id: string; balance: number }
+  }
   correction?: { before: Account; after: Account; revision: number }
   schedule?: RecurringSchedule
   transfer_pair_id?: string
@@ -141,6 +154,46 @@ export class CashLedgerRepository {
       expected[16] = t.updated_at ?? null
       bindings.push(...expected)
     }
+    if (op.split) {
+      const split = op.split.before ?? op.split.after
+      if (
+        !split ||
+        (op.split.before &&
+          op.split.after &&
+          op.split.before.id !== op.split.after.id)
+      )
+        throw AppError.validation('Split metadata must identify one payment')
+      if (op.split.before) {
+        const previous = op.split.before
+        conditions.push(
+          'EXISTS (SELECT 1 FROM transaction_splits WHERE id=? AND description IS ? AND created_at IS ? AND updated_at IS ?)',
+        )
+        bindings.push(
+          previous.id,
+          previous.description,
+          previous.created_at,
+          previous.updated_at,
+        )
+        conditions.push(
+          '(SELECT COUNT(*) FROM transactions WHERE split_id=?)=?',
+        )
+        bindings.push(previous.id, op.before.length)
+      } else {
+        conditions.push(
+          'NOT EXISTS (SELECT 1 FROM transaction_splits WHERE id=?)',
+        )
+        bindings.push(split.id)
+      }
+      if (op.split.expected_balance) {
+        conditions.push(
+          'EXISTS (SELECT 1 FROM accounts WHERE id=? AND balance IS ?)',
+        )
+        bindings.push(
+          op.split.expected_balance.account_id,
+          op.split.expected_balance.balance,
+        )
+      }
+    }
     // New row IDs are protected by their primary key. A duplicate insert aborts
     // the complete batch, including this claim and all balance changes.
     if (op.correction) {
@@ -227,8 +280,17 @@ export class CashLedgerRepository {
       )
       bindings.push(recoveryRevision)
     }
-    const entity = op.correction ? 'account' : 'transaction',
-      entityId = op.correction?.before.id ?? op.after[0]?.id ?? op.before[0]?.id
+    const entity = op.split
+        ? 'transaction_split'
+        : op.correction
+          ? 'account'
+          : 'transaction',
+      entityId =
+        op.split?.before?.id ??
+        op.split?.after?.id ??
+        op.correction?.before.id ??
+        op.after[0]?.id ??
+        op.before[0]?.id
     if (!entityId || !accounts.length)
       throw AppError.validation(
         'A cash mutation requires its account and ledger facts',
@@ -253,6 +315,7 @@ export class CashLedgerRepository {
             before: op.before,
             after: op.after,
             account: op.correction,
+            split: op.split,
             schedule_id: op.schedule?.id,
             transfer_pair_id: op.transfer_pair_id,
             balance_changes: balanceChanges,
@@ -302,6 +365,38 @@ export class CashLedgerRepository {
           ),
       )
     }
+    // Detach old members before deletion so split_cleanup cannot delete the
+    // shared row while its replacement/confirmation is still being written.
+    if (op.split?.before)
+      statements.push(
+        this.db
+          .prepare(
+            `UPDATE transactions SET split_id=NULL WHERE split_id=? AND ${guard}`,
+          )
+          .bind(op.split.before.id, claim),
+      )
+    if (op.split?.after) {
+      const next = op.split.after
+      statements.push(
+        op.split.before
+          ? this.db
+              .prepare(
+                `UPDATE transaction_splits SET description=?,updated_at=? WHERE id=? AND ${guard}`,
+              )
+              .bind(next.description, next.updated_at, next.id, claim)
+          : this.db
+              .prepare(
+                `INSERT INTO transaction_splits(id,description,created_at,updated_at) SELECT ?,?,?,? WHERE ${guard}`,
+              )
+              .bind(
+                next.id,
+                next.description,
+                next.created_at,
+                next.updated_at,
+                claim,
+              ),
+      )
+    }
     for (const t of op.before.filter(
       (t) => !op.after.some((a) => a.id === t.id),
     ))
@@ -331,6 +426,12 @@ export class CashLedgerRepository {
             .bind(...values(t, op.now), claim),
         )
     }
+    if (op.split?.before && !op.split.after)
+      statements.push(
+        this.db
+          .prepare(`DELETE FROM transaction_splits WHERE id=? AND ${guard}`)
+          .bind(op.split.before.id, claim),
+      )
     const otherIds = new Set([...op.before, ...op.after].map((t) => t.id))
     if (entity === 'transaction') otherIds.delete(entityId)
     for (const id of otherIds) {

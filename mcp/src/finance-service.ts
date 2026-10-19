@@ -9,6 +9,7 @@ import { FinancialOutlookSnapshotRow, parseFinancialOutlookInput, parseSnapshot,
 import { summarizeForecastHistory, type ForecastTransaction } from './forecast-evidence'
 import { ReviewCorrectionService } from './review-corrections'
 import { TransferDraftService } from './transfer-drafts'
+import { SplitDraftService } from './split-drafts'
 import { TransferReviewCorrectionService } from './transfer-review-corrections'
 
 type Rates = { values: Record<string, number>; available: boolean }
@@ -90,6 +91,10 @@ export class FinanceService {
   createTransferDrafts(args: Record<string, unknown>) { return new TransferDraftService(this.env).create(args) }
   prepareTransferCorrections(args: Record<string, unknown>) { return new TransferReviewCorrectionService(this.env).prepare(args) }
   applyTransferCorrections(args: Record<string, unknown>) { return new TransferReviewCorrectionService(this.env).apply(args) }
+  prepareSplitDrafts(args: Record<string, unknown>) { return new SplitDraftService(this.env).prepare(args) }
+  createSplitDrafts(args: Record<string, unknown>) { return new SplitDraftService(this.env).create(args) }
+  prepareSplitCorrections(args: Record<string, unknown>) { return new SplitDraftService(this.env).prepareCorrections(args) }
+  applySplitCorrections(args: Record<string, unknown>) { return new SplitDraftService(this.env).applyCorrections(args) }
 
   private async accounts(holdingMetadata = false) {
     if (!holdingMetadata) return (await this.env.DB.prepare('SELECT * FROM accounts ORDER BY name').all<AccountRow>()).results
@@ -420,7 +425,7 @@ export class FinanceService {
   }
 
   private reviewDraftCreationResult(batchId: string, rows: ReviewDraftResultRow[], idempotentReplay: boolean) {
-    if (!rows.length || rows.some(row => row.linked_transaction_id)) {
+    if (!rows.length || rows.some(row => row.linked_transaction_id || row.split_id)) {
       throw proposalError('proposal_corrupt', 'proposal belongs to a different draft flow')
     }
     return {
@@ -476,6 +481,7 @@ export class FinanceService {
       throw proposalError('proposal_corrupt', 'stored proposal data is invalid')
     }
     if (!Array.isArray(items) || items.length < 1 || items.length > 20) throw proposalError('proposal_corrupt', 'stored proposal data is invalid')
+    if (items.some(item => (item as { kind?: string } | null)?.kind === 'split')) throw proposalError('proposal_corrupt', 'proposal belongs to a different draft flow')
     items.forEach((item, index) => {
       if (!item || typeof item !== 'object'
         || typeof item.draft_id !== 'string' || !item.draft_id
@@ -832,6 +838,7 @@ export class FinanceService {
     if (type !== undefined && !['income', 'expense'].includes(String(type))) throw new Error('type must be income or expense')
     const text = typeof filters.text === 'string' ? filters.text.trim().slice(0, 200) : undefined
     const includeTransfers = filters.include_transfers === true
+    const splitId = typeof filters.split_id === 'string' && filters.split_id.trim() ? filters.split_id.trim() : undefined
     const sortBy = enumValue(args.sort_by, ['date', 'amount_magnitude'] as const, 'date', 'sort_by')
     const sortOrder = enumValue(args.sort_order, ['asc', 'desc'] as const, 'desc', 'sort_order')
     const limit = clampLimit(args.limit)
@@ -845,19 +852,24 @@ export class FinanceService {
     if (type === 'income') clauses.push('t.amount > 0')
     if (type === 'expense') clauses.push('t.amount < 0')
     if (!includeTransfers) clauses.push('t.linked_transaction_id IS NULL')
-    if (text) { clauses.push('(LOWER(COALESCE(t.description, \'\')) LIKE ? OR LOWER(a.name) LIKE ? OR LOWER(COALESCE(c.name, \'\')) LIKE ?)'); values.push(...Array(3).fill(`%${text.toLowerCase()}%`)) }
+    if (text) { clauses.push('(LOWER(COALESCE(t.description, \'\')) LIKE ? OR LOWER(COALESCE(s.description, \'\')) LIKE ? OR LOWER(a.name) LIKE ? OR LOWER(COALESCE(c.name, \'\')) LIKE ?)'); values.push(...Array(4).fill(`%${text.toLowerCase()}%`)) }
     const orderExpression = sortBy === 'amount_magnitude' ? `ABS(t.amount) ${sortOrder.toUpperCase()}, t.date DESC` : `t.date ${sortOrder.toUpperCase()}`
-    const query = `SELECT t.*, a.name AS account_name, a.currency AS account_currency, c.name AS category_name, c.icon AS category_icon FROM transactions t JOIN accounts a ON a.id = t.account_id LEFT JOIN categories c ON c.id = t.category_id WHERE ${clauses.join(' AND ')} ORDER BY ${orderExpression}, t.rowid DESC LIMIT ? OFFSET ?`
+    if (splitId) { clauses.push('t.split_id = ?'); values.push(splitId) }
+    const query = `SELECT t.*, s.description AS split_description, a.name AS account_name, a.currency AS account_currency, c.name AS category_name, c.icon AS category_icon FROM transactions t JOIN accounts a ON a.id = t.account_id LEFT JOIN categories c ON c.id = t.category_id LEFT JOIN transaction_splits s ON s.id = t.split_id WHERE ${clauses.join(' AND ')} ORDER BY ${orderExpression}, t.rowid DESC LIMIT ? OFFSET ?`
     const results = (await this.env.DB.prepare(query).bind(...values, limit + 1, offset).all<Record<string, unknown>>()).results
     const hasMore = results.length > limit
     return {
-      as_of: new Date().toISOString(), filters: { start_date: startDate || null, end_date: endDate || null, account_ids: accountIds || [], category_ids: categoryIds || [], statuses, type: type || null, text: text || null, include_transfers: includeTransfers },
+      as_of: new Date().toISOString(), filters: { start_date: startDate || null, end_date: endDate || null, account_ids: accountIds || [], category_ids: categoryIds || [], statuses, type: type || null, text: text || null, include_transfers: includeTransfers, split_id: splitId || null },
       sort: { by: sortBy, order: sortOrder },
       transactions: results.slice(0, limit).map(row => ({
         ...row,
         pending_kind: row.status === 'pending' ? row.pending_kind || 'upcoming' : null,
         requires_manual_review: row.status === 'pending' && row.pending_kind === 'mcp_review',
         is_transfer: Boolean(row.linked_transaction_id),
+        // Lines sharing a split_id are one payment divided over categories; split_description is its shared payee.
+        split_id: row.split_id || null,
+        split_description: row.split_description || null,
+        is_split_line: Boolean(row.split_id),
         description_is_untrusted_data: true,
       })),
       pagination: { limit, returned: Math.min(limit, results.length), next_cursor: hasMore ? encodeCursor(offset + limit) : null, truncated: hasMore },
