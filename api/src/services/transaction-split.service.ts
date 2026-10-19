@@ -3,7 +3,7 @@ import { Account } from '../models/Account'
 import { Transaction } from '../models/Transaction'
 import { SaveSplitDto } from '../dtos/transaction-split.dto'
 import { AccountRepository } from '../repositories/account.repository'
-import { SplitWrite, TransactionSplit, TransactionSplitRepository } from '../repositories/transaction-split.repository'
+import { PendingSplitReview, SplitWrite, TransactionSplit, TransactionSplitRepository } from '../repositories/transaction-split.repository'
 
 export interface SavedSplit {
   split: TransactionSplit
@@ -31,9 +31,13 @@ export class TransactionSplitService {
     return account
   }
 
-  private prepare(dto: SaveSplitDto, id: string, today?: string): SplitWrite {
-    if (dto.date > this.todayString(today)) {
+  private prepare(dto: SaveSplitDto, id: string, today?: string, pending?: PendingSplitReview): SplitWrite {
+    // A pending split (an MCP review draft) may wait for its date; a posted one cannot be in the future.
+    if (!pending && dto.date > this.todayString(today)) {
       throw AppError.validation('A split cannot be dated in the future')
+    }
+    if (pending && dto.balance_adjustment) {
+      throw AppError.validation('A pending split cannot adjust a balance')
     }
     const negative = dto.lines[0].amount < 0
     if (dto.lines.some(line => (line.amount < 0) !== negative)) {
@@ -61,15 +65,32 @@ export class TransactionSplitService {
       exclude_from_estimate: dto.exclude_from_estimate ?? false,
       lines,
       total,
+      pending,
     }
   }
 
-  private async load(id: string): Promise<SavedSplit> {
+  private async load(id: string, allowed: ReadonlyArray<'posted' | 'pending' | 'cancelled'> = ['posted', 'pending']): Promise<SavedSplit> {
     const split = await this.splitRepo.findById(id)
     const lines = split ? await this.splitRepo.findLines(id) : []
     if (!split || lines.length === 0) throw AppError.notFound('TRANSACTION_NOT_FOUND', 'Split not found')
-    if (lines.some(line => line.status !== 'posted')) throw AppError.validation('Only posted splits can be changed')
+    const status = lines[0].status ?? 'posted'
+    if (lines.some(line => (line.status ?? 'posted') !== status)) throw this.conflict()
+    if (!allowed.includes(status)) {
+      throw AppError.validation(status === 'cancelled' ? 'This split was declined' : status === 'posted' ? 'This split is already posted' : 'Only posted or pending splits can be changed')
+    }
     return { split, lines, total: round(lines.reduce((sum, line) => sum + line.amount, 0)) }
+  }
+
+  /** Review provenance of a pending split, kept by edits so the split stays a review draft. */
+  private pendingReview(saved: SavedSplit): PendingSplitReview | undefined {
+    const first = saved.lines[0]
+    if ((first.status ?? 'posted') !== 'pending') return undefined
+    return {
+      pending_kind: first.pending_kind ?? 'upcoming',
+      review_source: first.review_source ?? 'manual',
+      review_batch_id: first.review_batch_id ?? null,
+      review_flags: first.review_flags ?? [],
+    }
   }
 
   private conflict(): AppError {
@@ -89,7 +110,7 @@ export class TransactionSplitService {
     const previous = await this.load(id)
     this.assertUsable(await this.accountRepo.findById(previous.lines[0].account_id))
     this.assertUsable(await this.accountRepo.findById(dto.account_id))
-    const write = this.prepare(dto, id, today)
+    const write = this.prepare(dto, id, today, this.pendingReview(previous))
     const now = Math.max(Date.now(), (previous.split.updated_at ?? 0) + 1)
     const applied = await this.splitRepo.replace(previous, write, now, dto.balance_adjustment?.expected_balance)
     if (!applied) throw this.conflict()
@@ -107,5 +128,36 @@ export class TransactionSplitService {
     const now = Math.max(Date.now(), (previous.split.updated_at ?? 0) + 1)
     if (!await this.splitRepo.remove(previous, now)) throw this.conflict()
     return previous
+  }
+
+  /** Posts every line of a pending split and applies its total to the balance once. */
+  async confirm(id: string, today?: string): Promise<SavedSplit> {
+    const previous = await this.load(id, ['pending', 'posted'])
+    if ((previous.lines[0].status ?? 'posted') === 'posted') return previous
+    const effectiveToday = this.todayString(today)
+    if (previous.lines[0].date > effectiveToday) throw AppError.validation('Cannot confirm a split dated in the future')
+    this.assertUsable(await this.accountRepo.findById(previous.lines[0].account_id))
+    const now = Math.max(Date.now(), (previous.split.updated_at ?? 0) + 1)
+    if (!await this.splitRepo.resolve(previous, 'confirm', now, effectiveToday)) {
+      // A concurrent confirmation of the same split is a success, not a conflict.
+      const current = await this.load(id, ['posted', 'pending', 'cancelled'])
+      if ((current.lines[0].status ?? 'posted') === 'posted') return current
+      throw this.conflict()
+    }
+    return this.load(id, ['posted'])
+  }
+
+  /** Cancels every line of a pending split; balances do not change. */
+  async decline(id: string): Promise<SavedSplit> {
+    const previous = await this.load(id, ['pending', 'cancelled'])
+    if (previous.lines[0].status === 'cancelled') return previous
+    this.assertUsable(await this.accountRepo.findById(previous.lines[0].account_id))
+    const now = Math.max(Date.now(), (previous.split.updated_at ?? 0) + 1)
+    if (!await this.splitRepo.resolve(previous, 'decline', now, this.todayString())) {
+      const current = await this.load(id, ['posted', 'pending', 'cancelled'])
+      if (current.lines[0].status === 'cancelled') return current
+      throw this.conflict()
+    }
+    return this.load(id, ['cancelled'])
   }
 }

@@ -23,9 +23,10 @@ const categories = [
   { id: 'salary', name: 'Salary', icon: '💼', type: 'income' as const },
 ]
 const base = { account_id: 'otp', date: '2020-01-10', status: 'posted' as const, split_id: 'sp1', split_description: 'Spar' }
+// Entered as groceries then household; the API lists rows newest first.
 const splitLines = [
-  { ...base, id: 'a', category_id: 'groceries', amount: -24900, description: 'Weekly shop' },
   { ...base, id: 'b', category_id: 'household', amount: -11350, description: null },
+  { ...base, id: 'a', category_id: 'groceries', amount: -24900, description: 'Weekly shop' },
 ]
 const other = { id: 'c', account_id: 'otp', category_id: 'groceries', amount: -8950, description: 'BKK pass', date: '2020-01-10', status: 'posted' as const }
 
@@ -248,5 +249,50 @@ describe('split rows in the list', () => {
     renderList({ transactions: splitLines, accounts: [{ ...accounts[0], is_locked: true }, accounts[1]] })
     expect(screen.queryByRole('button', { name: 'Edit split' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Delete split' })).not.toBeInTheDocument()
+  })
+})
+
+describe('MCP split review drafts', () => {
+  const review = { status: 'pending' as const, pending_kind: 'mcp_review' as const, review_source: 'chatgpt_mcp' as const, review_flags: [] }
+  const reviewLines = splitLines.map(line => ({ ...line, ...review, split_id: 'mcp1', split_description: 'Tesco' }))
+
+  it('shows a pending split as one review item with its total, lines and balance preview', async () => {
+    const user = userEvent.setup()
+    renderList({ upcomingTransactions: reviewLines })
+    const section = within(screen.getByRole('region', { name: /needs review/i }).closest('section') ?? document.body)
+    expect(section.getAllByRole('button', { name: 'More actions for Tesco' })).toHaveLength(1)
+    expect(section.getByText(/Split · 2 lines · OTP Bank/)).toBeInTheDocument()
+    expect(section.getByText('−36 250 HUF')).toBeInTheDocument()
+    expect(screen.getByText(/1 MCP drafts/)).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Confirmation balance preview' })).toHaveTextContent('OTP Bank: 100 000 HUF → 63 750 HUF')
+    await user.click(section.getByRole('button', { name: 'Show split lines' }))
+    expect(within(screen.getByRole('list', { name: 'Split lines' })).getByText(/Groceries · Weekly shop/)).toBeInTheDocument()
+  })
+
+  it('confirms and declines the whole split through the split endpoints', async () => {
+    const user = userEvent.setup()
+    const { onTransactionAdded } = renderList({ upcomingTransactions: reviewLines })
+    await user.click(screen.getByRole('button', { name: 'Confirm split review draft' }))
+    await waitFor(() => expect(onTransactionAdded).toHaveBeenCalledOnce())
+    expect(calls()).toContainEqual(expect.objectContaining({ url: '/api/transactions/splits/mcp1/confirm', method: 'POST' }))
+    expect(screen.queryByRole('button', { name: 'More actions for Tesco' })).not.toBeInTheDocument()
+  })
+
+  it('declines every line at once', async () => {
+    const user = userEvent.setup()
+    renderList({ upcomingTransactions: reviewLines })
+    await user.click(screen.getByRole('button', { name: 'Decline split review draft' }))
+    await waitFor(() => expect(calls()).toContainEqual(expect.objectContaining({ url: '/api/transactions/splits/mcp1/decline', method: 'POST' })))
+    expect(alerts.confirm).toHaveBeenCalledWith(expect.objectContaining({ message: expect.stringContaining('all 2 of its lines') }))
+  })
+
+  it('edits a future-dated pending split in the composer and keeps it a split', async () => {
+    const user = userEvent.setup()
+    renderList({ upcomingTransactions: reviewLines.map(line => ({ ...line, date: '2999-01-10' })) })
+    await user.click(screen.getByRole('button', { name: 'Edit split review draft' }))
+    expect(within(dialog()).queryByText('A split cannot be dated in the future.')).not.toBeInTheDocument()
+    await user.click(within(dialog()).getByRole('button', { name: 'Save 2 transactions' }))
+    await waitFor(() => expect(calls().some(call => call.method === 'PUT')).toBe(true))
+    expect(calls().find(call => call.method === 'PUT')).toMatchObject({ url: '/api/transactions/splits/mcp1', body: { date: '2999-01-10', description: 'Tesco' } })
   })
 })

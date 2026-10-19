@@ -251,7 +251,7 @@ export class TransactionRepository {
 
   async findUpcoming(): Promise<Transaction[]> {
     const { results } = await this.db.prepare(
-      "SELECT * FROM transactions WHERE status = 'pending' ORDER BY date ASC, rowid DESC"
+      `${SELECT_WITH_SPLIT} WHERE t.status = 'pending' ORDER BY t.date ASC, t.rowid DESC`
     ).all<RawTransactionRow>()
     return results.map(r => TransactionRepository.mapRow(r))
   }

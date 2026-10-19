@@ -15,6 +15,14 @@ export interface SplitLineWrite {
   description: string | null
 }
 
+/** Review provenance kept by a pending split: its lines stay pending and never touch the balance. */
+export interface PendingSplitReview {
+  pending_kind: 'upcoming' | 'mcp_review'
+  review_source: 'manual' | 'chatgpt_mcp'
+  review_batch_id: string | null
+  review_flags: string[]
+}
+
 export interface SplitWrite {
   id: string
   account_id: string
@@ -23,7 +31,10 @@ export interface SplitWrite {
   exclude_from_estimate: boolean
   lines: SplitLineWrite[]
   total: number
+  pending?: PendingSplitReview
 }
+
+type LoadedSplit = { split: TransactionSplit; lines: Transaction[]; total: number }
 
 type D1Value = string | number | null
 
@@ -67,13 +78,16 @@ export class TransactionSplitRepository {
   private insertLines(split: SplitWrite, now: number, ready: { sql: string; values: D1Value[] }, claimedSql: string, claimedValues: D1Value[]): D1PreparedStatement[] {
     // A single remaining line is an ordinary transaction, not a split.
     const splitId = split.lines.length > 1 ? split.id : null
+    const pending = split.pending
     return split.lines.map(line => this.db.prepare(
       `INSERT INTO transactions (id, account_id, category_id, amount, description, date, exclude_from_estimate,
-         status, pending_kind, review_source, review_flags, confirmed_at, created_at, updated_at, split_id)
-       SELECT ?, ?, ?, ?, ?, ?, ?, 'posted', 'upcoming', 'manual', '[]', ?, ?, ?, ?
+         status, pending_kind, review_source, review_batch_id, review_flags, confirmed_at, created_at, updated_at, split_id)
+       SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
        WHERE ${ready.sql} AND ${claimedSql}`
     ).bind(line.id, split.account_id, line.category_id, line.amount, line.description, split.date,
-      split.exclude_from_estimate ? 1 : 0, now, now, now, splitId, ...ready.values, ...claimedValues))
+      split.exclude_from_estimate ? 1 : 0, pending ? 'pending' : 'posted', pending?.pending_kind ?? 'upcoming',
+      pending?.review_source ?? 'manual', pending?.review_batch_id ?? null, JSON.stringify(pending?.review_flags ?? []),
+      pending ? null : now, now, now, splitId, ...ready.values, ...claimedValues))
   }
 
   private audit(action: 'CREATE' | 'UPDATE' | 'DELETE', splitId: string, details: Record<string, unknown>, now: number,
@@ -103,29 +117,32 @@ export class TransactionSplitRepository {
    * ones are inserted so the last-line cleanup trigger never removes the split
    * row mid-batch. The split's updated_at is the optimistic lock.
    */
-  async replace(previous: { split: TransactionSplit; lines: Transaction[]; total: number }, next: SplitWrite, now: number, expectedBalance?: number): Promise<boolean> {
+  async replace(previous: LoadedSplit, next: SplitWrite, now: number, expectedBalance?: number): Promise<boolean> {
     const oldAccountId = previous.lines[0].account_id
     const ready = accountReady(next.account_id, expectedBalance)
     const oldReady = accountReady(oldAccountId, oldAccountId === next.account_id ? expectedBalance : undefined)
     const claimed = { sql: 'EXISTS (SELECT 1 FROM transaction_splits WHERE id = ? AND updated_at = ?)', values: [next.id, now] }
     const oldIds = previous.lines.map(line => line.id)
     const placeholders = oldIds.map(() => '?').join(', ')
+    const status = next.pending ? 'pending' : 'posted'
+    // A pending split never touched the balance, so replacing it changes no balance either.
+    const balanced = !next.pending
     const statements: D1PreparedStatement[] = [
       this.db.prepare(
         `UPDATE transaction_splits SET description = ?, updated_at = ?
-         WHERE id = ? AND updated_at IS ? AND (SELECT COUNT(*) FROM transactions WHERE split_id = ?) = ?
+         WHERE id = ? AND updated_at IS ? AND (SELECT COUNT(*) FROM transactions WHERE split_id = ? AND status = ?) = ?
          AND ${oldReady.sql} AND ${ready.sql}`
-      ).bind(next.description, now, next.id, previous.split.updated_at, next.id, oldIds.length, ...oldReady.values, ...ready.values),
-      this.db.prepare(
+      ).bind(next.description, now, next.id, previous.split.updated_at, next.id, status, oldIds.length, ...oldReady.values, ...ready.values),
+      ...(balanced ? [this.db.prepare(
         `UPDATE accounts SET balance = balance - (SELECT COALESCE(SUM(amount), 0) FROM transactions WHERE split_id = ?), updated_at = ?
          WHERE id = ? AND ${claimed.sql}`
-      ).bind(next.id, now, oldAccountId, ...claimed.values),
+      ).bind(next.id, now, oldAccountId, ...claimed.values)] : []),
       this.db.prepare(`UPDATE transactions SET split_id = NULL WHERE split_id = ? AND ${claimed.sql}`).bind(next.id, ...claimed.values),
       ...this.insertLines(next, now, accountReady(next.account_id), claimed.sql, claimed.values),
-      this.audit('UPDATE', next.id, { account_id: next.account_id, lines: next.lines.length, total: next.total, previous_total: previous.total }, now, claimed.sql, claimed.values),
+      this.audit('UPDATE', next.id, { account_id: next.account_id, lines: next.lines.length, total: next.total, previous_total: previous.total, status }, now, claimed.sql, claimed.values),
       this.db.prepare(`DELETE FROM transactions WHERE id IN (${placeholders}) AND split_id IS NULL AND ${claimed.sql}`).bind(...oldIds, ...claimed.values),
-      this.db.prepare(`UPDATE accounts SET balance = balance + ?, updated_at = ? WHERE id = ? AND ${claimed.sql}`)
-        .bind(next.total, now, next.account_id, ...claimed.values),
+      ...(balanced ? [this.db.prepare(`UPDATE accounts SET balance = balance + ?, updated_at = ? WHERE id = ? AND ${claimed.sql}`)
+        .bind(next.total, now, next.account_id, ...claimed.values)] : []),
       // Last, because it removes the claim row: an undone split leaves no split-linked lines.
       this.db.prepare('DELETE FROM transaction_splits WHERE id = ? AND NOT EXISTS (SELECT 1 FROM transactions WHERE split_id = ?)')
         .bind(next.id, next.id),
@@ -135,21 +152,55 @@ export class TransactionSplitRepository {
   }
 
   /** Reverts the balance and deletes every line; the cleanup trigger removes the split row. */
-  async remove(previous: { split: TransactionSplit; lines: Transaction[]; total: number }, now: number): Promise<boolean> {
+  async remove(previous: LoadedSplit, now: number): Promise<boolean> {
     const accountId = previous.lines[0].account_id
+    const status = previous.lines[0].status ?? 'posted'
     const ready = accountReady(accountId)
     const claimed = { sql: 'EXISTS (SELECT 1 FROM transaction_splits WHERE id = ? AND updated_at = ?)', values: [previous.split.id, now] }
     const results = await this.db.batch([
       this.db.prepare(
         `UPDATE transaction_splits SET updated_at = ?
-         WHERE id = ? AND updated_at IS ? AND (SELECT COUNT(*) FROM transactions WHERE split_id = ?) = ? AND ${ready.sql}`
-      ).bind(now, previous.split.id, previous.split.updated_at, previous.split.id, previous.lines.length, ...ready.values),
-      this.db.prepare(
+         WHERE id = ? AND updated_at IS ? AND (SELECT COUNT(*) FROM transactions WHERE split_id = ? AND status = ?) = ? AND ${ready.sql}`
+      ).bind(now, previous.split.id, previous.split.updated_at, previous.split.id, status, previous.lines.length, ...ready.values),
+      // Only posted lines are in the balance; deleting a pending split changes none.
+      ...(status === 'posted' ? [this.db.prepare(
         `UPDATE accounts SET balance = balance - (SELECT COALESCE(SUM(amount), 0) FROM transactions WHERE split_id = ?), updated_at = ?
          WHERE id = ? AND ${claimed.sql}`
-      ).bind(previous.split.id, now, accountId, ...claimed.values),
+      ).bind(previous.split.id, now, accountId, ...claimed.values)] : []),
       this.audit('DELETE', previous.split.id, { account_id: accountId, lines: previous.lines.length, total: previous.total }, now, claimed.sql, claimed.values),
       this.db.prepare(`DELETE FROM transactions WHERE split_id = ? AND ${claimed.sql}`).bind(previous.split.id, ...claimed.values),
+    ])
+    return results[0].meta.changes === 1
+  }
+
+  /**
+   * Confirms (posts every line and applies the total once) or declines (cancels
+   * every line, no balance change) a pending split. The split's updated_at,
+   * the pending line count and their total guard against concurrent changes.
+   */
+  async resolve(previous: LoadedSplit, action: 'confirm' | 'decline', now: number, today: string): Promise<boolean> {
+    const accountId = previous.lines[0].account_id
+    const ready = accountReady(accountId)
+    const id = previous.split.id
+    const claimed = { sql: 'EXISTS (SELECT 1 FROM transaction_splits WHERE id = ? AND updated_at = ?)', values: [id, now] }
+    const status = action === 'confirm' ? 'posted' : 'cancelled'
+    const results = await this.db.batch([
+      this.db.prepare(
+        `UPDATE transaction_splits SET updated_at = ?
+         WHERE id = ? AND updated_at IS ?
+         AND (SELECT COUNT(*) FROM transactions WHERE split_id = ?) = ?
+         AND (SELECT COUNT(*) FROM transactions WHERE split_id = ? AND status = 'pending' AND account_id = ? AND date = ?${action === 'confirm' ? ' AND date <= ?' : ''}) = ?
+         AND ABS((SELECT COALESCE(SUM(amount), 0) FROM transactions WHERE split_id = ?) - ?) < 0.000000001
+         AND ${ready.sql}`
+      ).bind(now, id, previous.split.updated_at, id, previous.lines.length, id, accountId, previous.lines[0].date,
+        ...(action === 'confirm' ? [today] : []), previous.lines.length, id, previous.total, ...ready.values),
+      ...(action === 'confirm' ? [this.db.prepare(`UPDATE accounts SET balance = balance + ?, updated_at = ? WHERE id = ? AND ${claimed.sql}`)
+        .bind(previous.total, now, accountId, ...claimed.values)] : []),
+      this.audit('UPDATE', id, { account_id: accountId, lines: previous.lines.length, total: previous.total, status }, now, claimed.sql, claimed.values),
+      this.db.prepare(
+        `UPDATE transactions SET status = ?, confirmed_at = ?, cancelled_at = ?, updated_at = ?
+         WHERE split_id = ? AND status = 'pending' AND ${claimed.sql}`
+      ).bind(status, action === 'confirm' ? now : null, action === 'decline' ? now : null, now, id, ...claimed.values),
     ])
     return results[0].meta.changes === 1
   }

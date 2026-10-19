@@ -46,6 +46,13 @@ type Transaction = {
   split_description?: string | null
 }
 
+// Every transaction list endpoint returns rows newest first (rowid DESC), so a split's
+// lines arrive in reverse entry order. Restore the order they were entered in.
+const inEntryOrder = <T,>(lines: T[]): T[] => [...lines].reverse()
+
+// A pending review row: either one transaction or a whole split with its lines.
+type PendingItem = Transaction & { splitGroup?: Transaction[] }
+
 type Account = {
   id: string
   name: string
@@ -226,8 +233,10 @@ export function TransactionList({
   const isUpcomingForm = formData.type !== 'transfer' && formData.date > today
   const selectedAccount = accounts.find(account => account.id === formData.account_id)
   const splitResolution = splitLines ? resolveSplit(formData.amount, splitLines) : null
+  // A pending split (an MCP review draft) stays pending when edited, so it may keep a future date.
+  const editingPendingSplit = !!editingSplitId && upcomingTransactions.some(tx => tx.split_id === editingSplitId)
   const splitBlockedReason = selectedAccount?.type === 'investment' ? 'Investment accounts cannot be split.'
-    : isUpcomingForm ? 'A split cannot be dated in the future.' : ''
+    : isUpcomingForm && !editingPendingSplit ? 'A split cannot be dated in the future.' : ''
   const allKnownTransactions = [...transactions, ...upcomingTransactions]
   const editingReviewTransfer = !!editingId && upcomingTransactions.some(tx =>
     tx.id === editingId && !!tx.linked_transaction_id && isMcpReviewTransaction(tx)
@@ -675,7 +684,7 @@ export function TransactionList({
       showAlert({ type: 'error', message: 'Investment accounts cannot be split' })
       return
     }
-    if (splitLines && isUpcomingForm) {
+    if (splitLines && isUpcomingForm && !editingPendingSplit) {
       showAlert({ type: 'error', message: 'A split cannot be dated in the future' })
       return
     }
@@ -708,7 +717,7 @@ export function TransactionList({
       }
       showAlert({
         type: 'success',
-        message: body.length > 1 ? (wasEditing ? 'Split updated' : `Split saved as ${body.length} transactions`)
+        message: body.length > 1 ? (wasEditing ? editingPendingSplit ? 'Split review draft updated' : 'Split updated' : `Split saved as ${body.length} transactions`)
           : wasEditing ? 'Split changed to a single transaction' : 'Transaction created',
       })
     } catch (error) {
@@ -884,7 +893,7 @@ export function TransactionList({
 
   // Opening any line opens the whole split with its shared fields.
   const handleEditSplit = (splitId: string) => {
-    const lines = allKnownTransactions.filter(tx => tx.split_id === splitId)
+    const lines = inEntryOrder(allKnownTransactions.filter(tx => tx.split_id === splitId))
     if (lines.length === 0 || isLocked(lines[0].account_id)) return
     const total = lines.reduce((sum, line) => sum + line.amount, 0)
     resetTransferRateState()
@@ -1104,13 +1113,24 @@ export function TransactionList({
     }
   }
 
+  const splitLinesOf = (tx: Transaction) => upcomingTransactions.filter(line => line.split_id === tx.split_id)
+
+  // Hide a resolved review item at once: both transfer legs, or every line of a split.
+  const markResolved = (tx: Transaction) => setResolvedPendingIds(ids => {
+    const next = new Set(ids).add(tx.id)
+    if (tx.linked_transaction_id) next.add(tx.linked_transaction_id)
+    if (tx.split_id) splitLinesOf(tx).forEach(line => next.add(line.id))
+    return next
+  })
+
   const handleConfirmUpcoming = async (tx: Transaction) => {
     if (pendingActionId) return
 
     const isMcpReview = isMcpReviewTransaction(tx)
     setPendingActionId(tx.id)
     try {
-      const res = await apiFetch(`${API_BASE_URL}/transactions/${tx.id}/confirm`, {
+      // A split is confirmed as a whole: every line posts and its total reaches the balance once.
+      const res = await apiFetch(tx.split_id ? `${API_BASE_URL}/transactions/splits/${tx.split_id}/confirm` : `${API_BASE_URL}/transactions/${tx.id}/confirm`, {
         method: 'POST'
       })
 
@@ -1120,15 +1140,11 @@ export function TransactionList({
       }
 
       refreshRecentBadges()
-      setResolvedPendingIds(ids => {
-        const next = new Set(ids).add(tx.id)
-        if (tx.linked_transaction_id) next.add(tx.linked_transaction_id)
-        return next
-      })
+      markResolved(tx)
       onTransactionAdded()
       showAlert({
         type: 'success',
-        message: tx.linked_transaction_id ? 'Transfer review pair confirmed' : isMcpReview ? 'MCP draft confirmed' : 'Upcoming transaction confirmed'
+        message: tx.split_id ? 'Split review draft confirmed' : tx.linked_transaction_id ? 'Transfer review pair confirmed' : isMcpReview ? 'MCP draft confirmed' : 'Upcoming transaction confirmed'
       })
     } catch (error) {
       console.error('Failed to confirm upcoming transaction')
@@ -1148,7 +1164,9 @@ export function TransactionList({
 
     const confirmed = await confirm({
       title: 'Decline Transaction',
-      message: tx.linked_transaction_id
+      message: tx.split_id
+        ? `Decline this split and all ${splitLinesOf(tx).length} of its lines? Your balance will not change.`
+        : tx.linked_transaction_id
         ? 'Decline both sides of this transfer review draft? Neither balance will change.'
         : isMcpReview
         ? 'Decline this MCP draft? It will not affect your balance.'
@@ -1161,7 +1179,7 @@ export function TransactionList({
 
     setPendingActionId(tx.id)
     try {
-      const res = await apiFetch(`${API_BASE_URL}/transactions/${tx.id}/decline`, {
+      const res = await apiFetch(tx.split_id ? `${API_BASE_URL}/transactions/splits/${tx.split_id}/decline` : `${API_BASE_URL}/transactions/${tx.id}/decline`, {
         method: 'POST'
       })
 
@@ -1170,15 +1188,11 @@ export function TransactionList({
         throw new Error(data.error || 'Failed to decline transaction')
       }
 
-      setResolvedPendingIds(ids => {
-        const next = new Set(ids).add(tx.id)
-        if (tx.linked_transaction_id) next.add(tx.linked_transaction_id)
-        return next
-      })
+      markResolved(tx)
       onTransactionAdded()
       showAlert({
         type: 'success',
-        message: tx.linked_transaction_id ? 'Transfer review pair declined' : isMcpReview ? 'MCP draft declined' : 'Upcoming transaction declined'
+        message: tx.split_id ? 'Split review draft declined' : tx.linked_transaction_id ? 'Transfer review pair declined' : isMcpReview ? 'MCP draft declined' : 'Upcoming transaction declined'
       })
     } catch (error) {
       console.error('Failed to decline upcoming transaction')
@@ -1354,16 +1368,28 @@ export function TransactionList({
   }
 
   const visibleUpcomingTransactions = upcomingTransactions.filter(tx => !resolvedPendingIds.has(tx.id))
+  // A pending split is one review item with the full total, even when a filter matched only some of its lines.
+  const groupPendingSplits = (items: Transaction[]): PendingItem[] => {
+    const seen = new Set<string>()
+    return items.flatMap(tx => {
+      if (!tx.split_id) return [tx]
+      if (seen.has(tx.split_id)) return []
+      seen.add(tx.split_id)
+      const lines = inEntryOrder(visibleUpcomingTransactions.filter(line => line.split_id === tx.split_id))
+      const group = lines.length > 0 ? lines : [tx]
+      return [{ ...group[0], id: `split:${tx.split_id}`, description: tx.split_description, amount: group.reduce((sum, line) => sum + line.amount, 0), splitGroup: group }]
+    })
+  }
   const standardPendingCount = visibleUpcomingTransactions.filter(tx => !isMcpReviewTransaction(tx)).length
-  const mcpReviewTransactions = getMcpReviewItems(visibleUpcomingTransactions, applyFilters)
+  const mcpReviewTransactions = groupPendingSplits(getMcpReviewItems(visibleUpcomingTransactions, applyFilters))
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
   const mcpReviewCount = mcpReviewTransactions.length
 
   // Keep legacy pending rows visible as upcoming while the migration rolls out.
   // Projection calculations are stricter and require pending_kind === 'upcoming'.
-  const pendingFilteredTransactions = visibleUpcomingTransactions
+  const pendingFilteredTransactions = groupPendingSplits(visibleUpcomingTransactions
     .filter(tx => !isMcpReviewTransaction(tx))
-    .filter(applyFilters)
+    .filter(applyFilters))
     .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
 
   const readyTransactions = pendingFilteredTransactions.filter(tx => tx.date <= today)
@@ -1385,7 +1411,7 @@ export function TransactionList({
         // A split shows as one row with the full total, even when a filter matched only some of its lines.
         if (seenSplits.has(tx.split_id)) return
         seenSplits.add(tx.split_id)
-        const group = transactions.filter(line => line.split_id === tx.split_id)
+        const group = inEntryOrder(transactions.filter(line => line.split_id === tx.split_id))
         const lines = group.length > 0 ? group : [tx]
         processed.push({ ...lines[0], id: `split:${tx.split_id}`, description: tx.split_description, amount: lines.reduce((sum, line) => sum + line.amount, 0), splitGroup: lines })
         return
@@ -1479,7 +1505,9 @@ export function TransactionList({
     return value < 0 && formatted !== '••••••' ? `−${formatted}` : formatted
   }
 
-  const renderPendingTransaction = (tx: Transaction, ready: boolean) => {
+  const renderPendingTransaction = (tx: PendingItem, ready: boolean) => {
+    const group = tx.splitGroup
+    const expanded = !!group && expandedSplits.has(tx.id)
     const linked = tx.linked_transaction_id ? visibleUpcomingTransactions.find(other => other.id === tx.linked_transaction_id) : undefined
     const outgoing = linked && tx.amount > 0 ? linked : tx
     const incoming = linked && tx.amount > 0 ? tx : linked
@@ -1488,15 +1516,15 @@ export function TransactionList({
     const daysLate = differenceInCalendarDays(parseISO(today), parseISO(tx.date))
     const dateLabel = format(parseISO(tx.date), 'MMM d, yyyy')
     const statusLabel = isReview ? 'MCP draft' : ready ? daysLate > 0 ? `${daysLate} day${daysLate === 1 ? '' : 's'} late` : 'Due today' : `Expected ${dateLabel}`
-    const actionName = linked ? 'transfer review draft' : isReview ? 'MCP draft' : 'transaction'
+    const actionName = linked ? 'transfer review draft' : group ? isReview ? 'split review draft' : 'split' : isReview ? 'MCP draft' : 'transaction'
     const busy = pendingActionId === tx.id
     return <div key={tx.id} className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-2 border-t border-border px-3 py-3 sm:flex sm:flex-wrap sm:gap-3 sm:px-4">
-      <div aria-hidden="true" className={cn('hidden h-9 w-9 shrink-0 items-center justify-center rounded-[10px] sm:flex', tx.linked_transaction_id ? 'bg-primary/10 text-primary' : 'bg-secondary')}>
-        {tx.linked_transaction_id ? <ArrowRightLeft className="h-4 w-4" /> : getCategoryIcon(tx.category_id)}
+      <div aria-hidden="true" className={cn('hidden h-9 w-9 shrink-0 items-center justify-center rounded-[10px] sm:flex', tx.linked_transaction_id || group ? 'bg-primary/10 text-primary' : 'bg-secondary')}>
+        {tx.linked_transaction_id ? <ArrowRightLeft className="h-4 w-4" /> : group ? <Split className="h-4 w-4" /> : getCategoryIcon(tx.category_id)}
       </div>
       <div className="min-w-0 flex-1">
-        <p className="flex items-center gap-2 text-sm font-medium"><button type="button" disabled={locked} aria-expanded={pendingDetails === tx.id} aria-label={`More actions for ${tx.description || getCategoryName(tx.category_id)}`} onClick={() => setPendingDetails(pendingDetails === tx.id ? null : tx.id)} className="flex min-w-0 items-center gap-1 text-left"><span className="truncate">{tx.description || (linked ? 'Transfer' : getCategoryName(tx.category_id))}</span><MoreHorizontal className="h-3 w-3 shrink-0 text-muted-foreground sm:hidden" /></button>{renderRecentBadge(tx)}</p>
-        <p className="mt-0.5 truncate text-xs text-muted-foreground"><span className={cn('font-medium', isReview ? 'text-violet-600 dark:text-violet-300' : ready ? 'text-amber-700 dark:text-amber-300' : '')}>{statusLabel}</span> · {linked ? `${getAccountName(outgoing.account_id)} → ${getAccountName(incoming!.account_id)}` : `${getCategoryName(tx.category_id)} · ${getAccountName(tx.account_id)}`} · {dateLabel}</p>
+        <p className="flex items-center gap-2 text-sm font-medium"><button type="button" disabled={locked} aria-expanded={pendingDetails === tx.id} aria-label={`More actions for ${tx.description || (group ? 'split' : getCategoryName(tx.category_id))}`} onClick={() => setPendingDetails(pendingDetails === tx.id ? null : tx.id)} className="flex min-w-0 items-center gap-1 text-left"><span className="truncate">{tx.description || (linked ? 'Transfer' : group ? 'Split' : getCategoryName(tx.category_id))}</span><MoreHorizontal className="h-3 w-3 shrink-0 text-muted-foreground sm:hidden" /></button>{renderRecentBadge(tx)}</p>
+        <p className="mt-0.5 truncate text-xs text-muted-foreground"><span className={cn('font-medium', isReview ? 'text-violet-600 dark:text-violet-300' : ready ? 'text-amber-700 dark:text-amber-300' : '')}>{statusLabel}</span> · {linked ? `${getAccountName(outgoing.account_id)} → ${getAccountName(incoming!.account_id)}` : group ? `Split · ${group.length} lines · ${getAccountName(tx.account_id)}` : `${getCategoryName(tx.category_id)} · ${getAccountName(tx.account_id)}`} · {dateLabel}</p>
         {isReview && !ready && <p className="mt-1 text-xs text-muted-foreground">Confirm on {dateLabel}</p>}
         {hasPossibleDuplicateFlag(tx.review_flags) && <span className="mt-1 inline-flex items-center gap-1 text-xs text-amber-700 dark:text-amber-300"><AlertCircle className="h-3 w-3" />Possible duplicate</span>}
       </div>
@@ -1504,11 +1532,16 @@ export function TransactionList({
         {linked ? <><div><span className="sr-only">Sent </span>{nativeAmount(outgoing.amount, outgoing.account_id, false)}</div><div className="text-xs font-medium text-muted-foreground"><span className="sr-only">Received </span>→ {nativeAmount(incoming!.amount, incoming!.account_id, false)}</div></> : <span className={tx.amount > 0 ? 'text-success' : 'text-foreground'}>{nativeAmount(tx.amount, tx.account_id)}</span>}
       </div>
       {!locked && <div className="ml-auto flex items-center gap-1 sm:ml-0">
-        {(!tx.linked_transaction_id || isReview) && <Button size="icon" variant="ghost" className={cn("h-11 w-11 sm:h-9 sm:w-9", pendingDetails === tx.id ? "" : "hidden sm:inline-flex")} disabled={pendingActionId !== null} aria-label={linked ? 'Edit transfer review draft' : isReview ? 'Edit MCP draft' : 'Edit upcoming transaction'} onClick={() => handleEdit(outgoing)}><Pencil className="h-3.5 w-3.5" /></Button>}
+        {group && <Button size="icon" variant="ghost" className="h-11 w-9 sm:h-9 sm:w-9" aria-label={expanded ? 'Hide split lines' : 'Show split lines'} aria-expanded={expanded}
+          onClick={() => setExpandedSplits(prev => { const next = new Set(prev); if (!next.delete(tx.id)) next.add(tx.id); return next })}><ChevronDown className={cn('h-4 w-4', expanded && 'rotate-180')} /></Button>}
+        {(!tx.linked_transaction_id || isReview) && <Button size="icon" variant="ghost" className={cn("h-11 w-11 sm:h-9 sm:w-9", pendingDetails === tx.id ? "" : "hidden sm:inline-flex")} disabled={pendingActionId !== null} aria-label={linked ? 'Edit transfer review draft' : group ? `Edit ${actionName}` : isReview ? 'Edit MCP draft' : 'Edit upcoming transaction'} onClick={() => handleEdit(outgoing)}><Pencil className="h-3.5 w-3.5" /></Button>}
         {ready && (!tx.linked_transaction_id || isReview) && <Button size="sm" variant="ghost" className="h-11 w-11 bg-success/10 p-0 text-success sm:h-9 sm:w-auto sm:px-3" disabled={pendingActionId !== null} aria-label={`Confirm ${actionName}`} onClick={() => handleConfirmUpcoming(outgoing)}>{busy ? <Loader2 className="h-4 w-4 animate-spin sm:mr-1" /> : <Check className="h-4 w-4 sm:mr-1" />}<span className="sr-only sm:not-sr-only">Confirm</span></Button>}
         {(ready || isReview) && (!tx.linked_transaction_id || isReview) ? <Button size="sm" variant="ghost" className={cn("h-11 px-3 text-muted-foreground sm:h-9", pendingDetails === tx.id ? "" : "hidden sm:inline-flex")} disabled={pendingActionId !== null} aria-label={`Decline ${actionName}`} onClick={() => handleDeclineUpcoming(outgoing)}>Decline</Button>
-          : !tx.linked_transaction_id && <Button size="icon" variant="ghost" className="h-11 w-11 sm:h-9 sm:w-9" aria-label="Delete upcoming transaction" disabled={deletingId === tx.id} onClick={event => { event.stopPropagation(); handleDelete(tx.id) }}><Trash2 className="h-4 w-4" /></Button>}
+          : !tx.linked_transaction_id && <Button size="icon" variant="ghost" className="h-11 w-11 sm:h-9 sm:w-9" aria-label={group ? 'Delete upcoming split' : 'Delete upcoming transaction'} disabled={deletingId === tx.id} onClick={event => { event.stopPropagation(); if (group && tx.split_id) handleDeleteSplit(tx.split_id); else handleDelete(tx.id) }}><Trash2 className="h-4 w-4" /></Button>}
       </div>}
+      {expanded && group && <ul className="col-span-3 basis-full space-y-1 border-l border-border pl-3 sm:ml-12" aria-label="Split lines">
+        {group.map(line => <li key={line.id} className="flex items-center gap-2 text-xs text-muted-foreground"><span aria-hidden="true">{getCategoryIcon(line.category_id)}</span><span className="min-w-0 flex-1 truncate">{getCategoryName(line.category_id)}{line.description ? ` · ${line.description}` : ''}</span><span className="tabular-nums">{nativeAmount(line.amount, line.account_id, true)}</span></li>)}
+      </ul>}
     </div>
   }
 
@@ -1761,7 +1794,7 @@ export function TransactionList({
                       {splitBlockedReason && <span className="text-xs text-muted-foreground">{splitBlockedReason}</span>}
                     </div>
                   )}
-                  {splitLines && isUpcomingForm && <p className="col-span-2 text-xs text-destructive">A split cannot be dated in the future.</p>}
+                  {splitLines && isUpcomingForm && !editingPendingSplit && <p className="col-span-2 text-xs text-destructive">A split cannot be dated in the future.</p>}
                   {formData.type === 'expense' && (
                     <div className="col-span-2">
                       <label className="flex items-center gap-2 cursor-pointer">

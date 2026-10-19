@@ -38,4 +38,12 @@ export class TransactionSplitController {
     await this.splitService.delete(c.req.param('id'))
     return c.json({ success: true })
   }
+
+  async confirm(c: Context) {
+    return c.json(this.toResponse(await this.splitService.confirm(c.req.param('id'), this.getClientDate(c))))
+  }
+
+  async decline(c: Context) {
+    return c.json(this.toResponse(await this.splitService.decline(c.req.param('id'))))
+  }
 }

@@ -38,6 +38,7 @@ export type TransactionRow = {
   review_source?: 'manual' | 'chatgpt_mcp' | null
   review_batch_id?: string | null
   review_flags?: string | null
+  split_id?: string | null
   created_at?: number | null
   updated_at?: number | null
 }
