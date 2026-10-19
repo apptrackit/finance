@@ -77,7 +77,6 @@ it('retains every same-day execution, its actual date/currency and the current r
  const list=screen.getByRole('list',{name:`Executions on ${date}`})
  expect(list.children).toHaveLength(4)
  expect(list).toHaveTextContent('101 EUR');expect(list).toHaveTextContent('102 EUR');expect(list).toHaveTextContent('110 EUR');expect(list).toHaveTextContent('99 USD')
- expect(screen.getByText(/Current average remaining cost: 98,5 EUR/)).toBeVisible()
 })
 it('reuses an owned detail cache until its source key changes',async()=>{
  const fetcher=vi.fn<typeof fetch>().mockResolvedValue(Response.json(value)),cache=new Map()

@@ -11,7 +11,7 @@ import { InvestmentChart } from './InvestmentChart'
 import type { HoldingChartCache } from './InvestmentChart'
 import type { Account, MarketQuote, Transaction } from './types'
 import { calculatePosition } from './utils'
-import { amount, costPrice, unitPrice, signedAmount, percentage, tone } from './overview'
+import { amount, costPrice, unitPrice, signedAmount, tone } from './overview'
 type Props = {
   account: Account | null
   allTransactions: Transaction[]
@@ -109,15 +109,7 @@ export function InvestmentDetailModal({
             {amount(p.currentValue, reportingCurrency, hidden)}
           </p>
           <p className={`mt-2 text-sm tabular-nums ${tone(p.gainLoss, hidden)}`}>
-            {signedAmount(p.gainLoss, reportingCurrency, hidden)}{' '}
-            <span className="text-xs font-normal text-muted-foreground">
-              total gain · excludes dividends ·{' '}
-              {hidden
-                ? '••••'
-                : p.gainLossPercent === null
-                  ? 'Estimated return unavailable'
-                  : `${percentage(p.gainLossPercent)} estimated`}
-            </span>
+            {signedAmount(p.gainLoss, reportingCurrency, hidden)}
           </p>
         </div>
         {(protectedAccount || (market && freshness.needsAttention) || p.priceFetchError) && (

@@ -12,7 +12,7 @@ import {
 } from 'recharts'
 import type { PriceHistory } from '../../../../shared/market-data'
 import { API_BASE_URL, apiFetch } from '../../config'
-import { costPrice, unitPrice } from './overview'
+import { unitPrice } from './overview'
 import { Select } from '../common/select'
 type Trade = {
   id: string
@@ -320,17 +320,6 @@ export function InvestmentChart({
           </ResponsiveContainer>
         )}
       </div>
-      <p className="text-[11px] text-muted-foreground">
-        Buy / Sell markers use recorded execution prices in {history?.currency ?? 'quote currency'}.
-        Unverified or other-currency executions remain in the dated list below.
-      </p>
-      <p className="text-[11px] text-muted-foreground">
-        Current average remaining cost:{' '}
-        {currentCost === null
-          ? 'Unavailable in this chart currency'
-          : costPrice(currentCost, history?.currency ?? '')}
-        . Dashed reference is today's remaining basis per unit, not a historical cost series.
-      </p>
       {dates.length > 0 && (
         <label className="block text-xs text-muted-foreground">
           Read chart day

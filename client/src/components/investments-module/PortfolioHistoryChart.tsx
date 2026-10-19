@@ -45,14 +45,6 @@ export function PortfolioHistoryChart({history,hidden,currency,currentValue}:{hi
   {!hidden&&data&&data.points.length>1&&<label className="sr-only focus-within:not-sr-only"><span>Read a day: {selected?.date??data.to}</span><input type="range" aria-label="Read portfolio history by date" min={0} max={data.points.length-1} value={selected?selection!.index:data.points.length-1} onChange={e=>readDay(Number(e.target.value))} aria-valuetext={`${selected?.date??data.to} · ${money(displayedValue)}`} className="w-full accent-primary"/></label>}
   {data&&<>
    <p className="text-[10px] leading-relaxed text-muted-foreground">{data.from} – {data.to} · {data.timezone} · read {new Date(data.as_of).toLocaleString()}{data.points.at(-1)?.provisional?' · today is provisional':''}</p>
-   <details className="text-xs text-muted-foreground"><summary className="cursor-pointer">History method and coverage{summary?.status==='partial'?' · incomplete':''}</summary>
-    <div className="mt-2 space-y-2"><p>History includes sold and archived holdings. Gain excludes contributions, withdrawals and dividends. Estimated return links daily factors, assuming contributions at the start and withdrawals at the end of each day. Missing inputs leave gaps.</p><p>{data.method.price_timing}</p><p>{data.method.fx_timing}</p><p>{data.method.current_endpoint}</p>
-     {summary?.reasons.length!==0&&<p>Range coverage: {summary?.reasons.join(', ').replaceAll('_',' ')}.</p>}
-     <p>Unknown legacy history starts at its first supported boundary. Net invested requires known lifetime cash flows; it is not remaining cost basis. All is bounded to the last ten years.</p>
-     <ul className="space-y-1">{data.coverage_ranges.slice(0,30).map((c,i)=><li key={i}>{data.holdings.find(h=>h.account_id===c.account_id)?.name??'Holding'} · {c.from} – {c.to} · {c.kind}: {c.reasons.join(', ').replaceAll('_',' ')}</li>)}</ul>
-     {data.coverage_ranges.length>30&&<p>{data.coverage_ranges.length-30} more coverage intervals in this response.</p>}
-    </div>
-   </details>
   </>}
  </section>
 }
