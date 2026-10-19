@@ -117,3 +117,17 @@ it('protects a changed trade on Back and preserves the draft when navigation is 
  expect(screen.queryByRole('form',{name:'Investment trade'})).not.toBeInTheDocument()
  router.dispose()
 })
+
+it('selects EUR for holdings and history and keeps it across route changes',async()=>{
+ const router=createMemoryRouter(appRoutes,{initialEntries:['/investments']})
+ render(<ThemeProvider><AlertProvider><RouterProvider router={router}/></AlertProvider></ThemeProvider>)
+ await screen.findByRole('heading',{name:'Portfolio value'})
+ fireEvent.click(screen.getByRole('button',{name:'EUR',exact:true}))
+ expect(screen.getByRole('button',{name:'EUR',exact:true})).toHaveAttribute('aria-pressed','true')
+ expect(screen.getByRole('heading',{name:'Portfolio value'}).closest('section')).toHaveTextContent('12 EUR')
+ await waitFor(()=>expect(fetchMock.mock.calls.some(([url])=>String(url).includes('/investment-history?')&&new URL(String(url),'http://localhost').searchParams.get('currency')==='EUR')).toBe(true))
+ await act(async()=>{await router.navigate('/settings');await router.navigate('/investments')})
+ expect(await screen.findByRole('button',{name:'EUR',exact:true})).toHaveAttribute('aria-pressed','true')
+ expect(screen.getByRole('heading',{name:'Portfolio value'}).closest('section')).toHaveTextContent('12 EUR')
+ router.dispose()
+})

@@ -61,3 +61,12 @@ it('rejects unsupported scope/currency rather than silently changing the reporti
  expect((await f.request('/investment-metrics?scope=other')).status).toBe(400)
  expect((await f.request('/investment-metrics?currencies=SHARE')).status).toBe(400)
 })
+
+it('returns EUR in a three-currency preview without changing balances or investment facts',async()=>{
+ const before=await facts(),r=await f.request('/investment-trades/preview?currencies=HUF,USD,EUR','POST',input())
+ expect(r.status,await r.clone().text()).toBe(200)
+ const result=await r.json() as InvestmentMetricsSnapshot
+ expect(Object.keys(result.by_currency)).toEqual(['HUF','USD','EUR'])
+ expect(result.by_currency.EUR).toMatchObject({currency:'EUR',holdings:[{account_id:'holding',quantity:10}]})
+ expect(await facts()).toEqual(before)
+})

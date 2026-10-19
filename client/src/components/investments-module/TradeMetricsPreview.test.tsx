@@ -16,7 +16,7 @@ it('shows the saved-engine preview, sends edit identity and masks all financial 
  expect(await screen.findByText('Average remaining cost: 101 USD')).toBeInTheDocument()
  expect(screen.getByText(/Estimated gain on this sale: 28/)).toBeInTheDocument()
  const [url,options]=vi.mocked(apiFetch).mock.calls[0]
- expect(url).toBe('/api/investment-trades/preview?trade_id=trade')
+ expect(url).toBe('/api/investment-trades/preview?currencies=HUF,USD,EUR&trade_id=trade')
  expect(JSON.parse(String(options?.body))).toMatchObject({...input,idempotency_key:expect.any(String)})
  view.rerender(<TradeMetricsPreview input={input} tradeId="trade" hidden/>)
  expect(screen.queryByText(/101,00|242|28.?800/)).not.toBeInTheDocument()
@@ -33,4 +33,12 @@ it('discards superseded previews and preserves drafts when a preview fails',asyn
  release(Response.json(fixture()))
  expect(screen.queryByText(/101,00|Private failure/)).not.toBeInTheDocument()
  expect(screen.getByText(/draft is preserved/)).toBeInTheDocument()
+})
+
+it('uses the EUR preview ledger rather than converting a HUF result in the browser',async()=>{
+ const data=fixture();Object.assign(data.by_currency.EUR.holdings[0],{remaining_basis:123,trade_realized:{preview:7},native:{average_cost:101}})
+ vi.mocked(apiFetch).mockResolvedValue(Response.json(data))
+ render(<TradeMetricsPreview input={input} currency="EUR" hidden={false}/>)
+ expect(await screen.findByText('Remaining basis: 123 EUR')).toBeInTheDocument()
+ expect(screen.getByText('Estimated gain on this sale: 7 EUR')).toBeInTheDocument()
 })

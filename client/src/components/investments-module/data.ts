@@ -1,3 +1,4 @@
+import { investmentReportingCurrencies } from './reporting-currencies'
 import type { CurrencyMetrics, InvestmentMetricsSnapshot } from '../../../../shared/investment-metrics'
 import {isoDate} from '../../../../shared/market-data'
 import type { TradeFacts } from '../../../../shared/investment-trade'
@@ -60,13 +61,13 @@ const description = (transaction: InvestmentTrade, quoteCurrency: string) => {
 // must never publish incomplete quantities or a zero-value portfolio.
 export async function readInvestmentSnapshot(signal: AbortSignal): Promise<InvestmentSnapshot> {
   const [response,categories] = await Promise.all([
-    apiFetch(`${API_BASE_URL}/investment-metrics?overview=1`,{throwOnError:true,signal}),
+    apiFetch(`${API_BASE_URL}/investment-metrics?overview=1&currencies=${investmentReportingCurrencies.join(',')}`,{throwOnError:true,signal}),
     readArray('/categories',category,signal),
   ])
   const snapshot: InvestmentMetricsSnapshot = await response.json()
   if (!Number.isSafeInteger(snapshot.source_revision) || snapshot.source_revision<0 || !isoDate(snapshot.date)
     || typeof snapshot.as_of!=='string' || !Number.isFinite(Date.parse(snapshot.as_of)) || !Array.isArray(snapshot.accounts) || !snapshot.accounts.every(account) || !Array.isArray(snapshot.trades) || !snapshot.trades.every(trade)
-    || !snapshot.by_currency?.HUF || !snapshot.by_currency?.USD || !snapshot.current_fx?.rates || !snapshot.quotes) throw new Error('Invalid investment metrics response')
+    || investmentReportingCurrencies.some(c=>!snapshot.by_currency?.[c]) || !snapshot.current_fx?.rates || !snapshot.quotes) throw new Error('Invalid investment metrics response')
   if(snapshot.overview!==undefined&&(!record(snapshot.overview.trends)||!Object.values(snapshot.overview.trends).every(trend)
     ||snapshot.accounts.some(a=>!Object.hasOwn(snapshot.overview!.trends,a.id))))throw new Error('Invalid overview trends')
   const allAccounts=snapshot.accounts as Account[],trades=snapshot.trades as InvestmentTrade[]

@@ -1,3 +1,4 @@
+import type { InvestmentReportingCurrency } from '../components/investments-module/reporting-currencies'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {initialOverview} from '../components/investments-module/overview'
 import type {OverviewView} from '../components/investments-module/overview'
@@ -10,7 +11,7 @@ import { readInvestmentSnapshot, type InvestmentSnapshot } from '../components/i
 // Nothing financial is persisted in browser storage.
 export function useInvestmentData(active: boolean, refreshKey: number) {
   const { data, status, load, invalidate } = useLoadableData<InvestmentSnapshot | null>(null, false)
-  const [currencyDisplay, setCurrencyDisplay] = useState<'HUF' | 'USD'>('HUF')
+  const [currencyDisplay, setCurrencyDisplay] = useState<InvestmentReportingCurrency>('HUF')
   const [detailCache]=useState<HoldingChartCache>(()=>new Map())
   useEffect(()=>{detailCache.clear()},[refreshKey,detailCache])
   const controller = useRef<AbortController | null>(null)

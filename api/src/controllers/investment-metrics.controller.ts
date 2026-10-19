@@ -8,7 +8,7 @@ export class InvestmentMetricsController {
   constructor(private db:D1Database,private trades:InvestmentTradeService) {}
   private options(c:Context) {
     const currencies=(c.req.query('currencies')||'HUF,USD').split(',')
-    if(currencies.length>2 || !currencies.length || currencies.some(v=>!(tradeCurrencies as readonly string[]).includes(v))) throw AppError.validation('Choose one or two supported reporting currencies')
+    if(currencies.length>3 || !currencies.length || currencies.some(v=>!(tradeCurrencies as readonly string[]).includes(v))) throw AppError.validation('Choose one to three supported reporting currencies')
     const scope=c.req.query('scope')??'investments'
     if(scope!=='investments' && scope!=='net_worth') throw AppError.validation('Unknown investment scope')
     return {currencies:[...new Set(currencies)],scope,date:c.req.header('X-Client-Date'),signal:c.req.raw.signal} satisfies import('../../../shared/investment-metrics-reader').MetricsReadOptions
