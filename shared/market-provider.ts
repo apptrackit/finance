@@ -6,22 +6,26 @@ const category = (type: unknown): AssetCategory | null => type === 'ETF' ? 'etf'
 const text = (v: unknown): string | null => typeof v === 'string' && v.length <= 200 ? v : null
 const seconds = (v: unknown, now: number): v is number => positive(v) && v * 1000 <= now + 60_000
 
-// One bounded queue per Worker isolate, shared by all provider adapter instances.
-let active = 0
-const queue: (() => void)[] = []
-async function slot(signal: AbortSignal): Promise<() => void> {
-  signal.throwIfAborted()
-  if (active >= 4) {
-    if (queue.length >= 32) throw new MarketError('rate_limited', 'Market request queue is full')
-    await new Promise<void>((resolve, reject) => {
-      const ready = () => { signal.removeEventListener('abort', abort); resolve() }
-      const abort = () => { const i = queue.indexOf(ready); if (i >= 0) queue.splice(i, 1); reject(signal.reason) }
-      queue.push(ready)
-      signal.addEventListener('abort', abort, { once: true })
-    })
-  } else active++
-  if (signal.aborted) { if (queue.length) queue.shift()!(); else active--; signal.throwIfAborted() }
-  return () => { if (queue.length) queue.shift()!(); else active-- }
+// Adapters are constructed inside each incoming Worker request. Never share
+// queue continuations across request handlers: Workers bind I/O to its owner.
+class ProviderQueue {
+  private active = 0
+  private queue: (() => void)[] = []
+  async slot(signal: AbortSignal): Promise<() => void> {
+    signal.throwIfAborted()
+    if (this.active >= 4) {
+      if (this.queue.length >= 32) throw new MarketError('rate_limited', 'Market request queue is full')
+      await new Promise<void>((resolve, reject) => {
+        const ready = () => { signal.removeEventListener('abort', abort); resolve() }
+        const abort = () => { const i = this.queue.indexOf(ready); if (i >= 0) this.queue.splice(i, 1); reject(signal.reason) }
+        this.queue.push(ready)
+        signal.addEventListener('abort', abort, { once: true })
+      })
+    } else this.active++
+    if (signal.aborted) { this.release(); signal.throwIfAborted() }
+    return () => this.release()
+  }
+  private release() { if (this.queue.length) this.queue.shift()!(); else this.active-- }
 }
 async function pause(ms: number, signal: AbortSignal) {
   await new Promise<void>((resolve, reject) => {
@@ -30,9 +34,9 @@ async function pause(ms: number, signal: AbortSignal) {
     signal.addEventListener('abort', abort, { once: true })
   })
 }
-export async function providerJson(url: string, inputSignal: AbortSignal, fetcher: typeof fetch = fetch): Promise<unknown> {
+export async function providerJson(url: string, inputSignal: AbortSignal, fetcher: typeof fetch = fetch, queue = new ProviderQueue()): Promise<unknown> {
   const signal = AbortSignal.any([inputSignal, AbortSignal.timeout(18_000)])
-  const release = await slot(signal)
+  const release = await queue.slot(signal)
   try {
     for (let attempt = 0; attempt < 2; attempt++) {
       signal.throwIfAborted()
@@ -156,12 +160,13 @@ export function normalizeYahoo(data: unknown, requestedSymbol: string, from: str
 }
 
 export class MarketProvider {
+  private readonly queue = new ProviderQueue()
   private readonly fetcher: typeof fetch
   constructor(fetcher: typeof fetch = fetch) { this.fetcher=fetcher }
   async series(symbol: string, from: string, now: number, signal: AbortSignal) {
     const query = new URLSearchParams({ interval: '1d', period1: String(Math.floor(Date.parse(from) / 1000) - DAY / 1000),
       period2: String(Math.floor(now / 1000)), events: 'splits,div', includeAdjustedClose: 'false' })
-    const data = await providerJson(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?${query}`, signal, this.fetcher)
+    const data = await providerJson(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?${query}`, signal, this.fetcher, this.queue)
     try { return normalizeYahoo(data,symbol,from,now) } catch (error) {
       // Bad historical bars/events cannot invalidate independently valid current
       // metadata. Withhold previous-close moves and all unusable history.
@@ -173,7 +178,7 @@ export class MarketProvider {
     }
   }
   async search(query: string, signal: AbortSignal): Promise<SearchResult[]> {
-    const data = await providerJson(`https://query2.finance.yahoo.com/v1/finance/search?${new URLSearchParams({ q: query, quotesCount: '10', newsCount: '0', enableFuzzyQuery: 'false' })}`, signal, this.fetcher)
+    const data = await providerJson(`https://query2.finance.yahoo.com/v1/finance/search?${new URLSearchParams({ q: query, quotesCount: '10', newsCount: '0', enableFuzzyQuery: 'false' })}`, signal, this.fetcher, this.queue)
     if (!record(data) || !Array.isArray(data.quotes) || data.quotes.length > 100) throw new MarketError('unavailable', 'Invalid search response')
     const rows: SearchResult[] = []
     for (const q of data.quotes) {
@@ -187,20 +192,24 @@ export class MarketProvider {
   async fx(from: string, to: string, currencies: string[], now: number, signal: AbortSignal): Promise<FxHistory> {
     const query = new URLSearchParams({ base: 'EUR', quotes: currencies.filter(c => c !== 'EUR').join(','),
       from: new Date(Date.parse(from) - 4 * DAY).toISOString().slice(0, 10), to })
-    const data = currencies.every(c => c === 'EUR') ? [] : await providerJson(`https://api.frankfurter.dev/v2/providers/ecb/rates?${query}`, signal, this.fetcher)
+    const data = currencies.every(c => c === 'EUR') ? [] : await providerJson(`https://api.frankfurter.dev/v2/providers/ecb/rates?${query}`, signal, this.fetcher, this.queue)
     if (!Array.isArray(data) || data.length > 4000) throw new MarketError('unavailable', 'Invalid historical FX series')
     const dates = new Map<string, Record<string, number>>()
     for (const row of data) {
-      if (!record(row) || !isoDate(row.date) || row.date < query.get('from')! || row.date > to || row.base !== 'EUR'
+      if (!record(row) || !isoDate(row.date) || row.date > to || row.base !== 'EUR'
         || typeof row.quote !== 'string' || !currencies.includes(row.quote) || !positive(row.rate)) throw new MarketError('unavailable', 'Invalid dated FX observation')
+      // Range responses can include the prior business-day start observation.
+      // Anything before our four-day padding is unusable under carry rules;
+      // discard it instead of invalidating all the requested dated rates.
+      if (row.date < query.get('from')!) continue
       const rates = dates.get(row.date) ?? { EUR: 1 }
       if (rates[row.quote] !== undefined && row.quote !== 'EUR') throw new MarketError('unavailable', 'Duplicate FX observation')
       rates[row.quote] = row.rate
       dates.set(row.date, rates)
     }
     return fxCoverage({ provider: 'frankfurter_ecb', source: 'ECB statistics', base: 'EUR', from, to, currencies,
-      retrieved_at: new Date(now).toISOString(), status: data.length || currencies.every(c => c === 'EUR') ? 'ok' : 'missing',
-      reason: data.length || currencies.every(c => c === 'EUR') ? null : 'missing_fx',
+      retrieved_at: new Date(now).toISOString(), status: dates.size || currencies.every(c => c === 'EUR') ? 'ok' : 'missing',
+      reason: dates.size || currencies.every(c => c === 'EUR') ? null : 'missing_fx',
       points: [...dates].sort(([a], [b]) => a.localeCompare(b)).map(([date, rates]) => ({ date, rates })) })
   }
 }
