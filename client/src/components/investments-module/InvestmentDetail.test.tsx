@@ -45,3 +45,9 @@ it('removes values, native prices, gain colors, fee amounts and execution descri
  expect(screen.getByRole('button',{name:'Buy',exact:true})).toBeDisabled()
  expect(screen.getAllByRole('button',{name:/Edit buy/}).every(b=>(b as HTMLButtonElement).disabled)).toBe(true)
 })
+it('opens historical details for an unlinked legacy purchase without presenting it as a new cash trade',()=>{
+ vi.stubGlobal('fetch',vi.fn<typeof fetch>().mockResolvedValue(Response.json({observations:[],valuation_at:null,next_cursor:null})))
+ const legacy={...trade('old',1),linked_transaction_id:undefined,execution_currency:undefined,cash_amount:null,trade_version:0}
+ render(<InvestmentDetailModal {...props} allTransactions={[legacy]}/>);
+ fireEvent.click(screen.getByRole('button',{name:/Confirm historical details for buy/}));expect(edit).toHaveBeenCalledWith(expect.objectContaining({id:'old',trade_version:0}));expect(screen.queryByText('Legacy record · read only')).not.toBeInTheDocument()
+})

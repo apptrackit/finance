@@ -22,13 +22,14 @@ Migration 018 also adds `investment_position_anchors`, an exported durable table
 - `opening`: a user-confirmed dated opening. Subsequent dated trade quantities must reconcile to the current mirror. It can establish supported unit history from that boundary, not earlier deposits or realized gains.
 - `correction`: a current balance correction with no cash or ordinary income/expense record. It does not automatically verify earlier history. A total manual value correction preserves an already known opening cost, without declaring a new contribution.
 
-The current read model always uses stored units, not a shorter sum of investment activity. `holding_position` exposes those units, signed activity, residual, latest anchor, whether history protects identity, and reconciliation status/reasons. A zero residual alone does not prove complete legacy history. A reconciled opening is unit coverage since its boundary, not a claim of complete lifetime cost/cash/return coverage.
+The current read model preserves stored balances and the saved anchor. For unit holdings with an observed/no anchor, complete supported recorded buys/sells can supply history directly when every prefix is nonnegative and the final quantity explains the saved balance. `holding_position.recorded_history` exposes this calculated provenance, first trade date and count. It does not insert an opening or rewrite ledger rows. Explicit imported openings and corrections take precedence. See [recorded investment history](recorded-investment-history.md) for evidence bounds and cash coverage.
+
 
 ## Account setup and reconciliation
 
 The Accounts editor supports explicit category and pricing selection. Market search recognizes ETFs and retains their exchange and canonical symbol. Manual pricing supports units and a fiat price without requiring an API symbol. A manual total asset does not require a symbol either. Empty Investments links into the existing Accounts flow with Investment preselected; opening warnings link back to that account's editor.
 
-New nonzero positions require an opening date. A zero start defaults to the day before the client's local today; the form translates its displayed today zero-start default to that prior boundary so a trade today is allowed. Select an earlier opening date when recording earlier trades. Opening dates are end of day: a new trade must be strictly after the opening date, not silently included in it twice.
+New nonzero imported positions require an opening date. New zero-unit holdings need no opening input: record the purchases/sales with their actual dates, including a first backdated purchase. An explicitly supplied opening remains a fixed boundary. Opening dates are end of day: a new trade must be strictly after the opening date, not silently included in it twice.
 
 A new manually priced ETF can be submitted as:
 

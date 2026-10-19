@@ -2,7 +2,7 @@ import { valuationAt } from '../../../shared/manual-valuation'
 import type { ManualValuation } from '../../../shared/manual-valuation'
 import { AppError } from '../errors/codes'
 import { addDecimal, recoverLedgerResidue } from '../../../shared/decimal-balance'
-import { validLocalDate } from '../../../shared/holding'
+import { validLocalDate, effectivePositionAnchor, applyRecordedHistory } from '../../../shared/holding'
 import type { PositionAnchor } from '../../../shared/holding'
 import { roundSettlement, settlementDetails, unitInteger as unitIntegerValue, tradeCurrencies } from '../../../shared/investment-trade'
 import type { TradeInput } from '../../../shared/investment-trade'
@@ -49,10 +49,16 @@ export class InvestmentTradeService {
     after: InvestmentTransaction | undefined, today: string): { balance: number; baseline?: PositionAnchor; recovery?: {account_id:string;before:number;value:number;evidence_count:number} } {
     if (account.asset_type === 'manual') throw AppError.validation('Use the manual ownership timeline')
     const oldEvents = state.trades.filter(t => t.account_id === account.id)
-    const savedAnchor = account.holding_position?.anchor
+    const savedAnchor = effectivePositionAnchor(account)
     const baseline: PositionAnchor = savedAnchor ?? {
       id: crypto.randomUUID(),kind:'observed',effective_date:today,balance:account.balance,cost_amount:null,cost_currency:null,
       trade_rowid_boundary:0,trade_order_boundary:Math.max(0,...oldEvents.map(t => t.effective_order ?? 0)),created_at:Date.now(),
+    }
+    // A recorded-history zero start follows the earliest event, including an
+    // earlier backdated purchase in this proposed edit. Imported openings stay fixed.
+    if (account.holding_position?.recorded_history && after?.account_id === account.id && after.date <= baseline.effective_date) {
+      const date=new Date(`${after.date}T00:00:00Z`); date.setUTCDate(date.getUTCDate()-1)
+      baseline.effective_date=date.toISOString().slice(0,10)
     }
     const included = (t: InvestmentTransaction) => baseline.kind === 'opening'
       ? t.date > baseline.effective_date : (t.effective_order ?? 0) > (baseline.trade_order_boundary ?? baseline.trade_rowid_boundary)
@@ -218,7 +224,8 @@ export class InvestmentTradeService {
         const account: Account={...holding,balance,
           ...(baseline?{holding_position:{...holding.holding_position!,anchor:baseline}}:{}),
           ...(total?{manual_ownership:t.type==='buy'?'owned' as const:'disposed' as const}:{})}
-        return {account,trades:[...state.trades.filter(row=>row.account_id===holding.id && row.id!==existing?.id),trade],trade_id:trade.id,revision:state.revision,
+        const plannedTrades=[...state.trades.filter(row=>row.account_id===holding.id && row.id!==existing?.id),trade]
+        return {account:applyRecordedHistory(account,plannedTrades.map(t=>({...t,effective_order:t.effective_order??0})),today),trades:plannedTrades,trade_id:trade.id,revision:state.revision,
           cash_after:{account_id:cash.id,currency:cash.currency,balance:op.balances.get(cash.id)!}}
       }
       if (await this.repo.commit(op)) return result

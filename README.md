@@ -58,6 +58,8 @@ Migration 017 backfills unambiguous existing investment links without changing f
 
 ### Investments and currencies
 
+Matching recorded purchases/sales now supply unit history directly; zero-start holdings need no separate opening date. A dated starting position is for imported units missing from the trade ledger. Verified old linked cash payments can support reporting cost, while standalone purchase currency/fees remain explicitly unavailable. See [recorded-history rules](docs/recorded-investment-history.md).
+
 Market-priced holdings distinguish share/coin quantity from cash value. Their buy/sell history lives in `investment_transactions`; current portfolio valuation uses quantities, market quotes, and currency conversion. Manual assets use a separately managed value. Individual account trend charts keep the account's native currency, while aggregate views use the selected reporting currency.
 
 Market quotes and exchange rates come from external services and may be unavailable or delayed. The epic’s [market input contract](docs/investment-market-data.md) implements shared API/MCP quote normalization, bounded caching, actual source/session timestamps and dated ECB FX without a paid provider. Investment metrics use a shared calculator with documented complete/partial aggregate policies; contributors should follow the [financial rules in AGENTS.md](AGENTS.md#financial-rules-to-preserve) when changing calculations.

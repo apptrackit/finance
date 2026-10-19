@@ -237,8 +237,8 @@ try {
   assert(Object.keys(metrics.overview.trends).length === holdings.length, 'bounded overview')
   for (const c of ['HUF', 'USD'])
     assert(
-      metrics.by_currency[c].holdings.every((h) => h.net_invested === null && h.total_gain === null),
-      'unknown historical facts preserved',
+      metrics.by_currency[c].holdings.every((h) => h.total_gain === null),
+      'gains stay unavailable without price coverage; recorded cash may be known',
     )
   for (const range of ['1m', '3m', '6m', '1y', 'ytd', 'all']) {
     const history = await read(`/investment-history?range=${range}&currency=HUF&timezone=Europe%2FBudapest`)
@@ -274,7 +274,7 @@ try {
     '021: reconstructible empty provider cache',
   ]
   result.compatibility = {
-    legacy_cost_and_cash_unknown: true,
+    legacy_execution_and_fee_facts_preserved: true,
     current_quantities_preserved: true,
     export_covered: true,
     all_ranges_bounded: true,

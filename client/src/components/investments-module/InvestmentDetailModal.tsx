@@ -265,15 +265,15 @@ export function InvestmentDetailModal({
                           ? amount(t.fee_amount, t.fee_currency ?? t.cash_currency ?? '')
                           : 'Unknown breakdown'}
                     </p>
-                    {editable ? (
+                    {(editable || (!total && !t.linked_transaction_id)) ? (
                       <button
                         type="button"
-                        aria-label={`Edit ${label.toLowerCase()} on ${t.date}, trade ${index + 1}`}
+                        aria-label={`${t.linked_transaction_id ? 'Edit' : 'Confirm historical details for'} ${label.toLowerCase()} on ${t.date}, trade ${index + 1}`}
                         disabled={editing || !!protectedAccount || dirty || hidden}
                         onClick={() => onEdit(t)}
                         className="min-h-10 shrink-0 text-xs font-medium text-primary disabled:opacity-50"
                       >
-                        Edit trade
+                        {t.linked_transaction_id ? 'Edit trade' : t.cash_amount == null ? 'Confirm historical details' : 'Review historical details'}
                       </button>
                     ) : (
                       <span>Legacy record · read only</span>

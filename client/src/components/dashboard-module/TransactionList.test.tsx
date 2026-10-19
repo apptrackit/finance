@@ -518,3 +518,12 @@ describe('confirmation balance preview', () => {
     expect(transferAccounts[0].balance).toBe(900)
   })
 })
+it('routes standalone investment edits into historical confirmation instead of income/expense and hides unsupported deletion',async()=>{
+ const user=userEvent.setup()
+ vi.mocked(apiFetch).mockImplementation(async(url)=>String(url).endsWith('/legacy-details')?Response.json({trade:{id:'old-buy',account_id:'holding',type:'buy',date:'2020-01-01',quantity:2,price:50,total_amount:100,trade_version:0},account:{name:'Synthetic holding',currency:'SHARE',is_locked:false,archived_at:null}}):Response.json([]))
+ renderTransfers({accounts:[...transferAccounts,{id:'holding',name:'Synthetic holding',type:'investment',balance:2,currency:'SHARE'}],transactions:[{id:'old-buy',account_id:'holding',amount:100,quantity:2,price:50,date:'2020-01-01',description:'Legacy buy'}]})
+ await user.click(screen.getByRole('button',{name:'Confirm historical trade details'}))
+ expect(await screen.findByRole('dialog',{name:'Confirm historical trade details'})).toBeVisible()
+ expect(screen.queryByRole('dialog',{name:'Edit Transaction'})).not.toBeInTheDocument()
+ expect(screen.queryByRole('button',{name:'Delete transaction'})).not.toBeInTheDocument()
+})
