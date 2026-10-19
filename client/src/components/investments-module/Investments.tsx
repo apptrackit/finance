@@ -61,8 +61,9 @@ export function Investments() {
    <div className="grid min-w-0 items-stretch gap-4 @min-[900px]:grid-cols-[minmax(0,1fr)_320px]">
     <InvestmentAttention positions={positions} quotes={quotes} refreshing={status.loading} onRefresh={()=>{void refresh()}} onOpen={a=>setSelected(a.id)} className="order-2 @min-[900px]:order-first @min-[900px]:col-span-2"/>
     <div className="order-1 min-w-0"><PortfolioHistoryChart history={investments.history} hidden={hidden} currency={currencyDisplay} currentValue={metrics?.total_value}/></div>
-    <div className="order-3 grid min-w-0 gap-4 sm:grid-cols-2 @min-[900px]:grid-cols-1"><PortfolioSummary metrics={metrics} hidden={hidden} currency={currencyDisplay}/><PortfolioAllocation positions={positions} view={overviewView} onChange={updateOverview} onOpen={a=>setSelected(a.id)} hidden={hidden} currency={currencyDisplay}/></div>
+    <div className="order-3 min-w-0"><PortfolioSummary metrics={metrics} hidden={hidden} currency={currencyDisplay}/></div>
    </div>
+   <PortfolioAllocation positions={positions} view={overviewView} onChange={updateOverview} onOpen={a=>setSelected(a.id)} hidden={hidden} currency={currencyDisplay}/>
    <HoldingsList positions={positions} quotes={quotes} trends={data?.trends} privacyMode={privacyMode} view={overviewView} onViewChange={updateOverview} refreshing={status.loading} onOpenDetail={a=>setSelected(a.id)}/>
    {!editor&&!legacyTradeId&&<InvestmentDetailModal key={selected} account={opening} allTransactions={trades} quotes={quotes} exchangeRates={data?.exchangeRates??{}} privacyMode={privacyMode}
     onClose={closeDetail} metrics={metrics?.holdings.find(h=>h.account_id===selected)} reportingCurrency={currencyDisplay} onValuationSaved={()=>{void saved()}}
