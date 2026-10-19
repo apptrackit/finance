@@ -2,7 +2,7 @@ import { investmentReportingCurrencies } from './reporting-currencies'
 import { LegacyTradeDetails } from './LegacyTradeDetails'
 import {useEffect,useRef,useState} from 'react'
 import {Link,useOutletContext} from 'react-router'
-import {Eye,EyeOff,Plus,RefreshCw} from 'lucide-react'
+import {Plus,RefreshCw} from 'lucide-react'
 import type {FinancePageContext} from '../../App'
 import {FinanceDataBoundary} from '../common/FinanceDataStatus'
 import {Button} from '../common/button'
@@ -21,7 +21,7 @@ import {InvestmentDetailModal} from './InvestmentDetailModal'
 export function Investments() {
  const {investments,finance}=useOutletContext<FinancePageContext>()
  const {data,status,refresh,currencyDisplay,setCurrencyDisplay,overviewView,updateOverview}=investments
- const {privacyMode,togglePrivacyMode}=usePrivacy(),hidden=privacyMode==='hidden'
+ const {privacyMode}=usePrivacy(),hidden=privacyMode==='hidden'
  const [legacyTradeId,setLegacyTradeId]=useState<string|null>(null)
  const [selected,setSelected]=useState<string|null>(null)
  const [editor,setEditor]=useState<{holdingId?:string;type?:'buy'|'sell';edit?:TradeEdit}|null>(null)
@@ -54,7 +54,6 @@ export function Investments() {
     <h1 className="mr-auto hidden text-2xl font-semibold tracking-tight lg:block">Investments</h1>
     <p className="order-last w-full text-right text-[10px] text-muted-foreground lg:order-none lg:w-auto">{status.stale?'Saved snapshot':'As of'} {data?.asOf?new Date(data.asOf).toLocaleString(undefined,{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}):'unavailable'}</p>
     <Button type="button" variant="outline" size="icon" disabled={status.loading} onClick={()=>{void refresh()}} aria-label="Refresh prices" className="h-10 w-10"><RefreshCw className={`h-4 w-4 ${refreshing?'animate-spin motion-reduce:animate-none':''}`}/></Button>
-    <Button type="button" variant="outline" size="icon" onClick={togglePrivacyMode} aria-label={hidden?'Show investment values':'Hide investment values'} aria-pressed={hidden} className="hidden h-10 w-10 lg:inline-flex">{hidden?<EyeOff className="h-4 w-4"/>:<Eye className="h-4 w-4"/>}</Button>
     <div role="group" aria-label="Investment reporting currency" className="flex rounded-lg border border-border p-0.5">{investmentReportingCurrencies.map(c=><button key={c} type="button" aria-pressed={currencyDisplay===c} onClick={()=>setCurrencyDisplay(c)} className={`min-h-9 rounded-md px-3 text-xs font-semibold ${c===currencyDisplay?'bg-secondary text-foreground':'text-muted-foreground'}`}>{c}</button>)}</div>
     {canTrade?<Button type="button" onClick={()=>setEditor({})} className="h-10"><Plus className="h-4 w-4"/>Record trade</Button>:<Link to="/accounts" state={{addAccount:true,investment:accounts.length===0}} className="inline-flex min-h-10 items-center rounded-lg bg-primary px-3 text-xs font-semibold text-primary-foreground">{accounts.length===0?'Add first holding':'Set up trade accounts'}</Link>}
    </header>
