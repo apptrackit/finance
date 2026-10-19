@@ -8,6 +8,8 @@ Intermediate package/UI version bumps are grouped under the next published GitHu
 
 ### Fixed
 
+- Holdings use trailing detail arrows, green/red 30-day price trends, readable source times and supported unrealized return percentages paired with remaining-cost gains. Privacy, missing basis and stale-source coverage remain explicit (#167).
+
 - Investment chart reads isolate provider queues and in-flight work per Worker request, preventing concurrent cross-request I/O failures. Historical FX keeps valid dated rates when a response includes an earlier business-day boundary outside the padded window; missing days remain unavailable (#159).
 
 - Show modest quote delays beside investment prices with their age/source timestamp instead of actionable stale-price attention. Older or unavailable quotes still warn, and strict Today-return coverage is unchanged (#163).

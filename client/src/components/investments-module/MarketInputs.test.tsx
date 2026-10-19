@@ -51,7 +51,7 @@ it('shows a stale source time without inventing a daily zero move and masks priv
   const position=calculatePosition(account,[],quotes,{USD:1,EUR:1})
   const props={positions:[position],quotes,loading:false,refreshing:false,privacyMode:'off',onRefresh:vi.fn(),onOpenDetail:vi.fn()}
   const view=render(<MemoryRouter><HoldingsList {...props}/></MemoryRouter>)
-  expect(screen.getByText(/Stale price 2026-10-16/)).toBeInTheDocument()
+  expect(screen.getByText('Stale price')).toBeInTheDocument();expect(document.querySelector('time')?.getAttribute('datetime')).toContain('2026-10-16')
   expect(screen.queryByText('+0.00%')).not.toBeInTheDocument()
   view.rerender(<MemoryRouter><HoldingsList {...props} privacyMode="hidden" quotes={{TEST:{...quotes.TEST,regularMarketChangePercent:12.34}}}/></MemoryRouter>)
   expect(screen.queryByText(/12.34%/)).not.toBeInTheDocument()
