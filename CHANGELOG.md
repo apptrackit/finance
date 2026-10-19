@@ -8,7 +8,7 @@ Intermediate package/UI version bumps are grouped under the next published GitHu
 
 ### Fixed
 
-- Confirm/correct missing payment details on standalone historical investments without changing units or cash; route legacy edits to the dedicated form instead of Income/Expense (#150).
+- Confirm/correct missing payment details on standalone historical investments without changing units or cash; route legacy edits to the dedicated form instead of Income/Expense. Distinguish missing historical FX from unsaved purchase facts and retry rates rather than asking to edit a saved trade again (#150).
 
 - Investment histories use complete matching recorded buys/sells instead of requiring a separate zero-opening confirmation. New zero-unit holdings take dates from trades; imported nonzero units retain dated openings. Verified reciprocal old cash payments support reporting cost without rewriting trades or guessing execution currency/fees. Missing-cost guidance opens trade review. No new migration.
 

@@ -101,3 +101,20 @@ it('sends missing cash details to trade review rather than asking for another op
  expect(screen.getByText(/Purchase cash details are missing/)).toBeVisible()
  fireEvent.click(screen.getByRole('button',{name:'Review trades'}));expect(open).toHaveBeenCalledWith(position.account)
 })
+
+it('retries missing historical FX after payment confirmation rather than asking to edit the saved trade again',()=>{
+ const p=fixture()[0]
+ const position={...p,reportingCurrency:'HUF',account:{...p.account,holding_position:{quantity:2,activity_quantity:2,residual:0,history_status:'reconciled' as const,coverage_reasons:[],anchor:null}},metrics:{...p.metrics,coverage:{...p.metrics.coverage,cost:['missing_dated_fx','unknown_cost']}}}
+ const retry=vi.fn()
+ render(<MemoryRouter><InvestmentAttention positions={[position]} quotes={quotes} refreshing={false} onRefresh={retry} onOpen={open}/></MemoryRouter>)
+ expect(screen.getByText(/Historical exchange rate unavailable for HUF reporting/)).toBeVisible()
+ expect(screen.queryByRole('button',{name:'Review trades'})).not.toBeInTheDocument()
+ expect(screen.queryByText('Purchase cash details are missing')).not.toBeInTheDocument()
+ fireEvent.click(screen.getByRole('button',{name:'Retry exchange rates'}));expect(retry).toHaveBeenCalledOnce();expect(open).not.toHaveBeenCalled()
+})
+it('does not warn for the same confirmed holding when its reporting currency needs no historical conversion',()=>{
+ const p=fixture()[0]
+ const position={...p,reportingCurrency:'USD',account:{...p.account,holding_position:{quantity:2,activity_quantity:2,residual:0,history_status:'reconciled' as const,coverage_reasons:[],anchor:null}},metrics:{...p.metrics,coverage:{...p.metrics.coverage,cost:[]}}}
+ render(<MemoryRouter><InvestmentAttention positions={[position]} quotes={quotes} refreshing={false} onRefresh={vi.fn()} onOpen={open}/></MemoryRouter>)
+ expect(screen.queryByRole('region',{name:'Investment needs attention'})).not.toBeInTheDocument()
+})
