@@ -8,12 +8,13 @@ import { Label } from '../common/label'
 import { Select } from '../common/select'
 import { Card, CardContent, CardHeader, CardTitle } from '../common/card'
 import { Modal } from '../common/modal'
-import { Plus, ArrowDownLeft, ArrowUpRight, Receipt, Pencil, Trash2, Check, ArrowRightLeft, ChevronDown, MoreHorizontal, SlidersHorizontal, Layers, Search, Clock, AlertCircle, Loader2 } from 'lucide-react'
+import { Plus, ArrowDownLeft, ArrowUpRight, Receipt, Pencil, Trash2, Check, ArrowRightLeft, ChevronDown, MoreHorizontal, SlidersHorizontal, Split, Search, Clock, AlertCircle, Loader2 } from 'lucide-react'
 import { format, startOfMonth, endOfMonth, differenceInCalendarDays, parseISO } from 'date-fns'
 import { API_BASE_URL, apiFetch } from '../../config'
 import { usePrivacy } from '../../context/PrivacyContext'
 import { useAlert } from '../../context/AlertContext'
-import { BulkTransactionModal, type BulkTransaction } from './BulkTransactionModal'
+import { SplitLinesEditor } from './SplitLinesEditor'
+import { resolveSplit, startSplit, newSplitLine, toSplitPayloadLines, type SplitLineDraft } from '../../lib/transaction-split'
 import { AmountInput } from '../common/amount-input'
 import { formatAmount, formatCalculatedAmount, parseAmount } from '../../lib/amount'
 import type { PendingKind } from '../../lib/transaction-review'
@@ -41,7 +42,16 @@ type Transaction = {
   cancelled_at?: number | null
   created_at?: number | null
   updated_at?: number | null
+  split_id?: string | null
+  split_description?: string | null
 }
+
+// Every transaction list endpoint returns rows newest first (rowid DESC), so a split's
+// lines arrive in reverse entry order. Restore the order they were entered in.
+const inEntryOrder = <T,>(lines: T[]): T[] => [...lines].reverse()
+
+// A pending review row: either one transaction or a whole split with its lines.
+type PendingItem = Transaction & { splitGroup?: Transaction[] }
 
 type Account = {
   id: string
@@ -149,7 +159,11 @@ export function TransactionList({
   const lastNavigationKey = useRef(navigationKey)
   const [isAdding, setIsAdding] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
-  const [showBulkModal, setShowBulkModal] = useState(false)
+  // Split mode turns the category into lines of category, note and amount. Null means a single entry.
+  const [splitLines, setSplitLines] = useState<SplitLineDraft[] | null>(null)
+  const [editingSplitId, setEditingSplitId] = useState<string | null>(null)
+  const [expandedSplits, setExpandedSplits] = useState<Set<string>>(() => new Set())
+  const [addedAnother, setAddedAnother] = useState(false)
   const [fetchedCategories, setCategories] = useState<Category[]>([])
   const categories = availableCategories ?? fetchedCategories
   const [upcomingOpen, setUpcomingOpen] = useState(false)
@@ -217,6 +231,12 @@ export function TransactionList({
   }
   const today = getLocalDateString()
   const isUpcomingForm = formData.type !== 'transfer' && formData.date > today
+  const selectedAccount = accounts.find(account => account.id === formData.account_id)
+  const splitResolution = splitLines ? resolveSplit(formData.amount, splitLines) : null
+  // A pending split (an MCP review draft) stays pending when edited, so it may keep a future date.
+  const editingPendingSplit = !!editingSplitId && upcomingTransactions.some(tx => tx.split_id === editingSplitId)
+  const splitBlockedReason = selectedAccount?.type === 'investment' ? 'Investment accounts cannot be split.'
+    : isUpcomingForm && !editingPendingSplit ? 'A split cannot be dated in the future.' : ''
   const allKnownTransactions = [...transactions, ...upcomingTransactions]
   const editingReviewTransfer = !!editingId && upcomingTransactions.some(tx =>
     tx.id === editingId && !!tx.linked_transaction_id && isMcpReviewTransaction(tx)
@@ -559,7 +579,14 @@ export function TransactionList({
     setSuggestedRate(null)
   }
 
+  const resetSplitState = () => {
+    setSplitLines(null)
+    setEditingSplitId(null)
+    setAddedAnother(false)
+  }
+
   const resetForm = () => {
+    resetSplitState()
     const defaults = loadSavedDefaults('expense')
     setFormData({
       account_id: defaults.account_id,
@@ -578,6 +605,7 @@ export function TransactionList({
 
   // When opening the Add form, load defaults
   const handleOpenForm = () => {
+    resetSplitState()
     const defaults = loadSavedDefaults('expense')
     setFormData({
       account_id: defaults.account_id,
@@ -606,6 +634,8 @@ export function TransactionList({
 
   // Handle type change with saved defaults
   const handleTypeChange = (newType: 'expense' | 'income' | 'transfer') => {
+    // Categories belong to a type, so a split keeps its lines and amounts but clears their categories.
+    setSplitLines(lines => newType === 'transfer' ? null : lines && lines.map(line => ({ ...line, category_id: '' })))
     const defaults = loadSavedDefaults(newType)
     setFormData({
       ...formData,
@@ -626,10 +656,88 @@ export function TransactionList({
     setFormData(prev => ({ ...prev, [field]: accountId, amount_to: '', manual_price: '' }))
   }
 
+  // Which submit button was used: only expense and income entries can stay open for the next payment.
+  const submitModeRef = useRef<'close' | 'another'>('close')
+
+  const submitSplit = async (addAnother: boolean) => {
+    const type = formData.type as 'expense' | 'income'
+    const account = accounts.find(a => a.id === formData.account_id)
+    let body
+    if (splitLines) {
+      const resolution = resolveSplit(formData.amount, splitLines)
+      if (!resolution.valid) {
+        showAlert({ type: 'error', message: resolution.problem === 'amounts' ? 'Enter the amounts for each line'
+          : resolution.problem === 'category' ? 'Choose a category for each line' : 'Assign the full amount to the lines' })
+        return
+      }
+      body = toSplitPayloadLines(splitLines, resolution, type)
+    } else {
+      // A split reduced to one line is saved as an ordinary transaction.
+      const amount = parseAmount(formData.amount)
+      if (amount === null || amount <= 0) {
+        showAlert({ type: 'error', message: 'Please enter a valid amount greater than 0' })
+        return
+      }
+      body = [{ category_id: formData.category_id || null, amount: type === 'expense' ? -amount : amount, note: null }]
+    }
+    if (account?.type === 'investment') {
+      showAlert({ type: 'error', message: 'Investment accounts cannot be split' })
+      return
+    }
+    if (splitLines && isUpcomingForm && !editingPendingSplit) {
+      showAlert({ type: 'error', message: 'A split cannot be dated in the future' })
+      return
+    }
+
+    setIsSubmitting(true)
+    try {
+      const wasEditing = !!editingSplitId
+      await apiFetch(editingSplitId ? `${API_BASE_URL}/transactions/splits/${editingSplitId}` : `${API_BASE_URL}/transactions/splits`, {
+        method: editingSplitId ? 'PUT' : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          account_id: formData.account_id,
+          date: formData.date,
+          description: formData.description.trim() || null,
+          exclude_from_estimate: type === 'expense' ? formData.exclude_from_estimate : false,
+          lines: body,
+        }),
+      })
+      saveDefaults(type)
+      refreshRecentBadges()
+      onTransactionAdded()
+      if (addAnother && !wasEditing) {
+        // Keep type, account and date for the next payment.
+        setFormData(prev => ({ ...prev, amount: '', category_id: '', description: '', manual_price: '' }))
+        setSplitLines(null)
+        setAddedAnother(true)
+      } else {
+        setIsAdding(false)
+        resetForm()
+      }
+      showAlert({
+        type: 'success',
+        message: body.length > 1 ? (wasEditing ? editingPendingSplit ? 'Split review draft updated' : 'Split updated' : `Split saved as ${body.length} transactions`)
+          : wasEditing ? 'Split changed to a single transaction' : 'Transaction created',
+      })
+    } catch (error) {
+      console.error('Failed to save split')
+      showAlert({ type: 'error', message: error instanceof Error ? error.message : 'Failed to save split. Please try again.' })
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (isSubmitting) return
+    const addAnother = submitModeRef.current === 'another'
+    submitModeRef.current = 'close'
     setTransferSaveError(null)
+    if (formData.type !== 'transfer' && (splitLines || editingSplitId)) {
+      await submitSplit(addAnother)
+      return
+    }
 
     const amount = parseAmount(formData.amount)
     if (amount === null || amount <= 0) {
@@ -751,8 +859,14 @@ export function TransactionList({
         }
         saveDefaults(formData.type)
       }
-      setIsAdding(false)
-      resetForm()
+      if (addAnother && !wasEditing && savedType !== 'transfer') {
+        // Keep type, account and date for the next payment.
+        setFormData(prev => ({ ...prev, amount: '', category_id: '', description: '', manual_price: '' }))
+        setAddedAnother(true)
+      } else {
+        setIsAdding(false)
+        resetForm()
+      }
       refreshRecentBadges()
       onTransactionAdded()
       showAlert({
@@ -777,6 +891,59 @@ export function TransactionList({
     }
   }
 
+  // Opening any line opens the whole split with its shared fields.
+  const handleEditSplit = (splitId: string) => {
+    const lines = inEntryOrder(allKnownTransactions.filter(tx => tx.split_id === splitId))
+    if (lines.length === 0 || isLocked(lines[0].account_id)) return
+    const total = lines.reduce((sum, line) => sum + line.amount, 0)
+    resetTransferRateState()
+    setFormData({
+      account_id: lines[0].account_id,
+      to_account_id: '',
+      category_id: '',
+      amount: formatCalculatedAmount(Math.abs(total), { maximumFractionDigits: 2 }),
+      amount_to: '',
+      description: lines[0].split_description || '',
+      date: lines[0].date,
+      type: total >= 0 ? 'income' : 'expense',
+      manual_price: '',
+      exclude_from_estimate: !!lines[0].exclude_from_estimate,
+    })
+    setSplitLines(lines.map(line => ({
+      ...newSplitLine(line.category_id || '', formatCalculatedAmount(Math.abs(line.amount), { maximumFractionDigits: 2 })),
+      note: line.description || '',
+    })))
+    setEditingId(null)
+    setEditingSplitId(splitId)
+    setIsAccountOpen(false)
+    setIsAdding(true)
+  }
+
+  const handleDeleteSplit = async (splitId: string) => {
+    const lines = allKnownTransactions.filter(tx => tx.split_id === splitId)
+    if (lines.length === 0 || isLocked(lines[0].account_id)) return
+    const confirmed = await confirm({
+      title: 'Delete Split',
+      message: `Delete this split and its ${lines.length} transactions? This action cannot be undone.`,
+      confirmText: 'Delete',
+      cancelText: 'Cancel'
+    })
+    if (!confirmed) return
+
+    setDeletingId(`split:${splitId}`)
+    try {
+      await apiFetch(`${API_BASE_URL}/transactions/splits/${splitId}`, { method: 'DELETE' })
+      refreshRecentBadges()
+      onTransactionAdded()
+      showAlert({ type: 'success', message: 'Split deleted' })
+    } catch (error) {
+      console.error('Failed to delete split')
+      showAlert({ type: 'error', message: error instanceof Error ? error.message : 'Failed to delete split. Please try again.' })
+    } finally {
+      setDeletingId(null)
+    }
+  }
+
   const handleEdit = (tx: Transaction) => {
     // Prevent editing if the account is locked
     if (isLocked(tx.account_id)) {
@@ -789,6 +956,11 @@ export function TransactionList({
       if (linkedTx && isLocked(linkedTx.account_id)) {
         return
       }
+    }
+
+    if (tx.split_id) {
+      handleEditSplit(tx.split_id)
+      return
     }
 
     const formatNumber = (num: number) => isMcpReviewTransaction(tx)
@@ -941,13 +1113,24 @@ export function TransactionList({
     }
   }
 
+  const splitLinesOf = (tx: Transaction) => upcomingTransactions.filter(line => line.split_id === tx.split_id)
+
+  // Hide a resolved review item at once: both transfer legs, or every line of a split.
+  const markResolved = (tx: Transaction) => setResolvedPendingIds(ids => {
+    const next = new Set(ids).add(tx.id)
+    if (tx.linked_transaction_id) next.add(tx.linked_transaction_id)
+    if (tx.split_id) splitLinesOf(tx).forEach(line => next.add(line.id))
+    return next
+  })
+
   const handleConfirmUpcoming = async (tx: Transaction) => {
     if (pendingActionId) return
 
     const isMcpReview = isMcpReviewTransaction(tx)
     setPendingActionId(tx.id)
     try {
-      const res = await apiFetch(`${API_BASE_URL}/transactions/${tx.id}/confirm`, {
+      // A split is confirmed as a whole: every line posts and its total reaches the balance once.
+      const res = await apiFetch(tx.split_id ? `${API_BASE_URL}/transactions/splits/${tx.split_id}/confirm` : `${API_BASE_URL}/transactions/${tx.id}/confirm`, {
         method: 'POST'
       })
 
@@ -957,15 +1140,11 @@ export function TransactionList({
       }
 
       refreshRecentBadges()
-      setResolvedPendingIds(ids => {
-        const next = new Set(ids).add(tx.id)
-        if (tx.linked_transaction_id) next.add(tx.linked_transaction_id)
-        return next
-      })
+      markResolved(tx)
       onTransactionAdded()
       showAlert({
         type: 'success',
-        message: tx.linked_transaction_id ? 'Transfer review pair confirmed' : isMcpReview ? 'MCP draft confirmed' : 'Upcoming transaction confirmed'
+        message: tx.split_id ? 'Split review draft confirmed' : tx.linked_transaction_id ? 'Transfer review pair confirmed' : isMcpReview ? 'MCP draft confirmed' : 'Upcoming transaction confirmed'
       })
     } catch (error) {
       console.error('Failed to confirm upcoming transaction')
@@ -985,7 +1164,9 @@ export function TransactionList({
 
     const confirmed = await confirm({
       title: 'Decline Transaction',
-      message: tx.linked_transaction_id
+      message: tx.split_id
+        ? `Decline this split and all ${splitLinesOf(tx).length} of its lines? Your balance will not change.`
+        : tx.linked_transaction_id
         ? 'Decline both sides of this transfer review draft? Neither balance will change.'
         : isMcpReview
         ? 'Decline this MCP draft? It will not affect your balance.'
@@ -998,7 +1179,7 @@ export function TransactionList({
 
     setPendingActionId(tx.id)
     try {
-      const res = await apiFetch(`${API_BASE_URL}/transactions/${tx.id}/decline`, {
+      const res = await apiFetch(tx.split_id ? `${API_BASE_URL}/transactions/splits/${tx.split_id}/decline` : `${API_BASE_URL}/transactions/${tx.id}/decline`, {
         method: 'POST'
       })
 
@@ -1007,15 +1188,11 @@ export function TransactionList({
         throw new Error(data.error || 'Failed to decline transaction')
       }
 
-      setResolvedPendingIds(ids => {
-        const next = new Set(ids).add(tx.id)
-        if (tx.linked_transaction_id) next.add(tx.linked_transaction_id)
-        return next
-      })
+      markResolved(tx)
       onTransactionAdded()
       showAlert({
         type: 'success',
-        message: tx.linked_transaction_id ? 'Transfer review pair declined' : isMcpReview ? 'MCP draft declined' : 'Upcoming transaction declined'
+        message: tx.split_id ? 'Split review draft declined' : tx.linked_transaction_id ? 'Transfer review pair declined' : isMcpReview ? 'MCP draft declined' : 'Upcoming transaction declined'
       })
     } catch (error) {
       console.error('Failed to decline upcoming transaction')
@@ -1035,44 +1212,9 @@ export function TransactionList({
     resetForm()
   }
 
-  const handleBulkTransactionConfirm = async (bulkTransactions: BulkTransaction[]) => {
-    const parsedTransactions = bulkTransactions.map(tx => {
-      const amount = parseAmount(tx.amount)
-      if (amount === null || amount <= 0) {
-        throw new Error('Each bulk transaction needs a valid amount greater than 0')
-      }
-      return { tx, amount }
-    })
-
-    // Validate every row before creating any transactions, then submit them one by one.
-    for (const { tx, amount } of parsedTransactions) {
-      const finalAmount = tx.type === 'expense' ? -amount : amount
-      
-      await apiFetch(`${API_BASE_URL}/transactions`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          account_id: tx.account_id,
-          category_id: tx.category_id || null,
-          amount: finalAmount,
-          description: tx.description,
-          date: tx.date,
-          exclude_from_estimate: tx.type === 'expense' ? tx.exclude_from_estimate : false
-        }),
-      })
-    }
-    
-    setShowBulkModal(false)
-    refreshRecentBadges()
-    onTransactionAdded()
-    showAlert({
-      type: 'success',
-      message: `${bulkTransactions.length} transaction${bulkTransactions.length === 1 ? '' : 's'} created`
-    })
-  }
-
   const matchesSearch = (tx: Transaction): boolean => {
-    return matchesTransaction(searchQuery, tx, accounts, categories)
+    // The shared split description (payee) is searchable alongside each line's note.
+    return matchesTransaction(searchQuery, tx.split_description ? { ...tx, description: [tx.description, tx.split_description].filter(Boolean).join(' ') } : tx, accounts, categories)
   }
 
   const getCategoryName = (id?: string | null) => {
@@ -1227,16 +1369,28 @@ export function TransactionList({
   }
 
   const visibleUpcomingTransactions = upcomingTransactions.filter(tx => !resolvedPendingIds.has(tx.id))
+  // A pending split is one review item with the full total, even when a filter matched only some of its lines.
+  const groupPendingSplits = (items: Transaction[]): PendingItem[] => {
+    const seen = new Set<string>()
+    return items.flatMap(tx => {
+      if (!tx.split_id) return [tx]
+      if (seen.has(tx.split_id)) return []
+      seen.add(tx.split_id)
+      const lines = inEntryOrder(visibleUpcomingTransactions.filter(line => line.split_id === tx.split_id))
+      const group = lines.length > 0 ? lines : [tx]
+      return [{ ...group[0], id: `split:${tx.split_id}`, description: tx.split_description, amount: group.reduce((sum, line) => sum + line.amount, 0), splitGroup: group }]
+    })
+  }
   const standardPendingCount = visibleUpcomingTransactions.filter(tx => !isMcpReviewTransaction(tx)).length
-  const mcpReviewTransactions = getMcpReviewItems(visibleUpcomingTransactions, applyFilters)
+  const mcpReviewTransactions = groupPendingSplits(getMcpReviewItems(visibleUpcomingTransactions, applyFilters))
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
   const mcpReviewCount = mcpReviewTransactions.length
 
   // Keep legacy pending rows visible as upcoming while the migration rolls out.
   // Projection calculations are stricter and require pending_kind === 'upcoming'.
-  const pendingFilteredTransactions = visibleUpcomingTransactions
+  const pendingFilteredTransactions = groupPendingSplits(visibleUpcomingTransactions
     .filter(tx => !isMcpReviewTransaction(tx))
-    .filter(applyFilters)
+    .filter(applyFilters))
     .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
 
   const readyTransactions = pendingFilteredTransactions.filter(tx => tx.date <= today)
@@ -1247,11 +1401,22 @@ export function TransactionList({
 
   // Helper to process transactions and merge transfers
   const processTransactions = (txs: Transaction[]) => {
-    const processed: (Transaction & { relatedTx?: Transaction })[] = []
+    const processed: (Transaction & { relatedTx?: Transaction; splitGroup?: Transaction[] })[] = []
     const skipIds = new Set<string>()
+    const seenSplits = new Set<string>()
 
     txs.forEach(tx => {
       if (skipIds.has(tx.id)) return
+
+      if (tx.split_id) {
+        // A split shows as one row with the full total, even when a filter matched only some of its lines.
+        if (seenSplits.has(tx.split_id)) return
+        seenSplits.add(tx.split_id)
+        const group = inEntryOrder(transactions.filter(line => line.split_id === tx.split_id))
+        const lines = group.length > 0 ? group : [tx]
+        processed.push({ ...lines[0], id: `split:${tx.split_id}`, description: tx.split_description, amount: lines.reduce((sum, line) => sum + line.amount, 0), splitGroup: lines })
+        return
+      }
 
       if (tx.linked_transaction_id) {
         const related = txs.find(t => t.id === tx.linked_transaction_id)
@@ -1341,7 +1506,9 @@ export function TransactionList({
     return value < 0 && formatted !== '••••••' ? `−${formatted}` : formatted
   }
 
-  const renderPendingTransaction = (tx: Transaction, ready: boolean) => {
+  const renderPendingTransaction = (tx: PendingItem, ready: boolean) => {
+    const group = tx.splitGroup
+    const expanded = !!group && expandedSplits.has(tx.id)
     const linked = tx.linked_transaction_id ? visibleUpcomingTransactions.find(other => other.id === tx.linked_transaction_id) : undefined
     const outgoing = linked && tx.amount > 0 ? linked : tx
     const incoming = linked && tx.amount > 0 ? tx : linked
@@ -1350,49 +1517,71 @@ export function TransactionList({
     const daysLate = differenceInCalendarDays(parseISO(today), parseISO(tx.date))
     const dateLabel = format(parseISO(tx.date), 'MMM d, yyyy')
     const statusLabel = isReview ? 'MCP draft' : ready ? daysLate > 0 ? `${daysLate} day${daysLate === 1 ? '' : 's'} late` : 'Due today' : `Expected ${dateLabel}`
-    const actionName = linked ? 'transfer review draft' : isReview ? 'MCP draft' : 'transaction'
+    const actionName = linked ? 'transfer review draft' : group ? isReview ? 'split review draft' : 'split' : isReview ? 'MCP draft' : 'transaction'
     const busy = pendingActionId === tx.id
     return <div key={tx.id} className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-2 border-t border-border px-3 py-3 sm:flex sm:flex-wrap sm:gap-3 sm:px-4">
-      <div aria-hidden="true" className={cn('hidden h-9 w-9 shrink-0 items-center justify-center rounded-[10px] sm:flex', tx.linked_transaction_id ? 'bg-primary/10 text-primary' : 'bg-secondary')}>
-        {tx.linked_transaction_id ? <ArrowRightLeft className="h-4 w-4" /> : getCategoryIcon(tx.category_id)}
+      <div aria-hidden="true" className={cn('hidden h-9 w-9 shrink-0 items-center justify-center rounded-[10px] sm:flex', tx.linked_transaction_id || group ? 'bg-primary/10 text-primary' : 'bg-secondary')}>
+        {tx.linked_transaction_id ? <ArrowRightLeft className="h-4 w-4" /> : group ? <Split className="h-4 w-4" /> : getCategoryIcon(tx.category_id)}
       </div>
       <div className="min-w-0 flex-1">
-        <p className="flex items-center gap-2 text-sm font-medium"><button type="button" disabled={locked} aria-expanded={pendingDetails === tx.id} aria-label={`More actions for ${tx.description || getCategoryName(tx.category_id)}`} onClick={() => setPendingDetails(pendingDetails === tx.id ? null : tx.id)} className="flex min-w-0 items-center gap-1 text-left"><span className="truncate">{tx.description || (linked ? 'Transfer' : getCategoryName(tx.category_id))}</span><MoreHorizontal className="h-3 w-3 shrink-0 text-muted-foreground sm:hidden" /></button>{renderRecentBadge(tx)}</p>
-        <p className="mt-0.5 truncate text-xs text-muted-foreground"><span className={cn('font-medium', isReview ? 'text-violet-600 dark:text-violet-300' : ready ? 'text-amber-700 dark:text-amber-300' : '')}>{statusLabel}</span> · {linked ? `${getAccountName(outgoing.account_id)} → ${getAccountName(incoming!.account_id)}` : `${getCategoryName(tx.category_id)} · ${getAccountName(tx.account_id)}`} · {dateLabel}</p>
+        <p className="flex items-center gap-2 text-sm font-medium"><button type="button" disabled={locked} aria-expanded={pendingDetails === tx.id} aria-label={`More actions for ${tx.description || (group ? 'split' : getCategoryName(tx.category_id))}`} onClick={() => setPendingDetails(pendingDetails === tx.id ? null : tx.id)} className="flex min-w-0 items-center gap-1 text-left"><span className="truncate">{tx.description || (linked ? 'Transfer' : group ? 'Split' : getCategoryName(tx.category_id))}</span><MoreHorizontal className="h-3 w-3 shrink-0 text-muted-foreground sm:hidden" /></button>{renderRecentBadge(tx)}</p>
+        <p className="mt-0.5 truncate text-xs text-muted-foreground"><span className={cn('font-medium', isReview ? 'text-violet-600 dark:text-violet-300' : ready ? 'text-amber-700 dark:text-amber-300' : '')}>{statusLabel}</span> · {linked ? `${getAccountName(outgoing.account_id)} → ${getAccountName(incoming!.account_id)}` : group ? `Split · ${group.length} lines · ${getAccountName(tx.account_id)}` : `${getCategoryName(tx.category_id)} · ${getAccountName(tx.account_id)}`} · {dateLabel}</p>
         {isReview && !ready && <p className="mt-1 text-xs text-muted-foreground">Confirm on {dateLabel}</p>}
         {hasPossibleDuplicateFlag(tx.review_flags) && <span className="mt-1 inline-flex items-center gap-1 text-xs text-amber-700 dark:text-amber-300"><AlertCircle className="h-3 w-3" />Possible duplicate</span>}
       </div>
-      <div className="max-w-full text-right text-sm font-semibold tabular-nums">
+      <div className="flex max-w-full items-center gap-1 text-right text-sm font-semibold tabular-nums"><div>
         {linked ? <><div><span className="sr-only">Sent </span>{nativeAmount(outgoing.amount, outgoing.account_id, false)}</div><div className="text-xs font-medium text-muted-foreground"><span className="sr-only">Received </span>→ {nativeAmount(incoming!.amount, incoming!.account_id, false)}</div></> : <span className={tx.amount > 0 ? 'text-success' : 'text-foreground'}>{nativeAmount(tx.amount, tx.account_id)}</span>}
-      </div>
+      </div>{renderSplitChevron(group ? tx.id : null)}</div>
       {!locked && <div className="ml-auto flex items-center gap-1 sm:ml-0">
-        {(!tx.linked_transaction_id || isReview) && <Button size="icon" variant="ghost" className={cn("h-11 w-11 sm:h-9 sm:w-9", pendingDetails === tx.id ? "" : "hidden sm:inline-flex")} disabled={pendingActionId !== null} aria-label={linked ? 'Edit transfer review draft' : isReview ? 'Edit MCP draft' : 'Edit upcoming transaction'} onClick={() => handleEdit(outgoing)}><Pencil className="h-3.5 w-3.5" /></Button>}
+        {(!tx.linked_transaction_id || isReview) && <Button size="icon" variant="ghost" className={cn("h-11 w-11 sm:h-9 sm:w-9", pendingDetails === tx.id ? "" : "hidden sm:inline-flex")} disabled={pendingActionId !== null} aria-label={linked ? 'Edit transfer review draft' : group ? `Edit ${actionName}` : isReview ? 'Edit MCP draft' : 'Edit upcoming transaction'} onClick={() => handleEdit(outgoing)}><Pencil className="h-3.5 w-3.5" /></Button>}
         {ready && (!tx.linked_transaction_id || isReview) && <Button size="sm" variant="ghost" className="h-11 w-11 bg-success/10 p-0 text-success sm:h-9 sm:w-auto sm:px-3" disabled={pendingActionId !== null} aria-label={`Confirm ${actionName}`} onClick={() => handleConfirmUpcoming(outgoing)}>{busy ? <Loader2 className="h-4 w-4 animate-spin sm:mr-1" /> : <Check className="h-4 w-4 sm:mr-1" />}<span className="sr-only sm:not-sr-only">Confirm</span></Button>}
+        {!ready && isReview && (!tx.linked_transaction_id || isReview) && <Button size="sm" variant="ghost" className="h-11 w-11 p-0 sm:h-9 sm:w-auto sm:px-3" disabled title={`Can be confirmed on ${dateLabel}`} aria-label={`Confirm ${actionName} available on ${dateLabel}`}><Check className="h-4 w-4 sm:mr-1" /><span className="sr-only sm:not-sr-only">Confirm</span></Button>}
         {(ready || isReview) && (!tx.linked_transaction_id || isReview) ? <Button size="sm" variant="ghost" className={cn("h-11 px-3 text-muted-foreground sm:h-9", pendingDetails === tx.id ? "" : "hidden sm:inline-flex")} disabled={pendingActionId !== null} aria-label={`Decline ${actionName}`} onClick={() => handleDeclineUpcoming(outgoing)}>Decline</Button>
-          : !tx.linked_transaction_id && <Button size="icon" variant="ghost" className="h-11 w-11 sm:h-9 sm:w-9" aria-label="Delete upcoming transaction" disabled={deletingId === tx.id} onClick={event => { event.stopPropagation(); handleDelete(tx.id) }}><Trash2 className="h-4 w-4" /></Button>}
+          : !tx.linked_transaction_id && <Button size="icon" variant="ghost" className="h-11 w-11 sm:h-9 sm:w-9" aria-label={group ? 'Delete upcoming split' : 'Delete upcoming transaction'} disabled={deletingId === tx.id} onClick={event => { event.stopPropagation(); if (group && tx.split_id) handleDeleteSplit(tx.split_id); else handleDelete(tx.id) }}><Trash2 className="h-4 w-4" /></Button>}
       </div>}
+      {/* Line amounts end under the item total: leave room for the confirm column (mobile) or the edit, confirm and decline buttons. */}
+      {expanded && group && <ul className={cn('col-span-3 basis-full space-y-1 border-l border-border pl-3 sm:ml-12', locked ? 'pr-6' : 'pr-[4.75rem] sm:pr-[15.3rem]')} aria-label="Split lines">
+        {group.map(line => <li key={line.id} className="flex items-center gap-2 text-xs text-muted-foreground"><span aria-hidden="true">{getCategoryIcon(line.category_id)}</span><span className="min-w-0 flex-1 truncate">{getCategoryName(line.category_id)}{line.description ? ` · ${line.description}` : ''}</span><span className="tabular-nums">{nativeAmount(line.amount, line.account_id, true)}</span></li>)}
+      </ul>}
     </div>
   }
 
-  const renderPostedTransaction = (tx: Transaction & { relatedTx?: Transaction }) => {
+  // The line count doubles as the expand toggle, so split rows need no extra column and amounts stay aligned.
+  // A small chevron sits right next to the amount; rows without lines keep an equal blank slot so amounts stay in one column.
+  const renderSplitChevron = (id: string | null) => {
+    if (!id) return <span aria-hidden="true" className="w-5 shrink-0" />
+    const expanded = expandedSplits.has(id)
+    return <button type="button" aria-label={expanded ? 'Hide split lines' : 'Show split lines'} aria-expanded={expanded}
+      className="relative flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted-foreground after:absolute after:-inset-3 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      onClick={event => { event.stopPropagation(); setExpandedSplits(prev => { const next = new Set(prev); if (!next.delete(id)) next.add(id); return next }) }}><ChevronDown className={cn('h-4 w-4 transition-transform', expanded && 'rotate-180')} /></button>
+  }
+
+  const renderPostedTransaction = (tx: Transaction & { relatedTx?: Transaction; splitGroup?: Transaction[] }) => {
     const related = tx.relatedTx
     const transfer = !!tx.linked_transaction_id
+    const group = tx.splitGroup
     const account = accounts.find(a => a.id === tx.account_id)
     const converted = !transfer && account?.currency !== masterCurrency ? convertCash(tx) : null
+    const expanded = !!group && expandedSplits.has(tx.id)
+    const canChange = !isLocked(tx.account_id) && !(related && isLocked(related.account_id))
     return <div key={tx.id} className="group flex flex-wrap items-center gap-3 rounded-lg px-1 py-2 hover:bg-secondary/40 sm:px-2" onClick={() => setActiveTxId(activeTxId === tx.id ? null : tx.id)}>
-      <div aria-hidden="true" className={cn('flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px]', transfer ? 'bg-primary/10 text-primary' : 'bg-secondary')}>{transfer ? <ArrowRightLeft className="h-4 w-4" /> : getCategoryIcon(tx.category_id)}</div>
+      <div aria-hidden="true" className={cn('flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px]', transfer || group ? 'bg-primary/10 text-primary' : 'bg-secondary')}>{transfer ? <ArrowRightLeft className="h-4 w-4" /> : group ? <Split className="h-4 w-4" /> : getCategoryIcon(tx.category_id)}</div>
       <div className="min-w-0 flex-1">
-        <p className="flex items-center gap-2 text-sm font-medium"><button type="button" aria-label={`Actions for ${tx.description || 'transaction'}`} aria-expanded={activeTxId === tx.id} className="min-w-0 truncate text-left">{transfer ? related ? `${getAccountName(tx.account_id)} → ${getAccountName(related.account_id)}` : tx.description || 'Transfer' : tx.description || getCategoryName(tx.category_id)}</button>{renderRecentBadge(tx)}</p>
-        <p className="mt-0.5 truncate text-xs text-muted-foreground">{sortOrder !== 'date' && `${format(parseISO(tx.date), 'MMM d, yyyy')} · `}{transfer ? 'Transfer' : `${getCategoryName(tx.category_id)} · ${getAccountName(tx.account_id)}`}</p>
+        <p className="flex items-center gap-2 text-sm font-medium"><button type="button" aria-label={`Actions for ${tx.description || (group ? 'split' : 'transaction')}`} aria-expanded={activeTxId === tx.id} className="min-w-0 truncate text-left">{transfer ? related ? `${getAccountName(tx.account_id)} → ${getAccountName(related.account_id)}` : tx.description || 'Transfer' : group ? tx.description || 'Split' : tx.description || getCategoryName(tx.category_id)}</button>{renderRecentBadge(tx)}</p>
+        <p className="mt-0.5 truncate text-xs text-muted-foreground">{sortOrder !== 'date' && `${format(parseISO(tx.date), 'MMM d, yyyy')} · `}{transfer ? 'Transfer' : group ? `Split · ${group.length} lines · ${getAccountName(tx.account_id)}` : `${getCategoryName(tx.category_id)} · ${getAccountName(tx.account_id)}`}</p>
       </div>
-      <div className="max-w-full text-right tabular-nums">
-        <p className={cn('text-sm font-semibold', !transfer && tx.amount > 0 ? 'text-success' : 'text-foreground')}>{nativeAmount(account?.type === 'investment' && tx.quantity !== undefined ? tx.quantity : tx.amount, tx.account_id, !transfer)}</p>
-        {related ? <p className="text-xs text-muted-foreground">→ {nativeAmount(related.quantity ?? related.amount, related.account_id, false)}</p> : !transfer && account?.type === 'cash' && account.currency !== masterCurrency && <p className="text-xs text-muted-foreground">{privacyMode === 'hidden' ? '••••••' : converted === null ? 'Conversion unavailable' : `≈ ${convertedAmount(Math.abs(converted)).replace(/^\+/, '')}`}</p>}
+      {/* Amount on top, row actions stacked below it, so amounts sit at the card edge on every row. */}
+      <div className="flex max-w-full flex-col items-end gap-0.5 self-start text-right tabular-nums">
+        <div className="flex items-center gap-1"><p className={cn('text-sm font-semibold', !transfer && tx.amount > 0 ? 'text-success' : 'text-foreground')}>{nativeAmount(account?.type === 'investment' && tx.quantity !== undefined ? tx.quantity : tx.amount, tx.account_id, !transfer)}</p>{renderSplitChevron(group ? tx.id : null)}</div>
+        {related ? <p className="pr-6 text-xs text-muted-foreground">→ {nativeAmount(related.quantity ?? related.amount, related.account_id, false)}</p> : !transfer && account?.type === 'cash' && account.currency !== masterCurrency && <p className="pr-6 text-xs text-muted-foreground">{privacyMode === 'hidden' ? '••••••' : converted === null ? 'Conversion unavailable' : `≈ ${convertedAmount(Math.abs(converted)).replace(/^\+/, '')}`}</p>}
+        {canChange && <div className={cn("-mr-2 items-center sm:flex sm:opacity-0 sm:group-hover:opacity-100 sm:focus-within:opacity-100", activeTxId === tx.id ? "flex" : "hidden")}>
+        <Button size="icon" variant="ghost" className="h-11 w-9 sm:h-8 sm:w-8" aria-label={transfer ? 'Edit transfer' : group ? 'Edit split' : 'Edit transaction'} onClick={event => { event.stopPropagation(); handleEdit(tx) }}><Pencil className="h-3.5 w-3.5" /></Button>
+        <Button size="icon" variant="ghost" className="h-11 w-9 text-muted-foreground hover:text-destructive sm:h-8 sm:w-8" aria-label={transfer ? 'Delete transfer' : group ? 'Delete split' : 'Delete transaction'} disabled={deletingId === tx.id} onClick={event => { event.stopPropagation(); if (group && tx.split_id) handleDeleteSplit(tx.split_id); else handleDelete(tx.id) }}><Trash2 className="h-3.5 w-3.5" /></Button>
+        </div>}
       </div>
-      {!isLocked(tx.account_id) && !(related && isLocked(related.account_id)) && <div className={cn("items-center sm:flex sm:opacity-0 sm:group-hover:opacity-100 sm:focus-within:opacity-100", activeTxId === tx.id ? "flex" : "hidden")}>
-        <Button size="icon" variant="ghost" className="h-11 w-9 sm:h-8 sm:w-8" aria-label={transfer ? 'Edit transfer' : 'Edit transaction'} onClick={event => { event.stopPropagation(); handleEdit(tx) }}><Pencil className="h-3.5 w-3.5" /></Button>
-        <Button size="icon" variant="ghost" className="h-11 w-9 text-muted-foreground hover:text-destructive sm:h-8 sm:w-8" aria-label={transfer ? 'Delete transfer' : 'Delete transaction'} disabled={deletingId === tx.id} onClick={event => { event.stopPropagation(); handleDelete(tx.id) }}><Trash2 className="h-3.5 w-3.5" /></Button>
-      </div>}
+      {expanded && group && <ul className="basis-full space-y-1 border-l border-border pl-3 pr-6 sm:ml-12" aria-label="Split lines">
+        {group.map(line => <li key={line.id} className="flex items-center gap-2 text-xs text-muted-foreground"><span aria-hidden="true">{getCategoryIcon(line.category_id)}</span><span className="min-w-0 flex-1 truncate">{getCategoryName(line.category_id)}{line.description ? ` · ${line.description}` : ''}</span><span className="tabular-nums">{nativeAmount(line.amount, line.account_id, true)}</span></li>)}
+      </ul>}
     </div>
   }
 
@@ -1411,7 +1600,6 @@ export function TransactionList({
             <button type="button" onClick={() => setTransactionView('list')} aria-pressed={transactionView === 'list'} className={cn('min-h-9 rounded-md px-2 text-xs sm:px-3', transactionView === 'list' ? 'bg-secondary font-medium' : 'text-muted-foreground')}>List</button>
             <button type="button" onClick={openCalendar} aria-pressed={transactionView === 'calendar'} className={cn('min-h-9 rounded-md px-2 text-xs sm:px-3', transactionView === 'calendar' ? 'bg-secondary font-medium' : 'text-muted-foreground')}>Calendar</button>
           </div>
-          <Button onClick={() => setShowBulkModal(true)} size="sm" variant="outline" className="h-10 px-2 sm:px-3" aria-label="Bulk add transactions"><Layers className="h-4 w-4" /><span className="ml-1 hidden sm:inline">Bulk add</span></Button>
           <Button onClick={() => isAdding ? handleCancel() : handleOpenForm()} size="sm" className="hidden h-10 px-3 sm:inline-flex"><Plus className="mr-1 h-4 w-4" />New</Button>
         </div>
         <div className="flex items-center justify-between border-b border-border px-4 py-2 sm:hidden"><button type="button" aria-expanded={filtersOpen} onClick={() => setFiltersOpen(!filtersOpen)} className="flex min-h-10 items-center gap-2 text-[13px] text-muted-foreground"><SlidersHorizontal className="h-4 w-4" />Filters{categoryFilter !== 'all' || searchQuery ? ' · active' : ''}</button><button type="button" onClick={() => transactionView === 'calendar' ? setTransactionView('list') : openCalendar()} className="min-h-10 px-2 text-[13px] text-muted-foreground">{transactionView === 'calendar' ? 'List view' : 'Calendar view'}</button></div>
@@ -1441,7 +1629,7 @@ export function TransactionList({
         className={formData.type === 'transfer' ? 'sm:max-w-[480px] rounded-2xl' : undefined}
         headerClassName={formData.type === 'transfer' ? 'px-5 py-4 sm:px-6 sm:py-4 [&_h2]:text-[17px] [&_h2]:tracking-tight' : undefined}
         contentClassName={formData.type === 'transfer' ? 'p-0 sm:p-0' : undefined}
-        title={editingId ? (formData.type === 'transfer' ? 'Edit Transfer' : 'Edit Transaction') : (formData.type === 'transfer' ? 'New transaction' : formData.type === 'income' ? 'Add Income' : 'Add Transaction')}
+        title={editingSplitId ? 'Edit Split' : editingId ? (formData.type === 'transfer' ? 'Edit Transfer' : 'Edit Transaction') : (formData.type === 'transfer' ? 'New transaction' : formData.type === 'income' ? 'Add Income' : 'Add Transaction')}
       >
         <form onSubmit={handleSubmit} className={formData.type === 'transfer' ? '' : 'space-y-4'}>
             {formData.type !== 'transfer' && typeSelector}
@@ -1481,16 +1669,16 @@ export function TransactionList({
               <>
                 <div className="grid grid-cols-2 gap-3 overflow-hidden">
                   <div className="col-span-2 space-y-2 min-w-0 rounded-xl border border-border bg-background p-4">
-                    <Label htmlFor="amount">{accounts.find(a => a.id === formData.account_id)?.type === 'investment' ? 'Shares' : 'Amount'}</Label>
+                    <Label htmlFor="amount">{splitLines ? 'Total' : accounts.find(a => a.id === formData.account_id)?.type === 'investment' ? 'Shares' : 'Amount'}</Label>
                     <div className="finance-amount-field flex min-w-0 cursor-text items-baseline gap-2 rounded-lg" onClick={() => document.getElementById('amount')?.focus()}>
                       <AmountInput
                         id="amount"
                         className="finance-amount-input h-14 w-auto min-w-[1ch] max-w-full border-0 bg-transparent px-0 text-3xl font-semibold shadow-none field-sizing-content hover:bg-transparent focus:ring-0 focus-visible:bg-transparent focus-visible:ring-0"
                         value={formData.amount}
                         onValueChange={amount => setFormData({...formData, amount})}
-                        placeholder="0"
+                        placeholder={splitLines ? 'Sum of lines' : '0'}
                         aria-describedby={selectedAmountUnit ? 'amount-currency' : undefined}
-                        required
+                        required={!splitLines}
                       />
                       {selectedAmountUnit && <span id="amount-currency" className="shrink-0 text-base font-medium text-muted-foreground">{selectedAmountUnit}</span>}
                     </div>
@@ -1559,7 +1747,7 @@ export function TransactionList({
                       <p className="text-xs text-gray-500">For old dates (before 2020), enter the price manually for accuracy</p>
                     </div>
                   )}
-                  <div className="col-span-2 space-y-2">
+                  {!splitLines && <div className="col-span-2 space-y-2">
                     <Label htmlFor="category">Category</Label>
                     <Select 
                       id="category" 
@@ -1573,7 +1761,7 @@ export function TransactionList({
                         <option key={c.id} value={c.id}>{c.icon} {c.name}</option>
                       ))}
                     </Select>
-                  </div>
+                  </div>}
                   <div className="space-y-2 min-w-0 overflow-hidden">
                     <Label htmlFor="date">Date</Label>
                     <Input
@@ -1597,6 +1785,31 @@ export function TransactionList({
                       placeholder="e.g. Grocery shopping" 
                     />
                   </div>
+                  {splitLines && selectedAccount?.type !== 'investment' && (
+                    <div className="col-span-2">
+                      <SplitLinesEditor
+                        lines={splitLines}
+                        resolution={splitResolution!}
+                        currency={selectedAccount?.currency || ''}
+                        categories={categories.filter(c => c.type === formData.type)}
+                        disabled={isSubmitting}
+                        onChange={setSplitLines}
+                        onUndo={() => {
+                          setFormData(prev => ({ ...prev, category_id: splitLines[0]?.category_id || '' }))
+                          setSplitLines(null)
+                        }}
+                      />
+                    </div>
+                  )}
+                  {!splitLines && !editingId && (
+                    <div className="col-span-2 flex flex-wrap items-center gap-x-3 gap-y-1">
+                      <Button type="button" variant="outline" size="sm" disabled={!!splitBlockedReason} onClick={() => setSplitLines(startSplit(formData.category_id))}>
+                        <Split className="h-3.5 w-3.5" />Split into categories
+                      </Button>
+                      {splitBlockedReason && <span className="text-xs text-muted-foreground">{splitBlockedReason}</span>}
+                    </div>
+                  )}
+                  {splitLines && isUpcomingForm && !editingPendingSplit && <p className="col-span-2 text-xs text-destructive">A split cannot be dated in the future.</p>}
                   {formData.type === 'expense' && (
                     <div className="col-span-2">
                       <label className="flex items-center gap-2 cursor-pointer">
@@ -1613,10 +1826,19 @@ export function TransactionList({
                     </div>
                   )}
                 </div>
-                <Button type="submit" className="w-full" variant={formData.type === 'income' ? 'success' : 'default'} disabled={isSubmitting}>
-                  {editingId ? <Check className="h-4 w-4 mr-2" /> : <Plus className="h-4 w-4 mr-2" />}
-                  {isSubmitting ? 'Saving...' : (editingId ? 'Save Changes' : isUpcomingForm ? 'Save Upcoming' : `Add ${formData.type === 'income' ? 'Income' : 'Expense'}`)}
-                </Button>
+                {addedAnother && !editingId && !editingSplitId && <p role="status" className="flex items-center gap-2 rounded-lg border border-success/30 bg-success/10 px-3 py-2 text-xs text-foreground"><Check className="h-3.5 w-3.5 text-success" />Saved. Type, account and date are kept for the next one.</p>}
+                <div className="flex flex-col gap-2 sm:flex-row-reverse">
+                  <Button type="submit" className="w-full sm:flex-1" variant={formData.type === 'income' ? 'success' : 'default'} disabled={isSubmitting} onClick={() => { submitModeRef.current = 'close' }}>
+                    {editingId || editingSplitId ? <Check className="h-4 w-4 mr-2" /> : <Plus className="h-4 w-4 mr-2" />}
+                    {isSubmitting ? 'Saving...' : splitLines ? (splitResolution?.valid ? `${editingSplitId ? 'Save' : 'Add'} ${splitLines.length} transactions` : splitResolution?.problem === 'amounts' ? 'Enter the amounts' : splitResolution?.problem === 'category' ? 'Choose a category for each line' : 'Assign the full amount')
+                      : (editingId ? 'Save Changes' : editingSplitId ? 'Save as single transaction' : isUpcomingForm ? 'Save Upcoming' : `Add ${formData.type === 'income' ? 'Income' : 'Expense'}`)}
+                  </Button>
+                  {!editingId && !editingSplitId && selectedAccount?.type !== 'investment' && (
+                    <Button type="submit" variant="outline" className="w-full sm:w-auto" disabled={isSubmitting} onClick={() => { submitModeRef.current = 'another' }}>
+                      Save and add another
+                    </Button>
+                  )}
+                </div>
               </>
             )}
           </form>
@@ -1664,16 +1886,6 @@ export function TransactionList({
           </div>}
         </div>}
       </CardContent>}
-
-      {/* Bulk Transaction Modal */}
-      <BulkTransactionModal
-        isOpen={showBulkModal}
-        onClose={() => setShowBulkModal(false)}
-        onConfirm={handleBulkTransactionConfirm}
-        accounts={accounts.filter(account => account.archived_at == null)}
-        categories={categories}
-        defaultDate={getLocalDateString()}
-      />
     </Card>
   )
 }

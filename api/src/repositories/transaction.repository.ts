@@ -15,6 +15,9 @@ export type RawTransactionRow = Omit<Transaction, 'exclude_from_estimate' | 'pen
 
 type D1Value = string | number | null
 
+// Split lines carry the split's shared description for display grouping.
+const SELECT_WITH_SPLIT = 'SELECT t.*, s.description AS split_description FROM transactions t LEFT JOIN transaction_splits s ON s.id = t.split_id'
+
 export class TransactionRepository {
   constructor(private db: D1Database) {}
 
@@ -42,7 +45,7 @@ export class TransactionRepository {
   }
 
   async findAll(): Promise<Transaction[]> {
-    const { results } = await this.db.prepare("SELECT * FROM transactions WHERE status = 'posted' ORDER BY date DESC, rowid DESC").all<RawTransactionRow>()
+    const { results } = await this.db.prepare(`${SELECT_WITH_SPLIT} WHERE t.status = 'posted' ORDER BY t.date DESC, t.rowid DESC`).all<RawTransactionRow>()
     return results.map(r => TransactionRepository.mapRow(r))
   }
 
@@ -184,7 +187,7 @@ export class TransactionRepository {
     const order = sortOrder.toLowerCase() === 'asc' ? 'ASC' : 'DESC'
 
     const { results } = await this.db.prepare(
-      `SELECT * FROM transactions WHERE status = 'posted' ORDER BY ${field} ${order}, rowid DESC LIMIT ? OFFSET ?`
+      `${SELECT_WITH_SPLIT} WHERE t.status = 'posted' ORDER BY t.${field} ${order}, t.rowid DESC LIMIT ? OFFSET ?`
     ).bind(limit, offset).all<RawTransactionRow>()
     return results.map(r => TransactionRepository.mapRow(r))
   }
@@ -195,40 +198,40 @@ export class TransactionRepository {
   }
 
   async findByDateRange(startDate: string, endDate: string, accountId?: string, categoryId?: string): Promise<Transaction[]> {
-    let query = "SELECT * FROM transactions WHERE status = 'posted' AND date >= ? AND date <= ?"
+    let query = `${SELECT_WITH_SPLIT} WHERE t.status = 'posted' AND t.date >= ? AND t.date <= ?`
     const params: D1Value[] = [startDate, endDate]
 
     if (accountId) {
-      query += ' AND account_id = ?'
+      query += ' AND t.account_id = ?'
       params.push(accountId)
     }
 
     if (categoryId) {
-      query += ' AND category_id = ?'
+      query += ' AND t.category_id = ?'
       params.push(categoryId)
     }
 
-    query += ' ORDER BY date DESC, rowid DESC'
+    query += ' ORDER BY t.date DESC, t.rowid DESC'
 
     const { results } = await this.db.prepare(query).bind(...params).all<RawTransactionRow>()
     return results.map(r => TransactionRepository.mapRow(r))
   }
 
   async findFromDate(startDate: string, accountId?: string, categoryId?: string): Promise<Transaction[]> {
-    let query = "SELECT * FROM transactions WHERE status = 'posted' AND date >= ?"
+    let query = `${SELECT_WITH_SPLIT} WHERE t.status = 'posted' AND t.date >= ?`
     const params: D1Value[] = [startDate]
 
     if (accountId) {
-      query += ' AND account_id = ?'
+      query += ' AND t.account_id = ?'
       params.push(accountId)
     }
 
     if (categoryId) {
-      query += ' AND category_id = ?'
+      query += ' AND t.category_id = ?'
       params.push(categoryId)
     }
 
-    query += ' ORDER BY date DESC, rowid DESC'
+    query += ' ORDER BY t.date DESC, t.rowid DESC'
 
     const { results } = await this.db.prepare(query).bind(...params).all<RawTransactionRow>()
     return results.map(r => TransactionRepository.mapRow(r))
@@ -248,7 +251,7 @@ export class TransactionRepository {
 
   async findUpcoming(): Promise<Transaction[]> {
     const { results } = await this.db.prepare(
-      "SELECT * FROM transactions WHERE status = 'pending' ORDER BY date ASC, rowid DESC"
+      `${SELECT_WITH_SPLIT} WHERE t.status = 'pending' ORDER BY t.date ASC, t.rowid DESC`
     ).all<RawTransactionRow>()
     return results.map(r => TransactionRepository.mapRow(r))
   }

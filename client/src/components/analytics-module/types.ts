@@ -13,6 +13,8 @@ export type Transaction = {
   review_source?: ReviewSource | null
   review_batch_id?: string | null
   review_flags?: unknown
+  split_id?: string | null
+  split_description?: string | null
 }
 
 export type Category = {

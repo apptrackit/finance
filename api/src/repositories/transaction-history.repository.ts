@@ -8,9 +8,10 @@ type HistoryRow = HistoryPosition & { payload: string }
 // Column names are fixed application constants, never request input.
 const cashColumns = ['id', 'account_id', 'category_id', 'amount', 'description', 'date',
   'linked_transaction_id', 'exclude_from_estimate', 'status', 'pending_kind', 'review_source',
-  'review_batch_id', 'review_flags', 'confirmed_at', 'cancelled_at', 'created_at', 'updated_at']
+  'review_batch_id', 'review_flags', 'confirmed_at', 'cancelled_at', 'created_at', 'updated_at', 'split_id']
 const investmentColumns = ['id', 'account_id', 'type', 'quantity', 'price', 'total_amount', 'date', 'notes', 'created_at']
 const jsonColumns = (columns: string[]) => columns.map(column => `'${column}', t.${column}`).join(', ')
+const cashJson = `${jsonColumns(cashColumns)}, 'split_description', (SELECT s.description FROM transaction_splits s WHERE s.id = t.split_id)`
 
 export class TransactionHistoryRepository {
   constructor(private db: D1Database) {}
@@ -24,7 +25,7 @@ export class TransactionHistoryRepository {
     const range = conditions.length ? ` AND ${conditions.join(' AND ')}` : ''
     const cursor = after ? 'WHERE date < ? OR (date = ? AND (kind > ? OR (kind = ? AND sequence < ?)))' : ''
     const sql = `SELECT * FROM (
-      SELECT t.date, 'cash' AS kind, t.rowid AS sequence, json_object(${jsonColumns(cashColumns)}) AS payload
+      SELECT t.date, 'cash' AS kind, t.rowid AS sequence, json_object(${cashJson}) AS payload
       FROM transactions t WHERE t.status = 'posted'${range}
       UNION ALL
       SELECT t.date, 'investment' AS kind, t.rowid AS sequence, json_object(${jsonColumns(investmentColumns)}) AS payload

@@ -18,6 +18,8 @@ export interface Transaction {
   review_source?: TransactionReviewSource
   review_batch_id?: string | null
   review_flags?: string[]
+  split_id?: string | null
+  split_description?: string | null
   confirmed_at?: number | null
   cancelled_at?: number | null
   created_at?: number | null
