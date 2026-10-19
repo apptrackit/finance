@@ -9,9 +9,9 @@ export class AccountRepository {
 
   async financialRevision() { return (await this.db.prepare('SELECT revision FROM financial_data_revision WHERE id = 1').first<number>('revision'))! }
 
-  async findAll(): Promise<Account[]> {
+  async findAll(today?:string): Promise<Account[]> {
     const { results } = await this.db.prepare(`${HOLDING_ACCOUNT_SELECT} ORDER BY a.name, a.id`).all<Account>()
-    return results.map(row => mapHoldingAccount(row))
+    return results.map(row => mapHoldingAccount(row,today))
   }
 
   async findById(id: string): Promise<Account | null> {
@@ -54,6 +54,11 @@ export class AccountRepository {
       updates.updated_at || Date.now(),
       id
     ).run()
+  }
+
+  async hasInvestmentCashHistory(id: string): Promise<boolean> {
+    return Boolean(await this.db.prepare(`SELECT 1 FROM transactions c JOIN investment_transactions t
+      ON t.linked_transaction_id=c.id AND c.linked_transaction_id=t.id WHERE c.account_id=? LIMIT 1`).bind(id).first())
   }
 
   async hasManualAssetEvents(id: string) { return Boolean(await this.db.prepare('SELECT 1 FROM investment_transactions WHERE account_id = ? AND asset_event IS NOT NULL LIMIT 1').bind(id).first()) }

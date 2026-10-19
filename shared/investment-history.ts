@@ -1,5 +1,5 @@
 import {addExact} from './investment-trade'
-import {usesMarketPricing} from './holding'
+import {usesMarketPricing,effectivePositionAnchor} from './holding'
 import type {PositionAnchor} from './holding'
 import type {ManualValuation} from './manual-valuation'
 import {dailyPriceAt,datedFxAt} from './market-data'
@@ -36,6 +36,11 @@ function effectiveAnchors(anchors:HistoryAnchor[]) {
  // A newly confirmed opening replaces older opening/observation versions. Later
  // corrections remain noncash dated boundaries, not hidden purchases.
  return sorted.filter(a=>!opening||a.record_order>=opening.record_order)
+}
+export function holdingHistoryAnchors(account:MetricAccount,anchors:HistoryAnchor[]):HistoryAnchor[] {
+ const effective=effectivePositionAnchor(account)
+ return account.holding_position?.recorded_history&&effective ? [{...effective,account_id:account.id,record_order:0}]
+   : anchors.filter(p=>p.account_id===account.id)
 }
 export function supportedStart(anchors:HistoryAnchor[],today:string) {
  return anchors.length?effectiveAnchors(anchors).map(a=>a.effective_date).sort()[0]:today
@@ -79,7 +84,7 @@ function sourcePrice(input:Context,a:MetricAccount,cutoff:number) {
  return {value:p.price,currency:h.currency,as_of:p.as_of,reason:p.price===null?p.reason??'missing_price':null}
 }
 function holdingSeries(input:Context,a:MetricAccount,dates:string[],cutoffs:Map<string,number>) {
- const anchors=effectiveAnchors(input.anchors.filter(p=>p.account_id===a.id)).sort((a,b)=>a.effective_date.localeCompare(b.effective_date)||a.record_order-b.record_order)
+ const anchors=effectiveAnchors(holdingHistoryAnchors(a,input.anchors)).sort((a,b)=>a.effective_date.localeCompare(b.effective_date)||a.record_order-b.record_order)
  const trades=orderedTrades(input.trades.filter(t=>t.account_id===a.id))
  const values=input.valuations.filter(v=>v.account_id===a.id).sort((a,b)=>a.effective_date.localeCompare(b.effective_date))
  const lastOpening=anchors.find(a=>a.kind==='opening'),manual=a.asset_type==='manual'

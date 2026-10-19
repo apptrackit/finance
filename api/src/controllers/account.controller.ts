@@ -11,7 +11,7 @@ export class AccountController {
   constructor(private accountService: AccountService) {}
 
   async getAll(c: Context) {
-    const accounts = await this.accountService.getAllAccounts()
+    const accounts = await this.accountService.getAllAccounts(c.req.header('X-Client-Date'))
     const day = c.req.header('X-Client-Date')
     return c.json(accounts.map(a => AccountMapper.toResponseDto({ ...a, ...(a.manual_valuation && day && validLocalDate(day)
       ? { manual_valuation: manualValuationStatus(a.manual_valuation.observation,day) } : {}) })))

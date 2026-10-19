@@ -1,6 +1,7 @@
+import { INVESTMENT_CASH_FACTS_SELECT, mapInvestmentCashFacts } from './investment-cash-facts'
 /** Independent Worker read adapter. User facts are read only; only the disposable
  * source cache can be refreshed. No API dependency from MCP. */
-import { HOLDING_ACCOUNT_SELECT, mapHoldingAccount, usesMarketPricing, validLocalDate } from './holding'
+import { HOLDING_ACCOUNT_SELECT, mapHoldingAccount, effectivePositionAnchor, usesMarketPricing, validLocalDate } from './holding'
 import { D1MarketCache } from './market-cache'
 import { MarketReader } from './market-reader'
 import { DAY, dailyPriceAt, datedFxAt, marketSymbol } from './market-data'
@@ -19,18 +20,18 @@ export type MetricFacts = { accounts: MetricAccount[]; trades: MetricTrade[]; re
 export class InvestmentMetricsRepository {
   constructor(private db: D1Database) {}
   async revision() { return (await this.db.prepare('SELECT revision FROM financial_data_revision WHERE id=1').first<{revision:number}>())?.revision??0 }
-  async read(scope: 'investments'|'net_worth'='investments',includeOverview=false): Promise<MetricFacts> {
+  async read(scope: 'investments'|'net_worth'='investments',includeOverview=false,today?:string): Promise<MetricFacts> {
     const included=scope==='net_worth'?' AND COALESCE(a.exclude_from_net_worth,0)=0':''
     const rows=await this.db.batch([
       this.db.prepare('SELECT revision FROM financial_data_revision WHERE id=1'),
       this.db.prepare(`${HOLDING_ACCOUNT_SELECT} WHERE a.type='investment' AND a.archived_at IS NULL${included} ORDER BY a.id LIMIT 101`),
-      this.db.prepare(`SELECT it.* FROM investment_transactions it JOIN accounts a ON a.id=it.account_id WHERE a.type='investment' AND a.archived_at IS NULL${included} ORDER BY it.date,it.effective_order,it.id LIMIT 10001`),
+      this.db.prepare(`${INVESTMENT_CASH_FACTS_SELECT} WHERE a.type='investment' AND a.archived_at IS NULL${included} ORDER BY it.date,it.effective_order,it.id LIMIT 10001`),
       ...(includeOverview?[this.db.prepare(`SELECT v.* FROM investment_valuations v JOIN accounts a ON a.id=v.account_id WHERE a.type='investment' AND a.archived_at IS NULL${included} ORDER BY v.account_id,v.effective_date LIMIT 20001`)]:[]),
     ])
-    const accounts=rows[1].results as MetricAccount[], trades=rows[2].results as MetricTrade[]
+    const accounts=rows[1].results as MetricAccount[], trades=(rows[2].results as MetricTrade[]).map(mapInvestmentCashFacts)
     if (accounts.length>100 || trades.length>10000) throw new MetricsReadError('limit','Investment metrics limit exceeded (100 holdings / 10000 trades); no partial history was published')
     if(includeOverview&&rows[3].results.length>20000)throw new MetricsReadError('limit','Valuation history limit exceeded; no overview was truncated')
-    return {valuations:includeOverview?rows[3].results as ManualValuation[]:undefined,accounts:accounts.map(a=>mapHoldingAccount(a)),trades,revision:(rows[0].results[0] as {revision:number}|undefined)?.revision??0}
+    return {valuations:includeOverview?rows[3].results as ManualValuation[]:undefined,accounts:accounts.map(a=>mapHoldingAccount(a,today)),trades,revision:(rows[0].results[0] as {revision:number}|undefined)?.revision??0}
   }
 }
 export type MetricsReadOptions = { currencies: string[]; date?: string; scope?: 'investments'|'net_worth'; partial?: boolean; signal?: AbortSignal; includeOverview?:boolean }
@@ -41,7 +42,7 @@ export class InvestmentMetricsReader {
     const now=this.clock(),utc=new Date(now).toISOString().slice(0,10)
     const date=validLocalDate(options.date??'') && Math.abs(Date.parse(options.date!)-Date.parse(utc))<=DAY?options.date!:utc
     const prior=new Date(Date.parse(date)-DAY).toISOString().slice(0,10)
-    const facts=await this.repo.read(options.scope,options.includeOverview)
+    const facts=await this.repo.read(options.scope,options.includeOverview,date)
     if (preview) {
       if (facts.revision!==preview.revision) throw new MetricsReadError('conflict','Investment records changed before preview; refresh and retry')
       facts.accounts=facts.accounts.filter(a=>a.id===preview.account.id).map(()=>preview.account)
@@ -59,7 +60,7 @@ export class InvestmentMetricsReader {
     await Promise.all(Array.from({length:Math.min(4,symbols.length)},async()=>{
       while(next<symbols.length) {
         const symbol=symbols[next++]
-        const starts=accounts.filter(a=>symbolOf(a)===symbol).map(a=>a.holding_position?.anchor?.effective_date).filter((v):v is string=>!!v)
+        const starts=accounts.filter(a=>symbolOf(a)===symbol).map(a=>effectivePositionAnchor(a)?.effective_date).filter((v):v is string=>!!v)
         const trendStart=options.includeOverview?new Date(Date.parse(date)-29*DAY).toISOString().slice(0,10):prior
         const earliest=[trendStart,...starts].sort()[0]
         const from=earliest<new Date(now-3659*DAY).toISOString().slice(0,10)?trendStart:earliest
@@ -97,7 +98,7 @@ export class InvestmentMetricsReader {
     const byCurrency=Object.fromEntries(options.currencies.map(currency=>{
       const holdings=accounts.map(account=>{
         const history=account.symbol?histories[symbolOf(account)??'']:undefined
-        const anchor=account.holding_position?.anchor
+        const anchor=effectivePositionAnchor(account)
         const events=history?.events.some(e=>!anchor || e.date>anchor.effective_date)??false
         const metric=holdingMetrics(account,trades.filter(t=>t.account_id===account.id),currency,quotes[symbolOf(account)??''],currentConvert,datedConvert,date,events)
         const unverifiedActions=!history || history.status!=='ok' || !anchor || history.from>anchor.effective_date || history.to<date
@@ -138,7 +139,7 @@ export class InvestmentMetricsReader {
       const reasons:string[]=[]
       if(!usesMarketPricing(a)) reasons.push('manual_pricing')
       const today=trades.filter(t=>t.account_id===a.id&&t.date===date)
-      const anchor=a.holding_position?.anchor
+      const anchor=effectivePositionAnchor(a)
       if(!anchor || anchor.effective_date>prior || today.some(t=>!afterAnchor(a,t))) reasons.push('unknown_prior_position')
       let units=positionUnits(a)
       for(const t of today) { if(units!==null) {try {units=addExact(units,t.type==='buy'?-t.quantity:t.quantity)} catch {units=null}} }

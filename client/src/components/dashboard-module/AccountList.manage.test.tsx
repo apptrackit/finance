@@ -511,6 +511,20 @@ describe('account creation redesign', () => {
 })
 
 describe('holding category, pricing and opening setup', () => {
+  it('creates a zero-start unit holding without an opening date or fabricated opening payload', async () => {
+    render(<AccountList manage accounts={[]} onAccountAdded={refresh} initialInvestment addRequest requestKey="zero-holding" />)
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Zero start ETF' } })
+    fireEvent.change(screen.getByLabelText('Asset category'), { target: { value: 'etf' } })
+    fireEvent.change(screen.getByLabelText('Pricing'), { target: { value: 'manual' } })
+    expect(screen.queryByLabelText('Starting position as of (end of day)')).not.toBeInTheDocument()
+    expect(screen.getByText(/Dates come from your trades/)).toBeVisible()
+    fireEvent.click(screen.getByRole('button', { name: 'Create account' }))
+    await waitFor(() => expect(refresh).toHaveBeenCalledOnce())
+    const request=fetchMock.mock.calls.find(([,options])=>options?.method==='POST')!
+    const body=JSON.parse(String(request[1]?.body))
+    expect(body.balance).toBe(0);expect(body.opening).toBeUndefined()
+  })
+
   it('creates a manually priced ETF with a dated opening and optional cost, without a market symbol', async () => {
     render(<AccountList manage accounts={[]} onAccountAdded={refresh} initialInvestment addRequest requestKey="new-holding" />)
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Manually priced ETF' } })
@@ -534,7 +548,7 @@ describe('holding category, pricing and opening setup', () => {
     const a = { id: 'legacy-opening', name: 'Legacy ETF', type: 'investment' as const, asset_type: 'etf' as const, pricing_method: 'manual' as const, balance: 5, currency: 'SHARE', quote_currency: 'EUR', updated_at: 1 }
     render(<AccountList manage accounts={[a]} onAccountAdded={refresh} />)
     fireEvent.click(screen.getByRole('button', { name: 'Edit Legacy ETF' }))
-    fireEvent.click(screen.getByLabelText('Reconcile a dated opening position'))
+    fireEvent.click(screen.getByLabelText('Set a starting position not recorded as trades'))
     fireEvent.change(screen.getByLabelText('Opening quantity'), { target: { value: '3' } })
     fireEvent.change(screen.getByLabelText('Starting position as of (end of day)'), { target: { value: '2026-01-10' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
@@ -576,7 +590,7 @@ it('prefills a previously confirmed opening rather than replacing its known basi
   render(<AccountList manage accounts={[{ id: 'known', name: 'Known opening', type: 'investment', asset_type: 'etf', pricing_method: 'manual', balance: 5, currency: 'SHARE', quote_currency: 'EUR',
     holding_position: { has_history: true, quantity: 5, activity_quantity: 2, residual: 0, history_status: 'reconciled', coverage_reasons: [], anchor } }]} onAccountAdded={refresh} />)
   fireEvent.click(screen.getByRole('button', { name: 'Edit Known opening' }))
-  fireEvent.click(screen.getByLabelText('Reconcile a dated opening position'))
+  fireEvent.click(screen.getByLabelText('Set a starting position not recorded as trades'))
   expect(screen.getByLabelText('Opening quantity')).toHaveValue('3')
   expect(screen.getByLabelText('Starting position as of (end of day)')).toHaveValue('2026-01-10')
   expect(screen.getByLabelText('Known remaining cost (optional)')).toHaveValue('30')

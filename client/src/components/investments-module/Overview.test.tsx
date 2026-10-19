@@ -65,7 +65,7 @@ it('offers recovery for missing values and opening coverage',()=>{
  render(<MemoryRouter><InvestmentAttention positions={fixture()} quotes={quotes} refreshing={false} onRefresh={retry} onOpen={open}/></MemoryRouter>)
  expect(screen.getByRole('region',{name:'Investment needs attention'})).toBeVisible()
  fireEvent.click(screen.getAllByRole('button',{name:'Retry prices'})[0]);expect(retry).toHaveBeenCalledOnce()
- expect(screen.getAllByRole('link',{name:'Review opening'}).length).toBeGreaterThan(0)
+ expect(screen.getAllByRole('link',{name:'Review position'}).length).toBeGreaterThan(0)
 })
 it('renders a native manual step sparkline and preserves explicit gaps',()=>{
  const p=fixture().slice(0,1),trend:HoldingTrend={kind:'unit_price',method:'step',status:'ok',currency:'EUR',reasons:[],points:[{date:'2026-01-01',value:null,as_of:null,provisional:false},{date:'2026-01-02',value:10,as_of:'2026-01-02',provisional:false},{date:'2026-01-03',value:20,as_of:'2026-01-03',provisional:false}]}
@@ -91,4 +91,13 @@ it('opens manual valuation recovery rather than retrying prices when an appraisa
  fireEvent.click(screen.getByRole('button',{name:'Update value'}))
  expect(open).toHaveBeenCalledWith(manual.account)
  expect(screen.queryByRole('button',{name:'Retry prices'})).not.toBeInTheDocument()
+})
+
+it('sends missing cash details to trade review rather than asking for another opening',()=>{
+ const p=fixture()[0]
+ const position={...p,account:{...p.account,holding_position:{quantity:2,activity_quantity:2,residual:0,history_status:'reconciled' as const,coverage_reasons:['unknown_cost'],anchor:null,recorded_history:{quantity:2,effective_date:'2026-01-01',first_trade_date:'2026-01-02',trade_count:1}}},metrics:{...p.metrics,coverage:{...p.metrics.coverage,cost:['unknown_cash_flow']}}}
+ render(<MemoryRouter><InvestmentAttention positions={[position]} quotes={quotes} refreshing={false} onRefresh={vi.fn()} onOpen={open}/></MemoryRouter>)
+ expect(screen.queryByRole('link',{name:'Review position'})).not.toBeInTheDocument()
+ expect(screen.getByText(/Purchase cash details are missing/)).toBeVisible()
+ fireEvent.click(screen.getByRole('button',{name:'Review trades'}));expect(open).toHaveBeenCalledWith(position.account)
 })

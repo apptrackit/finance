@@ -17,8 +17,8 @@ export class AccountService {
     private transactionRepo: TransactionRepository
   ) {}
 
-  async getAllAccounts(): Promise<Account[]> {
-    return await this.accountRepo.findAll()
+  async getAllAccounts(clientDate?:string): Promise<Account[]> {
+    return await this.accountRepo.findAll(this.today(clientDate))
   }
 
   async getAccountById(id: string): Promise<Account | null> {
@@ -58,7 +58,7 @@ export class AccountService {
       if (account.asset_type !== 'manual' && dto.opening?.owned !== undefined) throw AppError.validation('Explicit ownership belongs to total manual assets')
       if (account.asset_type === 'manual' && dto.opening?.owned === false && account.balance !== 0) throw AppError.validation('An unowned asset must start at zero current value')
       if (account.asset_type === 'manual' && account.balance === 0 && dto.opening?.owned !== true && (dto.opening?.cost_amount??0) > 0) throw AppError.validation('An unowned opening has no remaining cost. Mark an owned zero-value asset as owned, or leave its cost unknown.')
-      await this.accountRepo.createHolding(account, this.anchor(account.balance, 'opening', date, now,
+      await this.accountRepo.createHolding(account, this.anchor(account.balance, account.asset_type !== 'manual' && account.balance === 0 && !dto.opening ? 'observed' : 'opening', date, now,
         account.asset_type === 'manual' ? { ...dto.opening, balance:account.balance, date, owned:dto.opening?.owned??account.balance!==0 } : dto.opening))
       return (await this.accountRepo.findById(id))!
     }
@@ -120,6 +120,9 @@ export class AccountService {
       return (await this.accountRepo.findById(id))!
     }
     if (dto.opening || dto.manual_price != null || dto.pricing_method) throw AppError.validation('Holding metadata belongs to investment accounts')
+    if (dto.currency && dto.currency.trim().toUpperCase() !== existing.currency && await this.accountRepo.hasInvestmentCashHistory(id)) {
+      throw AppError.validation('Recorded investment cash payments protect this account currency; use a separate cash account for another currency')
+    }
 
     if ((dto.expected_balance !== undefined && dto.expected_balance !== existing.balance)
       || (dto.expected_updated_at !== undefined && dto.expected_updated_at !== existing.updated_at)) {

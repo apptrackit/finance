@@ -1,4 +1,4 @@
-import { holdingNativeValue, usesMarketPricing } from './holding'
+import { holdingNativeValue, usesMarketPricing, effectivePositionAnchor } from './holding'
 import type { HoldingFields } from './holding'
 import { addExact } from './investment-trade'
 import type { TradeFacts } from './investment-trade'
@@ -11,7 +11,7 @@ export type MetricAccount = HoldingFields & {
 }
 export type MetricTrade = TradeFacts & {
   id: string; account_id: string; type: 'buy' | 'sell'; quantity: number; price: number
-  total_amount: number; date: string
+  total_amount: number; date: string; cash_source?: 'linked_transaction'
 }
 export type DatedConversion = (amount: number, source: string, target: string, date: string) => number | null
 export type LedgerMetrics = {
@@ -30,11 +30,11 @@ const plus = (a: number | null,b: number | null) => a === null || b === null ? n
 const minus = (a: number | null,b: number | null) => a === null || b === null ? null : finite(a-b)
 export const orderedTrades = (trades: MetricTrade[]) => [...trades].sort((a,b) => a.date.localeCompare(b.date) || (a.effective_order??0)-(b.effective_order??0) || a.id.localeCompare(b.id))
 export function afterAnchor(account: MetricAccount, trade: MetricTrade) {
-  const a = account.holding_position?.anchor
+  const a = effectivePositionAnchor(account)
   return !a || (a.kind === 'opening' ? trade.date > a.effective_date : (trade.effective_order??0) > (a.trade_order_boundary??a.trade_rowid_boundary))
 }
 export function positionUnits(account: MetricAccount): number | null {
-  return account.asset_type !== 'manual' ? account.balance : account.manual_ownership === 'owned' ? 1
+  return account.asset_type !== 'manual' ? account.holding_position?.recorded_history?.quantity ?? account.balance : account.manual_ownership === 'owned' ? 1
     : account.manual_ownership === 'unowned' || account.manual_ownership === 'disposed' ? 0 : null
 }
 function nativeCash(t: MetricTrade, currency: string): number | null {
@@ -51,7 +51,7 @@ function nativeCash(t: MetricTrade, currency: string): number | null {
   return finite(t.type === 'buy' ? gross+fee : gross-fee)
 }
 function ledger(account: MetricAccount,trades: MetricTrade[],currency: string,value: number | null,convert: DatedConversion,native: boolean,asOf: string) {
-  const anchor = account.holding_position?.anchor
+  const anchor = effectivePositionAnchor(account)
   const manual = account.asset_type === 'manual'
   const knownStart = !!anchor && anchor.kind === 'opening'
   let q: number | null = anchor ? manual ? anchor.owned == null ? anchor.balance>0 ? 1 : null : Number(anchor.owned) : anchor.balance : null

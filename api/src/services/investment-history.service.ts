@@ -4,7 +4,7 @@ import {DAY,calendarDate,dateRange,marketSymbol,isoDate} from '../../../shared/m
 import type {PriceHistory,Quote,FxHistory} from '../../../shared/market-data'
 import {validRates} from '../../../shared/currency'
 import {tradeCurrencies} from '../../../shared/investment-trade'
-import {calculatePortfolioHistory,downsampleHistory,supportedStart} from '../../../shared/investment-history'
+import {calculatePortfolioHistory,downsampleHistory,supportedStart,holdingHistoryAnchors} from '../../../shared/investment-history'
 import type {HistoryPoint} from '../../../shared/investment-history'
 import {addDays,rangeStart} from '../../../shared/investment-history-dates'
 import type {PortfolioRange} from '../../../shared/investment-history-dates'
@@ -19,11 +19,11 @@ export class InvestmentHistoryService {
   const today=isoDate(request.clientDate)&&Math.abs(Date.parse(request.clientDate)-Date.parse(nativeToday))<=DAY?request.clientDate:nativeToday
   const to=request.to??today,signal=AbortSignal.any([request.signal,AbortSignal.timeout(45_000)])
   signal.throwIfAborted()
-  const facts=await this.repo.read()
+  const facts=await this.repo.read(today)
   signal.throwIfAborted()
   if(request.expectedRevision!==undefined&&request.expectedRevision!==facts.revision)throw new AppError('INVESTMENT_HISTORY_CONFLICT','Investment facts changed; refresh the portfolio before loading history.',409)
   const horizon=new Date(now-3659*DAY).toISOString().slice(0,10)
-  const earliest=[...facts.accounts.map(a=>supportedStart(facts.anchors.filter(p=>p.account_id===a.id),to)),to].sort()[0]
+  const earliest=[...facts.accounts.map(a=>supportedStart(holdingHistoryAnchors(a,facts.anchors),to)),to].sort()[0]
   const start=request.from??rangeStart(request.range??'1m',to,addDays(earliest,1))
   const from=[start,addDays(horizon,1)].sort().at(-1)!,prior=addDays(from,-1)
   if(start<horizon && request.from)throw AppError.validation('Portfolio history is limited to the last ten years')
@@ -34,7 +34,7 @@ export class InvestmentHistoryService {
   if(positionDays>75_000)throw new AppError('INVESTMENT_HISTORY_LIMIT','This range exceeds 75,000 daily holding positions; choose a shorter range.',422)
   const symbols=[...new Set(facts.accounts.filter(a=>a.asset_type!=='manual'&&a.pricing_method!=='manual'&&a.symbol).flatMap(a=>{try{return [marketSymbol(a.symbol!)]}catch{return []}}))]
   const sourceStarts=Object.fromEntries(symbols.map(symbol=>{
-   const starts=facts.accounts.filter(a=>a.symbol?.trim().toUpperCase()===symbol).map(a=>supportedStart(facts.anchors.filter(p=>p.account_id===a.id),to))
+   const starts=facts.accounts.filter(a=>a.symbol?.trim().toUpperCase()===symbol).map(a=>supportedStart(holdingHistoryAnchors(a,facts.anchors),to))
    // Corporate actions before the selected range still affect owned units.
    // Use the supported position boundary, reusing the metrics source cache.
    return [symbol,[horizon,[addDays(prior,-4),...starts].sort()[0]].sort().at(-1)!]

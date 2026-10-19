@@ -324,7 +324,7 @@ export function AccountList({ accounts, onAccountAdded, loading, manage = false,
           payload.manual_price_date = formData.manual_price_date || localAccountDate()
         }
         if (!formData.quote_currency) delete payload.quote_currency
-        if (!editingId || formData.confirm_opening) {
+        if ((!editingId && (formData.asset_type === 'manual' || payload.balance !== 0)) || formData.confirm_opening) {
           const openingBalance = editingId ? parseAmount(formData.opening_balance || '') : payload.balance
           if (openingBalance === null) throw new Error('Enter a complete opening quantity/value')
           let date = formData.opening_date || ''
