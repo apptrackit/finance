@@ -131,7 +131,7 @@ it('upgrades the preceding schema without changing existing MCP review drafts', 
       'pending', 'mcp_review', 'chatgpt_mcp', '[]', 1, 1)`).run()
   const before = await f.db.prepare('SELECT * FROM transactions WHERE id = ?').bind('existing-review').first()
   await migrate(f.db)
-  expect(await f.db.prepare('SELECT * FROM transactions WHERE id = ?').bind('existing-review').first()).toEqual(before)
+  expect(await f.db.prepare('SELECT * FROM transactions WHERE id = ?').bind('existing-review').first()).toEqual({ ...before, split_id: null })
   const revision = await f.db.prepare('SELECT revision FROM financial_data_revision WHERE id = 1').first('revision')
   await f.db.prepare("UPDATE transactions SET description = 'Corrected review' WHERE id = 'existing-review'").run()
   expect(await f.db.prepare('SELECT revision FROM financial_data_revision WHERE id = 1').first('revision')).toBe(revision)
@@ -150,9 +150,22 @@ it('upgrades schema 013 with a linked transfer review intact', async () => {
   ])
   const before = (await f.db.prepare("SELECT * FROM transactions ORDER BY id").all()).results
   await migrate(f.db)
-  expect((await f.db.prepare("SELECT * FROM transactions ORDER BY id").all()).results).toEqual(before)
+  expect((await f.db.prepare("SELECT * FROM transactions ORDER BY id").all()).results).toEqual(before.map(row => ({ ...row, split_id: null })))
   expect((await f.db.prepare("SELECT name FROM sqlite_master WHERE name IN ('mcp_transfer_correction_proposals', 'mcp_transfer_correction_runs') ORDER BY name").all()).results)
     .toEqual([{ name: 'mcp_transfer_correction_proposals' }, { name: 'mcp_transfer_correction_runs' }])
   expect(await f.db.prepare('PRAGMA foreign_key_check').all()).toMatchObject({ results: [] })
 })
 import { readdir } from 'node:fs/promises'
+
+it('upgrades schema 016 to splits without touching ledger rows, and splits survive account deletion cleanup', async () => {
+  await migrate(f.db, 16)
+  await f.seed()
+  await f.db.prepare("INSERT INTO transactions (id, account_id, category_id, amount, date, status) VALUES ('old', 'cash', 'food', -10, '2026-01-01', 'posted')").run()
+  await migrate(f.db)
+  expect(await f.db.prepare("SELECT split_id FROM transactions WHERE id = 'old'").first('split_id')).toBeNull()
+  expect(await f.db.prepare('PRAGMA foreign_key_check').all()).toMatchObject({ results: [] })
+  await f.db.prepare("INSERT INTO transaction_splits (id, description, created_at) VALUES ('split', 'Shop', 1)").run()
+  await f.db.prepare("INSERT INTO transactions (id, account_id, amount, date, status, split_id) VALUES ('line', 'savings', -5, '2026-01-01', 'posted', 'split')").run()
+  await f.db.prepare("DELETE FROM transactions WHERE account_id = 'savings'").run()
+  expect(await f.db.prepare('SELECT COUNT(*) AS n FROM transaction_splits').first('n')).toBe(0)
+})

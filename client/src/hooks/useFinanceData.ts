@@ -41,6 +41,8 @@ export type Transaction = TradeFacts & {
   review_source?: ReviewSource | null
   review_batch_id?: string | null
   review_flags?: unknown
+  split_id?: string | null
+  split_description?: string | null
   confirmed_at?: number | null
   cancelled_at?: number | null
   created_at?: number | null

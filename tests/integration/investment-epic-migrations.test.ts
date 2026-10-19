@@ -6,6 +6,7 @@ import { migrate, useFinanceWorkers } from './harness'
 const f = useFinanceWorkers({ migrateBeforeEach: false })
 const files = [
   '017-investment-transfer-links',
+  '017-transaction-splits',
   '018-investment-holding-metadata',
   '019-investment-trade-facts',
   '020-manual-investment-valuations',

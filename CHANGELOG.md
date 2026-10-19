@@ -8,6 +8,8 @@ Intermediate package/UI version bumps are grouped under the next published GitHu
 
 ### Fixed
 
+- Main/investment-epic integration preserves both existing 017 migration filenames, transaction split exports/history and direct investment trade paths. Split mutations share guarded decimal cash arithmetic so concurrent trades, pending confirmation and fractional payments retain exact balances (#169).
+
 - Investment price returns explicitly exclude dividends. Dividend events no longer block known purchase costs, gains or history or trigger misleading purchase-review warnings; split and missing-history safeguards remain (#161).
 - Holdings use trailing detail arrows, green/red 30-day price trends, readable source times and supported unrealized return percentages paired with remaining-cost gains. Privacy, missing basis and stale-source coverage remain explicit (#167).
 
@@ -35,6 +37,10 @@ Intermediate package/UI version bumps are grouped under the next published GitHu
 
 - Added direct cash-linked investment purchases and sales with exact settlement, confirmed execution currency/included fees, guarded event replay, stale-edit protection and bounded retry receipts. Migration 019 preserves legacy facts and makes unsupported standalone posting read-only; see `docs/investment-trades.md`.
 
+- One transaction composer for single, split and adjustment entries. **Split into categories** divides one payment over several category lines (shared account, date and description; the first line takes the rest of the total), saved atomically and shown as one expandable row. **Save and add another** keeps type, account and date for the next payment. Recording a balance difference opens the same controls with the amount and account fixed. New `transaction_splits` table and `transactions.split_id` (migration 017), `/transactions/splits` endpoints, and `transaction_splits` in the JSON export. [#138](https://github.com/apptrackit/finance/issues/138)
+
+- MCP split review drafts: `prepare_mcp_split_drafts` / `create_mcp_split_drafts` record a receipt or other payment as one pending split over several categories, checked against an optional receipt total; `prepare_mcp_split_corrections` / `apply_mcp_split_corrections` edit or decline whole splits; the review list and transaction search expose split grouping. The app shows each pending split as one review item and confirms or declines all its lines together (`POST /transactions/splits/:id/confirm` and `/decline`); edits keep it pending.
+
 ### Changed
 
 - Final investment validation makes ordinary cash writes, transfers, adjustments, declines and recurring occurrence consumption atomic with balances/audit; stale pending confirmation and correction races cannot overwrite posted facts. Old-opening cost stays unavailable outside verified event coverage. Default monthly history reuses quote inputs; mixed price/trade charts retain daily closes and omit empty execution series. No new migration.
@@ -46,6 +52,8 @@ Intermediate package/UI version bumps are grouped under the next published GitHu
 - Dashboard investment net worth now honors holding exclusions; Investments retains all active holdings. Known gains remain visible when complete daily return percentages are unavailable, and missing legacy costs/FX remain explicit across API, client and independent MCP.
 
 - Investment account setup separates ETF/stock/crypto/manual categories from pricing, preserves stored quantities across portfolio consumers, and records explicit dated openings/corrections without fake cash movements. Missing legacy cost/history stays unavailable; manually priced unit holdings use their saved fiat price.
+
+- Bulk add and the separate balance-adjustment choice and split dialogs are replaced by the composer. Per-row account and date, sliders, auto-balance and fill-with-total are gone; log unrelated payments with Save and add another.
 - Dashboard uses a shared period picker, a responsive balance/activity summary, compact transaction filters, and a combined review queue with explicit confirmation actions. Transaction rows show neutral transfers, daily cash-flow totals, and native/converted amounts; privacy masking and loading states follow the new layout.
 - Investment purchases store reciprocal links between the cash ledger and investment history. Linked creation, edits, and deletion batch both records, balances, and audit entries atomically; deletion from either side reverses the pair once. History, portfolio reads, MCP activity, and JSON exports preserve the investment-side link. Inconsistent legacy links are rejected before changing balances; the explicit sale workflow added above extends the original purchase-only foundation.
 
@@ -59,6 +67,10 @@ Intermediate package/UI version bumps are grouped under the next published GitHu
 
 - Migration 018 adds holding pricing/unit/provider metadata and exported position anchors. The baseline preserves every existing financial column/rowid and financial-source revision, including locked/archived holdings. Apply it after 017 and before the updated Workers/client; this is an intermediate investment epic step, not the completed rework.
 - Migration 017 adds the nullable investment-side cash link and backfills unambiguous active and archived history without changing financial values or source revision. Standalone trades remain unlinked; ambiguous or invalid legacy relationships are preserved for explicit repair. Apply the migration before deploying the updated API, client, or MCP.
+
+### Fixed
+
+- Buttons, tabs, switches, menus, selects, checkboxes and other enabled click targets show a pointer cursor again across the app; Tailwind CSS 4 had reset buttons to the default arrow. Disabled controls keep the default cursor. [#157](https://github.com/apptrackit/finance/issues/157)
 
 ## v3.3 — 2026-10-15
 

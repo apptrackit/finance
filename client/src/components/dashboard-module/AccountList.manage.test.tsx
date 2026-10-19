@@ -126,11 +126,68 @@ describe('dedicated account management', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Edit Everyday' }))
     fireEvent.change(screen.getByLabelText('Balance'), { target: { value: '125,50' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
-    expect(screen.getByText('Single Adjustment')).toBeInTheDocument()
+    expect(screen.getByRole('dialog', { name: 'Record the difference' })).toHaveTextContent('Balance adjustment · Everyday')
     expect(screen.queryByRole('dialog', { name: 'Edit account' })).not.toBeInTheDocument()
-    fireEvent.click(within(screen.getByRole('dialog', { name: 'Balance Adjustment' })).getByRole('button', { name: 'Cancel' }))
+    fireEvent.click(within(screen.getByRole('dialog', { name: 'Record the difference' })).getByRole('button', { name: 'Cancel' }))
     expect(screen.getByLabelText('Balance')).toHaveValue('125.50')
     expect(fetchMock.mock.calls.some(([, options]) => options?.method === 'PUT')).toBe(false)
+  })
+
+  it('records a single-line adjustment through the account update', async () => {
+    open()
+    fireEvent.click(screen.getByRole('button', { name: 'Edit Everyday' }))
+    fireEvent.change(screen.getByLabelText('Balance'), { target: { value: '125,50' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+    const composer = screen.getByRole('dialog', { name: 'Record the difference' })
+    fireEvent.change(within(composer).getByLabelText('Description'), { target: { value: 'Cash count' } })
+    fireEvent.click(within(composer).getByRole('button', { name: 'Save and update balance' }))
+    await waitFor(() => expect(refresh).toHaveBeenCalledOnce())
+    const writes = fetchMock.mock.calls.filter(([, options]) => options?.method === 'PUT' || options?.method === 'POST')
+    expect(writes).toHaveLength(1)
+    expect(JSON.parse(String(writes[0][1]?.body))).toMatchObject({ balance: 125.5, adjustWithTransaction: true,
+      splitTransactions: [{ amount: 125.5, description: 'Cash count', category_id: '' }] })
+  })
+
+  it('records a split adjustment as one guarded split before saving the account', async () => {
+    fetchMock.mockImplementation(async (input, options) => {
+      if (String(input).includes('open.er-api')) return Response.json({ rates: { USD: 1, HUF: 360 } })
+      if (options?.method && options.method !== 'GET') return Response.json({})
+      if (String(input).endsWith('/categories')) return Response.json([
+        { id: 'salary', name: 'Salary', icon: '💼', type: 'income' }, { id: 'refund', name: 'Refunds', icon: '↩️', type: 'income' }])
+      return Response.json([])
+    })
+    open()
+    fireEvent.click(screen.getByRole('button', { name: 'Edit Everyday' }))
+    fireEvent.change(screen.getByLabelText('Balance'), { target: { value: '100' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+    const composer = screen.getByRole('dialog', { name: 'Record the difference' })
+    await waitFor(() => expect(within(composer).getByRole('option', { name: /Salary/ })).toBeInTheDocument())
+    fireEvent.click(within(composer).getByRole('button', { name: 'Split into categories' }))
+    fireEvent.change(within(composer).getByLabelText('Category for line 1'), { target: { value: 'salary' } })
+    fireEvent.change(within(composer).getByLabelText('Category for line 2'), { target: { value: 'refund' } })
+    fireEvent.change(within(composer).getByLabelText('Amount for line 2'), { target: { value: '30' } })
+    fireEvent.click(within(composer).getByRole('button', { name: 'Save 2 and update balance' }))
+    await waitFor(() => expect(refresh).toHaveBeenCalledOnce())
+    const writes = fetchMock.mock.calls.filter(([, options]) => options?.method === 'PUT' || options?.method === 'POST')
+    expect(writes.map(([url, options]) => `${options?.method} ${String(url).replace(/^.*\/api/, '')}`)).toEqual([
+      expect.stringMatching(/^POST .*\/transactions\/splits$/), expect.stringMatching(/^PUT .*\/accounts\/active$/)])
+    expect(JSON.parse(String(writes[0][1]?.body))).toMatchObject({
+      account_id: 'active', balance_adjustment: { expected_balance: 0, new_balance: 100 },
+      lines: [{ category_id: 'salary', amount: 70 }, { category_id: 'refund', amount: 30 }] })
+    expect(JSON.parse(String(writes[1][1]?.body))).toMatchObject({ balance: 100, adjustWithTransaction: false })
+  })
+
+  it('keeps the composer open with the error when the guarded split is rejected', async () => {
+    open()
+    fireEvent.click(screen.getByRole('button', { name: 'Edit Everyday' }))
+    fireEvent.change(screen.getByLabelText('Balance'), { target: { value: '100' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+    const composer = screen.getByRole('dialog', { name: 'Record the difference' })
+    fail = true
+    fireEvent.click(within(composer).getByRole('button', { name: 'Save and update balance' }))
+    await waitFor(() => expect(within(composer).getByRole('alert')).toHaveTextContent('Save rejected'))
+    expect(refresh).not.toHaveBeenCalled()
+    expect(screen.getByRole('dialog', { name: 'Record the difference' })).toBeInTheDocument()
   })
 
   it('overwrites only when selected and persists independent inclusion flags', async () => {

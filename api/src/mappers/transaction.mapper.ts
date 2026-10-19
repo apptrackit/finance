@@ -19,6 +19,8 @@ export class TransactionMapper {
       review_source: transaction.review_source || 'manual',
       review_batch_id: transaction.review_batch_id,
       review_flags: transaction.review_flags || [],
+      split_id: transaction.split_id ?? null,
+      split_description: transaction.split_description ?? null,
       confirmed_at: transaction.confirmed_at,
       cancelled_at: transaction.cancelled_at,
       created_at: transaction.created_at,
