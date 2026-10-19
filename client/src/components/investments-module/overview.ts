@@ -19,7 +19,7 @@ export const dailyMove=(p:Position,quotes:Record<string,MarketQuote>)=>{
  return p.account.pricing_method!=='manual'&&p.account.asset_type!=='manual'&&q?.status==='ok'&&q.change_percent!=null?q.change_percent:null
 }
 export function sortHoldings(positions:Position[],quotes:Record<string,MarketQuote>,view:OverviewView) {
- const value=(p:Position)=>view.sort==='value'?p.currentValue:view.sort==='return'?p.gainLoss:dailyMove(p,quotes)
+ const value=(p:Position)=>view.sort==='value'?p.currentValue:view.sort==='return'?p.metrics.unrealized_gain:dailyMove(p,quotes)
  return positions.filter(p=>view.filter==='all'||category(p)===view.filter).sort((a,b)=>{
   let order:number
   if(view.sort==='name')order=(a.account.symbol||a.account.name).localeCompare(b.account.symbol||b.account.name)

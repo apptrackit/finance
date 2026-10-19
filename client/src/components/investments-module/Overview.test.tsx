@@ -70,7 +70,7 @@ it('offers recovery for missing values and opening coverage',()=>{
 it('renders a native manual step sparkline and preserves explicit gaps',()=>{
  const p=fixture().slice(0,1),trend:HoldingTrend={kind:'unit_price',method:'step',status:'ok',currency:'EUR',reasons:[],points:[{date:'2026-01-01',value:null,as_of:null,provisional:false},{date:'2026-01-02',value:10,as_of:'2026-01-02',provisional:false},{date:'2026-01-03',value:20,as_of:'2026-01-03',provisional:false}]}
  render(<MemoryRouter><HoldingsList positions={p} quotes={quotes} privacyMode="visible" onOpenDetail={open} trends={{a:trend}}/></MemoryRouter>)
- const svg=screen.getByRole('img',{name:'30-day unit price history in EUR'})
+ const svg=screen.getByRole('img',{name:/30-day unit price history in EUR/})
  expect(svg.querySelector('path')?.getAttribute('d')).toContain('H118V')
 })
 
@@ -135,4 +135,28 @@ it('preserves purchase review independently of a modest quote delay, including i
  expect(screen.getByRole('region',{name:'Investment needs attention'})).toHaveTextContent('Purchase cash details are missing')
  expect(screen.queryByText('Market price is stale')).not.toBeInTheDocument()
  expect(screen.getByText(/Delayed price/)).toBeVisible();expect(screen.queryByText(/10 EUR/)).not.toBeInTheDocument()
+})
+
+it('puts the accessible detail arrow in the trailing cell and shows a matching unrealized gain/percentage after sales',()=>{
+ const p=fixture()[0];Object.assign(p.metrics,{remaining_basis:100,unrealized_gain:20,unrealized_gain_percent:20,total_gain:70,realized_gain:50});p.gainLoss=70;p.gainLossPercent=null
+ render(<MemoryRouter><HoldingsList positions={[p]} quotes={quotes} privacyMode="visible" onOpenDetail={open}/></MemoryRouter>)
+ const row=screen.getByRole('button',{name:'View AAA details'}).closest('tr')!
+ expect(row.lastElementChild).toContainElement(screen.getByRole('button',{name:'View AAA details'}))
+ expect(row.firstElementChild?.querySelector('svg')).toBeNull()
+ fireEvent.click(screen.getByRole('button',{name:'View AAA details'}));expect(open).toHaveBeenCalledWith(p.account)
+ expect(within(row).getByText('+20 HUF')).toBeVisible();expect(within(row).getByText('+20%')).toBeVisible()
+ expect(within(row).queryByText('+70 HUF')).not.toBeInTheDocument();expect(within(row).queryByText('Estimated return unavailable')).not.toBeInTheDocument()
+ const time=row.querySelector('time')!;expect(time).toHaveAttribute('datetime',quotes.AAA.as_of);expect(time.textContent).not.toContain('T12:00:00');expect(time.title).toContain(quotes.AAA.as_of)
+})
+it('keeps return unavailable for missing or zero basis and hides the new return signals in privacy mode',()=>{
+ const p=fixture()[0];Object.assign(p.metrics,{unrealized_gain:20,unrealized_gain_percent:null,remaining_basis:0})
+ const view=render(<MemoryRouter><HoldingsList positions={[p]} quotes={quotes} privacyMode="visible" onOpenDetail={open}/></MemoryRouter>)
+ expect(screen.getByText('Return unavailable')).toBeVisible()
+ p.metrics.unrealized_gain_percent=20
+ view.rerender(<MemoryRouter><HoldingsList positions={[p]} quotes={quotes} privacyMode="hidden" onOpenDetail={open}/></MemoryRouter>)
+ expect(screen.queryByText('+20%')).not.toBeInTheDocument();expect(screen.queryByText('+20 HUF')).not.toBeInTheDocument()
+})
+it('sorts the displayed unrealized gain independently of total realized-plus-unrealized gain',()=>{
+ const [a,b]=fixture();a.metrics.unrealized_gain=10;b.metrics.unrealized_gain=20;a.gainLoss=100;b.gainLoss=0
+ expect(sortHoldings([a,b],quotes,{...initialOverview,sort:'return'}).map(p=>p.account.id)).toEqual(['b','a'])
 })
