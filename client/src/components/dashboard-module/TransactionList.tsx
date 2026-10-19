@@ -1564,7 +1564,7 @@ export function TransactionList({
     const converted = !transfer && account?.currency !== masterCurrency ? convertCash(tx) : null
     const expanded = !!group && expandedSplits.has(tx.id)
     const canChange = !isLocked(tx.account_id) && !(related && isLocked(related.account_id))
-    return <div key={tx.id} className="group flex flex-wrap items-center gap-3 rounded-lg px-1 py-2 hover:bg-secondary/40 sm:px-2" onClick={() => setActiveTxId(activeTxId === tx.id ? null : tx.id)}>
+    return <div key={tx.id} className="group flex flex-wrap items-center gap-3 rounded-lg px-1 py-2 hover:bg-secondary/40 max-sm:cursor-pointer sm:px-2" onClick={() => setActiveTxId(activeTxId === tx.id ? null : tx.id)}>
       <div aria-hidden="true" className={cn('flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px]', transfer || group ? 'bg-primary/10 text-primary' : 'bg-secondary')}>{transfer ? <ArrowRightLeft className="h-4 w-4" /> : group ? <Split className="h-4 w-4" /> : getCategoryIcon(tx.category_id)}</div>
       <div className="min-w-0 flex-1">
         <p className="flex items-center gap-2 text-sm font-medium"><button type="button" aria-label={`Actions for ${tx.description || (group ? 'split' : 'transaction')}`} aria-expanded={activeTxId === tx.id} className="min-w-0 truncate text-left">{transfer ? related ? `${getAccountName(tx.account_id)} → ${getAccountName(related.account_id)}` : tx.description || 'Transfer' : group ? tx.description || 'Split' : tx.description || getCategoryName(tx.category_id)}</button>{renderRecentBadge(tx)}</p>
