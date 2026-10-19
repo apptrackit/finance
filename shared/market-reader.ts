@@ -4,6 +4,8 @@ import type { MarketCache } from './market-cache'
 import { MarketProvider } from './market-provider'
 
 type Flight = { controller: AbortController; promise: Promise<unknown>; users: number }
+// D1MarketCache supplies a fresh request-local scope, never the reusable DB
+// binding. A flight owns I/O and cannot be joined by a different fetch handler.
 const flights = new WeakMap<object, Map<string, Flight>>()
 async function shared<T>(scope: object, key: string, signal: AbortSignal, run: (signal: AbortSignal) => Promise<T>): Promise<T> {
   signal.throwIfAborted()

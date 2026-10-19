@@ -7,8 +7,10 @@ export interface MarketCache {
   put<T>(key: string, data: T, fetched: number, ttl: number, retention: number): Promise<void>
 }
 export class D1MarketCache implements MarketCache {
-  readonly scope: object
-  constructor(private readonly db: D1Database) { this.scope = db }
+  // The binding can outlive a fetch handler. Only completed D1 payloads may
+  // cross requests; in-flight promises/cancellation belong to this read context.
+  readonly scope = {}
+  constructor(private readonly db: D1Database) {}
   async get<T>(key: string): Promise<CacheRow<T> | null> {
     const row = await this.db.prepare('SELECT payload,fetched_at,expires_at,stale_until FROM market_data_cache WHERE cache_key = ?').bind(key)
       .first<{ payload: string; fetched_at: number; expires_at: number; stale_until: number }>()

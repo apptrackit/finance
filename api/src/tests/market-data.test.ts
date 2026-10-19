@@ -139,3 +139,57 @@ describe('bounded provider reads and cache',()=>{
     finish(Response.json(yahooFixture(now)))
   })
 })
+
+describe('request-owned provider work',()=>{
+ it('bounds one adapter to four active requests and 32 queued slots',async()=>{
+  let active=0,maximum=0
+  const fetcher=vi.fn<typeof fetch>().mockImplementation(async input=>{
+   active++;maximum=Math.max(maximum,active)
+   try{await new Promise(resolve=>setTimeout(resolve,5));const symbol=decodeURIComponent(new URL(String(input)).pathname.split('/').at(-1)!);return Response.json(yahooFixture(now,symbol))}finally{active--}
+  })
+  const provider=new MarketProvider(fetcher)
+  const results=await Promise.allSettled(Array.from({length:40},(_,i)=>provider.series(`TEST${i}`,'2026-10-01',now,new AbortController().signal)))
+  expect(maximum).toBe(4)
+  expect(results.filter(r=>r.status==='fulfilled')).toHaveLength(36)
+  expect(results.filter(r=>r.status==='rejected')).toHaveLength(4)
+  for(const r of results)if(r.status==='rejected')expect(r.reason).toMatchObject({kind:'rate_limited'})
+ })
+ it('does not block another adapter behind one saturated request, and releases cancelled queued slots',async()=>{
+  let active=0
+  const stalled=vi.fn<typeof fetch>().mockImplementation(async(_input,options)=>new Promise((_resolve,reject)=>{
+   active++;const signal=options!.signal!;signal.addEventListener('abort',()=>{active--;reject(signal.reason)},{once:true})
+  }))
+  const first=new MarketProvider(stalled),controllers=Array.from({length:8},()=>new AbortController())
+  const pending=Promise.allSettled(controllers.map((c,i)=>first.series(`WAIT${i}`,'2026-10-01',now,c.signal)))
+  await vi.waitFor(()=>expect(stalled).toHaveBeenCalledTimes(4))
+  const healthy=vi.fn<typeof fetch>().mockResolvedValue(Response.json(yahooFixture(now,'HEALTHY')))
+  try{
+   const other=new MarketProvider(healthy)
+   expect((await other.series('HEALTHY','2026-10-01',now,new AbortController().signal)).quote.price).toBe(110)
+   expect(healthy).toHaveBeenCalledOnce()
+  }finally{controllers.forEach(c=>c.abort())}
+  expect((await pending).every(r=>r.status==='rejected')).toBe(true)
+  expect(active).toBe(0)
+ })
+})
+describe('historical FX start boundary',()=>{
+ it('ignores a provider boundary observation preceding the padded request start while retaining exact older trade-date rates',async()=>{
+  const fetcher=vi.fn<typeof fetch>().mockResolvedValue(Response.json([
+   {date:'2025-10-10',base:'EUR',quote:'USD',rate:2},{date:'2025-10-10',base:'EUR',quote:'HUF',rate:400},
+   {date:'2025-10-15',base:'EUR',quote:'USD',rate:2},{date:'2025-10-15',base:'EUR',quote:'HUF',rate:410},
+  ]))
+  const result=await new MarketProvider(fetcher).fx('2025-10-15','2025-10-15',['USD','HUF'],now,new AbortController().signal)
+  expect(new URL(String(fetcher.mock.calls[0][0])).searchParams.get('from')).toBe('2025-10-11')
+  expect(result.status).toBe('ok');expect(result.points.map(p=>p.date)).toEqual(['2025-10-15'])
+  expect(datedFxAt(result,'2025-10-15','HUF').rate).toBe(410)
+ })
+ it('does not treat an out-of-window boundary row as usable history or bridge an absent business day',async()=>{
+  const fetcher=vi.fn<typeof fetch>().mockResolvedValue(Response.json([{date:'2025-10-10',base:'EUR',quote:'USD',rate:2}]))
+  const empty=await new MarketProvider(fetcher).fx('2025-10-15','2025-10-15',['USD'],now,new AbortController().signal)
+  expect(empty).toMatchObject({status:'missing',coverage:'missing',points:[]})
+  expect(datedFxAt(empty,'2025-10-15','USD').rate).toBeNull()
+  fetcher.mockResolvedValue(Response.json([{date:'2025-10-13',base:'EUR',quote:'USD',rate:2}]))
+  const missing=await new MarketProvider(fetcher).fx('2025-10-15','2025-10-15',['USD'],now,new AbortController().signal)
+  expect(datedFxAt(missing,'2025-10-15','USD').rate).toBeNull()
+ })
+})
