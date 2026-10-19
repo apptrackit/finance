@@ -58,11 +58,9 @@ export function Investments() {
     <div role="group" aria-label="Investment reporting currency" className="flex rounded-lg border border-border p-0.5">{investmentReportingCurrencies.map(c=><button key={c} type="button" aria-pressed={currencyDisplay===c} onClick={()=>setCurrencyDisplay(c)} className={`min-h-9 rounded-md px-3 text-xs font-semibold ${c===currencyDisplay?'bg-secondary text-foreground':'text-muted-foreground'}`}>{c}</button>)}</div>
     {canTrade?<Button type="button" onClick={()=>setEditor({})} className="h-10"><Plus className="h-4 w-4"/>Record trade</Button>:<Link to="/accounts" state={{addAccount:true,investment:accounts.length===0}} className="inline-flex min-h-10 items-center rounded-lg bg-primary px-3 text-xs font-semibold text-primary-foreground">{accounts.length===0?'Add first holding':'Set up trade accounts'}</Link>}
    </header>
-   <div className="grid min-w-0 items-stretch gap-4 @min-[900px]:grid-cols-[minmax(0,1fr)_320px]">
-    <InvestmentAttention positions={positions} quotes={quotes} refreshing={status.loading} onRefresh={()=>{void refresh()}} onOpen={a=>setSelected(a.id)} className="order-2 @min-[900px]:order-first @min-[900px]:col-span-2"/>
-    <div className="order-1 min-w-0"><PortfolioHistoryChart history={investments.history} hidden={hidden} currency={currencyDisplay} currentValue={metrics?.total_value}/></div>
-    <div className="order-3 min-w-0"><PortfolioSummary metrics={metrics} hidden={hidden} currency={currencyDisplay}/></div>
-   </div>
+   <InvestmentAttention positions={positions} quotes={quotes} refreshing={status.loading} onRefresh={()=>{void refresh()}} onOpen={a=>setSelected(a.id)}/>
+   <PortfolioSummary metrics={metrics} hidden={hidden} currency={currencyDisplay}/>
+   <PortfolioHistoryChart history={investments.history} hidden={hidden} currency={currencyDisplay} currentValue={metrics?.total_value}/>
    <PortfolioAllocation positions={positions} view={overviewView} onChange={updateOverview} onOpen={a=>setSelected(a.id)} hidden={hidden} currency={currencyDisplay}/>
    <HoldingsList positions={positions} quotes={quotes} trends={data?.trends} privacyMode={privacyMode} view={overviewView} onViewChange={updateOverview} refreshing={status.loading} onOpenDetail={a=>setSelected(a.id)}/>
    {!editor&&!legacyTradeId&&<InvestmentDetailModal key={selected} account={opening} allTransactions={trades} quotes={quotes} exchangeRates={data?.exchangeRates??{}} privacyMode={privacyMode}

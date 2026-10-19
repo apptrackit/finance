@@ -18,6 +18,10 @@ Total gain is the known lifetime realized plus unrealized amount. The summary sh
 
 The history tooltip shows the selected calendar date, total gain (`value − net_invested`) and its gain-on-net-invested ratio, with portfolio value secondary. Both dated amounts must be known and finite for gain; the percentage additionally requires positive net invested. Unknown gain stays unavailable and unsupported percentages are omitted. This is lifetime gain as of that date, not the selected range's daily-linked return. Observation/flow diagnostics remain in the API contract rather than the tooltip. Calendar dates are formatted without a local-timezone day shift.
 
+## Layout
+
+The overview stacks a responsive summary strip, a full-width history chart and Allocation before Holdings. Total gain leads the strip; narrow containers place it above Net invested and Today. The plot uses an explicit 220px/300px responsive height rather than stretching to a neighboring column. Allocation entries use one, two or four compact columns based on available container width. The initial skeleton follows the same arrangement.
+
 ## Interaction and retained state
 
 Desktop tables become cards at narrower available widths, with a mobile sort selector. Allocation by type filters the table; allocation by holding and holding names open the existing detail panel. Category, sort, allocation mode and reporting currency survive route changes only in App-owned session memory. Financial snapshots are never persisted to browser storage. Superseded and hidden overview reads are aborted and invalidated; return visits revalidate while retaining the last complete snapshot. Failed reads preserve that snapshot with retry feedback.
