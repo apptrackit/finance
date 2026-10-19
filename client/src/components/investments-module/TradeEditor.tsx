@@ -25,6 +25,7 @@ type Props = {
   holdingId?: string
   type?: 'buy' | 'sell'
   edit?: TradeEdit
+  initialDraft?: Partial<TradeDraft>
   quotes: Record<string, MarketQuote>
   rates: Record<string, number>
   hidden: boolean
@@ -46,6 +47,7 @@ export function TradeEditor({
   holdingId,
   type = 'buy',
   edit: providedEdit,
+  initialDraft,
   quotes,
   rates,
   hidden,
@@ -57,7 +59,7 @@ export function TradeEditor({
   const [edit] = useState(providedEdit)
   const holdings = accounts.filter((a) => a.type === 'investment'),
     cashAccounts = accounts.filter((a) => a.type === 'cash')
-  const [draft, setDraft] = useState(() => initialTrade(holdings, cashAccounts, holdingId, type, edit))
+  const [draft, setDraft] = useState(() => ({...initialTrade(holdings, cashAccounts, holdingId, type, edit),...(!edit?initialDraft:{})}))
   const [initial] = useState(draft)
   const [busy, setBusy] = useState(false),
     busyRef = useRef(false),

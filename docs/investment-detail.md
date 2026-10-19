@@ -12,6 +12,12 @@ Price charts use native daily unadjusted observations. Every buy/sell in the sel
 
 Manual histories remain dated total/per-unit step observations, independently loaded and paged. Their cost reference is current known remaining cost, not a deposit or new appraisal. Corrections pin the saved observation ID/version and retain drafts after failure. A successful appraisal refreshes the overview and account snapshots without cash movement.
 
+## Transfer entry points
+
+The transaction composer uses the same `TradeEditor` as Investments. Selecting a holding as the destination opens Buy; selecting one as the source opens Sell. The selected cash account, explicit native cash amount, date and note carry into the shared draft. Cash amounts are never reinterpreted as units, and FX-derived received amounts are not reused as confirmed sale proceeds. Selecting a holding before choosing cash lets the canonical editor select a suitable cash account for review. Whole manual assets keep the editor's one-ITEM acquisition/disposal rules.
+
+Editing an existing investment transfer first loads the canonical reciprocal pair and saved version, then opens the same editor. Reads abort when superseded/unmounted; stale versions or invalid pairs reject opening. Save/delete/preview/uncertain retry and refresh ownership are the canonical editor's existing paths. The composer no longer has an investment price/fee form or its own investment save implementation. Cash-to-cash transfers, split transactions and MCP review transfers remain separate; existing cash transfers cannot be retargeted into a holding.
+
 ## Recording and replacing trades
 
 Record trade on Investments or Buy/Sell in a unit holding opens the dedicated editor. Its saved values are string drafts using AmountInput. It collects the holding, exact units, execution price/currency/date, cash account, included fee and actual settlement. Same-currency cash must equal rounded gross plus the buy fee or minus the sale fee. Cross-currency settlement is entered and explicitly confirmed; displayed current FX is only an estimate. Included fees never create another expense. The existing negative-cash policy remains a warning; overselling is rejected locally and by full API timeline replay.

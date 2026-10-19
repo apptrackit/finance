@@ -195,3 +195,13 @@ it('prefills legacy settlement from the verified linked cash leg without guessin
  expect(screen.getByLabelText('Fee (HUF)')).toHaveValue('')
  expect(screen.getByLabelText('Executed unit price')).toHaveValue('50')
 })
+
+it('keeps explicit transfer cash/date/note drafts when opening the shared buy/sell editor',()=>{
+ render(<TradeEditor {...props} holdingId="holding" initialDraft={{cash:'cash',cashAmount:'123.45',date:'2025-02-03',notes:'Transfer purchase'}}/>)
+ expect(screen.getByLabelText('Pay from')).toHaveValue('cash')
+ expect(screen.getByLabelText('Holding')).toHaveValue('holding')
+ expect(parseAmount((screen.getByLabelText('Actual cash paid (HUF)') as HTMLInputElement).value)).toBe(123.45)
+ expect(screen.getByLabelText('Execution date')).toHaveValue('2025-02-03')
+ expect(screen.getByLabelText('Note (optional)')).toHaveValue('Transfer purchase')
+ expect(screen.getByLabelText('Quantity')).toHaveValue('')
+})
