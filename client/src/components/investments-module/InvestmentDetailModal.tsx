@@ -235,11 +235,14 @@ export function InvestmentDetailModal({
                       : buy
                         ? 'Buy'
                         : 'Sell'
-              const editable =
+              const legacyLinked = !total && !!t.linked_transaction_id &&
+                Number.isSafeInteger(t.trade_version) && t.trade_version! >= 0 &&
+                (!t.execution_currency || t.cash_amount == null)
+              const editable = legacyLinked || (
                 !!t.linked_transaction_id &&
                 t.trade_version != null &&
                 !!t.execution_currency &&
-                t.cash_amount != null
+                t.cash_amount != null)
               return (
                 <li key={t.id} className="space-y-1 py-3">
                   <div className="flex min-w-0 items-start gap-2">
@@ -270,12 +273,12 @@ export function InvestmentDetailModal({
                     {(editable || (!total && !t.linked_transaction_id)) ? (
                       <button
                         type="button"
-                        aria-label={`${t.linked_transaction_id ? 'Edit' : 'Confirm historical details for'} ${label.toLowerCase()} on ${t.date}, trade ${index + 1}`}
+                        aria-label={`${legacyLinked ? 'Review historical details for' : t.linked_transaction_id ? 'Edit' : 'Confirm historical details for'} ${label.toLowerCase()} on ${t.date}, trade ${index + 1}`}
                         disabled={editing || !!protectedAccount || dirty || hidden}
                         onClick={() => onEdit(t)}
                         className="min-h-10 shrink-0 text-xs font-medium text-primary disabled:opacity-50"
                       >
-                        {t.linked_transaction_id ? 'Edit trade' : t.cash_amount == null ? 'Confirm historical details' : 'Review historical details'}
+                        {legacyLinked ? 'Review historical details' : t.linked_transaction_id ? 'Edit trade' : t.cash_amount == null ? 'Confirm historical details' : 'Review historical details'}
                       </button>
                     ) : (
                       <span>Legacy record · read only</span>

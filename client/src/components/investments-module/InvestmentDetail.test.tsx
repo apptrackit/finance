@@ -60,3 +60,16 @@ it.each([26,61])('uses the same delayed-price policy for a %s-minute quote in ho
  if(minutes===26){expect(screen.getByText(/Delayed price · updated 26 minutes ago/)).toBeVisible();expect(screen.queryByText(/Market price is stale/)).not.toBeInTheDocument()}
  else expect(screen.getByText(/Market price is stale/)).toBeVisible()
 })
+
+it('opens the canonical editor for a versioned linked legacy trade whose execution/cash facts are missing',()=>{
+ vi.stubGlobal('fetch',vi.fn<typeof fetch>().mockResolvedValue(Response.json({observations:[],valuation_at:null,next_cursor:null})))
+ const legacy={...trade('linked-old',1),execution_currency:undefined,cash_amount:null,trade_version:0}
+ const {rerender}=render(<InvestmentDetailModal {...props} allTransactions={[legacy]}/>)
+ fireEvent.click(screen.getByRole('button',{name:/Review historical details for buy/}))
+ expect(edit).toHaveBeenCalledWith(expect.objectContaining({id:'linked-old',linked_transaction_id:'cash-linked-old',trade_version:0}))
+ expect(screen.queryByText('Legacy record · read only')).not.toBeInTheDocument()
+ rerender(<InvestmentDetailModal {...props} allTransactions={[legacy]} account={{...base,is_locked:true}}/>)
+ expect(screen.getByRole('button',{name:/Review historical details for buy/})).toBeDisabled()
+ rerender(<InvestmentDetailModal {...props} allTransactions={[legacy]} privacyMode="hidden"/>)
+ expect(screen.getByRole('button',{name:/Review historical details for buy/})).toBeDisabled()
+})
