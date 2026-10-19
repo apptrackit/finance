@@ -1528,21 +1528,31 @@ export function TransactionList({
         {isReview && !ready && <p className="mt-1 text-xs text-muted-foreground">Confirm on {dateLabel}</p>}
         {hasPossibleDuplicateFlag(tx.review_flags) && <span className="mt-1 inline-flex items-center gap-1 text-xs text-amber-700 dark:text-amber-300"><AlertCircle className="h-3 w-3" />Possible duplicate</span>}
       </div>
-      <div className="max-w-full text-right text-sm font-semibold tabular-nums">
+      <div className="flex max-w-full items-center gap-1 text-right text-sm font-semibold tabular-nums"><div>
         {linked ? <><div><span className="sr-only">Sent </span>{nativeAmount(outgoing.amount, outgoing.account_id, false)}</div><div className="text-xs font-medium text-muted-foreground"><span className="sr-only">Received </span>→ {nativeAmount(incoming!.amount, incoming!.account_id, false)}</div></> : <span className={tx.amount > 0 ? 'text-success' : 'text-foreground'}>{nativeAmount(tx.amount, tx.account_id)}</span>}
-      </div>
+      </div>{renderSplitChevron(group ? tx.id : null)}</div>
       {!locked && <div className="ml-auto flex items-center gap-1 sm:ml-0">
-        {group && <Button size="icon" variant="ghost" className="h-11 w-9 sm:h-9 sm:w-9" aria-label={expanded ? 'Hide split lines' : 'Show split lines'} aria-expanded={expanded}
-          onClick={() => setExpandedSplits(prev => { const next = new Set(prev); if (!next.delete(tx.id)) next.add(tx.id); return next })}><ChevronDown className={cn('h-4 w-4', expanded && 'rotate-180')} /></Button>}
         {(!tx.linked_transaction_id || isReview) && <Button size="icon" variant="ghost" className={cn("h-11 w-11 sm:h-9 sm:w-9", pendingDetails === tx.id ? "" : "hidden sm:inline-flex")} disabled={pendingActionId !== null} aria-label={linked ? 'Edit transfer review draft' : group ? `Edit ${actionName}` : isReview ? 'Edit MCP draft' : 'Edit upcoming transaction'} onClick={() => handleEdit(outgoing)}><Pencil className="h-3.5 w-3.5" /></Button>}
         {ready && (!tx.linked_transaction_id || isReview) && <Button size="sm" variant="ghost" className="h-11 w-11 bg-success/10 p-0 text-success sm:h-9 sm:w-auto sm:px-3" disabled={pendingActionId !== null} aria-label={`Confirm ${actionName}`} onClick={() => handleConfirmUpcoming(outgoing)}>{busy ? <Loader2 className="h-4 w-4 animate-spin sm:mr-1" /> : <Check className="h-4 w-4 sm:mr-1" />}<span className="sr-only sm:not-sr-only">Confirm</span></Button>}
+        {!ready && isReview && (!tx.linked_transaction_id || isReview) && <Button size="sm" variant="ghost" className="h-11 w-11 p-0 sm:h-9 sm:w-auto sm:px-3" disabled title={`Can be confirmed on ${dateLabel}`} aria-label={`Confirm ${actionName} available on ${dateLabel}`}><Check className="h-4 w-4 sm:mr-1" /><span className="sr-only sm:not-sr-only">Confirm</span></Button>}
         {(ready || isReview) && (!tx.linked_transaction_id || isReview) ? <Button size="sm" variant="ghost" className={cn("h-11 px-3 text-muted-foreground sm:h-9", pendingDetails === tx.id ? "" : "hidden sm:inline-flex")} disabled={pendingActionId !== null} aria-label={`Decline ${actionName}`} onClick={() => handleDeclineUpcoming(outgoing)}>Decline</Button>
           : !tx.linked_transaction_id && <Button size="icon" variant="ghost" className="h-11 w-11 sm:h-9 sm:w-9" aria-label={group ? 'Delete upcoming split' : 'Delete upcoming transaction'} disabled={deletingId === tx.id} onClick={event => { event.stopPropagation(); if (group && tx.split_id) handleDeleteSplit(tx.split_id); else handleDelete(tx.id) }}><Trash2 className="h-4 w-4" /></Button>}
       </div>}
-      {expanded && group && <ul className="col-span-3 basis-full space-y-1 border-l border-border pl-3 sm:ml-12" aria-label="Split lines">
+      {/* Line amounts end under the item total: leave room for the confirm column (mobile) or the edit, confirm and decline buttons. */}
+      {expanded && group && <ul className={cn('col-span-3 basis-full space-y-1 border-l border-border pl-3 sm:ml-12', locked ? 'pr-6' : 'pr-[4.75rem] sm:pr-[15.3rem]')} aria-label="Split lines">
         {group.map(line => <li key={line.id} className="flex items-center gap-2 text-xs text-muted-foreground"><span aria-hidden="true">{getCategoryIcon(line.category_id)}</span><span className="min-w-0 flex-1 truncate">{getCategoryName(line.category_id)}{line.description ? ` · ${line.description}` : ''}</span><span className="tabular-nums">{nativeAmount(line.amount, line.account_id, true)}</span></li>)}
       </ul>}
     </div>
+  }
+
+  // The line count doubles as the expand toggle, so split rows need no extra column and amounts stay aligned.
+  // A small chevron sits right next to the amount; rows without lines keep an equal blank slot so amounts stay in one column.
+  const renderSplitChevron = (id: string | null) => {
+    if (!id) return <span aria-hidden="true" className="w-5 shrink-0" />
+    const expanded = expandedSplits.has(id)
+    return <button type="button" aria-label={expanded ? 'Hide split lines' : 'Show split lines'} aria-expanded={expanded}
+      className="relative flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted-foreground after:absolute after:-inset-3 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      onClick={event => { event.stopPropagation(); setExpandedSplits(prev => { const next = new Set(prev); if (!next.delete(id)) next.add(id); return next }) }}><ChevronDown className={cn('h-4 w-4 transition-transform', expanded && 'rotate-180')} /></button>
   }
 
   const renderPostedTransaction = (tx: Transaction & { relatedTx?: Transaction; splitGroup?: Transaction[] }) => {
@@ -1552,23 +1562,23 @@ export function TransactionList({
     const account = accounts.find(a => a.id === tx.account_id)
     const converted = !transfer && account?.currency !== masterCurrency ? convertCash(tx) : null
     const expanded = !!group && expandedSplits.has(tx.id)
+    const canChange = !isLocked(tx.account_id) && !(related && isLocked(related.account_id))
     return <div key={tx.id} className="group flex flex-wrap items-center gap-3 rounded-lg px-1 py-2 hover:bg-secondary/40 sm:px-2" onClick={() => setActiveTxId(activeTxId === tx.id ? null : tx.id)}>
       <div aria-hidden="true" className={cn('flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px]', transfer || group ? 'bg-primary/10 text-primary' : 'bg-secondary')}>{transfer ? <ArrowRightLeft className="h-4 w-4" /> : group ? <Split className="h-4 w-4" /> : getCategoryIcon(tx.category_id)}</div>
       <div className="min-w-0 flex-1">
         <p className="flex items-center gap-2 text-sm font-medium"><button type="button" aria-label={`Actions for ${tx.description || (group ? 'split' : 'transaction')}`} aria-expanded={activeTxId === tx.id} className="min-w-0 truncate text-left">{transfer ? related ? `${getAccountName(tx.account_id)} → ${getAccountName(related.account_id)}` : tx.description || 'Transfer' : group ? tx.description || 'Split' : tx.description || getCategoryName(tx.category_id)}</button>{renderRecentBadge(tx)}</p>
         <p className="mt-0.5 truncate text-xs text-muted-foreground">{sortOrder !== 'date' && `${format(parseISO(tx.date), 'MMM d, yyyy')} · `}{transfer ? 'Transfer' : group ? `Split · ${group.length} lines · ${getAccountName(tx.account_id)}` : `${getCategoryName(tx.category_id)} · ${getAccountName(tx.account_id)}`}</p>
       </div>
-      <div className="max-w-full text-right tabular-nums">
-        <p className={cn('text-sm font-semibold', !transfer && tx.amount > 0 ? 'text-success' : 'text-foreground')}>{nativeAmount(account?.type === 'investment' && tx.quantity !== undefined ? tx.quantity : tx.amount, tx.account_id, !transfer)}</p>
-        {related ? <p className="text-xs text-muted-foreground">→ {nativeAmount(related.quantity ?? related.amount, related.account_id, false)}</p> : !transfer && account?.type === 'cash' && account.currency !== masterCurrency && <p className="text-xs text-muted-foreground">{privacyMode === 'hidden' ? '••••••' : converted === null ? 'Conversion unavailable' : `≈ ${convertedAmount(Math.abs(converted)).replace(/^\+/, '')}`}</p>}
-      </div>
-      {group && <Button size="icon" variant="ghost" className="h-11 w-9 sm:h-8 sm:w-8" aria-label={expanded ? 'Hide split lines' : 'Show split lines'} aria-expanded={expanded}
-        onClick={event => { event.stopPropagation(); setExpandedSplits(prev => { const next = new Set(prev); if (!next.delete(tx.id)) next.add(tx.id); return next }) }}><ChevronDown className={cn('h-4 w-4', expanded && 'rotate-180')} /></Button>}
-      {!isLocked(tx.account_id) && !(related && isLocked(related.account_id)) && <div className={cn("items-center sm:flex sm:opacity-0 sm:group-hover:opacity-100 sm:focus-within:opacity-100", activeTxId === tx.id ? "flex" : "hidden")}>
+      {/* Amount on top, row actions stacked below it, so amounts sit at the card edge on every row. */}
+      <div className="flex max-w-full flex-col items-end gap-0.5 self-start text-right tabular-nums">
+        <div className="flex items-center gap-1"><p className={cn('text-sm font-semibold', !transfer && tx.amount > 0 ? 'text-success' : 'text-foreground')}>{nativeAmount(account?.type === 'investment' && tx.quantity !== undefined ? tx.quantity : tx.amount, tx.account_id, !transfer)}</p>{renderSplitChevron(group ? tx.id : null)}</div>
+        {related ? <p className="pr-6 text-xs text-muted-foreground">→ {nativeAmount(related.quantity ?? related.amount, related.account_id, false)}</p> : !transfer && account?.type === 'cash' && account.currency !== masterCurrency && <p className="pr-6 text-xs text-muted-foreground">{privacyMode === 'hidden' ? '••••••' : converted === null ? 'Conversion unavailable' : `≈ ${convertedAmount(Math.abs(converted)).replace(/^\+/, '')}`}</p>}
+        {canChange && <div className={cn("-mr-2 items-center sm:flex sm:opacity-0 sm:group-hover:opacity-100 sm:focus-within:opacity-100", activeTxId === tx.id ? "flex" : "hidden")}>
         <Button size="icon" variant="ghost" className="h-11 w-9 sm:h-8 sm:w-8" aria-label={transfer ? 'Edit transfer' : group ? 'Edit split' : 'Edit transaction'} onClick={event => { event.stopPropagation(); handleEdit(tx) }}><Pencil className="h-3.5 w-3.5" /></Button>
         <Button size="icon" variant="ghost" className="h-11 w-9 text-muted-foreground hover:text-destructive sm:h-8 sm:w-8" aria-label={transfer ? 'Delete transfer' : group ? 'Delete split' : 'Delete transaction'} disabled={deletingId === tx.id} onClick={event => { event.stopPropagation(); if (group && tx.split_id) handleDeleteSplit(tx.split_id); else handleDelete(tx.id) }}><Trash2 className="h-3.5 w-3.5" /></Button>
-      </div>}
-      {expanded && group && <ul className="basis-full space-y-1 border-l border-border pl-3 sm:ml-12" aria-label="Split lines">
+        </div>}
+      </div>
+      {expanded && group && <ul className="basis-full space-y-1 border-l border-border pl-3 pr-6 sm:ml-12" aria-label="Split lines">
         {group.map(line => <li key={line.id} className="flex items-center gap-2 text-xs text-muted-foreground"><span aria-hidden="true">{getCategoryIcon(line.category_id)}</span><span className="min-w-0 flex-1 truncate">{getCategoryName(line.category_id)}{line.description ? ` · ${line.description}` : ''}</span><span className="tabular-nums">{nativeAmount(line.amount, line.account_id, true)}</span></li>)}
       </ul>}
     </div>

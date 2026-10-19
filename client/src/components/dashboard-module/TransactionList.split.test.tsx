@@ -261,7 +261,7 @@ describe('MCP split review drafts', () => {
     renderList({ upcomingTransactions: reviewLines })
     const section = within(screen.getByRole('region', { name: /needs review/i }).closest('section') ?? document.body)
     expect(section.getAllByRole('button', { name: 'More actions for Tesco' })).toHaveLength(1)
-    expect(section.getByText(/Split · 2 lines · OTP Bank/)).toBeInTheDocument()
+    expect(section.getByText(/Split · 2 lines · OTP Bank · Jan 10, 2020/)).toBeInTheDocument()
     expect(section.getByText('−36 250 HUF')).toBeInTheDocument()
     expect(screen.getByText(/1 MCP drafts/)).toBeInTheDocument()
     expect(screen.getByRole('region', { name: 'Confirmation balance preview' })).toHaveTextContent('OTP Bank: 100 000 HUF → 63 750 HUF')
