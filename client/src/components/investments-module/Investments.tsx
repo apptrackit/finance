@@ -1,3 +1,4 @@
+import { LegacyTradeDetails } from './LegacyTradeDetails'
 import {useEffect,useRef,useState} from 'react'
 import {Link,useOutletContext} from 'react-router'
 import {Eye,EyeOff,Plus,RefreshCw} from 'lucide-react'
@@ -20,12 +21,14 @@ export function Investments() {
  const {investments,finance}=useOutletContext<FinancePageContext>()
  const {data,status,refresh,currencyDisplay,setCurrencyDisplay,overviewView,updateOverview}=investments
  const {privacyMode,togglePrivacyMode}=usePrivacy(),hidden=privacyMode==='hidden'
+ const [legacyTradeId,setLegacyTradeId]=useState<string|null>(null)
  const [selected,setSelected]=useState<string|null>(null)
  const [editor,setEditor]=useState<{holdingId?:string;type?:'buy'|'sell';edit?:TradeEdit}|null>(null)
  const [editing,setEditing]=useState(false),[editError,setEditError]=useState<string|null>(null)
  const editController=useRef<AbortController|null>(null)
  useEffect(()=>()=>editController.current?.abort(),[])
  const editTrade=async(t:Transaction)=>{
+  if(!t.linked_transaction_id){setLegacyTradeId(t.id);return}
   editController.current?.abort();const controller=new AbortController();editController.current=controller;setEditing(true);setEditError(null)
   try {
    const response=await apiFetch(`${API_BASE_URL}/investment-trades/${encodeURIComponent(t.id)}`,{throwOnError:true,signal:controller.signal})
@@ -61,9 +64,10 @@ export function Investments() {
     <div className="order-3 grid min-w-0 gap-4 sm:grid-cols-2 @min-[900px]:grid-cols-1"><PortfolioSummary metrics={metrics} hidden={hidden} currency={currencyDisplay}/><PortfolioAllocation positions={positions} view={overviewView} onChange={updateOverview} onOpen={a=>setSelected(a.id)} hidden={hidden} currency={currencyDisplay}/></div>
    </div>
    <HoldingsList positions={positions} quotes={quotes} trends={data?.trends} privacyMode={privacyMode} view={overviewView} onViewChange={updateOverview} refreshing={status.loading} onOpenDetail={a=>setSelected(a.id)}/>
-   {!editor&&<InvestmentDetailModal key={selected} account={opening} allTransactions={trades} quotes={quotes} exchangeRates={data?.exchangeRates??{}} privacyMode={privacyMode}
+   {!editor&&!legacyTradeId&&<InvestmentDetailModal key={selected} account={opening} allTransactions={trades} quotes={quotes} exchangeRates={data?.exchangeRates??{}} privacyMode={privacyMode}
     onClose={closeDetail} metrics={metrics?.holdings.find(h=>h.account_id===selected)} reportingCurrency={currencyDisplay} onValuationSaved={()=>{void saved()}}
     canTrade={canTrade} onTrade={type=>setEditor({holdingId:selected??undefined,type})} onEdit={t=>{void editTrade(t)}} chartCache={investments.detailCache} revisionKey={`${data?.sourceRevision}:${data?.asOf}`} editing={editing} editError={editError}/>}
+   {legacyTradeId&&<LegacyTradeDetails key={legacyTradeId} tradeId={legacyTradeId} hidden={hidden} onClose={()=>setLegacyTradeId(null)} onSaved={saved}/>}
    {editor&&<TradeEditor accounts={[...finance.accounts.filter(a=>a.type==='cash'),...accounts]} holdingId={editor.holdingId} type={editor.type} edit={editor.edit} quotes={quotes} rates={data?.exchangeRates??{}} hidden={hidden} currency={currencyDisplay} sourceRevision={data?.sourceRevision} onClose={()=>setEditor(null)} onSaved={saved}/>}
   </div>
  </FinanceDataBoundary>

@@ -14,3 +14,11 @@ export const InvestmentTradeSchema = z.object({
   fee_amount: z.number().refine(validSettlement, 'Fee supports two decimal settlement digits').nullable().optional(),
   date: z.string().refine(validLocalDate, 'Use a valid YYYY-MM-DD date'), notes: z.string().max(500).nullable().optional(),
 }).strict()
+
+export const LegacyInvestmentDetailsSchema = z.object({
+  expected_version:z.number().int().nonnegative(),
+  execution_currency:z.enum(tradeCurrencies), cash_currency:z.enum(tradeCurrencies),
+  cash_amount:z.number().positive().refine(validSettlement,'Total paid/received supports two decimal settlement digits'),
+  fee_status:z.enum(['known','unknown']),
+  fee_amount:z.number().nonnegative().refine(validSettlement,'Fee supports two decimal settlement digits').nullable().optional(),
+}).strict()

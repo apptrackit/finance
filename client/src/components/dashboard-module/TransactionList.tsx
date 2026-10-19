@@ -1,3 +1,4 @@
+import { LegacyTradeDetails } from '../investments-module/LegacyTradeDetails'
 import type { TradeFacts } from '../../../../shared/investment-trade'
 import type { HoldingFields } from '../../../../shared/holding'
 import type { DashboardFilters, FilterChange } from '../../navigation/filters'
@@ -158,6 +159,7 @@ export function TransactionList({
   const [filtersOpen, setFiltersOpen] = useState(false)
   const [activeTxId, setActiveTxId] = useState<string | null>(null)
   const [pendingDetails, setPendingDetails] = useState<string | null>(null)
+  const [legacyTradeId,setLegacyTradeId]=useState<string|null>(null)
   const [formData, setFormData] = useState({
     account_id: '',
     to_account_id: '',
@@ -679,6 +681,8 @@ export function TransactionList({
         return
       }
     }
+
+    if(accounts.find(a=>a.id===tx.account_id)?.type==='investment' && !tx.linked_transaction_id && tx.quantity!==undefined) { setLegacyTradeId(tx.id);return }
 
     const formatNumber = (num: number) => isMcpReviewTransaction(tx)
       ? formatAmount(Math.abs(num))
@@ -1300,8 +1304,8 @@ export function TransactionList({
         {related ? <p className="text-xs text-muted-foreground">→ {nativeAmount(related.quantity ?? related.amount, related.account_id, false, related.asset_event ? 'ITEM' : undefined)}</p> : !transfer && account?.type === 'cash' && account.currency !== masterCurrency && <p className="text-xs text-muted-foreground">{privacyMode === 'hidden' ? '••••••' : converted === null ? 'Conversion unavailable' : `≈ ${convertedAmount(Math.abs(converted)).replace(/^\+/, '')}`}</p>}
       </div>
       {!isLocked(tx.account_id) && !(related && isLocked(related.account_id)) && <div className={cn("items-center sm:flex sm:opacity-0 sm:group-hover:opacity-100 sm:focus-within:opacity-100", activeTxId === tx.id ? "flex" : "hidden")}>
-        <Button size="icon" variant="ghost" className="h-11 w-9 sm:h-8 sm:w-8" aria-label={transfer ? 'Edit transfer' : 'Edit transaction'} onClick={event => { event.stopPropagation(); handleEdit(tx) }}><Pencil className="h-3.5 w-3.5" /></Button>
-        <Button size="icon" variant="ghost" className="h-11 w-9 text-muted-foreground hover:text-destructive sm:h-8 sm:w-8" aria-label={transfer ? 'Delete transfer' : 'Delete transaction'} disabled={deletingId === tx.id} onClick={event => { event.stopPropagation(); handleDelete(tx.id) }}><Trash2 className="h-3.5 w-3.5" /></Button>
+        <Button size="icon" variant="ghost" className="h-11 w-9 sm:h-8 sm:w-8" aria-label={account?.type==='investment'&&!tx.linked_transaction_id?'Confirm historical trade details':transfer ? 'Edit transfer' : 'Edit transaction'} onClick={event => { event.stopPropagation(); handleEdit(tx) }}><Pencil className="h-3.5 w-3.5" /></Button>
+        {!(account?.type==='investment'&&!tx.linked_transaction_id)&&<Button size="icon" variant="ghost" className="h-11 w-9 text-muted-foreground hover:text-destructive sm:h-8 sm:w-8" aria-label={transfer ? 'Delete transfer' : 'Delete transaction'} disabled={deletingId === tx.id} onClick={event => { event.stopPropagation(); handleDelete(tx.id) }}><Trash2 className="h-3.5 w-3.5" /></Button>}
       </div>}
     </div>
   }
@@ -1573,6 +1577,7 @@ export function TransactionList({
         </div>}
       </CardContent>}
 
+      {legacyTradeId&&<LegacyTradeDetails tradeId={legacyTradeId} hidden={privacyMode==='hidden'||shouldHideInvestment()} onClose={()=>setLegacyTradeId(null)} onSaved={async()=>{await onTransactionAdded()}}/>}
       {/* Bulk Transaction Modal */}
       <BulkTransactionModal
         isOpen={showBulkModal}

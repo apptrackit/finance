@@ -12,7 +12,7 @@ export const INVESTMENT_CASH_FACTS_SELECT = `SELECT it.*,
   LEFT JOIN transactions c ON c.id=it.linked_transaction_id
   LEFT JOIN accounts ca ON ca.id=c.account_id`
 export function mapInvestmentCashFacts<
-  T extends { cash_amount?: number | null; cash_currency?: string | null },
+  T extends { cash_amount?: number | null; cash_currency?: string | null; linked_transaction_id?: string | null; trade_version?: number },
 >(
   row: T & {
     _linked_cash_amount?: number | null
@@ -26,6 +26,7 @@ export function mapInvestmentCashFacts<
   } = row
   return {
     ...trade,
+    ...(!trade.linked_transaction_id && (trade.trade_version??0)>0 && trade.cash_amount!=null && trade.cash_currency ? {cash_source: 'confirmed_legacy'} : {}),
     ...(amount != null && Number.isFinite(amount) && currency
       ? {
           cash_amount: amount,

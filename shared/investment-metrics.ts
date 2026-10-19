@@ -11,7 +11,7 @@ export type MetricAccount = HoldingFields & {
 }
 export type MetricTrade = TradeFacts & {
   id: string; account_id: string; type: 'buy' | 'sell'; quantity: number; price: number
-  total_amount: number; date: string; cash_source?: 'linked_transaction'
+  total_amount: number; date: string; cash_source?: 'linked_transaction' | 'confirmed_legacy'
 }
 export type DatedConversion = (amount: number, source: string, target: string, date: string) => number | null
 export type LedgerMetrics = {

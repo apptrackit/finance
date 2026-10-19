@@ -1,3 +1,6 @@
+import { LegacyInvestmentDetailsController } from './controllers/legacy-investment-details.controller'
+import { LegacyInvestmentDetailsService } from './services/legacy-investment-details.service'
+import { LegacyInvestmentDetailsRepository } from './repositories/legacy-investment-details.repository'
 import {InvestmentHistoryController} from './controllers/investment-history.controller'
 import {createInvestmentHistoryService} from './services/investment-history.service'
 import { InvestmentMetricsController } from './controllers/investment-metrics.controller'
@@ -49,7 +52,7 @@ import { FinancialOutlookController } from './controllers/financial-outlook.cont
 import { DataExportController } from './controllers/data-export.controller'
 import { InvestmentTradeController } from './controllers/investment-trade.controller'
 import { InvestmentTradeService } from './services/investment-trade.service'
-import { InvestmentTradeSchema } from './validators/investment-trade.validator'
+import { InvestmentTradeSchema, LegacyInvestmentDetailsSchema } from './validators/investment-trade.validator'
 
 // Middleware
 import { allowedOrigins, corsMiddleware } from './middlewares/cors.middleware'
@@ -129,6 +132,7 @@ function createDependencies(db: D1Database) {
     dataExportController,
     transactionHistoryController,
     investmentTradeController,
+    legacyInvestmentDetailsController: new LegacyInvestmentDetailsController(new LegacyInvestmentDetailsService(new LegacyInvestmentDetailsRepository(db))),
     investmentMetricsController,
     investmentHistoryController:new InvestmentHistoryController(createInvestmentHistoryService(db)),
     manualValuationController: new ManualValuationController(new ManualValuationService(new ManualValuationRepository(db)))
@@ -248,6 +252,8 @@ app.get('/investment-history', c => getControllers(c).investmentHistoryControlle
 app.get('/investment-metrics', c => getControllers(c).investmentMetricsController.read(c))
 app.post('/investment-trades/preview', validateBody(InvestmentTradeSchema), c => getControllers(c).investmentMetricsController.preview(c))
 app.post('/investment-trades', validateBody(InvestmentTradeSchema), c => getControllers(c).investmentTradeController.save(c))
+app.get('/investment-trades/:id/legacy-details', c => getControllers(c).legacyInvestmentDetailsController.read(c))
+app.put('/investment-trades/:id/legacy-details', validateBody(LegacyInvestmentDetailsSchema), c => getControllers(c).legacyInvestmentDetailsController.save(c))
 app.get('/investment-trades/:id', c => getControllers(c).investmentTradeController.read(c))
 app.put('/investment-trades/:id', validateBody(InvestmentTradeSchema), c => getControllers(c).investmentTradeController.save(c))
 app.delete('/investment-trades/:id', c => getControllers(c).investmentTradeController.delete(c))
