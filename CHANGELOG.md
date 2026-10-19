@@ -10,6 +10,8 @@ Intermediate package/UI version bumps are grouped under the next published GitHu
 
 - Investment chart reads isolate provider queues and in-flight work per Worker request, preventing concurrent cross-request I/O failures. Historical FX keeps valid dated rates when a response includes an earlier business-day boundary outside the padded window; missing days remain unavailable (#159).
 
+- Show modest quote delays beside investment prices with their age/source timestamp instead of actionable stale-price attention. Older or unavailable quotes still warn, and strict Today-return coverage is unchanged (#163).
+
 - Confirm/correct missing payment details on standalone historical investments without changing units or cash; route legacy edits to the dedicated form instead of Income/Expense. Distinguish missing historical FX from unsaved purchase facts and retry rates rather than asking to edit a saved trade again (#150).
 
 - Investment histories use complete matching recorded buys/sells instead of requiring a separate zero-opening confirmation. New zero-unit holdings take dates from trades; imported nonzero units retain dated openings. Verified reciprocal old cash payments support reporting cost without rewriting trades or guessing execution currency/fees. Missing-cost guidance opens trade review. No new migration.

@@ -1,3 +1,4 @@
+import {quotePresentation} from './quote-presentation'
 import {useState} from 'react'
 import {Link} from 'react-router'
 import {TriangleAlert} from 'lucide-react'
@@ -10,7 +11,7 @@ export function InvestmentAttention({positions,quotes,refreshing,onRefresh,onOpe
   const a=p.account,q=quoteFor(p,quotes),result:{id:string;account:Account;text:string;action:'retry'|'value'|'opening'|'trades'|'fx'}[]=[]
   const add=(id:string,text:string,action:'retry'|'value'|'opening'|'trades'|'fx')=>result.push({id:`${a.id}:${id}`,account:a,text,action})
   if(p.currentValue===null)add('value',p.missingCurrencies.length?`Missing ${p.missingCurrencies.join(', ')} FX conversion`:usesMarketPricing(a)?'Current market value unavailable':'Manual value unavailable',p.missingCurrencies.length||usesMarketPricing(a)?'retry':'value')
-  if(usesMarketPricing(a)&&a.balance!==0&&q?.status==='stale')add('stale','Market price is stale','retry')
+  if(usesMarketPricing(a)&&a.balance!==0&&quotePresentation(q).needsAttention)add('stale','Market price is stale','retry')
   if(!usesMarketPricing(a)&&a.manual_valuation?.status==='stale')add('appraisal','Manual appraisal needs an update','value')
   const incomplete=p.metrics.coverage.cost?.some(r=>/unknown|mismatch|ambiguous|unsupported|missing_dated|unverified|future/.test(r))
   if(a.holding_position?.history_status!=='reconciled') add('history','Recorded units need review or an imported starting position','opening')

@@ -118,3 +118,21 @@ it('does not warn for the same confirmed holding when its reporting currency nee
  render(<MemoryRouter><InvestmentAttention positions={[position]} quotes={quotes} refreshing={false} onRefresh={vi.fn()} onOpen={open}/></MemoryRouter>)
  expect(screen.queryByRole('region',{name:'Investment needs attention'})).not.toBeInTheDocument()
 })
+
+it.each([26,61])('keeps a %s-minute quote visible while separating delayed prices from attention',minutes=>{
+ const now=Date.now(),q={...quotes.AAA,status:'stale' as const,as_of:new Date(now-minutes*60_000).toISOString(),change:null,change_percent:null}
+ const p=fixture()[0];p.account.holding_position={quantity:2,activity_quantity:2,residual:0,history_status:'reconciled',coverage_reasons:[],anchor:null};p.metrics.coverage.cost=[]
+ render(<MemoryRouter><HoldingsList positions={[p]} quotes={{AAA:q}} privacyMode="visible" onOpenDetail={open}/><InvestmentAttention positions={[p]} quotes={{AAA:q}} refreshing={false} onRefresh={vi.fn()} onOpen={open}/></MemoryRouter>)
+ expect(screen.getByText(/10 EUR/)).toBeVisible();expect(screen.getByText('Today move unavailable')).toBeVisible()
+ if(minutes===26){expect(screen.getByText(/Delayed price · updated 26 minutes ago/)).toBeVisible();expect(screen.queryByRole('region',{name:'Investment needs attention'})).not.toBeInTheDocument()}
+ else expect(screen.getByRole('region',{name:'Investment needs attention'})).toHaveTextContent('Market price is stale')
+})
+
+it('preserves purchase review independently of a modest quote delay, including in privacy mode',()=>{
+ const p=fixture()[0];p.account.holding_position={quantity:2,activity_quantity:2,residual:0,history_status:'reconciled',coverage_reasons:[],anchor:null};p.metrics.coverage.cost=['unknown_cash_flow']
+ const q={...quotes.AAA,status:'stale' as const,as_of:new Date(Date.now()-26*60_000).toISOString()}
+ render(<MemoryRouter><HoldingsList positions={[p]} quotes={{AAA:q}} privacyMode="hidden" onOpenDetail={open}/><InvestmentAttention positions={[p]} quotes={{AAA:q}} refreshing={false} onRefresh={vi.fn()} onOpen={open}/></MemoryRouter>)
+ expect(screen.getByRole('region',{name:'Investment needs attention'})).toHaveTextContent('Purchase cash details are missing')
+ expect(screen.queryByText('Market price is stale')).not.toBeInTheDocument()
+ expect(screen.getByText(/Delayed price/)).toBeVisible();expect(screen.queryByText(/10 EUR/)).not.toBeInTheDocument()
+})
