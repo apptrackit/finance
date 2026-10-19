@@ -51,3 +51,12 @@ it('opens historical details for an unlinked legacy purchase without presenting 
  render(<InvestmentDetailModal {...props} allTransactions={[legacy]}/>);
  fireEvent.click(screen.getByRole('button',{name:/Confirm historical details for buy/}));expect(edit).toHaveBeenCalledWith(expect.objectContaining({id:'old',trade_version:0}));expect(screen.queryByText('Legacy record · read only')).not.toBeInTheDocument()
 })
+
+it.each([26,61])('uses the same delayed-price policy for a %s-minute quote in holding details',minutes=>{
+ vi.stubGlobal('fetch',vi.fn<typeof fetch>().mockResolvedValue(Response.json({points:[],events:[]})))
+ const q={symbol:'TEST',price:110,regularMarketPrice:110,currency:'EUR',status:'stale' as const,as_of:new Date(Date.now()-minutes*60_000).toISOString()}
+ render(<InvestmentDetailModal {...props} account={{...base,pricing_method:'market',symbol:'TEST'}} quotes={{TEST:q}}/>)
+ expect(screen.getByText('Native price').closest('div')).toHaveTextContent('110 EUR')
+ if(minutes===26){expect(screen.getByText(/Delayed price · updated 26 minutes ago/)).toBeVisible();expect(screen.queryByText(/Market price is stale/)).not.toBeInTheDocument()}
+ else expect(screen.getByText(/Market price is stale/)).toBeVisible()
+})

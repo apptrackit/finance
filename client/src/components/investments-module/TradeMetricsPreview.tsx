@@ -1,3 +1,4 @@
+import { investmentReportingCurrencies } from './reporting-currencies'
 import { useEffect, useState } from 'react'
 import { API_BASE_URL, apiFetch, ApiRequestError } from '../../config'
 import type { TradeInput } from '../../../../shared/investment-trade'
@@ -25,7 +26,7 @@ const finiteOrNull = (value: unknown) =>
   value === null || (typeof value === 'number' && Number.isFinite(value))
 function validPreview(value: unknown): value is PreviewResponse {
   if (!record(value) || typeof value.preview_trade_id !== 'string' || !record(value.by_currency)) return false
-  for (const currency of ['HUF', 'USD']) {
+  for (const currency of investmentReportingCurrencies) {
     const ledger = value.by_currency[currency]
     if (
       !record(ledger) ||
@@ -82,7 +83,7 @@ export function TradeMetricsPreview({
     const controller = new AbortController()
     const timer = setTimeout(() => {
       void apiFetch(
-        `${API_BASE_URL}/investment-trades/preview${target ? `?trade_id=${encodeURIComponent(target)}` : ''}`,
+        `${API_BASE_URL}/investment-trades/preview?currencies=${investmentReportingCurrencies.join(',')}${target ? `&trade_id=${encodeURIComponent(target)}` : ''}`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },

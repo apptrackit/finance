@@ -44,3 +44,11 @@ it('explains a work limit instead of suggesting endless retries of an oversized 
  const {result}=renderHook(()=>usePortfolioHistory(true,snapshot,'HUF',1))
  await waitFor(()=>expect(result.current.error).toBe(true));expect(result.current.errorMessage).toBe('Choose a shorter range.')
 })
+
+it('keeps failed EUR history separate from a successful USD snapshot',async()=>{
+ const {result,rerender}=renderHook(({currency})=>usePortfolioHistory(true,snapshot,currency,1),{initialProps:{currency:'USD'}})
+ await waitFor(()=>expect(result.current.data?.currency).toBe('USD'))
+ fetcher.mockResolvedValue(Response.json({}, {status:503}));rerender({currency:'EUR'})
+ await waitFor(()=>expect(result.current.error).toBe(true));expect(result.current.data).toBeNull()
+ rerender({currency:'USD'});await waitFor(()=>expect(result.current.data?.currency).toBe('USD'))
+})

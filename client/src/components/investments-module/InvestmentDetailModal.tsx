@@ -1,3 +1,4 @@
+import { quotePresentation } from './quote-presentation'
 import { useRef, useState } from 'react'
 import type { HoldingMetrics } from '../../../../shared/investment-metrics'
 import { usesMarketPricing } from '../../../../shared/holding'
@@ -82,6 +83,7 @@ export function InvestmentDetailModal({
     )
   const p = calculatePosition(account, transactions, quotes, exchangeRates, metrics, reportingCurrency),
     q = quotes[account.symbol?.trim().toUpperCase() ?? '']
+  const freshness = quotePresentation(q)
   const protectedAccount = account.is_locked || account.archived_at != null
   const stat = (label: string, value: string, sub?: string) => (
     <div key={label} className="min-w-0 bg-card px-3 py-3">
@@ -118,16 +120,24 @@ export function InvestmentDetailModal({
             </span>
           </p>
         </div>
-        {(protectedAccount || q?.status === 'stale' || p.priceFetchError) && (
+        {(protectedAccount || (market && freshness.needsAttention) || p.priceFetchError) && (
           <p
             role="status"
             className="rounded-xl border border-amber-500/25 bg-amber-500/5 p-3 text-xs text-amber-700 dark:text-amber-300"
           >
             {protectedAccount ? 'Unlock or restore the holding before changing it. ' : ''}
-            {q?.status === 'stale' ? 'Market price is stale; the last known source is shown. ' : ''}
+            {market && freshness.needsAttention
+              ? 'Market price is stale; the last known source is shown. '
+              : ''}
             {p.priceFetchError
               ? 'Current valuation is unavailable; independently known fields remain visible.'
               : ''}
+          </p>
+        )}
+        {market && freshness.delayed && (
+          <p className="text-xs text-muted-foreground">
+            Delayed price · {freshness.ageLabel} · {q?.as_of}. Last known price is shown;
+            Today’s return remains unavailable until a fresh quote arrives.
           </p>
         )}
         <dl className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-border bg-border">

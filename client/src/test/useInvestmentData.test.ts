@@ -68,3 +68,19 @@ it('does not publish malformed overview trends and keeps the last coherent snaps
  await act(async()=>{await result.current.refresh()})
  expect(result.current.status.stale).toBe(true);expect(result.current.data).toBe(previous)
 })
+
+it('requests a complete EUR ledger and retains EUR selection across hidden views',async()=>{
+ const {result,rerender}=renderHook(({active})=>useInvestmentData(active,1),{initialProps:{active:true}})
+ await waitFor(()=>expect(result.current.status.loaded).toBe(true))
+ expect(fetcher.mock.calls.some(([url])=>String(url).includes('currencies=HUF,USD,EUR'))).toBe(true)
+ expect(result.current.data?.metrics.EUR.holdings[0].value).toBe(12)
+ act(()=>result.current.setCurrencyDisplay('EUR'));rerender({active:false});rerender({active:true})
+ await waitFor(()=>expect(result.current.currencyDisplay).toBe('EUR'))
+ await waitFor(()=>expect(fetcher.mock.calls.some(([url])=>String(url).includes('currency=EUR'))).toBe(true))
+})
+it('rejects a missing EUR ledger while preserving the previous complete snapshot',async()=>{
+ const {result}=renderHook(()=>useInvestmentData(true,1));await waitFor(()=>expect(result.current.status.loaded).toBe(true))
+ const previous=result.current.data;delete snapshot.by_currency.EUR
+ await act(async()=>{await result.current.refresh()})
+ expect(result.current.status.stale).toBe(true);expect(result.current.data).toBe(previous)
+})

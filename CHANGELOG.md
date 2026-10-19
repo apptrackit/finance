@@ -9,8 +9,11 @@ Intermediate package/UI version bumps are grouped under the next published GitHu
 ### Fixed
 
 - Investment price returns explicitly exclude dividends. Dividend events no longer block known purchase costs, gains or history or trigger misleading purchase-review warnings; split and missing-history safeguards remain (#161).
+- Holdings use trailing detail arrows, green/red 30-day price trends, readable source times and supported unrealized return percentages paired with remaining-cost gains. Privacy, missing basis and stale-source coverage remain explicit (#167).
 
 - Investment chart reads isolate provider queues and in-flight work per Worker request, preventing concurrent cross-request I/O failures. Historical FX keeps valid dated rates when a response includes an earlier business-day boundary outside the padded window; missing days remain unavailable (#159).
+
+- Show modest quote delays beside investment prices with their age/source timestamp instead of actionable stale-price attention. Older or unavailable quotes still warn, and strict Today-return coverage is unchanged (#163).
 
 - Confirm/correct missing payment details on standalone historical investments without changing units or cash; route legacy edits to the dedicated form instead of Income/Expense. Distinguish missing historical FX from unsaved purchase facts and retry rates rather than asking to edit a saved trade again (#150).
 
@@ -19,6 +22,8 @@ Intermediate package/UI version bumps are grouped under the next published GitHu
 - Cash and investment balance changes use decimal arithmetic to prevent floating residue after postings, transfers, edits, pending confirmation and recurring execution. Narrowly verified legacy residue is recovered only within a successful audited mutation; genuine fractional cash/crypto quantities and old ledger facts stay intact. The trade editor lets the required server preview check unsupported stored mirrors while retaining strict entered-unit validation. Lost increments reject the complete save. No schema migration is added; see `docs/decimal-balances.md`.
 
 ### Added
+
+- EUR reporting alongside HUF/USD throughout Investments, including history, holdings, summaries, details and trade previews, with acquisition-date cost conversion and coherent three-currency reads (#165).
 
 - Combined portfolio value and Net invested history with calendar ranges, dated units/FX/appraisals, sold/archived holdings, range gain and daily-linked Estimated return. Bounded revision-guarded reads preserve gaps and events; unknown legacy history stays unavailable. No new migration.
 
