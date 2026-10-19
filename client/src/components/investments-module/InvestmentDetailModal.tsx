@@ -98,8 +98,8 @@ export function InvestmentDetailModal({
       onClose={close}
       title={account.symbol || account.name}
       subtitle={`${account.name} · ${account.asset_type?.toUpperCase() ?? 'Holding'}`}
-      placement="drawer"
-      className="flex min-h-0 max-h-[96dvh] flex-col sm:max-w-[540px] sm:h-[calc(100dvh-2rem)]"
+      placement="centered"
+      className="flex min-h-0 max-h-[92dvh] flex-col sm:max-w-4xl"
       contentClassName="flex min-h-0 flex-1 flex-col p-0 sm:p-0"
     >
       <div className="min-h-0 flex-1 space-y-5 overflow-y-auto p-4 sm:p-5">

@@ -112,9 +112,16 @@ export function InvestmentChart({
     () => history?.points.map((p) => ({ ...p, time: Date.parse(`${p.date}T00:00:00Z`) })) ?? [],
     [history],
   )
-  const markers = trades
-    .filter((t) => t.price != null && t.execution_currency === history?.currency)
-    .map((t) => ({ ...t, time: Date.parse(`${t.date}T00:00:00Z`), executionPrice: t.price }))
+  const markers = useMemo(() => {
+    // Date-only markers sit in a separate bottom lane, never at an inferred fill.
+    const lowest = Math.min(...points.map(p => p.close))
+    const highest = Math.max(...points.map(p => p.close))
+    const lane = Math.max(0, lowest - Math.max((highest - lowest) * 0.12, lowest * 0.03))
+    return trades.map(t => {
+      const exact = t.price != null && Number.isFinite(t.price) && t.price > 0 && t.execution_currency === history?.currency
+      return {...t, time: Date.parse(`${t.date}T00:00:00Z`), markerPrice: exact ? t.price! : lane, dateOnly: !exact}
+    })
+  }, [trades, points, history?.currency])
   const buys = markers.filter((t) => (t.quantity ?? t.amount) > 0)
   const sells = markers.filter((t) => (t.quantity ?? t.amount) < 0)
   const dates = [...new Set([...points.map((p) => p.date), ...trades.map((t) => t.date)])].sort()
@@ -213,7 +220,7 @@ export function InvestmentChart({
           {history ? 'Refreshing price history…' : 'Loading price history…'}
         </p>
       )}
-      <div className="h-56 w-full" aria-label="Daily instrument price history">
+      <div className="h-64 w-full sm:h-80" aria-label="Daily instrument price history">
         {!points.length ? (
           <p className="p-4 text-xs text-muted-foreground">
             {loading ? 'Loading daily observations…' : 'No known daily closes in this range.'}
@@ -262,13 +269,15 @@ export function InvestmentChart({
                 tickFormatter={(n) => Number(n).toLocaleString(undefined, { maximumFractionDigits: 6 })}
               />
               <Tooltip
+                filterNull={false}
                 content={({ active, payload }) => {
                   const p = (active ? payload?.[0]?.payload : undefined) as
-                    { date?: string; close?: number; time?: number } | undefined
+                    { date?: string; close?: number; time?: number; dateOnly?: boolean } | undefined
                   const d = p?.date ?? (p?.time ? new Date(p.time).toISOString().slice(0, 10) : null)
                   return d ? (
                     <div className="max-w-64 rounded-lg border border-border bg-card p-3 text-xs shadow-lg">
                       <p>{d}</p>
+                      {p?.dateOnly && <p className="text-muted-foreground">Date only · execution price unavailable in chart currency</p>}
                       {p?.close != null && <p>Daily close: {money(p.close)}</p>}
                       {trades
                         .filter((t) => t.date === d)
@@ -294,18 +303,22 @@ export function InvestmentChart({
                 <Scatter
                   name="Buy executions"
                   data={buys}
-                  dataKey="executionPrice"
-                  fill="hsl(var(--primary))"
+                  dataKey="markerPrice"
+                  fill="hsl(var(--success))"
                   isAnimationActive={false}
+                  shape={<TradeDot />}
+                  onClick={entry => setSelected({key, date: entry.date})}
                 />
               )}
               {sells.length > 0 && (
                 <Scatter
                   name="Sell executions"
                   data={sells}
-                  dataKey="executionPrice"
+                  dataKey="markerPrice"
                   fill="hsl(var(--destructive))"
                   isAnimationActive={false}
+                  shape={<TradeDot />}
+                  onClick={entry => setSelected({key, date: entry.date})}
                 />
               )}
               {currentCost !== null && (
@@ -320,6 +333,11 @@ export function InvestmentChart({
           </ResponsiveContainer>
         )}
       </div>
+      {trades.length > 0 && <div className="flex flex-wrap gap-4 text-xs text-muted-foreground" aria-label="Trade marker legend">
+        <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-success"/>Buy · {buys.length}</span>
+        <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-destructive"/>Sell · {sells.length}</span>
+        {markers.some(t => t.dateOnly) && <span title="Hollow markers show the actual trade date in the bottom lane, not an execution price.">○ Date only</span>}
+      </div>}
       {dates.length > 0 && (
         <label className="block text-xs text-muted-foreground">
           Read chart day
@@ -355,4 +373,11 @@ export function InvestmentChart({
       )}
     </section>
   )
+}
+
+function TradeDot({cx,cy,fill,payload}:{cx?:number;cy?:number;fill?:string;payload?:{dateOnly?:boolean;date?:string;quantity?:number;amount?:number}}) {
+  if(cx==null||cy==null)return <g />
+  return <circle cx={cx} cy={cy} r={5} fill={payload?.dateOnly?'hsl(var(--card))':fill} stroke={fill} strokeWidth={2}>
+    <title>{(payload?.quantity??payload?.amount??0)>0?'Buy':'Sell'} · {payload?.date}{payload?.dateOnly?' · date only':''}</title>
+  </circle>
 }
