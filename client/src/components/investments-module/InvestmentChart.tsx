@@ -37,6 +37,17 @@ export function chartTrades(history: PriceHistory, transactions: Trade[]) {
     .filter((t) => t.date >= history.from && t.date <= history.to)
     .sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id))
 }
+/** Presentation only: recorded fills retain their original price and units. */
+export function splitAdjustedTradePrice(trade:Pick<Trade,'date'|'price'>,history:PriceHistory):number|null {
+  if(trade.price==null||!Number.isFinite(trade.price)||trade.price<=0)return null
+  let factor=1
+  for(const event of history.events)if(event.type==='split'&&event.date>trade.date){
+    if(event.ratio==null||!Number.isFinite(event.ratio)||event.ratio<=0)return null
+    factor*=event.ratio
+  }
+  const price=trade.price/factor
+  return Number.isFinite(factor)&&factor>0&&Number.isFinite(price)&&price>0?price:null
+}
 export function InvestmentChart({
   symbol,
   transactions = [],
@@ -88,7 +99,7 @@ export function InvestmentChart({
           !Number.isFinite(Date.parse(value.to)) ||
           !value.currency ||
           value.points.some(
-            (p) => !Number.isFinite(p.close) || p.close <= 0 || !/^\d{4}-\d{2}-\d{2}$/.test(p.date),
+            (p) => !Number.isFinite(p.close) || p.close <= 0 || !Number.isFinite(p.provider_close) || p.provider_close<=0 || !/^\d{4}-\d{2}-\d{2}$/.test(p.date),
           )
         )
           throw new Error('Invalid price history')
@@ -109,7 +120,7 @@ export function InvestmentChart({
   const history = snapshot?.key === key ? snapshot.value : (store.get(key) ?? null)
   const trades = useMemo(() => (history ? chartTrades(history, transactions) : []), [history, transactions])
   const points = useMemo(
-    () => history?.points.map((p) => ({ ...p, time: Date.parse(`${p.date}T00:00:00Z`) })) ?? [],
+    () => history?.points.map((p) => ({ ...p, close:p.provider_close, time: Date.parse(`${p.date}T00:00:00Z`) })) ?? [],
     [history],
   )
   const markers = useMemo(() => {
@@ -118,8 +129,8 @@ export function InvestmentChart({
     const highest = Math.max(...points.map(p => p.close))
     const lane = Math.max(0, lowest - Math.max((highest - lowest) * 0.12, lowest * 0.03))
     return trades.map(t => {
-      const exact = t.price != null && Number.isFinite(t.price) && t.price > 0 && t.execution_currency === history?.currency
-      return {...t, time: Date.parse(`${t.date}T00:00:00Z`), markerPrice: exact ? t.price! : lane, dateOnly: !exact}
+      const adjusted=history&&t.execution_currency===history.currency?splitAdjustedTradePrice(t,history):null
+      return {...t, time: Date.parse(`${t.date}T00:00:00Z`), markerPrice: adjusted ?? lane, dateOnly: adjusted==null}
     })
   }, [trades, points, history?.currency])
   const buys = markers.filter((t) => (t.quantity ?? t.amount) > 0)
@@ -128,10 +139,10 @@ export function InvestmentChart({
   const first = points.at(0),
     last = points.at(-1),
     splitInRange = history?.events.some((e) => e.type === 'split') ?? false
-  const change = first && last && !splitInRange ? last.close - first.close : null,
+  const change = first && last ? last.close - first.close : null,
     rawPercent = change !== null && first ? (change / first.close) * 100 : null
   const percent = rawPercent !== null && Number.isFinite(rawPercent) ? rawPercent : null
-  const money = (n: number | null | undefined) => unitPrice(n, history?.currency ?? '')
+  const money = (n: number | null | undefined) => n==null?'Unavailable':Math.abs(n)>=1?`${n.toLocaleString('hu-HU',{minimumFractionDigits:2,maximumFractionDigits:2})} ${history?.currency??''}`:unitPrice(n,history?.currency??'')
   const date = selected?.key === key ? selected.date : last?.date
   const dayTrades = trades.filter((t) => t.date === date),
     close = points.find((p) => p.date === date)?.close
@@ -174,27 +185,19 @@ export function InvestmentChart({
         {change !== null && percent !== null && (
           <p className="text-xs text-muted-foreground">
             {change >= 0 ? '+' : ''}
-            {money(change)} ({percent.toFixed(2)}%) · selected range
+            {money(change)} ({percent.toFixed(2)}%) · price change
           </p>
-        )}
-        {splitInRange && (
-          <p className="text-xs text-muted-foreground">Range change unavailable across split events.</p>
         )}
       </div>
       {history && (
         <p className="text-[10px] text-muted-foreground">
-          Yahoo Finance · daily unadjusted close · excludes dividends · {history.currency} ·{' '}
+          Yahoo Finance · split-adjusted daily close · excludes dividends · {history.currency} ·{' '}
           {history.status === 'stale' || error ? 'Saved history; refresh unavailable' : 'Retrieved'}{' '}
           {history.retrieved_at}
           {last?.provisional ? ' · current session provisional' : ''}
         </p>
       )}
-      {history?.events.some(event => event.type === 'split') && (
-        <p className="text-xs text-muted-foreground">
-          Stock splits occur in this range. Price history alone does not establish complete portfolio
-          returns.
-        </p>
-      )}
+      {splitInRange&&<p className="text-xs text-muted-foreground">Prices and trade dots use the current share basis. Recorded trades keep their original units and execution prices.</p>}
       <button
         type="button"
         disabled={loading}
@@ -266,19 +269,20 @@ export function InvestmentChart({
                 width={55}
                 domain={['auto', 'auto']}
                 tick={{ fontSize: 10 }}
-                tickFormatter={(n) => Number(n).toLocaleString(undefined, { maximumFractionDigits: 6 })}
+                tickFormatter={(n) => Number(n).toLocaleString(undefined, { maximumFractionDigits: Math.abs(Number(n))>=1?2:12 })}
               />
               <Tooltip
                 filterNull={false}
                 content={({ active, payload }) => {
                   const p = (active ? payload?.[0]?.payload : undefined) as
-                    { date?: string; close?: number; time?: number; dateOnly?: boolean } | undefined
+                    { date?: string; close?: number; time?: number; dateOnly?: boolean; markerPrice?:number } | undefined
                   const d = p?.date ?? (p?.time ? new Date(p.time).toISOString().slice(0, 10) : null)
                   return d ? (
                     <div className="max-w-64 rounded-lg border border-border bg-card p-3 text-xs shadow-lg">
                       <p>{d}</p>
                       {p?.dateOnly && <p className="text-muted-foreground">Date only · execution price unavailable in chart currency</p>}
-                      {p?.close != null && <p>Daily close: {money(p.close)}</p>}
+                      {p?.close != null && <p>Split-adjusted close: {money(p.close)}</p>}
+                      {p?.markerPrice!=null&&!p.dateOnly&&<p>Split-adjusted execution: {money(p.markerPrice)}</p>}
                       {trades
                         .filter((t) => t.date === d)
                         .map((t) => (
