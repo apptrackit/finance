@@ -19,7 +19,7 @@ it('shows native currency/daily bounds and preserves a matching chart on failed 
   vi.stubGlobal('fetch',fetcher)
   render(<InvestmentChart symbol="TEST"/>)
   expect(await screen.findByText(/110,00 EUR/)).toBeInTheDocument()
-  expect(screen.getByText(/split-adjusted daily close/)).toBeInTheDocument()
+  expect(screen.getByText(/split-adjusted, excluding dividends/)).toBeInTheDocument()
   expect(String(fetcher.mock.calls[0][0])).toContain('interval=1d')
   expect(screen.getByTestId('instrument-chart')).toHaveAttribute('data-points','3')
   fetcher.mockRejectedValue(new Error('private error'))
@@ -60,8 +60,8 @@ it('shows a stale source time without inventing a daily zero move and masks priv
 it('uses split-adjusted closes for price change across stock splits',async()=>{
   vi.stubGlobal('fetch',vi.fn<typeof fetch>().mockResolvedValue(Response.json({...value,events:[{date:value.points[1].date,type:'split',ratio:2}],requires_event_review:true})))
   render(<InvestmentChart symbol="TEST"/>)
-  expect(await screen.findByText(/22.22%.*price change/)).toBeInTheDocument()
-  expect(screen.getByText(/split-adjusted daily close/)).toBeVisible()
+  expect(await screen.findByText(/22.22%.*past month/)).toBeInTheDocument()
+  expect(screen.getByText(/split-adjusted, excluding dividends/)).toBeVisible()
 })
 
 it('retains every same-day execution, its actual date/currency and the current remaining-cost reference',async()=>{

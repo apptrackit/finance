@@ -26,7 +26,7 @@ it('shows a manual total once, its known cost and last valuation, with Update va
  const metrics=holdingMetrics(account,[],'HUF',undefined,(n,s,t)=>s===t?n:null,(n,s,t)=>s===t?n:null,'2026-01-15')
  vi.stubGlobal('fetch',vi.fn<typeof fetch>().mockResolvedValue(Response.json({observations:[],valuation_at:null,next_cursor:null})))
  render(<InvestmentDetailModal {...props} account={account} allTransactions={[]} metrics={metrics}/>)
- expect(screen.getByText('1200 HUF')).toBeVisible();expect(screen.getByText('Remaining cost').parentElement).toHaveTextContent('1000 HUF')
+ expect(screen.getByRole('region',{name:'Holding summary'})).toHaveTextContent(/1200\s*HUF/);expect(screen.getByText('Remaining cost').parentElement).toHaveTextContent('1000 HUF')
  expect(screen.getByRole('button',{name:'Update value'})).toBeEnabled();expect(screen.queryByRole('button',{name:'Buy',exact:true})).not.toBeInTheDocument();expect(screen.queryByRole('button',{name:'Sell',exact:true})).not.toBeInTheDocument()
  expect(await screen.findByText(/Last valued 2026-01-10/)).toBeVisible()
 })
@@ -40,7 +40,7 @@ it('withholds a missing manual unit price instead of showing a zero, and disable
 it('removes values, native prices, gain colors, fee amounts and execution descriptions in privacy mode',()=>{
  vi.stubGlobal('fetch',vi.fn<typeof fetch>().mockResolvedValue(Response.json({observations:[],valuation_at:null,next_cursor:null})))
  render(<InvestmentDetailModal {...props} privacyMode="hidden"/>)
- expect(screen.queryByText(/110 EUR|101 EUR|100 EUR|1 EUR|2 SHARE/)).not.toBeInTheDocument()
+ expect(screen.queryByText(/110(?:,00)? EUR|101 EUR|100 EUR|1 EUR|2 SHARE/)).not.toBeInTheDocument()
  expect(screen.getAllByText('••••••').length).toBeGreaterThan(4)
  expect(screen.getByRole('button',{name:'Buy',exact:true})).toBeDisabled()
  expect(screen.getAllByRole('button',{name:/Edit buy/}).every(b=>(b as HTMLButtonElement).disabled)).toBe(true)
@@ -56,7 +56,7 @@ it.each([26,61])('uses the same delayed-price policy for a %s-minute quote in ho
  vi.stubGlobal('fetch',vi.fn<typeof fetch>().mockResolvedValue(Response.json({points:[],events:[]})))
  const q={symbol:'TEST',price:110,regularMarketPrice:110,currency:'EUR',status:'stale' as const,as_of:new Date(Date.now()-minutes*60_000).toISOString()}
  render(<InvestmentDetailModal {...props} account={{...base,pricing_method:'market',symbol:'TEST'}} quotes={{TEST:q}}/>)
- expect(screen.getByText('Current price').closest('div')).toHaveTextContent('110 EUR')
+ expect(screen.getByText('Current price').closest('div')).toHaveTextContent('110,00 EUR')
  if(minutes===26){expect(screen.getByText(/Delayed price · updated 26 minutes ago/)).toBeVisible();expect(screen.queryByText(/Market price is stale/)).not.toBeInTheDocument()}
  else expect(screen.getByText(/Market price is stale/)).toBeVisible()
 })
@@ -79,9 +79,9 @@ it('pairs labeled holding gain with its supported percentage and masks both in p
  const metric={...holdingMetrics(base,[],'HUF',undefined,n=>n,n=>n,'2026-10-20'),value:1200,total_gain:200,net_invested:1000}
  const {rerender}=render(<InvestmentDetailModal {...props} metrics={metric}/>)
  const summary=within(screen.getByRole('region',{name:'Holding summary'}))
- expect(summary.getByText('Current value')).toBeVisible()
- expect(summary.getByText('1200 HUF')).toBeVisible()
- expect(summary.getByText('Total gain')).toBeVisible()
+ expect(summary.getByText('Position value')).toBeVisible()
+ expect(screen.getByRole('region',{name:'Holding summary'})).toHaveTextContent(/1200\s*HUF/)
+ expect(summary.getByText('total gain')).toBeVisible()
  expect(summary.getByText('+200 HUF')).toBeVisible()
  expect(summary.getByTitle('Gain on net invested')).toHaveTextContent('+20%')
  rerender(<InvestmentDetailModal {...props} metrics={{...metric,net_invested:0}}/>)

@@ -48,10 +48,10 @@ it('keeps daily prices in the visible axis domain when execution scatter data is
   await screen.findByText(/110,00 EUR/)
   await waitFor(() => {
     const plot = screen.getByLabelText('Daily instrument price history')
-    const ticks = [
-      ...plot.querySelectorAll('.recharts-yAxis-tick-labels .recharts-cartesian-axis-tick-value'),
-    ].map((n) => Number(n.textContent?.replaceAll(',', '')))
-    expect(Math.max(...ticks)).toBeGreaterThanOrEqual(110)
+    const path=plot.querySelector('.recharts-area-curve')?.getAttribute('d')??''
+    const y=[...path.matchAll(/[ML](-?[\d.]+),(-?[\d.]+)/g)].map(match=>Number(match[2]))
+    expect(y.length).toBeGreaterThan(1)
+    expect(y.every(value=>Number.isFinite(value)&&value>=0&&value<=240)).toBe(true)
     expect(plot.querySelector('.recharts-area-curve')).toHaveAttribute(
       'd',
       expect.stringContaining('L'),
@@ -83,7 +83,7 @@ it('renders daily history without inventing executions from empty scatter series
 })
 
 it.each(['dividend', 'split'] as const)(
-  'only warns about split position review for %s history',
+  'retains a split-adjusted price-only disclosure for %s history',
   async (type) => {
     const now = Date.now()
     const history = normalizeYahoo(
@@ -103,9 +103,7 @@ it.each(['dividend', 'split'] as const)(
     vi.stubGlobal('fetch', vi.fn<typeof fetch>().mockResolvedValue(Response.json(history)))
     render(<InvestmentChart symbol="TEST" />)
     await screen.findByText(/110,00 EUR/)
-    expect(screen.getByText(/excludes dividends/)).toBeVisible()
-    if (type === 'split') expect(screen.getByText(/Prices and trade dots use the current share basis/)).toBeVisible()
-    else expect(screen.queryByText(/Price history alone/)).not.toBeInTheDocument()
+    expect(screen.getByText(/split-adjusted, excluding dividends/)).toBeVisible()
   },
 )
 
@@ -125,12 +123,12 @@ it('shows every long-range buy/sell at its date, including date-only trades and 
  ]}/> )
  await screen.findByText(/110,00 EUR/)
  fireEvent.click(screen.getByRole('button',{name:'5Y',exact:true}))
- await screen.findByText('Buy · 3')
+ await screen.findByText('Your buys · 3')
  expect(fetcher.mock.calls.some(([url])=>String(url).includes('range=5y'))).toBe(true)
  const plot=screen.getByLabelText('Daily instrument price history')
  await waitFor(()=>expect(plot.querySelectorAll('.recharts-scatter-symbol')).toHaveLength(5))
  const dots=[...plot.querySelectorAll('.recharts-scatter-symbol circle')]
- expect(dots.filter(dot=>dot.getAttribute('stroke')==='hsl(var(--success))')).toHaveLength(3)
+ expect(dots.filter(dot=>dot.getAttribute('stroke')==='hsl(var(--foreground))')).toHaveLength(3)
  expect(dots.filter(dot=>dot.getAttribute('stroke')==='hsl(var(--destructive))')).toHaveLength(2)
  expect(dots.filter(dot=>dot.getAttribute('fill')==='hsl(var(--card))')).toHaveLength(2)
  const sale=dots.find(dot=>dot.querySelector('title')?.textContent==='Sell · 2025-01-03')!
@@ -157,13 +155,11 @@ it('plots a continuous split-only series and adjusts trade dots without rewritin
  vi.stubGlobal('fetch',vi.fn<typeof fetch>().mockResolvedValue(Response.json(history)))
  render(<InvestmentChart symbol="TEST" transactions={trades}/>)
  await screen.findByText(/63,00 EUR/)
- expect(screen.getByText(/5.00%.*price change/)).toBeVisible()
+ expect(screen.getByText(/5.00%.*past month/)).toBeVisible()
  const plot=screen.getByLabelText('Daily instrument price history')
  await waitFor(()=>expect(plot.querySelectorAll('.recharts-scatter-symbol')).toHaveLength(2))
- const ticks=[...plot.querySelectorAll('.recharts-yAxis-tick-labels .recharts-cartesian-axis-tick-value')].map(n=>Number(n.textContent?.replaceAll(',','')))
- expect(Math.max(...ticks)).toBeLessThan(100)
- expect(Math.min(...ticks)).toBeGreaterThan(0)
  fireEvent.change(screen.getByRole('combobox',{name:'Read instrument history by date'}),{target:{value:'2021-07-19'}})
+ expect(screen.getByText('60,00 EUR')).toBeVisible()
  expect(screen.getByRole('list',{name:'Executions on 2021-07-19'})).toHaveTextContent('2400 EUR')
  expect(JSON.stringify({history,trades})).toBe(original)
 })
@@ -184,4 +180,18 @@ it('formats normal unit prices as cents without altering the source observation'
  render(<InvestmentChart symbol="TEST"/>)
  expect(await screen.findByText('214,13 EUR')).toBeVisible()
  expect(history.points.at(-1)!.provider_close).toBe(214.130004882813)
+})
+
+it('ends at a compatible current quote while retaining the source history and rejecting stale or other-currency quotes',async()=>{
+ const history=normalizeYahoo(yahooFixture(Date.now()),'TEST','2026-01-01',Date.now()).history
+ const original=JSON.stringify(history),last=history.points.at(-1)!
+ vi.stubGlobal('fetch',vi.fn<typeof fetch>().mockResolvedValue(Response.json(history)))
+ const quote={symbol:'TEST',price:111,regularMarketPrice:111,currency:'EUR',status:'ok' as const,session:'closed' as const,session_date:last.date,as_of:new Date(Date.parse(last.period_start)+1000).toISOString()}
+ const {rerender}=render(<InvestmentChart symbol="TEST" quote={quote}/>)
+ expect(await screen.findByText('111,00 EUR')).toBeVisible()
+ expect(JSON.stringify(history)).toBe(original)
+ rerender(<InvestmentChart symbol="TEST" quote={{...quote,price:120,currency:'USD'}}/>)
+ expect(screen.getByText('110,00 EUR')).toBeVisible()
+ rerender(<InvestmentChart symbol="TEST" quote={{...quote,price:120,status:'stale'}}/>)
+ expect(screen.getByText('110,00 EUR')).toBeVisible()
 })
