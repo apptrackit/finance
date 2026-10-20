@@ -23,6 +23,7 @@ Example: `001-init.sql`, `002-add-user-table.sql`
 - Migrations already applied are skipped automatically
 - API/MCP-only deployments check migration history and stop if any are pending. Add `-- --migrations` to explicitly apply them before deploying that Worker.
 - A history-query failure stops deployment. Each migration and its history insert are submitted together; do not substitute Wrangler's separate built-in migration ledger.
+- The final SQL statement must end with a semicolon; trailing line/block comments are allowed. All pending files are checked for this terminator before any migration write. Retrying a stopped deployment skips migrations already recorded by their complete name.
 
 ## For Developers
 

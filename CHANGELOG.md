@@ -29,6 +29,7 @@ Intermediate package/UI version bumps are grouped under the next published GitHu
 
 ### Fixed
 
+- Deployment accepts trailing SQL comments and checks every pending migration's statement terminator before database changes, preventing false semicolon errors and avoidable partial upgrades. [#173](https://github.com/apptrackit/finance/issues/173)
 - Cash and investment balance changes use decimal arithmetic to prevent floating-point residue while preserving genuine fractional amounts. Payments, transfers, adjustments, pending confirmations and recurring execution update balances and audit records together, with guards against duplicate or conflicting changes.
 - Dashboard net worth respects investment holding exclusions; Investments continues to show all active holdings.
 - Buttons, tabs, switches, menus, selects, checkboxes and other enabled click targets show a pointer cursor again across the app; Tailwind CSS 4 had reset buttons to the default arrow. Disabled controls keep the default cursor. [#157](https://github.com/apptrackit/finance/issues/157)
