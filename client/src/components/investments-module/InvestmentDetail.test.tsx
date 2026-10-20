@@ -33,7 +33,7 @@ it('shows a manual total once, its known cost and last valuation, with Update va
 it('withholds a missing manual unit price instead of showing a zero, and disables locked mutations',()=>{
  vi.stubGlobal('fetch',vi.fn<typeof fetch>().mockResolvedValue(Response.json({observations:[],valuation_at:null,next_cursor:null})))
  render(<InvestmentDetailModal {...props} account={{...base,manual_price:null,is_locked:true}}/>)
- const price=screen.getByText('Native price').closest('div')!
+ const price=screen.getByText('Current price').closest('div')!
  expect(price).toHaveTextContent('Unavailable');expect(price).not.toHaveTextContent('0 EUR')
  expect(screen.getByRole('button',{name:'Buy',exact:true})).toBeDisabled();expect(screen.getByRole('button',{name:'Update value'})).toBeDisabled()
 })
@@ -56,7 +56,7 @@ it.each([26,61])('uses the same delayed-price policy for a %s-minute quote in ho
  vi.stubGlobal('fetch',vi.fn<typeof fetch>().mockResolvedValue(Response.json({points:[],events:[]})))
  const q={symbol:'TEST',price:110,regularMarketPrice:110,currency:'EUR',status:'stale' as const,as_of:new Date(Date.now()-minutes*60_000).toISOString()}
  render(<InvestmentDetailModal {...props} account={{...base,pricing_method:'market',symbol:'TEST'}} quotes={{TEST:q}}/>)
- expect(screen.getByText('Native price').closest('div')).toHaveTextContent('110 EUR')
+ expect(screen.getByText('Current price').closest('div')).toHaveTextContent('110 EUR')
  if(minutes===26){expect(screen.getByText(/Delayed price · updated 26 minutes ago/)).toBeVisible();expect(screen.queryByText(/Market price is stale/)).not.toBeInTheDocument()}
  else expect(screen.getByText(/Market price is stale/)).toBeVisible()
 })
@@ -72,4 +72,21 @@ it('opens the canonical editor for a versioned linked legacy trade whose executi
  expect(screen.getByRole('button',{name:/Review historical details for buy/})).toBeDisabled()
  rerender(<InvestmentDetailModal {...props} allTransactions={[legacy]} privacyMode="hidden"/>)
  expect(screen.getByRole('button',{name:/Review historical details for buy/})).toBeDisabled()
+})
+
+it('pairs labeled holding gain with its supported percentage and masks both in privacy mode',()=>{
+ vi.stubGlobal('fetch',vi.fn<typeof fetch>().mockResolvedValue(Response.json({observations:[],valuation_at:null,next_cursor:null})))
+ const metric={...holdingMetrics(base,[],'HUF',undefined,n=>n,n=>n,'2026-10-20'),value:1200,total_gain:200,net_invested:1000}
+ const {rerender}=render(<InvestmentDetailModal {...props} metrics={metric}/>)
+ const summary=within(screen.getByRole('region',{name:'Holding summary'}))
+ expect(summary.getByText('Current value')).toBeVisible()
+ expect(summary.getByText('1200 HUF')).toBeVisible()
+ expect(summary.getByText('Total gain')).toBeVisible()
+ expect(summary.getByText('+200 HUF')).toBeVisible()
+ expect(summary.getByTitle('Gain on net invested')).toHaveTextContent('+20%')
+ rerender(<InvestmentDetailModal {...props} metrics={{...metric,net_invested:0}}/>)
+ expect(summary.queryByTitle('Gain on net invested')).not.toBeInTheDocument()
+ rerender(<InvestmentDetailModal {...props} metrics={metric} privacyMode="hidden"/>)
+ expect(summary.queryByText(/1200 HUF|200 HUF|20%/)).not.toBeInTheDocument()
+ expect(summary.getByTitle('Gain on net invested')).toHaveTextContent('••••••')
 })

@@ -1,3 +1,4 @@
+import { holdingSourceTime } from './holding-presentation'
 import { quotePresentation } from './quote-presentation'
 import { useRef, useState } from 'react'
 import type { HoldingMetrics } from '../../../../shared/investment-metrics'
@@ -11,7 +12,7 @@ import { InvestmentChart } from './InvestmentChart'
 import type { HoldingChartCache } from './InvestmentChart'
 import type { Account, MarketQuote, Transaction } from './types'
 import { calculatePosition } from './utils'
-import { amount, costPrice, unitPrice, signedAmount, tone } from './overview'
+import { amount, costPrice, unitPrice, signedAmount, percentage, tone } from './overview'
 type Props = {
   account: Account | null
   allTransactions: Transaction[]
@@ -84,11 +85,15 @@ export function InvestmentDetailModal({
   const p = calculatePosition(account, transactions, quotes, exchangeRates, metrics, reportingCurrency),
     q = quotes[account.symbol?.trim().toUpperCase() ?? '']
   const freshness = quotePresentation(q)
+  const ratio=p.gainLoss!=null&&Number.isFinite(p.gainLoss)&&p.netInvested!=null&&Number.isFinite(p.netInvested)&&p.netInvested>0?p.gainLoss/p.netInvested*100:null
+  const gainPercent=ratio!=null&&Number.isFinite(ratio)?ratio:null
+  const sourceDate=market?q?.as_of:account.manual_valuation?.as_of??account.manual_price_date
+  const sourceTime=holdingSourceTime(sourceDate)
   const protectedAccount = account.is_locked || account.archived_at != null
   const stat = (label: string, value: string, sub?: string) => (
-    <div key={label} className="min-w-0 bg-card px-3 py-3">
+    <div key={label} className="min-w-0">
       <dt className="text-[11px] text-muted-foreground">{label}</dt>
-      <dd className="mt-1 break-words text-sm font-semibold tabular-nums">{value}</dd>
+      <dd className="mt-1.5 break-words text-lg font-semibold tabular-nums">{value}</dd>
       {sub && <p className="mt-1 text-[10px] text-muted-foreground">{sub}</p>}
     </div>
   )
@@ -102,16 +107,25 @@ export function InvestmentDetailModal({
       className="flex min-h-0 max-h-[92dvh] flex-col sm:max-w-4xl"
       contentClassName="flex min-h-0 flex-1 flex-col p-0 sm:p-0"
     >
-      <div className="min-h-0 flex-1 space-y-5 overflow-y-auto p-4 sm:p-5">
-        <div>
-          <p className="text-xs text-muted-foreground">Holding value · {reportingCurrency}</p>
-          <p className="mt-1 break-words text-3xl font-semibold tracking-tight tabular-nums">
-            {amount(p.currentValue, reportingCurrency, hidden)}
-          </p>
-          <p className={`mt-2 text-sm tabular-nums ${tone(p.gainLoss, hidden)}`}>
-            {signedAmount(p.gainLoss, reportingCurrency, hidden)}
-          </p>
-        </div>
+      <div className="@container min-h-0 flex-1 space-y-5 overflow-y-auto p-4 sm:p-6">
+        <section aria-label="Holding summary" className="grid items-center gap-5 @min-[560px]:grid-cols-[1.1fr_1fr]">
+          <div className="min-w-0">
+            <p className="text-xs font-medium text-muted-foreground">Current value</p>
+            <p className="mt-2 break-words text-3xl font-semibold tracking-tight tabular-nums sm:text-4xl">
+              {amount(p.currentValue,reportingCurrency,hidden)}
+            </p>
+          </div>
+          <div className="min-w-0 rounded-xl border border-border bg-secondary/40 p-4">
+            <p className="text-xs font-medium text-muted-foreground">Total gain</p>
+            <div className={`mt-2 flex flex-wrap items-baseline gap-x-3 gap-y-1 tabular-nums ${tone(p.gainLoss,hidden)}`}>
+              <p className="break-words text-2xl font-semibold tracking-tight">{signedAmount(p.gainLoss,reportingCurrency,hidden)}</p>
+              {gainPercent!=null&&<span className="text-sm font-semibold" title="Gain on net invested">{percentage(gainPercent,hidden)}</span>}
+            </div>
+            <div className="mt-3 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-t border-border pt-3 text-xs">
+              <span className="text-muted-foreground">Net invested</span><span className="font-medium tabular-nums">{amount(p.netInvested,reportingCurrency,hidden)}</span>
+            </div>
+          </div>
+        </section>
         {(protectedAccount || (market && freshness.needsAttention) || p.priceFetchError) && (
           <p
             role="status"
@@ -128,66 +142,29 @@ export function InvestmentDetailModal({
         )}
         {market && freshness.delayed && (
           <p className="text-xs text-muted-foreground">
-            Delayed price · {freshness.ageLabel} · {q?.as_of}. Last known price is shown;
-            Today’s return remains unavailable until a fresh quote arrives.
+            Delayed price · {freshness.ageLabel}. Today’s return is unavailable until a fresh quote arrives.
           </p>
         )}
-        <dl className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-border bg-border">
-          {stat(
-            total ? 'Ownership' : 'Quantity',
-            hidden
-              ? '••••••'
-              : total
-                ? (account.manual_ownership ?? 'Unknown')
-                : `${p.actualQuantity.toLocaleString(undefined, { maximumFractionDigits: 12 })} ${account.currency}`,
-          )}
-          {stat(
-            total ? 'Remaining cost' : 'Average remaining cost',
-            costPrice(
-              total ? p.metrics.native.remaining_basis : p.metrics.native.average_cost,
-              p.metrics.native_currency,
-              hidden,
-            ),
-            'Known native basis · includes fees',
-          )}
-          {stat(
-            total ? 'Last valued' : 'Native price',
-            total
-              ? (account.manual_valuation?.as_of ?? 'Unknown')
-              : unitPrice(
-                  market ? (q?.price ?? q?.regularMarketPrice) : (account.manual_price ?? null),
-                  market ? q?.currency || p.quoteCurrency : p.quoteCurrency,
-                  hidden,
-                ),
-            market
-              ? (q?.as_of ?? 'Source time unavailable')
-              : (account.manual_valuation?.as_of ?? account.manual_price_date ?? 'No dated observation'),
-          )}
-          {stat(
-            'Net invested',
-            amount(p.netInvested, reportingCurrency, hidden),
-            'Exact cash paid minus received',
-          )}
-        </dl>
-        <details className="rounded-xl border border-border p-3 text-xs text-muted-foreground">
-          <summary className="min-h-7 cursor-pointer">Accounting and return coverage</summary>
-          <dl className="mt-2 grid grid-cols-2 gap-3">
-            {[
-              ['Remaining basis', p.metrics.remaining_basis],
-              ['Realized gain', p.metrics.realized_gain],
-              ['Unrealized gain', p.metrics.unrealized_gain],
-            ].map(([label, value]) =>
-              stat(String(label), amount(value as number | null, reportingCurrency, hidden)),
-            )}
+        <section aria-label="Your position" className="rounded-xl border border-border p-4">
+          <h3 className="mb-4 text-xs font-semibold text-muted-foreground">Your position</h3>
+          <dl className="grid grid-cols-1 gap-4 @min-[480px]:grid-cols-3">
+            {stat(total?'Ownership':'Quantity',hidden?'••••••':total?(account.manual_ownership??'Unknown'):
+              `${p.actualQuantity.toLocaleString(undefined,{maximumFractionDigits:12})} ${account.currency==='SHARE'?'shares':account.currency}`)}
+            <div className="min-w-0">
+              <dt className="text-[11px] text-muted-foreground">{total?'Last valued':'Current price'}</dt>
+              <dd className="mt-1.5 break-words text-lg font-semibold tabular-nums">{total?(sourceTime?.short??'Unknown'):costPrice(market?(q?.price??q?.regularMarketPrice):(account.manual_price??null),market?q?.currency||p.quoteCurrency:p.quoteCurrency,hidden)}</dd>
+              {!total&&sourceTime&&<p className="mt-1 text-[10px] text-muted-foreground">As of <time dateTime={sourceDate??undefined} title={sourceTime.full}>{sourceTime.short}</time></p>}
+            </div>
+            {stat(total?'Remaining cost':'Average cost',costPrice(total?p.metrics.native.remaining_basis:p.metrics.native.average_cost,p.metrics.native_currency,hidden))}
           </dl>
-          <p className="mt-3">
-            Moving weighted-average remaining cost uses acquisition-date FX. Imported basis does not prove
-            earlier cash or realized gains. Lifetime Estimated return requires complete daily history.
-          </p>
-          <p className="mt-2">
-            {[...new Set(Object.values(p.metrics.coverage).flat())].join(', ').replaceAll('_', ' ') ||
-              'Current accounting inputs covered'}
-          </p>
+        </section>
+        <details className="group rounded-xl border border-border px-4 py-3 text-xs">
+          <summary className="min-h-7 cursor-pointer font-medium text-muted-foreground">Gain breakdown</summary>
+          <dl className="mt-3 grid grid-cols-1 gap-4 border-t border-border pt-4 @min-[480px]:grid-cols-3">
+            {stat('Remaining basis',amount(p.metrics.remaining_basis,reportingCurrency,hidden))}
+            {stat('Realized gain',signedAmount(p.metrics.realized_gain,reportingCurrency,hidden),'From sold units')}
+            {stat('Unrealized gain',signedAmount(p.metrics.unrealized_gain,reportingCurrency,hidden),'From current holdings')}
+          </dl>
         </details>
         {!market && (
           <ManualValuations

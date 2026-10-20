@@ -9,7 +9,7 @@ Intermediate package/UI version bumps are grouped under the next published GitHu
 ### Fixed
 
 - Investment overview uses a clearly named Gain on net invested ratio, a compact responsive summary/chart/allocation layout, and simpler selected-day gain tooltips. Remove requested explanatory copy and the duplicate privacy button (#171).
-- Center holding details, show green/red trade dots and distinguish date-only legacy markers. Make linked legacy trade review accessible and prefill recorded cash from the verified transfer (#171).
+- Center holding details and organize them into current value, a labeled gain/net-invested card and compact position facts, with a collapsed gain breakdown and readable source times. Show green/red trade dots and distinguish date-only legacy markers. Make linked legacy trade review accessible and prefill recorded cash from the verified transfer (#171).
 - Investment transfers now open the same Buy/Sell editor as Investments for creation and linked edits, preserving selected cash, explicit cash amount, date and note. Cash transfers and review drafts retain their existing workflow (#171).
 
 - Main/investment-epic integration preserves both existing 017 migration filenames, transaction split exports/history and direct investment trade paths. Split mutations share guarded decimal cash arithmetic so concurrent trades, pending confirmation and fractional payments retain exact balances (#169).
