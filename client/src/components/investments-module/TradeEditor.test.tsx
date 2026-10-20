@@ -29,6 +29,23 @@ it('requires actual cross-currency confirmation, previews exact cash, and keeps 
  expect(JSON.parse(String(requests[0][1]?.body))).toMatchObject({quantity:0.123456789012,price:50,cash_amount:2500,fee_amount:400,execution_currency:'EUR',cash_account_id:'cash',holding_account_id:'holding',type:'buy'})
  expect(close).toHaveBeenCalledOnce()
 })
+it('shows the read-only review before the final settlement confirmation and keeps saving blocked until acknowledged',async()=>{
+ render(<TradeEditor {...props}/>)
+ for(const [label,value] of [['Quantity','0,123456789012'],['Executed unit price','50'],['Fee (HUF)','400'],['Actual cash paid (HUF)','2500']])fireEvent.change(screen.getByLabelText(label),{target:{value}})
+ const checkbox=screen.getByRole('checkbox',{name:/actual cash settlement, including fees/})
+ const save=screen.getByRole('button',{name:'Record purchase'})
+ await waitFor(()=>expect(screen.getByText(/Cash balance after: -1\s?500 HUF/)).toBeVisible())
+ expect(checkbox).not.toBeChecked();expect(save).toBeDisabled()
+ expect(screen.getByText('Required before saving')).toBeVisible()
+ const review=screen.getByRole('region',{name:'Exact trade totals'})
+ expect(review.compareDocumentPosition(checkbox)&Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+ expect(screen.getByLabelText('Note (optional)').compareDocumentPosition(checkbox)&Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+ expect(vi.mocked(apiFetch).mock.calls.every(([url])=>String(url).includes('/preview'))).toBe(true)
+ fireEvent.click(checkbox);await waitFor(()=>expect(save).toBeEnabled())
+ fireEvent.change(screen.getByLabelText('Actual cash paid (HUF)'),{target:{value:'2501'}})
+ expect(checkbox).not.toBeChecked();expect(save).toBeDisabled()
+ expect(saved).not.toHaveBeenCalled()
+})
 it('requires an authoritative preview for a legacy stored residue and retains the entered units',async()=>{
  const data=preview();data.by_currency.HUF.holdings[0].quantity=0.435802467012
  let release:(r:Response)=>void=()=>{}
