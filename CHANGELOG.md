@@ -6,43 +6,17 @@ Intermediate package/UI version bumps are grouped under the next published GitHu
 
 ## Unreleased
 
-### Fixed
+### Investment rework
 
-- Investment overview uses a clearly named Gain on net invested ratio, a compact responsive summary/chart/allocation layout, and simpler selected-day gain tooltips. Remove requested explanatory copy and the duplicate privacy button (#171).
-- Holding price charts display split-only-adjusted history and consistently adjusted trade dots, preventing artificial NVDA split crashes while retaining original executions and raw accounting inputs. Format normal chart prices to cents and preserve tiny-coin precision (#171).
-- Apply holding popup design 2a: compact centered 600px layout, instrument header, value/gain summary, chart-first flow, six-cell position grid, readable source footer and smaller Buy/Sell actions. Remove gain bars and duplicate summary cards. Keep chart caption height stable when hovering between range returns and dates. Make the full holding row open details, retaining keyboard-accessible controls. Preserve split-adjusted trade markers, full quantity access and review history; only compatible current quotes can extend the display endpoint (#171).
-- Put asset search/manual selection before category, pricing, trading currency and holding unit in new investment account setup (#171).
-- Place cross-currency settlement confirmation after the full trade review in a prominent required-action card. Show read-only totals before acknowledgement while keeping saves blocked until confirmed (#171).
-- Restrict Dashboard income, expense and transfer creation to cash accounts; new investment trades start on Investments. Ignore saved investment-account defaults while preserving canonical linked-trade editing from existing ledger rows (#171).
-
-- Main/investment-epic integration preserves both existing 017 migration filenames, transaction split exports/history and direct investment trade paths. Split mutations share guarded decimal cash arithmetic so concurrent trades, pending confirmation and fractional payments retain exact balances (#169).
-
-- Investment price returns explicitly exclude dividends. Dividend events no longer block known purchase costs, gains or history or trigger misleading purchase-review warnings; split and missing-history safeguards remain (#161).
-- Holdings use trailing detail arrows, green/red 30-day price trends, readable source times and supported unrealized return percentages paired with remaining-cost gains. Privacy, missing basis and stale-source coverage remain explicit (#167).
-
-- Investment chart reads isolate provider queues and in-flight work per Worker request, preventing concurrent cross-request I/O failures. Historical FX keeps valid dated rates when a response includes an earlier business-day boundary outside the padded window; missing days remain unavailable (#159).
-
-- Show modest quote delays beside investment prices with their age/source timestamp instead of actionable stale-price attention. Older or unavailable quotes still warn, and strict Today-return coverage is unchanged (#163).
-
-- Confirm/correct missing payment details on standalone historical investments without changing units or cash; route legacy edits to the dedicated form instead of Income/Expense. Distinguish missing historical FX from unsaved purchase facts and retry rates rather than asking to edit a saved trade again (#150).
-
-- Investment histories use complete matching recorded buys/sells instead of requiring a separate zero-opening confirmation. New zero-unit holdings take dates from trades; imported nonzero units retain dated openings. Verified reciprocal old cash payments support reporting cost without rewriting trades or guessing execution currency/fees. Missing-cost guidance opens trade review. No new migration.
-
-- Cash and investment balance changes use decimal arithmetic to prevent floating residue after postings, transfers, edits, pending confirmation and recurring execution. Narrowly verified legacy residue is recovered only within a successful audited mutation; genuine fractional cash/crypto quantities and old ledger facts stay intact. The trade editor lets the required server preview check unsupported stored mirrors while retaining strict entered-unit validation. Lost increments reject the complete save. No schema migration is added; see `docs/decimal-balances.md`.
+- **Redesigned portfolio overview.** A responsive Investments page brings together portfolio value, net invested, gains, allocation and sortable holdings with 30-day trends. Filters, privacy controls and clear loading/retry states work across desktop and mobile. [#123](https://github.com/apptrackit/finance/issues/123)
+- **Holding details at a glance.** Open any holding for its value, gain, position, price chart and trade history in a compact dialog. Split-adjusted charts keep historical prices and trade markers comparable across stock splits.
+- **Direct cash-linked Buy/Sell.** A dedicated trade editor records purchases and sales with actual execution prices, fees and settlement amounts, previewing cash and position changes before saving. Editing or deleting a linked trade updates both cash and holdings together; new trades start from Investments.
+- **Clearer investment performance.** Track remaining cost basis, net invested, realized and unrealized gains, and covered daily/range return estimates. Price returns exclude dividends; missing historical costs or exchange rates stay explicit, with a review flow for completing old purchase details.
+- **Historical portfolio tracking.** Compare portfolio value with net invested over selectable calendar ranges, using dated holdings, prices, valuations and exchange rates. History includes sold and archived holdings during their ownership periods, with visible gaps where records are incomplete.
+- **Flexible holdings and manual valuations.** Set up ETFs, stocks, crypto and manual assets with separate pricing and unit choices. Record dated opening positions, quantity corrections and total/per-unit appraisals; valuation updates keep their own history and reminders without creating cash movements.
+- **HUF, USD and EUR reporting.** Switch reporting currency across portfolio summaries, history, holdings and trade previews. Market prices retain their native currency and source time, with delayed-price indicators, stale-value warnings and dated exchange rates for historical values and purchase costs.
 
 ### Added
-
-- EUR reporting alongside HUF/USD throughout Investments, including history, holdings, summaries, details and trade previews, with acquisition-date cost conversion and coherent three-currency reads (#165).
-
-- Combined portfolio value and Net invested history with calendar ranges, dated units/FX/appraisals, sold/archived holdings, range gain and daily-linked Estimated return. Bounded revision-guarded reads preserve gaps and events; unknown legacy history stays unavailable. No new migration.
-
-- Shared derived investment accounting with remaining weighted-average basis, exact net invested, realized/unrealized gains, acquisition-date reporting FX and nonmutating trade previews. Market Today exposes omitted holdings; lifetime percentages require complete daily history; the portfolio history chart reports covered range estimates. No schema migration is added.
-
-- Shared normalized Yahoo quotes/daily histories, bounded provider caching, and dated ECB FX via Frankfurter. Source/session dates, missing/stale prices, split-aware raw history and incomplete dated-FX coverage remain explicit; market refreshes change no financial ledger facts.
-
-- Dated manual total/per-unit appraisal history, guarded corrections, step charts and 90-day reminders. Explicit whole-asset acquisitions/disposals remain linked cash events; a zero appraisal preserves ownership.
-
-- Added direct cash-linked investment purchases and sales with exact settlement, confirmed execution currency/included fees, guarded event replay, stale-edit protection and bounded retry receipts. Migration 019 preserves legacy facts and makes unsupported standalone posting read-only; see `docs/investment-trades.md`.
 
 - One transaction composer for single, split and adjustment entries. **Split into categories** divides one payment over several category lines (shared account, date and description; the first line takes the rest of the total), saved atomically and shown as one expandable row. **Save and add another** keeps type, account and date for the next payment. Recording a balance difference opens the same controls with the amount and account fixed. New `transaction_splits` table and `transactions.split_id` (migration 017), `/transactions/splits` endpoints, and `transaction_splits` in the JSON export. [#138](https://github.com/apptrackit/finance/issues/138)
 
@@ -50,34 +24,19 @@ Intermediate package/UI version bumps are grouped under the next published GitHu
 
 ### Changed
 
-- Final investment validation makes ordinary cash writes, transfers, adjustments, declines and recurring occurrence consumption atomic with balances/audit; stale pending confirmation and correction races cannot overwrite posted facts. Old-opening cost stays unavailable outside verified event coverage. Default monthly history reuses quote inputs; mixed price/trade charts retain daily closes and omit empty execution series. No new migration.
-
-- Holding details now use a responsive side panel/sheet with native execution markers, remaining-cost references, ordered trade history and separate manual appraisal controls. A dedicated Buy/Sell editor previews exact cash and resulting positions, preserves failed drafts/retry keys, and guards linked edits/deletion by saved versions. Confirmation focus, Escape and navigation protection cover these flows. No new migration.
-
-- Investments now combines the portfolio chart, summaries, allocation and sortable responsive holding cards/table. Native 30-day market/manual trends share the bounded overview snapshot; category filters affect only holdings. Coverage recovery actions, session-only view state, privacy, keyboard chart selection and first-holding/trade entry preserve existing accounting and linked cash writes. No new migration.
-
-- Dashboard investment net worth now honors holding exclusions; Investments retains all active holdings. Known gains remain visible when complete daily return percentages are unavailable, and missing legacy costs/FX remain explicit across API, client and independent MCP.
-
-- Investment account setup separates ETF/stock/crypto/manual categories from pricing, preserves stored quantities across portfolio consumers, and records explicit dated openings/corrections without fake cash movements. Missing legacy cost/history stays unavailable; manually priced unit holdings use their saved fiat price.
-
 - Bulk add and the separate balance-adjustment choice and split dialogs are replaced by the composer. Per-row account and date, sliders, auto-balance and fill-with-total are gone; log unrelated payments with Save and add another.
 - Dashboard uses a shared period picker, a responsive balance/activity summary, compact transaction filters, and a combined review queue with explicit confirmation actions. Transaction rows show neutral transfers, daily cash-flow totals, and native/converted amounts; privacy masking and loading states follow the new layout.
-- Investment purchases store reciprocal links between the cash ledger and investment history. Linked creation, edits, and deletion batch both records, balances, and audit entries atomically; deletion from either side reverses the pair once. History, portfolio reads, MCP activity, and JSON exports preserve the investment-side link. Inconsistent legacy links are rejected before changing balances; the explicit sale workflow added above extends the original purchase-only foundation.
-
-### Migration and upgrade notes
-
-- Migration 021 adds only a reconstructible market input cache, explicitly excluded from JSON financial exports and isolated from the financial source revision.
-
-- Migration 020 adds manual observations, nullable opening ownership and explicit asset event markers while preserving all existing financial columns/row IDs and source revision. Apply after 019 before the updated Workers/client; see `docs/manual-investment-valuations.md`.
-
-- Migration 019 adds explicit execution/fee/settlement facts, stable order/version and bounded replay receipts. Existing financial columns/row IDs and source revision are preserved. Apply after 018 before updated Workers/client; standalone investment posting and recurring unit mutations are blocked. See `docs/investment-trades.md`.
-
-- Migration 018 adds holding pricing/unit/provider metadata and exported position anchors. The baseline preserves every existing financial column/rowid and financial-source revision, including locked/archived holdings. Apply it after 017 and before the updated Workers/client; this is an intermediate investment epic step, not the completed rework.
-- Migration 017 adds the nullable investment-side cash link and backfills unambiguous active and archived history without changing financial values or source revision. Standalone trades remain unlinked; ambiguous or invalid legacy relationships are preserved for explicit repair. Apply the migration before deploying the updated API, client, or MCP.
 
 ### Fixed
 
+- Cash and investment balance changes use decimal arithmetic to prevent floating-point residue while preserving genuine fractional amounts. Payments, transfers, adjustments, pending confirmations and recurring execution update balances and audit records together, with guards against duplicate or conflicting changes.
+- Dashboard net worth respects investment holding exclusions; Investments continues to show all active holdings.
 - Buttons, tabs, switches, menus, selects, checkboxes and other enabled click targets show a pointer cursor again across the app; Tailwind CSS 4 had reset buttons to the default arrow. Disabled controls keep the default cursor. [#157](https://github.com/apptrackit/finance/issues/157)
+
+### Migration and upgrade notes
+
+- Apply all pending migrations before deploying the updated API, MCP and client. Keep both `017-investment-transfer-links.sql` and `017-transaction-splits.sql` under their original names, followed by migrations 018–021. Migration history tracks the full migration name, so upgrades apply only missing files; see the [migration guide](api/migrations/README.md).
+- The investment migrations add holding metadata, linked trade facts, manual valuation history and a reconstructible market-data cache. Existing financial records are preserved; unknown historical purchase details are not fabricated. The cache is excluded from financial exports. See the [holding](docs/investment-holdings.md), [trade](docs/investment-trades.md) and [manual valuation](docs/manual-investment-valuations.md) guides for compatibility details.
 
 ## v3.3 — 2026-10-15
 
