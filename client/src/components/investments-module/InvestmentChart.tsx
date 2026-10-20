@@ -174,14 +174,8 @@ export function InvestmentChart({
         <div className="min-w-0 flex-1">
           <h3 className="text-xs font-medium text-muted-foreground">Price</h3>
           <p className="mt-1 text-lg font-semibold tabular-nums">{close!=null?money(close):date?'Daily close unavailable':'Price unavailable'}</p>
-          {/* Keep both captions in the same grid cell so wrapped range text reserves
-              its height while the selected date is visible. */}
-          <div className="mt-0.5 grid min-h-4 text-xs leading-4">
-            <p aria-hidden={selected?.key!==key} className={`col-start-1 row-start-1 text-muted-foreground ${selected?.key===key?'':'invisible'}`}>{holdingSourceTime(date)?.short??date}</p>
-            <p aria-hidden={selected?.key===key} className={`col-start-1 row-start-1 font-medium tabular-nums ${selected?.key===key?'invisible ':''}${change===0?'text-muted-foreground':change!=null&&change>0?'text-success':'text-destructive'}`}>
-              {change!=null&&percent!=null&&<>{change>0?'+':''}{money(change)} ({percent>0?'+':''}{percent.toLocaleString('hu-HU',{minimumFractionDigits:2,maximumFractionDigits:2})}%) · {{'1d':'past day','5d':'past 5 days','1mo':'past month','6mo':'past 6 months','1y':'past year','5y':'past 5 years','max':'past 10 years'}[range]}</>}
-            </p>
-          </div>
+          {selected?.key===key&&<p className="text-xs text-muted-foreground">{holdingSourceTime(date)?.short??date}</p>}
+          {selected?.key!==key&&change!=null&&percent!=null&&<p className={`mt-0.5 text-xs font-medium tabular-nums ${change===0?'text-muted-foreground':change>0?'text-success':'text-destructive'}`}>{change>0?'+':''}{money(change)} ({percent>0?'+':''}{percent.toLocaleString('hu-HU',{minimumFractionDigits:2,maximumFractionDigits:2})}%) · {{'1d':'past day','5d':'past 5 days','1mo':'past month','6mo':'past 6 months','1y':'past year','5y':'past 5 years','max':'past 10 years'}[range]}</p>}
         </div>
         <div role="group" aria-label="Instrument chart range" className="flex max-w-full overflow-x-auto rounded-lg border border-border bg-background p-0.5">
           {RANGES.map(([value,label])=><button type="button" key={value} aria-pressed={range===value} onClick={()=>setRange(value)} className={`min-h-8 rounded-md px-2 text-[11px] font-semibold ${range===value?'bg-secondary':'text-muted-foreground'}`}>{label}</button>)}
