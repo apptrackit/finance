@@ -1,3 +1,4 @@
+import { GainBreakdown } from './GainBreakdown'
 import { holdingSourceTime } from './holding-presentation'
 import { quotePresentation } from './quote-presentation'
 import { useRef, useState } from 'react'
@@ -158,14 +159,8 @@ export function InvestmentDetailModal({
             {stat(total?'Remaining cost':'Average cost',costPrice(total?p.metrics.native.remaining_basis:p.metrics.native.average_cost,p.metrics.native_currency,hidden))}
           </dl>
         </section>
-        <details className="group rounded-xl border border-border px-4 py-3 text-xs">
-          <summary className="min-h-7 cursor-pointer font-medium text-muted-foreground">Gain breakdown</summary>
-          <dl className="mt-3 grid grid-cols-1 gap-4 border-t border-border pt-4 @min-[480px]:grid-cols-3">
-            {stat('Remaining basis',amount(p.metrics.remaining_basis,reportingCurrency,hidden))}
-            {stat('Realized gain',signedAmount(p.metrics.realized_gain,reportingCurrency,hidden),'From sold units')}
-            {stat('Unrealized gain',signedAmount(p.metrics.unrealized_gain,reportingCurrency,hidden),'From current holdings')}
-          </dl>
-        </details>
+        <GainBreakdown realized={p.metrics.realized_gain} unrealized={p.metrics.unrealized_gain}
+          basis={p.metrics.remaining_basis} currency={reportingCurrency} hidden={hidden}/>
         {!market && (
           <ManualValuations
             account={account}
