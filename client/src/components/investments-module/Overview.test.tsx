@@ -143,7 +143,12 @@ it('puts the accessible detail arrow in the trailing cell and shows a matching u
  const row=screen.getByRole('button',{name:'View AAA details'}).closest('tr')!
  expect(row.lastElementChild).toContainElement(screen.getByRole('button',{name:'View AAA details'}))
  expect(row.firstElementChild?.querySelector('svg')).toBeNull()
- fireEvent.click(screen.getByRole('button',{name:'View AAA details'}));expect(open).toHaveBeenCalledWith(p.account)
+ open.mockClear()
+ fireEvent.click(within(row).getByText('+20 HUF'));expect(open).toHaveBeenCalledExactlyOnceWith(p.account)
+ open.mockClear()
+ fireEvent.click(screen.getByRole('button',{name:'View AAA details'}));expect(open).toHaveBeenCalledExactlyOnceWith(p.account)
+ open.mockClear()
+ fireEvent.click(screen.getByRole('button',{name:'Open AAA details'}));expect(open).toHaveBeenCalledExactlyOnceWith(p.account)
  expect(within(row).getByText('+20 HUF')).toBeVisible();expect(within(row).getByText('+20%')).toBeVisible()
  expect(within(row).queryByText('+70 HUF')).not.toBeInTheDocument();expect(within(row).queryByText('Estimated return unavailable')).not.toBeInTheDocument()
  const time=row.querySelector('time')!;expect(time).toHaveAttribute('datetime',quotes.AAA.as_of);expect(time.textContent).not.toContain('T12:00:00');expect(time.title).toContain(quotes.AAA.as_of)
