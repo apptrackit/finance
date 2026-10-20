@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
-import { access, mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from 'node:fs/promises'
+import { access, mkdir, mkdtemp, readFile, readdir, rm, stat, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { test } from 'node:test'
@@ -286,6 +286,62 @@ test('migration-only deployment initializes an empty database without building o
   assert.equal(f.sqlFiles.length, 2)
   assert.ok(f.mutations().every(call => call.argv[0] === 'd1'))
   assert.ok(!f.calls.some(call => ['npm', 'tsc'].includes(call.kind)))
+  await f.assertClean()
+})
+
+test('migration validation accepts trailing comments without changing SQL or adding empty statements', async () => {
+  const statements = [
+    "CREATE TABLE example (value TEXT DEFAULT '--not a comment;');",
+    'CREATE TABLE "example/*not a comment*/" ("a""--" TEXT);',
+    'CREATE TABLE `example``--` ([/*column*/] TEXT);',
+    "CREATE TRIGGER example AFTER DELETE ON entries BEGIN SELECT 'it''s; -- quoted'; END;",
+  ]
+  for (const statement of statements) {
+    for (const suffix of [' -- note', '\n-- note\r\n-- another', ' /* note */', '\n/* note\n; */ -- final']) {
+      const sql = statement + suffix
+      assert.equal(migrationSqlWithHistory(sql, 'test'), `${sql}\nINSERT INTO migration_history (id, migration_name) VALUES ('test', 'test');\n`)
+    }
+  }
+  for (const sql of [
+    'CREATE TABLE example (id TEXT) -- ;',
+    'CREATE TABLE example (id TEXT) /* ; */',
+    "SELECT ';' -- ;",
+    'SELECT "a;" /* ; */',
+    'SELECT `a;`',
+    'SELECT [a;]',
+    "SELECT 'unterminated;",
+    'SELECT 1; /* unterminated;',
+    '-- only comments;',
+    '/* only comments; */',
+  ]) assert.throws(() => migrationSqlWithHistory(sql, 'test'), /must end with a semicolon/)
+
+  const directory = resolve(dirname(script), '../api/migrations')
+  for (const file of (await readdir(directory)).filter(file => file.endsWith('.sql'))) {
+    const sql = await readFile(join(directory, file), 'utf8')
+    assert.ok(migrationSqlWithHistory(sql, file.slice(0, -4)).startsWith(sql.trimEnd() + '\nINSERT'))
+  }
+})
+
+test('an invalid later pending migration prevents all remote writes', async t => {
+  const f = await fixture(t, { applied: ['001-init'] })
+  await writeFile(join(f.root, 'api/migrations/003-invalid.sql'), 'SELECT 1 -- missing terminator;')
+  await assert.rejects(f.execute(['api', '--migrations']), /Migration 003-invalid must end with a semicolon/)
+  assert.equal(f.mutations().length, 0)
+  await f.assertClean()
+})
+
+test('retry after recorded investment links applies commented split migration without replaying links', async t => {
+  const f = await fixture(t, { applied: ['001-init', '002-change', '017-investment-transfer-links'] })
+  const directory = resolve(dirname(script), '../api/migrations')
+  for (const file of ['017-investment-transfer-links.sql', '017-transaction-splits.sql']) {
+    await writeFile(join(f.root, 'api/migrations', file), await readFile(join(directory, file), 'utf8'))
+  }
+  await f.execute(['migrations'])
+  assert.equal(f.sqlFiles.length, 1)
+  assert.match(f.sqlFiles[0], /INSERT INTO migration_history .*'017-transaction-splits'/)
+  assert.ok(f.sqlFiles[0].includes('-- keeps the shared fields in sync instead.\nINSERT INTO migration_history'))
+  await f.execute(['migrations'])
+  assert.equal(f.sqlFiles.length, 1, 'a second run must not replay either migration')
   await f.assertClean()
 })
 

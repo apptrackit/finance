@@ -140,9 +140,40 @@ export function d1Rows(output) {
   return result.flatMap(item => item.results)
 }
 
+function hasFinalSqlTerminator(sql) {
+  let lastToken
+  for (let index = 0; index < sql.length; index++) {
+    const char = sql[index]
+    if (/\s/.test(char)) continue
+    if (char === '-' && sql[index + 1] === '-') {
+      while (index < sql.length && !/[\r\n]/.test(sql[index])) index++
+      continue
+    }
+    if (char === '/' && sql[index + 1] === '*') {
+      const end = sql.indexOf('*/', index + 2)
+      if (end === -1) return false
+      index = end + 1
+      continue
+    }
+    // Comment markers and semicolons inside SQL strings/identifiers are data.
+    // SQLite escapes quotes by doubling them; bracket identifiers end at ].
+    if (['\'', '"', '`', '['].includes(char)) {
+      const closing = char === '[' ? ']' : char
+      for (index++; index < sql.length; index++) {
+        if (sql[index] !== closing) continue
+        if (closing !== ']' && sql[index + 1] === closing) index++
+        else break
+      }
+      if (index === sql.length) return false
+      lastToken = closing
+    } else lastToken = char
+  }
+  return lastToken === ';'
+}
+
 export function migrationSqlWithHistory(sql, name) {
   const migration = sql.trimEnd()
-  if (!migration.endsWith(';')) throw new Error(`Migration ${name} must end with a semicolon.`)
+  if (!hasFinalSqlTerminator(migration)) throw new Error(`Migration ${name} must end with a semicolon.`)
   // A second standalone semicolon is an empty statement rejected by D1's
   // remote file importer, even though the local executor accepts it.
   return `${migration}\nINSERT INTO migration_history (id, migration_name) VALUES ('${name}', '${name}');\n`
@@ -374,14 +405,19 @@ export async function deploy(options, { root = repositoryRoot, run = runCommand,
         throw new Error(`Pending migrations: ${pending.join(', ')}. Run npm run deploy:migrations or add -- --migrations to deploy:${options.target}.`)
       }
       if (plan.migrations && pending.length) {
-        await d1('Initializing migration history', ['--command', 'CREATE TABLE IF NOT EXISTS migration_history (id TEXT PRIMARY KEY, migration_name TEXT NOT NULL UNIQUE, executed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)'])
-        for (const file of pending) {
+        // Validate every pending payload before the first remote write, so a
+        // later file-format error cannot leave an avoidable partial upgrade.
+        const prepared = await Promise.all(pending.map(async file => {
           const name = file.slice(0, -4)
           const sql = await readFile(join(root, 'api/migrations', file), 'utf8')
+          return { file, name, sql: migrationSqlWithHistory(sql, name) }
+        }))
+        await d1('Initializing migration history', ['--command', 'CREATE TABLE IF NOT EXISTS migration_history (id TEXT PRIMARY KEY, migration_name TEXT NOT NULL UNIQUE, executed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)'])
+        for (const { file, name, sql } of prepared) {
           const migrationFile = join(temporary, file)
           // Record success in the same SQL submission, rather than ignoring a
           // separate history-write failure and replaying ALTERs on the next run.
-          await writeFile(migrationFile, migrationSqlWithHistory(sql, name), { mode: 0o600 })
+          await writeFile(migrationFile, sql, { mode: 0o600 })
           // Wrangler prints file-import progress to stdout even with --json, so
           // its output cannot be parsed as a JSON query result. Verify the
           // history row with a separate read after the import exits successfully.
