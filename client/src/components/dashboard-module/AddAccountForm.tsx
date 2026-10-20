@@ -60,7 +60,6 @@ export function AddAccountForm({ value, onChange, onTypeChange, onSubmit, onCanc
             })}
           </div>
         </fieldset>
-        {investment && <HoldingAccountFields value={value} onChange={onChange} section="identity" />}
         {investment && <section aria-label="Investment asset" className="space-y-2">
           <div className="flex items-baseline justify-between gap-3">
             <h3 className="text-[13px] font-medium">Asset</h3>
@@ -78,6 +77,7 @@ export function AddAccountForm({ value, onChange, onTypeChange, onSubmit, onCanc
             <button type="button" onClick={onManualAsset} className="text-xs text-primary hover:underline disabled:opacity-50">Enter manually</button>
           </div>}
         </section>}
+        {investment && <HoldingAccountFields value={value} onChange={onChange} section="identity" />}
         <div className="space-y-2">
           <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
             <Label htmlFor="create-account-balance" className="text-[13px]">{marketAsset ? 'Starting quantity' : 'Starting balance'}</Label>
