@@ -1,5 +1,5 @@
 import { TradeEditor } from '../investments-module/TradeEditor'
-import type { TradeEdit, TradeDraft } from '../investments-module/trade-editor'
+import type { TradeEdit } from '../investments-module/trade-editor'
 import { LegacyTradeDetails } from '../investments-module/LegacyTradeDetails'
 import type { TradeFacts } from '../../../../shared/investment-trade'
 import type { HoldingFields } from '../../../../shared/holding'
@@ -176,7 +176,7 @@ export function TransactionList({
   const [activeTxId, setActiveTxId] = useState<string | null>(null)
   const [pendingDetails, setPendingDetails] = useState<string | null>(null)
   const [legacyTradeId,setLegacyTradeId]=useState<string|null>(null)
-  const [tradeEditor,setTradeEditor]=useState<{holdingId?:string;type?:'buy'|'sell';initialDraft?:Partial<TradeDraft>;edit?:TradeEdit}|null>(null)
+  const [tradeEditor,setTradeEditor]=useState<{edit:TradeEdit}|null>(null)
   const [loadingTrade,setLoadingTrade]=useState(false)
   const tradeRead=useRef<AbortController|null>(null)
   useEffect(()=>()=>tradeRead.current?.abort(),[])
@@ -412,7 +412,7 @@ export function TransactionList({
 
   // Load saved defaults when opening the form
   const loadSavedDefaults = (type: 'expense' | 'income' | 'transfer') => {
-    const availableAccount = (id: string) => accounts.some(account => account.id === id && !isLocked(id)) ? id : ''
+    const availableAccount = (id: string) => accounts.some(account => account.id === id && account.type === 'cash' && account.archived_at == null && !isLocked(id)) ? id : ''
     if (type === 'expense') {
       const savedAccount = localStorage.getItem(STORAGE_KEYS.expenseAccount) || ''
       const savedCategory = localStorage.getItem(STORAGE_KEYS.expenseCategory) || ''
@@ -526,11 +526,10 @@ export function TransactionList({
     field: 'account_id' | 'to_account_id',
     accountId: string,
   ) => {
-    const keepReceived=field==='account_id' && accounts.some(a=>a.id===accountId&&a.type==='investment') &&
-      accounts.some(a=>a.id===formData.to_account_id&&a.type==='cash') && manuallyEditedTransferFieldsRef.current.amount_to
+    if(accountId&&!accounts.some(account=>account.id===accountId&&account.type==='cash'&&account.archived_at==null&&!isLocked(account.id)))return
     resetTransferRateState(false)
-    manuallyEditedTransferFieldsRef.current.amount_to=keepReceived
-    setFormData(prev => ({ ...prev, [field]: accountId, amount_to: keepReceived?prev.amount_to:'', manual_price: '' }))
+    manuallyEditedTransferFieldsRef.current.amount_to=false
+    setFormData(prev => ({ ...prev, [field]: accountId, amount_to:'', manual_price: '' }))
   }
 
   // Which submit button was used: only expense and income entries can stay open for the next payment.
@@ -1127,18 +1126,6 @@ export function TransactionList({
     return acc ? acc.currency : 'HUF'
   }
 
-  const selectedHoldingId = formData.type === 'transfer' ? accounts.find(a=>a.id===formData.account_id&&a.type==='investment')?.id ?? accounts.find(a=>a.id===formData.to_account_id&&a.type==='investment')?.id : undefined
-  useEffect(()=>{
-    if(!isAdding||editingId||editingReviewTransfer||!selectedHoldingId)return
-    const from=accounts.find(a=>a.id===formData.account_id),to=accounts.find(a=>a.id===formData.to_account_id)
-    const sell=from?.type==='investment',cash=sell?to:from
-    setTradeEditor({holdingId:selectedHoldingId,type:sell?'sell':'buy',initialDraft:{
-      ...(cash?.type==='cash'?{cash:cash.id}:{}),date:formData.date,notes:formData.description,
-      ...(cash?.type==='cash'&&!sell&&formData.amount?{cashAmount:formData.amount}:{}),
-      ...(cash?.type==='cash'&&sell&&manuallyEditedTransferFieldsRef.current.amount_to&&formData.amount_to?{cashAmount:formData.amount_to}:{}),
-    }})
-    setIsAdding(false)
-  },[isAdding,editingId,editingReviewTransfer,selectedHoldingId,accounts,formData])
   const handleTransferPatch = (patch: Partial<TransferFormData>) => setFormData(prev=>({...prev,...patch}))
 
   // For transfer preview
@@ -1525,7 +1512,7 @@ export function TransactionList({
       </CardHeader>}
 
       <Modal 
-        isOpen={isAdding && !selectedHoldingId}
+        isOpen={isAdding}
         onClose={handleCancel} 
         placement={formData.type === 'transfer' ? 'centered' : 'center'}
         className={formData.type === 'transfer' ? 'sm:max-w-[480px] rounded-2xl flex min-h-0 flex-col overflow-hidden' : undefined}
@@ -1539,7 +1526,7 @@ export function TransactionList({
             {/* Transfer Form */}
             {formData.type === 'transfer' ? (
               <TransferForm
-                accounts={editingId?accounts.filter(a=>a.type==='cash'):accounts}
+                accounts={accounts.filter(a=>a.type==='cash')}
                 data={formData}
                 editing={!!editingId}
                 reviewDraft={editingReviewTransfer}

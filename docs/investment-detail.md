@@ -18,7 +18,7 @@ Manual histories remain dated total/per-unit step observations, independently lo
 
 ## Transfer entry points
 
-The transaction composer uses the same `TradeEditor` as Investments. Selecting a holding as the destination opens Buy; selecting one as the source opens Sell. The selected cash account, explicit native cash amount, date and note carry into the shared draft. Cash amounts are never reinterpreted as units, and FX-derived received amounts are not reused as confirmed sale proceeds. Selecting a holding before choosing cash lets the canonical editor select a suitable cash account for review. Whole manual assets keep the editor's one-ITEM acquisition/disposal rules.
+New buys and sells start on Investments. The Dashboard transaction composer offers only cash accounts for income, expense and both transfer sides; saved investment-account defaults are ignored. Existing linked trade rows can still open the canonical versioned editor for corrections.
 
 Editing an existing investment transfer first loads the canonical reciprocal pair and saved version, then opens the same editor. Reads abort when superseded/unmounted; stale versions or invalid pairs reject opening. Save/delete/preview/uncertain retry and refresh ownership are the canonical editor's existing paths. The composer no longer has an investment price/fee form or its own investment save implementation. Cash-to-cash transfers, split transactions and MCP review transfers remain separate; existing cash transfers cannot be retargeted into a holding.
 

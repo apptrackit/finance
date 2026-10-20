@@ -66,7 +66,7 @@ export function TransferForm(props: TransferFormProps) {
   const sent = parseAmount(data.amount)
   const received = sameCurrency ? sent : parseAmount(data.amount_to)
   const rate = parseAmount(props.exchangeRate)
-  const selectable = accounts.filter(account => !account.is_locked && account.archived_at == null && (!reviewDraft || account.type === 'cash'))
+  const selectable = accounts.filter(account => account.type === 'cash' && !account.is_locked && account.archived_at == null)
   const ready = from && to && !sameAccount && selectable.includes(from) && selectable.includes(to)
     && sent !== null && sent > 0 && received !== null && received > 0 && from.type==='cash' && to.type==='cash' && data.date
     && (!editing || dirty)
