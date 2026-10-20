@@ -72,10 +72,12 @@ export class RecurringScheduleService {
       throw new Error('Account not found')
     }
 
+    if (account.type === 'investment') throw AppError.validation('Investment trades require confirmed execution and cash amounts; recurring investment posting is unsupported')
     if (account.archived_at != null) throw new AppError('ACCOUNT_ARCHIVED', 'Restore this account before creating schedules.', 409)
 
     if (dto.to_account_id) {
       const toAccount = await this.accountRepo.findById(dto.to_account_id)
+      if (toAccount?.type === 'investment') throw AppError.validation('Recurring investment posting is unsupported; record a linked trade')
       if (toAccount?.archived_at != null) throw new AppError('ACCOUNT_ARCHIVED', 'Restore this account before creating schedules.', 409)
       if (!toAccount) {
         throw new Error('To account not found')
@@ -110,6 +112,13 @@ export class RecurringScheduleService {
     const existing = await this.recurringRepo.findById(id)
     if (!existing) {
       throw new Error('Recurring schedule not found')
+    }
+
+    if (dto.is_active !== false) {
+      for (const accountId of [dto.account_id ?? existing.account_id,dto.to_account_id ?? existing.to_account_id].filter((id): id is string => !!id)) {
+        const account = await this.accountRepo.findById(accountId)
+        if (account?.type === 'investment') throw AppError.validation('Pause this legacy investment schedule and record confirmed linked trades instead')
+      }
     }
 
     // Validate frequency-specific fields if being updated
@@ -193,19 +202,6 @@ export class RecurringScheduleService {
         // A locked or missing account skips execution, not an occurrence.
         if (!processed) continue
 
-        // Update last processed date and decrement remaining_occurrences
-        const updates: Partial<RecurringSchedule> = { last_processed_date: todayStr }
-        
-        if (schedule.remaining_occurrences !== undefined && schedule.remaining_occurrences !== null && schedule.remaining_occurrences > 0) {
-          updates.remaining_occurrences = schedule.remaining_occurrences - 1
-          
-          // If this was the last occurrence, deactivate the schedule
-          if (updates.remaining_occurrences === 0) {
-            updates.is_active = false
-          }
-        }
-        
-        await this.recurringRepo.update(schedule.id, updates)
         console.log(`Processed recurring schedule ${schedule.id} for ${todayStr}`)
       } catch (error) {
         console.error(`Failed to process recurring schedule ${schedule.id}:`, error)
@@ -258,6 +254,7 @@ export class RecurringScheduleService {
       return false
     }
 
+    if (account.type === 'investment') return false
     if (account.is_locked || account.archived_at != null) {
       console.warn(`Skipping recurring schedule ${schedule.id}: account ${schedule.account_id} is locked`)
       return false
@@ -273,14 +270,7 @@ export class RecurringScheduleService {
       linked_transaction_id: undefined
     }
 
-    await this.transactionRepo.create(transaction)
-
-    // Update account balance
-    await this.accountRepo.updateBalance(
-      schedule.account_id,
-      account.balance + schedule.amount,
-      Date.now()
-    )
+    await this.transactionRepo.cashLedger.commit({ before: [], after: [transaction], accounts: [account], now: Date.now(), schedule })
     return true
   }
 
@@ -298,6 +288,7 @@ export class RecurringScheduleService {
       return false
     }
 
+    if (fromAccount.type === 'investment' || toAccount.type === 'investment') return false
     if (fromAccount.is_locked || toAccount.is_locked || fromAccount.archived_at != null || toAccount.archived_at != null) {
       console.warn(`Skipping recurring transfer ${schedule.id}: one or more accounts are locked`)
       return false
@@ -343,21 +334,7 @@ export class RecurringScheduleService {
       linked_transaction_id: outgoingId
     }
 
-    await this.transactionRepo.create(outgoing)
-    await this.transactionRepo.create(incoming)
-
-    // Update account balances
-    await this.accountRepo.updateBalance(
-      schedule.account_id,
-      fromAccount.balance - Math.abs(schedule.amount),
-      Date.now()
-    )
-
-    await this.accountRepo.updateBalance(
-      schedule.to_account_id,
-      toAccount.balance + Math.abs(amountTo),
-      Date.now()
-    )
+    await this.transactionRepo.cashLedger.commit({ before: [], after: [outgoing, incoming], accounts: [fromAccount, toAccount], now: Date.now(), schedule })
     return true
   }
 

@@ -206,28 +206,7 @@ describe('TransactionList redesigned transfers', () => {
     expect(JSON.parse(String(save?.[1]?.body))).toMatchObject({ from_account_id: 'source', to_account_id: 'other', amount_from: 12.5, amount_to: 12.5 })
   })
 
-  it('keeps investment quantities precise and includes the manual price in the save', async () => {
-    mockRates(0.001)
-    localStorage.clear()
-    const user = userEvent.setup()
-    const added = renderTransfers({ composerOnly: true, openRequest: 1, transactions: [], accounts: [
-      ...transferAccounts,
-      { id: 'holding', name: 'Example holding', balance: 1.5, currency: 'UNIT', quote_currency: 'EUR', type: 'investment' },
-    ] })
-    await user.click(screen.getByRole('button', { name: 'Transfer' }))
-    const dialog = screen.getByRole('dialog')
-    await user.selectOptions(within(dialog).getByRole('combobox', { name: 'From account' }), 'source')
-    await user.selectOptions(within(dialog).getByRole('combobox', { name: 'To account' }), 'holding')
-    await user.type(within(dialog).getByLabelText('Amount to Send (HUF)'), '100')
-    const quantity = within(dialog).getByLabelText('Shares to Receive')
-    await user.clear(quantity)
-    await user.type(quantity, '0.12345678')
-    await user.type(within(dialog).getByLabelText('Price per Share in EUR (optional - leave blank to auto-fetch)'), '123.45')
-    await user.click(within(dialog).getByRole('button', { name: 'Transfer 100 HUF' }))
-    await waitFor(() => expect(added).toHaveBeenCalledOnce())
-    const save = vi.mocked(apiFetch).mock.calls.find(([url, options]) => url === '/api/transfers' && options?.method === 'POST')
-    expect(JSON.parse(String(save?.[1]?.body))).toMatchObject({ amount_to: 0.12345678, price: 123.45 })
-  })
+
 })
 
 it('hides balances in cards, account options, projected balances, and insufficient-balance warnings', async () => {
@@ -420,4 +399,13 @@ describe('confirmation balance preview', () => {
     expect(apiFetch).toHaveBeenCalledExactlyOnceWith('/api/transactions/due/decline', { method: 'POST' })
     expect(transferAccounts[0].balance).toBe(900)
   })
+})
+it('routes standalone investment edits into historical confirmation instead of income/expense and hides unsupported deletion',async()=>{
+ const user=userEvent.setup()
+ vi.mocked(apiFetch).mockImplementation(async(url)=>String(url).endsWith('/legacy-details')?Response.json({trade:{id:'old-buy',account_id:'holding',type:'buy',date:'2020-01-01',quantity:2,price:50,total_amount:100,trade_version:0},account:{name:'Synthetic holding',currency:'SHARE',is_locked:false,archived_at:null}}):Response.json([]))
+ renderTransfers({accounts:[...transferAccounts,{id:'holding',name:'Synthetic holding',type:'investment',balance:2,currency:'SHARE'}],transactions:[{id:'old-buy',account_id:'holding',amount:100,quantity:2,price:50,date:'2020-01-01',description:'Legacy buy'}]})
+ await user.click(screen.getByRole('button',{name:'Confirm historical trade details'}))
+ expect(await screen.findByRole('dialog',{name:'Confirm historical trade details'})).toBeVisible()
+ expect(screen.queryByRole('dialog',{name:'Edit Transaction'})).not.toBeInTheDocument()
+ expect(screen.queryByRole('button',{name:'Delete transaction'})).not.toBeInTheDocument()
 })

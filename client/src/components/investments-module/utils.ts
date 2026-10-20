@@ -1,7 +1,10 @@
+import { holdingMetrics } from '../../../../shared/investment-metrics'
+import type { HoldingMetrics, MetricTrade } from '../../../../shared/investment-metrics'
+import { usesMarketPricing } from '../../../../shared/holding'
 import { convertCurrency } from '../../../../shared/currency'
 import type { Account, Transaction, Position } from './types'
 
-export const formatValue = (value: number, account?: Account, currency?: string) => {
+export const formatValue = (value: number | null, account?: Account, currency?: string) => {
   const valueCurrency = currency || (account?.asset_type === 'manual' ? account.currency : 'USD')
   if (value === null) return 'Unavailable'
   const currencySymbols: Record<string, string> = {
@@ -13,7 +16,7 @@ export const formatValue = (value: number, account?: Account, currency?: string)
   }
   const symbol = currencySymbols[valueCurrency] || valueCurrency
   const decimals = valueCurrency === 'HUF' ? 0 : 2
-  const formatted = Math.abs(value).toLocaleString('hu-HU', {
+  const formatted = value.toLocaleString('hu-HU', {
     minimumFractionDigits: decimals,
     maximumFractionDigits: decimals
   })
@@ -31,7 +34,7 @@ export const formatDisplayCurrency = (value: number | null, displayCurrency: 'HU
   }
   const symbol = currencySymbols[displayCurrency] || displayCurrency
   const decimals = displayCurrency === 'HUF' ? 0 : 2
-  const formatted = Math.abs(value).toLocaleString('hu-HU', {
+  const formatted = value.toLocaleString('hu-HU', {
     minimumFractionDigits: decimals,
     maximumFractionDigits: decimals
   })
@@ -47,19 +50,21 @@ export const calculatePosition = (
   account: Account,
   transactions: Transaction[],
   quotes: Record<string, any>,
-  exchangeRates: Record<string, number>
+  exchangeRates: Record<string, number>,
+  metrics?: HoldingMetrics,
+  reportingCurrency = 'USD'
 ): Position => {
-  // Calculate actual quantity from transactions (don't trust account.balance)
-  const actualQuantity = transactions.reduce((sum, tx) => sum + (tx.quantity || 0), 0)
+  // Stored units include openings and corrections that legacy activity may omit.
+  const actualQuantity = account.balance
   
   // Get current market price if available
   let currentPrice = 0
   let priceFetchError = false
   let quoteCurrency = (account.asset_type === 'manual' ? account.currency : account.quote_currency || 'USD').toUpperCase()
-  if (account.asset_type !== 'manual' && account.symbol) {
-    if (quotes[account.symbol]) {
-      currentPrice = quotes[account.symbol].regularMarketPrice || 0
-      quoteCurrency = (quotes[account.symbol].currency || quoteCurrency).toUpperCase()
+  if (usesMarketPricing(account) && account.symbol) {
+    if (quotes[account.symbol.trim().toUpperCase()]) {
+      currentPrice = quotes[account.symbol.trim().toUpperCase()].regularMarketPrice || 0
+      quoteCurrency = (quotes[account.symbol.trim().toUpperCase()].currency || quoteCurrency).toUpperCase()
     } else {
       // Symbol exists but no quote data - price fetch failed
       priceFetchError = true
@@ -67,27 +72,23 @@ export const calculatePosition = (
   }
   
   const missingCurrencies = new Set<string>()
-  const convertToUsd = (value: number, currency: string) => {
-    const result = convertCurrency(value, currency, 'USD', exchangeRates)
-    result.missingCurrencies.forEach(item => missingCurrencies.add(item))
-    return result.value
-  }
-
-  // Keep native values available even when the portfolio conversion fails.
-  const displayValue = account.asset_type === 'manual' ? account.balance : actualQuantity * currentPrice
-  const currentValue = priceFetchError ? null : convertToUsd(displayValue, quoteCurrency)
-  const transactionNet = transactions.reduce((sum, tx) => sum + tx.amount, 0)
-  const nativeInvested = account.asset_type === 'manual' ? account.balance : transactionNet
-  const netInvested = convertToUsd(nativeInvested, account.asset_type === 'manual' ? account.currency : account.quote_currency || quoteCurrency)
-  const gainLoss = account.asset_type === 'manual'
-    ? convertToUsd(transactionNet, account.currency)
-    : currentValue === null || netInvested === null ? null : currentValue - netInvested
-  const gainLossPercent = gainLoss === null || netInvested === null ? null : netInvested > 0 ? gainLoss / netInvested * 100 : 0
+  const facts: MetricTrade[]=transactions.filter(t=>t.quantity!==undefined && t.price!==undefined).map(t=>({...t,
+    type:t.quantity!<0?'sell':'buy',quantity:Math.abs(t.quantity!),price:t.price!,total_amount:Math.abs(t.amount)}))
+  const metric=metrics??holdingMetrics(account,facts,reportingCurrency,account.symbol?quotes[account.symbol.trim().toUpperCase()]:undefined,
+    (amount,source,target)=>convertCurrency(amount,source,target,exchangeRates,'USD').value,
+    (amount,source,target)=>source===target?amount:null,new Date().toISOString().slice(0,10))
+  const displayValue=metric.native_value
+  quoteCurrency=metric.native_currency||quoteCurrency
+  priceFetchError=displayValue===null
+  if (!usesMarketPricing(account)) currentPrice = account.manual_price ?? 0
+  if(metric.value===null && displayValue!==null) convertCurrency(displayValue,quoteCurrency,reportingCurrency,exchangeRates,'USD').missingCurrencies.forEach(c=>missingCurrencies.add(c))
+  const currentValue=metric.value,netInvested=metric.net_invested,nativeInvested=metric.native.net_invested
+  const gainLoss=metric.total_gain,gainLossPercent=metric.estimated_return_percent
 
   return {
-    account,
+    account,metrics:metric,reportingCurrency,
     netInvested,
-    currentValue, // USD value for portfolio totals
+    currentValue, // Selected reporting-currency value
     displayValue, // Original currency value for display
     currentPrice,
     quoteCurrency,

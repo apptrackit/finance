@@ -1,3 +1,13 @@
+import { LegacyInvestmentDetailsController } from './controllers/legacy-investment-details.controller'
+import { LegacyInvestmentDetailsService } from './services/legacy-investment-details.service'
+import { LegacyInvestmentDetailsRepository } from './repositories/legacy-investment-details.repository'
+import {InvestmentHistoryController} from './controllers/investment-history.controller'
+import {createInvestmentHistoryService} from './services/investment-history.service'
+import { InvestmentMetricsController } from './controllers/investment-metrics.controller'
+import { ManualValuationRepository } from './repositories/manual-valuation.repository'
+import { ManualValuationService } from './services/manual-valuation.service'
+import { ManualValuationController } from './controllers/manual-valuation.controller'
+import { ManualValuationSchema } from './validators/manual-valuation.validator'
 import { Hono, Context } from 'hono'
 import { Bindings } from './types/environment.types'
 import { APP_VERSION } from './config/constants'
@@ -43,6 +53,9 @@ import { RecurringScheduleController } from './controllers/recurring-schedule.co
 import { SettingsController } from './controllers/settings.controller'
 import { FinancialOutlookController } from './controllers/financial-outlook.controller'
 import { DataExportController } from './controllers/data-export.controller'
+import { InvestmentTradeController } from './controllers/investment-trade.controller'
+import { InvestmentTradeService } from './services/investment-trade.service'
+import { InvestmentTradeSchema, LegacyInvestmentDetailsSchema } from './validators/investment-trade.validator'
 
 // Middleware
 import { allowedOrigins, corsMiddleware } from './middlewares/cors.middleware'
@@ -87,7 +100,7 @@ function createDependencies(db: D1Database) {
   const investmentTransactionService = new InvestmentTransactionService(investmentTransactionRepo, accountRepo)
   const transferService = new TransferService(accountRepo, transactionRepo, investmentTransactionRepo)
   const dashboardService = new DashboardService(accountRepo, transactionRepo, recurringScheduleRepo, categoryRepo)
-  const marketDataService = new MarketDataService()
+  const marketDataService = new MarketDataService(db)
   const recurringScheduleService = new RecurringScheduleService(recurringScheduleRepo, transactionRepo, accountRepo)
   const settingsService = new SettingsService(settingsRepo)
   const financialOutlookService = new FinancialOutlookService(financialOutlookRepo)
@@ -108,6 +121,9 @@ function createDependencies(db: D1Database) {
   const financialOutlookController = new FinancialOutlookController(financialOutlookService)
   const dataExportController = new DataExportController(dataExportService)
   const transactionHistoryController = new TransactionHistoryController(transactionHistoryService)
+  const investmentTrades = new InvestmentTradeService(investmentTransactionRepo.trades)
+  const investmentTradeController = new InvestmentTradeController(investmentTrades)
+  const investmentMetricsController = new InvestmentMetricsController(db,investmentTrades)
 
   return {
     accountController,
@@ -122,7 +138,12 @@ function createDependencies(db: D1Database) {
     settingsController,
     financialOutlookController,
     dataExportController,
-    transactionHistoryController
+    transactionHistoryController,
+    investmentTradeController,
+    legacyInvestmentDetailsController: new LegacyInvestmentDetailsController(new LegacyInvestmentDetailsService(new LegacyInvestmentDetailsRepository(db))),
+    investmentMetricsController,
+    investmentHistoryController:new InvestmentHistoryController(createInvestmentHistoryService(db)),
+    manualValuationController: new ManualValuationController(new ManualValuationService(new ManualValuationRepository(db)))
   }
 }
 
@@ -137,6 +158,11 @@ app.onError((err, c) => {
   const accountErrors = {
     ACCOUNT_ARCHIVED: 'Restore the archived account before making changes.',
     ACCOUNT_LOCKED: 'Unlock the account before making changes.',
+    HOLDING_HISTORY_METADATA: 'This change would reinterpret holding history. Keep its instrument, units, quote currency and pricing method, or create a separate holding.',
+    HOLDING_POSITION_MISMATCH: 'Opening quantity and later activity do not match the current holding. Reconcile the opening or record an explicit correction.',
+    HOLDING_OPENING_DATE: 'The trade date must be after the end-of-day opening position. Correct the opening date before backdating this trade.',
+    TRADE_CASH_CURRENCY: 'This cash currency is protected by recorded trade settlements. Create a separate cash account for a different currency.',
+    MANUAL_ASSET_OWNED: 'Confirm a known unowned opening or record full disposal before archiving this asset; zero value alone does not establish disposal.',
     ACCOUNT_ARCHIVE_NONZERO: 'The balance or holding must be zero before archiving.',
     ACCOUNT_ARCHIVE_PENDING: 'Confirm or decline all pending and review transactions before archiving.',
     ACCOUNT_DELETE_LINKED: 'This account has linked transfers. Archive it to preserve both sides and their history.',
@@ -232,6 +258,18 @@ app.post('/investment-transactions', (c) => getControllers(c).investmentTransact
 app.delete('/investment-transactions/:id', (c) => getControllers(c).investmentTransactionController.delete(c))
 
 // Transfers
+app.get('/accounts/:id/valuations', c => getControllers(c).manualValuationController.history(c))
+app.put('/accounts/:id/valuations', validateBody(ManualValuationSchema), c => getControllers(c).manualValuationController.save(c))
+
+app.get('/investment-history', c => getControllers(c).investmentHistoryController.read(c))
+app.get('/investment-metrics', c => getControllers(c).investmentMetricsController.read(c))
+app.post('/investment-trades/preview', validateBody(InvestmentTradeSchema), c => getControllers(c).investmentMetricsController.preview(c))
+app.post('/investment-trades', validateBody(InvestmentTradeSchema), c => getControllers(c).investmentTradeController.save(c))
+app.get('/investment-trades/:id/legacy-details', c => getControllers(c).legacyInvestmentDetailsController.read(c))
+app.put('/investment-trades/:id/legacy-details', validateBody(LegacyInvestmentDetailsSchema), c => getControllers(c).legacyInvestmentDetailsController.save(c))
+app.get('/investment-trades/:id', c => getControllers(c).investmentTradeController.read(c))
+app.put('/investment-trades/:id', validateBody(InvestmentTradeSchema), c => getControllers(c).investmentTradeController.save(c))
+app.delete('/investment-trades/:id', c => getControllers(c).investmentTradeController.delete(c))
 app.get('/transfers/exchange-rate', (c) => getControllers(c).transferController.getExchangeRate(c))
 app.post('/transfers', validateBody(CreateTransferSchema), (c) => getControllers(c).transferController.create(c))
 
@@ -245,6 +283,9 @@ app.get('/financial-outlook-snapshots', (c) => getControllers(c).financialOutloo
 
 // Market Data
 app.get('/market/search', (c) => getControllers(c).marketDataController.search(c))
+app.get('/market/quotes', (c) => getControllers(c).marketDataController.quotes(c))
+app.get('/market/history', (c) => getControllers(c).marketDataController.history(c))
+app.get('/market/fx-history', (c) => getControllers(c).marketDataController.fx(c))
 app.get('/market/quote', (c) => getControllers(c).marketDataController.quote(c))
 app.get('/market/chart', (c) => getControllers(c).marketDataController.chart(c))
 

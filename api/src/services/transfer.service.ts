@@ -1,3 +1,4 @@
+import { InvestmentTradeService } from './investment-trade.service'
 import { AppError } from '../errors/codes'
 import { AccountRepository } from '../repositories/account.repository'
 import { TransactionRepository } from '../repositories/transaction.repository'
@@ -27,7 +28,7 @@ export class TransferService {
     return { rate, from, to }
   }
 
-  async createTransfer(dto: CreateTransferDto): Promise<TransferResponseDto> {
+  async createTransfer(dto: CreateTransferDto, clientDate?: string): Promise<TransferResponseDto> {
     if (dto.from_account_id === dto.to_account_id) {
       throw new Error('Cannot transfer to same account')
     }
@@ -53,6 +54,21 @@ export class TransferService {
     if (toAccount.is_locked) {
       throw new Error(`Account "${toAccount.name}" is locked`)
     }
+    if (fromAccount.type === 'investment' || toAccount.type === 'investment') {
+      if (fromAccount.type === 'investment' && toAccount.type === 'investment') throw AppError.validation('Choose a cash account for trade settlement')
+      const buy = toAccount.type === 'investment'
+      const trade = await new InvestmentTradeService(this.investmentTransactionRepo.trades).save({
+        idempotency_key: dto.idempotency_key!, holding_account_id: buy ? toAccount.id : fromAccount.id,
+        cash_account_id: buy ? fromAccount.id : toAccount.id, type: buy ? 'buy' : 'sell',
+        quantity: buy ? dto.amount_to : dto.amount_from, cash_amount: buy ? dto.amount_from : dto.amount_to,
+        price: dto.price!, execution_currency: dto.execution_currency!, fee_status: dto.fee_status!,
+        fee_amount: dto.fee_amount, date: dto.date, notes: dto.description,
+      }, clientDate)
+      return { id: trade.trade_id, outgoing_transaction_id: buy ? trade.cash_transaction_id : trade.trade_id,
+        incoming_transaction_id: buy ? trade.trade_id : trade.cash_transaction_id,
+        amount_from: dto.amount_from, amount_to: dto.amount_to, exchange_rate: dto.amount_to / dto.amount_from,
+        from_account_id: fromAccount.id, to_account_id: toAccount.id, is_investment_transfer: true }
+    }
 
     const totalDeduction = dto.amount_from
     const now = Date.now()
@@ -65,13 +81,7 @@ export class TransferService {
     let outgoingDesc = `Transfer to ${toAccount.name}`
     let incomingDesc = `Transfer from ${fromAccount.name}`
 
-    if (toAccount.type === 'investment') {
-      const quoteCurrency = toAccount.quote_currency || 'USD'
-      const priceDetails = dto.price ? ` @ ${quoteCurrency} ${dto.price.toFixed(2)}/share` : ''
-      const purchaseDetails = `${dto.amount_to.toFixed(8)} shares${priceDetails}`
-      outgoingDesc += ` (${purchaseDetails})`
-      incomingDesc += ` (${purchaseDetails})`
-    } else if (fromAccount.currency !== toAccount.currency) {
+    if (fromAccount.currency !== toAccount.currency) {
       const effectiveRate = dto.amount_to / dto.amount_from
       outgoingDesc += ` (${dto.amount_to.toFixed(2)} ${toAccount.currency} @ ${effectiveRate.toFixed(4)})`
       incomingDesc += ` (${dto.amount_from.toFixed(2)} ${fromAccount.currency} @ ${effectiveRate.toFixed(4)})`
@@ -82,67 +92,16 @@ export class TransferService {
       incomingDesc += ` - ${dto.description}`
     }
 
-    // Create outgoing transaction (always in regular transactions - cash out)
-    await this.transactionRepo.create({
-      id: outgoingId,
-      account_id: dto.from_account_id,
-      amount: -totalDeduction,
-      description: outgoingDesc,
-      date: dto.date,
-      linked_transaction_id: incomingId
+    await this.transactionRepo.cashLedger.commit({
+      before: [], accounts: [fromAccount, toAccount], now,
+      after: [{
+        id: outgoingId, account_id: dto.from_account_id, amount: -totalDeduction,
+        description: outgoingDesc, date: dto.date, linked_transaction_id: incomingId,
+      }, {
+        id: incomingId, account_id: dto.to_account_id, amount: dto.amount_to,
+        description: incomingDesc, date: dto.date, linked_transaction_id: outgoingId,
+      }],
     })
-
-    // Update FROM account balance (always cash account)
-    await this.accountRepo.updateBalance(
-      dto.from_account_id,
-      fromAccount.balance - totalDeduction,
-      now
-    )
-
-    // Handle incoming transaction based on TO account type
-    if (toAccount.type === 'investment') {
-      // TO account is investment: save to investment_transactions
-      const quantity = dto.amount_to // amount_to is the number of shares
-      const pricePerUnit = dto.price || 0
-      const totalAmount = quantity * pricePerUnit
-      
-      await this.investmentTransactionRepo.create({
-        id: incomingId,
-        account_id: dto.to_account_id,
-        type: 'buy',
-        quantity,
-        price: pricePerUnit,
-        total_amount: totalAmount,
-        date: dto.date,
-        notes: incomingDesc,
-        created_at: now
-      })
-      
-      // Update investment account balance with shares
-      await this.accountRepo.updateBalance(
-        dto.to_account_id,
-        toAccount.balance + quantity,
-        now
-      )
-    } else {
-      // TO account is regular cash account: save to transactions
-      await this.transactionRepo.create({
-        id: incomingId,
-        account_id: dto.to_account_id,
-        amount: dto.amount_to,
-        description: incomingDesc,
-        date: dto.date,
-
-        linked_transaction_id: outgoingId
-      })
-      
-      // Update cash account balance
-      await this.accountRepo.updateBalance(
-        dto.to_account_id,
-        toAccount.balance + dto.amount_to,
-        now
-      )
-    }
 
     return {
       id: transferId,
@@ -153,7 +112,7 @@ export class TransferService {
       exchange_rate: dto.amount_to / dto.amount_from,
       from_account_id: dto.from_account_id,
       to_account_id: dto.to_account_id,
-      is_investment_transfer: toAccount.type === 'investment'
+      is_investment_transfer: false
     }
   }
 }

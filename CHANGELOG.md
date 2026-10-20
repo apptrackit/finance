@@ -6,6 +6,16 @@ Intermediate package/UI version bumps are grouped under the next published GitHu
 
 ## Unreleased
 
+### Investment rework
+
+- **Redesigned portfolio overview.** A responsive Investments page brings together portfolio value, net invested, gains, allocation and sortable holdings with 30-day trends. Filters, privacy controls and clear loading/retry states work across desktop and mobile. [#123](https://github.com/apptrackit/finance/issues/123)
+- **Holding details at a glance.** Open any holding for its value, gain, position, price chart and trade history in a compact dialog. Split-adjusted charts keep historical prices and trade markers comparable across stock splits.
+- **Direct cash-linked Buy/Sell.** A dedicated trade editor records purchases and sales with actual execution prices, fees and settlement amounts, previewing cash and position changes before saving. Editing or deleting a linked trade updates both cash and holdings together; new trades start from Investments.
+- **Clearer investment performance.** Track remaining cost basis, net invested, realized and unrealized gains, and covered daily/range return estimates. Price returns exclude dividends; missing historical costs or exchange rates stay explicit, with a review flow for completing old purchase details.
+- **Historical portfolio tracking.** Compare portfolio value with net invested over selectable calendar ranges, using dated holdings, prices, valuations and exchange rates. History includes sold and archived holdings during their ownership periods, with visible gaps where records are incomplete.
+- **Flexible holdings and manual valuations.** Set up ETFs, stocks, crypto and manual assets with separate pricing and unit choices. Record dated opening positions, quantity corrections and total/per-unit appraisals; valuation updates keep their own history and reminders without creating cash movements.
+- **HUF, USD and EUR reporting.** Switch reporting currency across portfolio summaries, history, holdings and trade previews. Market prices retain their native currency and source time, with delayed-price indicators, stale-value warnings and dated exchange rates for historical values and purchase costs.
+
 ### Added
 
 - One transaction composer for single, split and adjustment entries. **Split into categories** divides one payment over several category lines (shared account, date and description; the first line takes the rest of the total), saved atomically and shown as one expandable row. **Save and add another** keeps type, account and date for the next payment. Recording a balance difference opens the same controls with the amount and account fixed. New `transaction_splits` table and `transactions.split_id` (migration 017), `/transactions/splits` endpoints, and `transaction_splits` in the JSON export. [#138](https://github.com/apptrackit/finance/issues/138)
@@ -15,12 +25,18 @@ Intermediate package/UI version bumps are grouped under the next published GitHu
 ### Changed
 
 - Bulk add and the separate balance-adjustment choice and split dialogs are replaced by the composer. Per-row account and date, sliders, auto-balance and fill-with-total are gone; log unrelated payments with Save and add another.
-
 - Dashboard uses a shared period picker, a responsive balance/activity summary, compact transaction filters, and a combined review queue with explicit confirmation actions. Transaction rows show neutral transfers, daily cash-flow totals, and native/converted amounts; privacy masking and loading states follow the new layout.
 
 ### Fixed
 
+- Cash and investment balance changes use decimal arithmetic to prevent floating-point residue while preserving genuine fractional amounts. Payments, transfers, adjustments, pending confirmations and recurring execution update balances and audit records together, with guards against duplicate or conflicting changes.
+- Dashboard net worth respects investment holding exclusions; Investments continues to show all active holdings.
 - Buttons, tabs, switches, menus, selects, checkboxes and other enabled click targets show a pointer cursor again across the app; Tailwind CSS 4 had reset buttons to the default arrow. Disabled controls keep the default cursor. [#157](https://github.com/apptrackit/finance/issues/157)
+
+### Migration and upgrade notes
+
+- Apply all pending migrations before deploying the updated API, MCP and client. Keep both `017-investment-transfer-links.sql` and `017-transaction-splits.sql` under their original names, followed by migrations 018–021. Migration history tracks the full migration name, so upgrades apply only missing files; see the [migration guide](api/migrations/README.md).
+- The investment migrations add holding metadata, linked trade facts, manual valuation history and a reconstructible market-data cache. Existing financial records are preserved; unknown historical purchase details are not fabricated. The cache is excluded from financial exports. See the [holding](docs/investment-holdings.md), [trade](docs/investment-trades.md) and [manual valuation](docs/manual-investment-valuations.md) guides for compatibility details.
 
 ## v3.3 — 2026-10-15
 

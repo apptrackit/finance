@@ -1,120 +1,72 @@
-import { sumAvailable, convertCurrency } from '../../../../shared/currency'
-import { MissingExchangeRates } from '../common/MissingExchangeRates'
-import { useState } from 'react'
-import { useOutletContext } from 'react-router'
-import type { FinancePageContext } from '../../App'
-import { FinanceDataBoundary } from '../common/FinanceDataStatus'
-import { usePrivacy } from '../../context/PrivacyContext'
-import type { PortfolioStats } from './types'
-import { calculatePosition, convertToDisplayCurrency } from './utils'
-import { PortfolioSummary } from './PortfolioSummary'
-import { HoldingsList } from './HoldingsList'
-import { InvestmentDetailModal } from './InvestmentDetailModal'
-
+import { investmentReportingCurrencies } from './reporting-currencies'
+import { LegacyTradeDetails } from './LegacyTradeDetails'
+import {useEffect,useRef,useState} from 'react'
+import {Link,useOutletContext} from 'react-router'
+import {Plus,RefreshCw} from 'lucide-react'
+import type {FinancePageContext} from '../../App'
+import {FinanceDataBoundary} from '../common/FinanceDataStatus'
+import {Button} from '../common/button'
+import {usePrivacy} from '../../context/PrivacyContext'
+import {calculatePosition} from './utils'
+import {PortfolioHistoryChart} from './PortfolioHistoryChart'
+import {PortfolioSummary} from './PortfolioSummary'
+import {PortfolioAllocation} from './PortfolioAllocation'
+import {InvestmentAttention} from './InvestmentAttention'
+import {HoldingsList} from './HoldingsList'
+import {API_BASE_URL,apiFetch} from '../../config'
+import {TradeEditor} from './TradeEditor'
+import type {TradeEdit} from './trade-editor'
+import type {Transaction} from './types'
+import {InvestmentDetailModal} from './InvestmentDetailModal'
 export function Investments() {
-  const { investments } = useOutletContext<FinancePageContext>()
-  const { data, status, refresh: fetchData, currencyDisplay, setCurrencyDisplay } = investments
-  const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null)
-  const { privacyMode } = usePrivacy()
-  const investmentAccounts = data?.accounts ?? []
-  const selectedAccount = investmentAccounts.find(account => account.id === selectedAccountId) ?? null
-  const allTransactions = data?.transactions ?? []
-  const categories = data?.categories ?? []
-  const quotes = data?.quotes ?? {}
-  const exchangeRates = data?.exchangeRates ?? {}
-  const refreshing = status.loading
-
-  const getAccountTransactions = (accountId: string) => {
-    return allTransactions.filter(tx => tx.account_id === accountId)
-  }
-
-  const calculatePortfolioStats = (): PortfolioStats => {
-    const positions = investmentAccounts.map(acc => 
-      calculatePosition(acc, getAccountTransactions(acc.id), quotes, exchangeRates)
-    )
-    
-    // Sort positions by current value (descending, most to least)
-    const sortedPositions = [...positions].sort((a, b) => (b.currentValue ?? -Infinity) - (a.currentValue ?? -Infinity))
-    
-    const totalValue = sumAvailable(positions.map(pos => pos.currentValue))
-    const totalInvested = sumAvailable(positions.map(pos => pos.netInvested))
-    const totalGainLoss = totalValue === null || totalInvested === null ? null : totalValue - totalInvested
-    const totalGainLossPercent = totalInvested === null || totalGainLoss === null ? null : totalInvested > 0 ? (totalGainLoss / totalInvested) * 100 : 0
-    
-    return { totalValue, totalInvested, totalGainLoss, totalGainLossPercent, positions: sortedPositions }
-  }
-
-  const stats = calculatePortfolioStats()
-
-  const convertDisplayCurrency = (usdValue: number | null) =>
-    convertToDisplayCurrency(usdValue, currencyDisplay, exchangeRates)
-
-  const missingCurrencies = [...new Set([
-    ...stats.positions.flatMap(position => position.missingCurrencies),
-    ...convertCurrency(1, 'USD', currencyDisplay, exchangeRates, 'USD').missingCurrencies,
-  ])].sort()
-
-  return (
-    <FinanceDataBoundary label="Investments" datasets={[{ label: 'Investment portfolio', status }]}>
-    <div className="space-y-6">
-      <MissingExchangeRates currencies={missingCurrencies} targetCurrency={currencyDisplay}
-        onRetry={() => { void fetchData() }} retrying={refreshing} />
-      {/* Currency Toggle */}
-      <div className="flex justify-end gap-2">
-        <button
-          onClick={() => setCurrencyDisplay('HUF')}
-          className={`px-3 py-1 rounded-lg text-sm font-medium transition-colors ${
-            currencyDisplay === 'HUF'
-              ? 'bg-primary text-primary-foreground'
-              : 'bg-secondary text-muted-foreground hover:bg-secondary/80'
-          }`}
-        >
-          HUF
-        </button>
-        <button
-          onClick={() => setCurrencyDisplay('USD')}
-          className={`px-3 py-1 rounded-lg text-sm font-medium transition-colors ${
-            currencyDisplay === 'USD'
-              ? 'bg-primary text-primary-foreground'
-              : 'bg-secondary text-muted-foreground hover:bg-secondary/80'
-          }`}
-        >
-          USD
-        </button>
-      </div>
-
-      {/* Portfolio Summary */}
-      <PortfolioSummary
-        stats={stats}
-        loading={false}
-        privacyMode={privacyMode}
-        displayCurrency={currencyDisplay}
-        convertToDisplayCurrency={convertDisplayCurrency}
-        investmentAccountsCount={investmentAccounts.length}
-      />
-
-      {/* Holdings List */}
-      <HoldingsList
-        positions={stats.positions}
-        quotes={quotes}
-        loading={false}
-        refreshing={refreshing}
-        privacyMode={privacyMode}
-        onRefresh={fetchData}
-        onOpenDetail={account => setSelectedAccountId(account.id)}
-      />
-
-      {/* Investment Detail Modal */}
-      <InvestmentDetailModal
-        account={selectedAccount}
-        categories={categories}
-        allTransactions={allTransactions}
-        quotes={quotes}
-        exchangeRates={exchangeRates}
-        privacyMode={privacyMode}
-        onClose={() => setSelectedAccountId(null)}
-      />
-    </div>
-    </FinanceDataBoundary>
-  )
+ const {investments,finance}=useOutletContext<FinancePageContext>()
+ const {data,status,refresh,currencyDisplay,setCurrencyDisplay,overviewView,updateOverview}=investments
+ const {privacyMode}=usePrivacy(),hidden=privacyMode==='hidden'
+ const [legacyTradeId,setLegacyTradeId]=useState<string|null>(null)
+ const [selected,setSelected]=useState<string|null>(null)
+ const [editor,setEditor]=useState<{holdingId?:string;type?:'buy'|'sell';edit?:TradeEdit}|null>(null)
+ const [editing,setEditing]=useState(false),[editError,setEditError]=useState<string|null>(null)
+ const editController=useRef<AbortController|null>(null)
+ useEffect(()=>()=>editController.current?.abort(),[])
+ const editTrade=async(t:Transaction)=>{
+  if(!t.linked_transaction_id){setLegacyTradeId(t.id);return}
+  editController.current?.abort();const controller=new AbortController();editController.current=controller;setEditing(true);setEditError(null)
+  try {
+   const response=await apiFetch(`${API_BASE_URL}/investment-trades/${encodeURIComponent(t.id)}`,{throwOnError:true,signal:controller.signal})
+   const value=await response.json() as TradeEdit
+   if(value.trade?.id!==t.id||value.trade.trade_version!==t.trade_version||value.source_revision!==data?.sourceRevision||typeof value.cash_account_id!=='string')throw new Error('Investment records changed. Refresh prices, then open the trade again.')
+   if(!controller.signal.aborted)setEditor({edit:value})
+  } catch(e){if(!controller.signal.aborted)setEditError(e instanceof Error?e.message:'Could not read the linked trade')}
+  finally{if(!controller.signal.aborted)setEditing(false)}
+ }
+ const saved=async()=>{investments.detailCache.clear();await finance.handleDataChange()}
+ const closeDetail=()=>{editController.current?.abort();setEditing(false);setEditError(null);setSelected(null)}
+ const accounts=data?.accounts??[],trades=data?.transactions??[],quotes=data?.quotes??{},metrics=data?.metrics[currencyDisplay]
+ const positions=accounts.map(a=>calculatePosition(a,trades.filter(t=>t.account_id===a.id),quotes,data?.exchangeRates??{},metrics?.holdings.find(h=>h.account_id===a.id),currencyDisplay))
+ const eligible=finance.accounts.filter(a=>!a.is_locked&&a.archived_at==null)
+ const canTrade=eligible.some(a=>a.type==='investment')&&eligible.some(a=>a.type==='cash')
+  &&finance.dataStatus.accounts.loaded&&!finance.dataStatus.accounts.error&&finance.dataStatus.categories.loaded&&!finance.dataStatus.categories.error
+ const opening=accounts.find(a=>a.id===selected)??null
+ const refreshing=status.loading||investments.history.loading
+ return <FinanceDataBoundary label="Investments" datasets={[{label:'Investment portfolio',status}]}>
+  <div className="@container space-y-4">
+   <header className="flex flex-wrap items-center justify-end gap-2 sm:gap-3 lg:justify-start">
+    <h1 className="mr-auto hidden text-2xl font-semibold tracking-tight lg:block">Investments</h1>
+    <p className="order-last w-full text-right text-[10px] text-muted-foreground lg:order-none lg:w-auto">{status.stale?'Saved snapshot':'As of'} {data?.asOf?new Date(data.asOf).toLocaleString(undefined,{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}):'unavailable'}</p>
+    <Button type="button" variant="outline" size="icon" disabled={status.loading} onClick={()=>{void refresh()}} aria-label="Refresh prices" className="h-10 w-10"><RefreshCw className={`h-4 w-4 ${refreshing?'animate-spin motion-reduce:animate-none':''}`}/></Button>
+    <div role="group" aria-label="Investment reporting currency" className="flex rounded-lg border border-border p-0.5">{investmentReportingCurrencies.map(c=><button key={c} type="button" aria-pressed={currencyDisplay===c} onClick={()=>setCurrencyDisplay(c)} className={`min-h-9 rounded-md px-3 text-xs font-semibold ${c===currencyDisplay?'bg-secondary text-foreground':'text-muted-foreground'}`}>{c}</button>)}</div>
+    {canTrade?<Button type="button" onClick={()=>setEditor({})} className="h-10"><Plus className="h-4 w-4"/>Record trade</Button>:<Link to="/accounts" state={{addAccount:true,investment:accounts.length===0}} className="inline-flex min-h-10 items-center rounded-lg bg-primary px-3 text-xs font-semibold text-primary-foreground">{accounts.length===0?'Add first holding':'Set up trade accounts'}</Link>}
+   </header>
+   <InvestmentAttention positions={positions} quotes={quotes} refreshing={status.loading} onRefresh={()=>{void refresh()}} onOpen={a=>setSelected(a.id)}/>
+   <PortfolioSummary metrics={metrics} hidden={hidden} currency={currencyDisplay}/>
+   <PortfolioHistoryChart history={investments.history} hidden={hidden} currency={currencyDisplay} currentValue={metrics?.total_value}/>
+   <PortfolioAllocation positions={positions} view={overviewView} onChange={updateOverview} onOpen={a=>setSelected(a.id)} hidden={hidden} currency={currencyDisplay}/>
+   <HoldingsList positions={positions} quotes={quotes} trends={data?.trends} privacyMode={privacyMode} view={overviewView} onViewChange={updateOverview} refreshing={status.loading} onOpenDetail={a=>setSelected(a.id)}/>
+   {!editor&&!legacyTradeId&&<InvestmentDetailModal key={selected} account={opening} allTransactions={trades} quotes={quotes} exchangeRates={data?.exchangeRates??{}} privacyMode={privacyMode}
+    onClose={closeDetail} metrics={metrics?.holdings.find(h=>h.account_id===selected)} reportingCurrency={currencyDisplay} onValuationSaved={()=>{void saved()}}
+    canTrade={canTrade} onTrade={type=>setEditor({holdingId:selected??undefined,type})} onEdit={t=>{void editTrade(t)}} chartCache={investments.detailCache} revisionKey={`${data?.sourceRevision}:${data?.asOf}`} editing={editing} editError={editError}/>}
+   {legacyTradeId&&<LegacyTradeDetails key={legacyTradeId} tradeId={legacyTradeId} hidden={hidden} onClose={()=>setLegacyTradeId(null)} onSaved={saved}/>}
+   {editor&&<TradeEditor accounts={[...finance.accounts.filter(a=>a.type==='cash'),...accounts]} holdingId={editor.holdingId} type={editor.type} edit={editor.edit} quotes={quotes} rates={data?.exchangeRates??{}} hidden={hidden} currency={currencyDisplay} sourceRevision={data?.sourceRevision} onClose={()=>setEditor(null)} onSaved={saved}/>}
+  </div>
+ </FinanceDataBoundary>
 }

@@ -1,3 +1,4 @@
+import type { HoldingFields } from '../../../shared/holding'
 import { AccountType, AssetType } from '../models/Account'
 
 export interface SplitTransactionDto {
@@ -8,7 +9,24 @@ export interface SplitTransactionDto {
   date: string
 }
 
-export interface CreateAccountDto {
+export interface HoldingOpeningDto {
+  owned?: boolean
+  balance: number
+  date: string
+  cost_amount?: number | null
+  cost_currency?: string | null
+}
+
+export interface HoldingWriteDto {
+  pricing_method?: 'market' | 'manual'
+  provider?: 'yahoo' | null
+  exchange?: string | null
+  manual_price?: number | null
+  manual_price_date?: string | null
+  opening?: HoldingOpeningDto
+}
+
+export interface CreateAccountDto extends HoldingWriteDto {
   name: string
   type: AccountType
   balance: number
@@ -20,7 +38,11 @@ export interface CreateAccountDto {
   exclude_from_cash_balance?: boolean
 }
 
-export interface UpdateAccountDto {
+export interface UpdateAccountDto extends HoldingWriteDto {
+  expected_balance?: number
+  expected_updated_at?: number
+  correction_date?: string
+
   name?: string
   type?: AccountType
   balance?: number
@@ -34,7 +56,7 @@ export interface UpdateAccountDto {
   splitTransactions?: SplitTransactionDto[]
 }
 
-export interface AccountResponseDto {
+export interface AccountResponseDto extends HoldingFields {
   id: string
   name: string
   type: AccountType

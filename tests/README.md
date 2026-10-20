@@ -28,7 +28,7 @@ npm run test:integration -- -t 'rolls back'
 | Workflow validation | Invalid Actions syntax, expressions, and shell commands |
 | CI passed | One stable check that requires every preceding job to succeed |
 
-The workflow runs on pull requests and pushes to `main`, merge queues, and manual dispatch. It cancels superseded runs, uses timeouts and read-only repository permissions, pins Actions to commits, and uploads JUnit reports for seven days. Failed integration tests print the harness's Worker logs. Reports use synthetic fixtures only.
+The workflow runs on pull requests and pushes to `main` and `epic/**`, merge queues, and manual dispatch. It cancels superseded runs, uses timeouts and read-only repository permissions, pins Actions to commits, and uploads JUnit reports for seven days. Failed integration tests print the harness's Worker logs. Reports use synthetic fixtures only.
 
 Require **CI passed** in GitHub branch protection or a ruleset to make these checks block merging. Adding the workflow does not itself change repository protection settings. The original four check names are retained for existing rules.
 
@@ -51,6 +51,8 @@ The financial scenarios assert both API responses and persisted balances/rows. T
 
 ## Adding a regression
 
+The investment rework's [accounting contract](../docs/investment-accounting.md) has reusable [synthetic examples](fixtures/investment-accounting-v1.json), checked by `api/src/tests/investment-accounting-contract.test.ts` in the normal API suite. These checks verify worked arithmetic, coverage expectations and the existing shared FX contract; they do not certify that legacy investment endpoints implement the future rules. Future investment implementations should run their adapters against the same expected results. Use `npm test -w api -- src/tests/investment-accounting-contract.test.ts` for a focused check.
+
 Choose a unit test for a pure calculation or validation rule. Choose integration when correctness depends on SQL, migrations, multiple writes, bindings, authentication, or API/MCP agreement. Reproduce the failure before fixing it; assert the resulting financial state, including what must remain unchanged on failure. Avoid tests that reimplement the production SQL in a mock.
 
 Keep fixtures synthetic, external calls intercepted, and assertions independent of test order. Add a populated upgrade fixture when introducing a migration. Keep harness runtime flags and compatibility dates aligned with `api/wrangler.toml.example` and `mcp/wrangler.toml.example`. Do not regenerate baselines or disable checks merely to obtain a green run.
@@ -62,3 +64,9 @@ These are local runtime tests, not proof of deployed Cloudflare Access/OAuth con
 `npm run test:staging -w mcp` remains a separate, explicit operation: it writes a real review draft to a configured staging database and is not part of CI.
 
 Node 22 LTS is pinned because the current Miniflare transport can encounter the upstream [Undici `setTypeOfService EINVAL` socket bug](https://github.com/nodejs/undici/issues/5544) on macOS with newer Node runtimes. Node 22 does not expose the affected socket API. Keep Worker/D1 integration and the primary CI jobs on `.node-version` until the transport dependency includes the fix. The additional Node 26 client job covers the local runtime used by some contributors without running Miniflare. Vitest must continue failing on unhandled errors; do not suppress them to make a run pass.
+
+## Complete investment upgrade rehearsal
+
+[The final investment validation report](../docs/investment-rework-validation.md) maps epic acceptance criteria to runtime, migration, browser and request-budget evidence. `investment-epic-migrations.test.ts` covers the complete 016 → 021 upgrade plus late-failure D1 rollback at every epic migration. Mixed-writer regressions use real repositories/D1 and deliberate service-read interleavings with compiled Worker writes. Chart renderer regressions retain real Recharts axes/selectors.
+
+For an operator-supplied schema-016 SQL backup, run `node scripts/rehearse-investment-upgrade.mjs --export /absolute/backup.sql --report /absolute/report.json` with Node 22. It builds fresh and upgraded disposable storage, intercepts provider calls, checks original columns/rowids/revision, and emits only sanitized outcomes. Never commit the backup or private temporary state. This local command does not deploy or authorize a production restore.

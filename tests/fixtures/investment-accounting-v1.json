@@ -1,0 +1,571 @@
+{
+  "contract_version": 1,
+  "purpose": "Synthetic expected results for docs/investment-accounting.md; not a production calculator, customer data, or migration input.",
+  "weighted_average": {
+    "currency": "USD",
+    "events": [
+      {
+        "type": "buy",
+        "quantity": 10,
+        "price": 100,
+        "included_fee": 10,
+        "net_cash": 1010,
+        "mark": 100,
+        "expected": {
+          "quantity": 10,
+          "remaining_basis": 1010,
+          "realized_gain": 0,
+          "net_invested": 1010,
+          "average_cost": 101,
+          "value": 1000,
+          "unrealized_gain": -10,
+          "total_gain": -10
+        }
+      },
+      {
+        "type": "sell",
+        "quantity": 4,
+        "price": 120,
+        "included_fee": 4,
+        "net_cash": 476,
+        "mark": 110,
+        "expected": {
+          "quantity": 6,
+          "remaining_basis": 606,
+          "realized_gain": 72,
+          "net_invested": 534,
+          "average_cost": 101,
+          "value": 660,
+          "unrealized_gain": 54,
+          "total_gain": 126
+        }
+      },
+      {
+        "type": "buy",
+        "quantity": 2,
+        "price": 90,
+        "included_fee": 2,
+        "net_cash": 182,
+        "mark": 110,
+        "expected": {
+          "quantity": 8,
+          "remaining_basis": 788,
+          "realized_gain": 72,
+          "net_invested": 716,
+          "average_cost": 98.5,
+          "value": 880,
+          "unrealized_gain": 92,
+          "total_gain": 164
+        }
+      },
+      {
+        "type": "sell",
+        "quantity": 8,
+        "price": 110,
+        "included_fee": 0,
+        "net_cash": 880,
+        "mark": null,
+        "expected": {
+          "quantity": 0,
+          "remaining_basis": 0,
+          "realized_gain": 164,
+          "net_invested": -164,
+          "average_cost": null,
+          "value": 0,
+          "unrealized_gain": 0,
+          "total_gain": 164
+        }
+      },
+      {
+        "type": "buy",
+        "quantity": 1,
+        "price": 50,
+        "included_fee": 0,
+        "net_cash": 50,
+        "mark": 50,
+        "expected": {
+          "quantity": 1,
+          "remaining_basis": 50,
+          "realized_gain": 164,
+          "net_invested": -114,
+          "average_cost": 50,
+          "value": 50,
+          "unrealized_gain": 0,
+          "total_gain": 164
+        }
+      }
+    ]
+  },
+  "unknown_opening": {
+    "stored_current_quantity": 5,
+    "signed_activity_quantity": 2,
+    "price": 20,
+    "expected": {
+      "quantity": 5,
+      "value": 100,
+      "residual": 3,
+      "opening_date": null,
+      "remaining_basis": null,
+      "net_invested": null,
+      "total_gain": null,
+      "historical_quantity": null,
+      "reasons": [
+        "unknown_opening",
+        "quantity_mismatch",
+        "unknown_cost",
+        "unknown_cash_flow"
+      ]
+    }
+  },
+  "unknown_cost_disposal": {
+    "opening_quantity": 3,
+    "opening_cost": null,
+    "sale_quantity": 3,
+    "net_sale_cash": 90,
+    "rebuy_quantity": 1,
+    "rebuy_cash": 20,
+    "expected": {
+      "quantity": 1,
+      "remaining_basis": 20,
+      "lifetime_realized_gain": null,
+      "lifetime_net_invested": null,
+      "lifetime_total_gain": null
+    }
+  },
+  "cross_currency": {
+    "quantity": 2,
+    "execution_price": 50,
+    "execution_currency": "EUR",
+    "cash_currency": "HUF",
+    "reporting_currency": "HUF",
+    "net_cash_paid": 40400,
+    "included_fee_cash": 400,
+    "mark_price": 60,
+    "mark_huf_per_eur": 410,
+    "expected": {
+      "gross_execution": 100,
+      "gross_cash": 40000,
+      "implied_cash_per_execution": 400,
+      "fee_execution": 1,
+      "native_basis": 101,
+      "reporting_basis": 40400,
+      "native_value": 120,
+      "reporting_value": 49200,
+      "native_unrealized_gain": 19,
+      "reporting_unrealized_gain": 8800,
+      "incorrect_current_fx_gain": 7790
+    }
+  },
+  "manual_total": {
+    "acquisition_date": "2026-01-05",
+    "acquisition_cost": 1000,
+    "valuations": [
+      {
+        "date": "2026-01-05",
+        "value": 1000
+      },
+      {
+        "date": "2026-02-01",
+        "value": 1200
+      }
+    ],
+    "observations": [
+      {
+        "date": "2026-01-04",
+        "expected_value": null
+      },
+      {
+        "date": "2026-01-05",
+        "expected_value": 1000
+      },
+      {
+        "date": "2026-01-31",
+        "expected_value": 1000
+      },
+      {
+        "date": "2026-02-01",
+        "expected_value": 1200
+      }
+    ],
+    "expected": {
+      "net_invested": 1000,
+      "remaining_basis": 1000,
+      "value": 1200,
+      "unrealized_gain": 200,
+      "cash_delta_on_revaluation": 0,
+      "unit_delta_on_revaluation": 0
+    }
+  },
+  "periods": [
+    {
+      "id": "deposit_is_not_profit",
+      "start_value": 100,
+      "days": [
+        {
+          "value": 200,
+          "contribution": 100,
+          "withdrawal": 0,
+          "expected_factor": 1
+        }
+      ],
+      "expected_gain": 0,
+      "expected_estimated_return": 0
+    },
+    {
+      "id": "funded_zero_start",
+      "start_value": 0,
+      "days": [
+        {
+          "value": 100,
+          "contribution": 100,
+          "withdrawal": 0,
+          "expected_factor": 1
+        }
+      ],
+      "expected_gain": 0,
+      "expected_estimated_return": 0
+    },
+    {
+      "id": "fee_on_first_buy",
+      "start_value": 0,
+      "days": [
+        {
+          "value": 1000,
+          "contribution": 1010,
+          "withdrawal": 0,
+          "expected_factor": 0.9900990099009901
+        }
+      ],
+      "expected_gain": -10,
+      "expected_estimated_return": -0.009900990099009901
+    },
+    {
+      "id": "growth_with_later_deposit",
+      "start_value": 100,
+      "days": [
+        {
+          "value": 110,
+          "contribution": 0,
+          "withdrawal": 0,
+          "expected_factor": 1.1
+        },
+        {
+          "value": 231,
+          "contribution": 100,
+          "withdrawal": 0,
+          "expected_factor": 1.1
+        }
+      ],
+      "expected_gain": 31,
+      "expected_estimated_return": 0.21
+    },
+    {
+      "id": "same_day_round_trip",
+      "start_value": 0,
+      "days": [
+        {
+          "value": 0,
+          "contribution": 100,
+          "withdrawal": 110,
+          "expected_factor": 1.1
+        }
+      ],
+      "expected_gain": 10,
+      "expected_estimated_return": 0.1
+    },
+    {
+      "id": "full_withdrawal_keeps_gain",
+      "start_value": 100,
+      "days": [
+        {
+          "value": 0,
+          "contribution": 0,
+          "withdrawal": 120,
+          "expected_factor": 1.2
+        }
+      ],
+      "expected_gain": 20,
+      "expected_estimated_return": 0.2
+    },
+    {
+      "id": "keep_gross_inflow_outflow",
+      "start_value": 100,
+      "days": [
+        {
+          "value": 132,
+          "contribution": 50,
+          "withdrawal": 30,
+          "expected_factor": 1.08
+        }
+      ],
+      "expected_gain": 12,
+      "expected_estimated_return": 0.08
+    },
+    {
+      "id": "known_inactive_day_then_funding",
+      "start_value": 0,
+      "days": [
+        {
+          "value": 0,
+          "contribution": 0,
+          "withdrawal": 0,
+          "expected_factor": 1
+        },
+        {
+          "value": 100,
+          "contribution": 100,
+          "withdrawal": 0,
+          "expected_factor": 1
+        }
+      ],
+      "expected_gain": 0,
+      "expected_estimated_return": 0
+    },
+    {
+      "id": "empty_range_has_no_return",
+      "start_value": 0,
+      "days": [
+        {
+          "value": 0,
+          "contribution": 0,
+          "withdrawal": 0,
+          "expected_factor": 1
+        },
+        {
+          "value": 0,
+          "contribution": 0,
+          "withdrawal": 0,
+          "expected_factor": 1
+        }
+      ],
+      "expected_gain": 0,
+      "expected_estimated_return": null
+    },
+    {
+      "id": "missing_active_day_is_not_skipped",
+      "start_value": 100,
+      "days": [
+        {
+          "value": null,
+          "contribution": 0,
+          "withdrawal": 0,
+          "expected_factor": null
+        },
+        {
+          "value": 110,
+          "contribution": 0,
+          "withdrawal": 0,
+          "expected_factor": null
+        }
+      ],
+      "expected_gain": 10,
+      "expected_estimated_return": null
+    },
+    {
+      "id": "missing_final_value",
+      "start_value": 100,
+      "days": [
+        {
+          "value": null,
+          "contribution": 0,
+          "withdrawal": 0,
+          "expected_factor": null
+        }
+      ],
+      "expected_gain": null,
+      "expected_estimated_return": null
+    },
+    {
+      "id": "missing_contribution",
+      "start_value": 100,
+      "days": [
+        {
+          "value": 120,
+          "contribution": null,
+          "withdrawal": 0,
+          "expected_factor": null
+        }
+      ],
+      "expected_gain": null,
+      "expected_estimated_return": null
+    },
+    {
+      "id": "invalid_zero_denominator",
+      "start_value": 0,
+      "days": [
+        {
+          "value": 0,
+          "contribution": 0,
+          "withdrawal": 10,
+          "expected_factor": null
+        }
+      ],
+      "expected_gain": 10,
+      "expected_estimated_return": null
+    },
+    {
+      "id": "complete_loss_then_new_funding",
+      "start_value": 100,
+      "days": [
+        {
+          "value": 0,
+          "contribution": 0,
+          "withdrawal": 0,
+          "expected_factor": 0
+        },
+        {
+          "value": 100,
+          "contribution": 100,
+          "withdrawal": 0,
+          "expected_factor": 1
+        }
+      ],
+      "expected_gain": -100,
+      "expected_estimated_return": -1
+    }
+  ],
+  "missing_inputs": [
+    {
+      "id": "missing_eur_fx",
+      "amount": 100,
+      "source": "EUR",
+      "target": "HUF",
+      "base": "USD",
+      "rates": {
+        "HUF": 360
+      },
+      "expected_value": null,
+      "expected_missing": [
+        "EUR"
+      ]
+    },
+    {
+      "id": "missing_price_keeps_native_cost",
+      "quantity": 2,
+      "price": null,
+      "native_basis": 100,
+      "expected_native_value": null,
+      "expected_native_unrealized_gain": null
+    },
+    {
+      "id": "zero_units_need_no_price",
+      "quantity": 0,
+      "price": null,
+      "expected_native_value": 0
+    },
+    {
+      "id": "same_currency_needs_no_fx",
+      "amount": 100,
+      "source": "HUF",
+      "target": "HUF",
+      "base": "USD",
+      "rates": {},
+      "expected_value": 100,
+      "expected_missing": []
+    },
+    {
+      "id": "invalid_rate_is_not_one",
+      "amount": 100,
+      "source": "EUR",
+      "target": "HUF",
+      "base": "USD",
+      "rates": {
+        "EUR": 0,
+        "HUF": 360
+      },
+      "expected_value": null,
+      "expected_missing": [
+        "EUR"
+      ]
+    }
+  ],
+  "scopes": {
+    "holdings": [
+      {
+        "id": "synthetic-market",
+        "archived": false,
+        "excluded_net_worth": false,
+        "pricing_method": "market",
+        "current_value": 20,
+        "prior_market_value": 18,
+        "today_gain": 2
+      },
+      {
+        "id": "synthetic-manual",
+        "archived": false,
+        "excluded_net_worth": true,
+        "pricing_method": "manual",
+        "current_value": 30,
+        "prior_market_value": null,
+        "today_gain": null
+      },
+      {
+        "id": "synthetic-archived",
+        "archived": true,
+        "excluded_net_worth": false,
+        "pricing_method": "market",
+        "current_value": 0,
+        "prior_market_value": null,
+        "today_gain": null,
+        "historically_owned": true
+      }
+    ],
+    "expected": {
+      "investment_current_value": 50,
+      "net_worth_investment_value": 20,
+      "investment_active_ids": [
+        "synthetic-market",
+        "synthetic-manual"
+      ],
+      "historical_ids": [
+        "synthetic-market",
+        "synthetic-manual",
+        "synthetic-archived"
+      ],
+      "market_today_gain": 2,
+      "market_today_prior_value": 18,
+      "market_today_excluded_ids": [
+        "synthetic-manual"
+      ]
+    }
+  },
+  "daily_fx": {
+    "quantity": 2,
+    "prior_price_usd": 10,
+    "prior_huf_per_usd": 360,
+    "current_price_usd": 11,
+    "current_huf_per_usd": 370,
+    "expected": {
+      "native_price_change": 1,
+      "native_price_change_percent": 10,
+      "prior_value_huf": 7200,
+      "current_value_huf": 8140,
+      "converted_gain_huf": 940
+    }
+  },
+  "known_basis_unknown_cash": {
+    "opening_quantity": 3,
+    "remaining_basis": 90,
+    "price": 40,
+    "expected": {
+      "value": 120,
+      "unrealized_gain": 30,
+      "lifetime_realized_gain": null,
+      "net_invested": null,
+      "total_gain": null
+    }
+  },
+  "fractional_crypto": {
+    "quantity": 1e-06,
+    "price_usd": 60000,
+    "included_fee_usd": 0.001,
+    "net_cash_usd": 0.061,
+    "mark_usd": 65000,
+    "expected": {
+      "remaining_basis_usd": 0.061,
+      "average_cost_usd": 61000,
+      "value_usd": 0.065,
+      "unrealized_gain_usd": 0.004
+    }
+  }
+}

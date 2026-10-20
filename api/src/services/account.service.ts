@@ -1,8 +1,15 @@
+import { validLocalDate, validHoldingNumber } from '../../../shared/holding'
+import type { PositionAnchor } from '../../../shared/holding'
+import type { HoldingOpeningDto } from '../dtos/account.dto'
 import { Account } from '../models/Account'
+import type { Transaction } from '../models/Transaction'
 import { AccountRepository } from '../repositories/account.repository'
 import { TransactionRepository } from '../repositories/transaction.repository'
 import { CreateAccountDto, UpdateAccountDto } from '../dtos/account.dto'
 import { AppError } from '../errors/codes'
+import { addDecimal } from '../../../shared/decimal-balance'
+
+const FIAT = new Set(['HUF', 'EUR', 'USD', 'GBP', 'CHF', 'PLN', 'CZK', 'RON', 'MXN'])
 
 export class AccountService {
   constructor(
@@ -10,20 +17,20 @@ export class AccountService {
     private transactionRepo: TransactionRepository
   ) {}
 
-  async getAllAccounts(): Promise<Account[]> {
-    return await this.accountRepo.findAll()
+  async getAllAccounts(clientDate?:string): Promise<Account[]> {
+    return await this.accountRepo.findAll(this.today(clientDate))
   }
 
   async getAccountById(id: string): Promise<Account | null> {
     return await this.accountRepo.findById(id)
   }
 
-  async createAccount(dto: CreateAccountDto): Promise<Account> {
+  async createAccount(dto: CreateAccountDto, clientDate?: string): Promise<Account> {
     const id = crypto.randomUUID()
     const now = Date.now()
     const currency = dto.currency?.trim() || 'HUF'
 
-    const account: Account = {
+    let account: Account = {
       id,
       name: dto.name,
       type: dto.type,
@@ -32,94 +39,157 @@ export class AccountService {
       quote_currency: dto.quote_currency?.trim().toUpperCase(),
       symbol: dto.symbol,
       asset_type: dto.asset_type,
+      pricing_method: dto.pricing_method, provider: dto.provider, exchange: dto.exchange,
+      manual_price: dto.manual_price, manual_price_date: dto.manual_price_date,
       exclude_from_net_worth: dto.exclude_from_net_worth,
       exclude_from_cash_balance: dto.exclude_from_cash_balance,
       updated_at: now
     }
 
+    if (account.type === 'investment') {
+      const today = this.today(clientDate)
+      const prior = new Date(`${today}T00:00:00Z`); prior.setUTCDate(prior.getUTCDate() - 1)
+      const date = dto.opening?.date ?? (account.balance === 0 ? prior.toISOString().slice(0, 10) : '')
+      if (!date || !validLocalDate(date) || date > today) throw AppError.validation('A nonzero holding needs a valid opening date on or before today')
+      if (dto.opening && dto.opening.balance !== account.balance) throw AppError.validation('The new opening amount must match the starting quantity/value')
+      account = this.normalizeHolding(account)
+      if (account.manual_price != null) account.manual_price_date = dto.manual_price_date ?? date
+      if (account.manual_price_date && (!validLocalDate(account.manual_price_date) || account.manual_price_date > today)) throw AppError.validation('Manual price date cannot be in the future')
+      if (account.asset_type !== 'manual' && dto.opening?.owned !== undefined) throw AppError.validation('Explicit ownership belongs to total manual assets')
+      if (account.asset_type === 'manual' && dto.opening?.owned === false && account.balance !== 0) throw AppError.validation('An unowned asset must start at zero current value')
+      if (account.asset_type === 'manual' && account.balance === 0 && dto.opening?.owned !== true && (dto.opening?.cost_amount??0) > 0) throw AppError.validation('An unowned opening has no remaining cost. Mark an owned zero-value asset as owned, or leave its cost unknown.')
+      await this.accountRepo.createHolding(account, this.anchor(account.balance, account.asset_type !== 'manual' && account.balance === 0 && !dto.opening ? 'observed' : 'opening', date, now,
+        account.asset_type === 'manual' ? { ...dto.opening, balance:account.balance, date, owned:dto.opening?.owned??account.balance!==0 } : dto.opening))
+      return (await this.accountRepo.findById(id))!
+    }
+    if (dto.opening || dto.manual_price != null || dto.pricing_method) throw AppError.validation('Holding metadata belongs to investment accounts')
     await this.accountRepo.create(account)
     return account
   }
 
-  async updateAccount(id: string, dto: UpdateAccountDto): Promise<Account> {
-    await this.requireActive(id)
+  async updateAccount(id: string, dto: UpdateAccountDto, clientDate?: string): Promise<Account> {
+    const revision = await this.accountRepo.financialRevision()
+    const existing = await this.requireActive(id)
     const now = Date.now()
-
-    // Get the current account data if we're potentially adjusting balance with a transaction
-    let oldAccount: Account | null = null
-    if (dto.balance !== undefined && dto.adjustWithTransaction) {
-      oldAccount = await this.accountRepo.findById(id)
-    }
-
-    // Update account details
-    const updates: Partial<Account> = {
-      ...dto,
-      updated_at: now
-    }
-    delete (updates as any).adjustWithTransaction
-    delete (updates as any).splitTransactions
-
-    const currency = dto.currency?.trim()
-    if (currency) {
-      updates.currency = currency.toUpperCase()
-    } else {
-      delete (updates as any).currency
-    }
-
-    const quoteCurrency = dto.quote_currency?.trim()
-    if (quoteCurrency) {
-      updates.quote_currency = quoteCurrency.toUpperCase()
-    } else {
-      delete (updates as any).quote_currency
-    }
-
-    await this.accountRepo.update(id, updates)
-
-    // If adjustWithTransaction is true and balance changed, create transactions
-    if (dto.adjustWithTransaction && oldAccount && dto.balance !== undefined) {
-      const oldBalance = oldAccount.balance
-      const newBalance = dto.balance
-      const difference = newBalance - oldBalance
-
-      // Only create transactions if there's actually a difference
-      if (difference !== 0) {
-        // Check if we have split transactions
-        if (dto.splitTransactions && dto.splitTransactions.length > 0) {
-          // Create multiple transactions based on the split
-          for (const split of dto.splitTransactions) {
-            await this.transactionRepo.create({
-              id: split.id,
-              account_id: id,
-              category_id: split.category_id,
-              amount: split.amount,
-              description: split.description,
-              date: split.date,
-              is_recurring: false
-            })
-          }
-        } else {
-          // Create a single adjustment transaction (original behavior)
-          const transactionId = crypto.randomUUID()
-          const description = difference > 0
-            ? `Balance adjustment: +${Math.abs(difference)}`
-            : `Balance adjustment: -${Math.abs(difference)}`
-
-          await this.transactionRepo.create({
-            id: transactionId,
-            account_id: id,
-            amount: difference,
-            description,
-            date: new Date().toISOString().split('T')[0],
-            is_recurring: false
-          })
+    if (dto.type && dto.type !== existing.type && (dto.type === 'investment' || existing.type === 'investment')) throw new AppError('HOLDING_HISTORY_METADATA', 'Create a separate account to change between cash and investment', 409)
+    if (existing.type === 'investment') {
+      if ((existing.asset_type === 'manual' && dto.balance !== undefined && dto.balance !== existing.balance)
+        || (dto.manual_price !== undefined && dto.manual_price !== existing.manual_price)
+        || (dto.manual_price_date !== undefined && dto.manual_price_date !== existing.manual_price_date)) {
+        throw AppError.validation('Use Update value in the holding details to save a dated appraisal. Buying/selling uses a linked cash transfer.')
+      }
+      if (existing.asset_type === 'manual' && dto.opening && await this.accountRepo.hasManualAssetEvents(id)) throw AppError.validation('An opening cannot replace recorded manual acquisition/disposal events')
+      if (existing.asset_type === 'manual' && dto.opening && (dto.opening.owned === false || (dto.opening.balance === 0 && dto.opening.owned !== true)) && (existing.balance !== 0 || existing.manual_ownership === 'owned')) throw AppError.validation('A zero opening would discard an owned asset; record its full disposal instead')
+      if (dto.adjustWithTransaction || dto.splitTransactions?.length) throw AppError.validation('Use a dated position correction, not an income/expense adjustment, for a holding')
+      if (dto.balance !== undefined && dto.balance !== existing.balance && dto.expected_balance === undefined) throw new AppError('HOLDING_POSITION_CONFLICT', 'Refresh and provide the saved quantity/value before correcting a holding', 409)
+      if ((dto.expected_balance !== undefined && dto.expected_balance !== existing.balance) || (dto.expected_updated_at !== undefined && dto.expected_updated_at !== existing.updated_at)) throw new AppError('HOLDING_POSITION_CONFLICT', 'Holding changed; refresh before saving', 409)
+      const today = this.today(clientDate)
+      let next: Account = { ...existing, ...dto, updated_at: now }
+      const identityFields = ['currency', 'quote_currency', 'symbol', 'pricing_method', 'provider', 'exchange'] as const
+      const identityChanged = identityFields.some(field => dto[field] !== undefined && (dto[field] ?? null) !== (existing[field] ?? null))
+      const categoryChanged = dto.asset_type !== undefined && dto.asset_type !== existing.asset_type
+      const safeCategoryChange = categoryChanged && ['stock', 'etf'].includes(existing.asset_type || '') && ['stock', 'etf'].includes(dto.asset_type!)
+      if ((identityChanged || (categoryChanged && !safeCategoryChange)) && (existing.holding_position?.has_history || existing.balance !== 0)) throw new AppError('HOLDING_HISTORY_METADATA', 'This change would reinterpret existing holding history. Keep its instrument, units, currency and pricing, or create a separate holding.', 409)
+      if (identityChanged || (categoryChanged && !safeCategoryChange)) {
+        if (next.pricing_method === 'market') next = { ...next, manual_price: null, manual_price_date: null }
+        next = this.normalizeHolding(next)
+      }
+      if (next.balance !== existing.balance && !validHoldingNumber(next.balance)) throw AppError.validation('Invalid holding quantity/value precision or range')
+      if (dto.manual_price !== undefined && dto.manual_price != null && (next.asset_type === 'manual' || next.pricing_method !== 'manual' || !validHoldingNumber(dto.manual_price))) throw AppError.validation('A manual unit price requires a manually priced ETF, stock or crypto holding')
+      let anchor: PositionAnchor | null = null
+      if (dto.opening) {
+        if (existing.asset_type !== 'manual' && dto.opening.owned !== undefined) throw AppError.validation('Explicit ownership belongs to total manual assets')
+        if (await this.accountRepo.hasFutureInvestmentActivity(id, today)) throw AppError.validation('Resolve future-dated legacy investment activity before confirming an opening')
+        if (!validLocalDate(dto.opening.date) || dto.opening.date > today) throw AppError.validation('Opening date must be on or before today')
+        if (existing.asset_type === 'manual' && dto.opening.owned === false && dto.opening.balance !== 0) throw AppError.validation('An unowned opening must have zero current value')
+        if (existing.asset_type === 'manual' && (dto.opening.owned === false || (dto.opening.owned == null && dto.opening.balance === 0)) && (dto.opening.cost_amount??0) > 0) throw AppError.validation('An unowned opening has no remaining cost. Confirm ownership for a zero-value asset with remaining cost.')
+        anchor = this.anchor(dto.opening.balance, 'opening', dto.opening.date, now, existing.asset_type === 'manual' ? {...dto.opening,owned:dto.opening.owned??dto.opening.balance!==0} : dto.opening)
+        if (existing.asset_type === 'manual') {
+          const current = anchor.owned ? existing.manual_valuation?.observation?.amount ?? existing.balance : 0
+          if (!validHoldingNumber(current)) throw AppError.validation('Record a valid current appraisal before confirming this asset ownership')
+          next = {...next,balance:current}
         }
+      } else if (next.balance !== existing.balance) {
+        const date = dto.correction_date ?? today
+        if (!validLocalDate(date) || date !== today) throw AppError.validation('A current position correction must use today; supply a dated opening to reconcile earlier history')
+        anchor = this.anchor(next.balance, 'correction', date, now, next.asset_type === 'manual' ? { balance: next.balance, date, cost_amount: existing.holding_position?.anchor?.cost_amount, cost_currency: existing.holding_position?.anchor?.cost_currency } : undefined)
+      }
+      if (dto.manual_price !== undefined && dto.manual_price !== existing.manual_price) next = { ...next, manual_price_date: dto.manual_price == null ? null : dto.manual_price_date ?? today }
+      if (next.manual_price_date && (!validLocalDate(next.manual_price_date) || next.manual_price_date > today)) throw AppError.validation('Manual price date cannot be in the future')
+      if (!await this.accountRepo.updateHolding(existing, next, anchor, revision)) throw new AppError('HOLDING_POSITION_CONFLICT', 'Holding changed or became protected; refresh before saving', 409)
+      return (await this.accountRepo.findById(id))!
+    }
+    if (dto.opening || dto.manual_price != null || dto.pricing_method) throw AppError.validation('Holding metadata belongs to investment accounts')
+    if (dto.currency && dto.currency.trim().toUpperCase() !== existing.currency && await this.accountRepo.hasInvestmentCashHistory(id)) {
+      throw AppError.validation('Recorded investment cash payments protect this account currency; use a separate cash account for another currency')
+    }
+
+    if ((dto.expected_balance !== undefined && dto.expected_balance !== existing.balance)
+      || (dto.expected_updated_at !== undefined && dto.expected_updated_at !== existing.updated_at)) {
+      throw new AppError('HISTORY_CHANGED', 'Cash account changed; refresh before correcting it.', 409)
+    }
+    const after: Account = { ...existing, ...dto, updated_at: now, currency: dto.currency?.trim().toUpperCase() || existing.currency }
+    let difference = 0, splitTotal = 0
+    try {
+      if (dto.adjustWithTransaction) {
+        difference = addDecimal(after.balance, -existing.balance)
+        if (dto.splitTransactions?.length) splitTotal = addDecimal(...dto.splitTransactions.map(t => t.amount))
+      }
+    } catch(error) { throw AppError.validation((error as Error).message) }
+    const rows: Transaction[] = []
+    if (dto.adjustWithTransaction && difference !== 0) {
+      if (dto.splitTransactions?.length) {
+        if (splitTotal !== difference) {
+          throw AppError.validation('Split adjustments must add up to the balance difference')
+        }
+        for (const split of dto.splitTransactions) rows.push({ ...split, account_id: id })
+      } else {
+        rows.push({
+          id: crypto.randomUUID(), account_id: id, amount: difference,
+          description: `Balance adjustment: ${difference > 0 ? '+' : '-'}${Math.abs(difference)}`,
+          date: this.today(clientDate),
+        })
       }
     }
+    if (rows.some(t => t.date > this.today(clientDate))) throw AppError.validation('Balance adjustment transactions cannot be future-dated')
+    await this.transactionRepo.cashLedger.commit({ before: [], after: rows, accounts: [existing], now, correction: { before: existing, after, revision } })
 
     // Return updated account
     const updatedAccount = await this.accountRepo.findById(id)
     if (!updatedAccount) throw AppError.notFound('ACCOUNT_NOT_FOUND', `Account ${id} not found`)
     return updatedAccount
+  }
+
+  private today(clientDate?: string) {
+    return clientDate && validLocalDate(clientDate) ? clientDate : new Date().toISOString().slice(0, 10)
+  }
+
+  private normalizeHolding(a: Account): Account {
+    const category = a.asset_type
+    if (!category || !['stock', 'etf', 'crypto', 'manual'].includes(category)) throw AppError.validation('Choose ETF, stock, crypto or manual for the holding')
+    if (!validHoldingNumber(a.balance)) throw AppError.validation('Use a nonnegative quantity/value with at most 12 decimal and 15 significant digits (maximum 1 trillion)')
+    const total = category === 'manual'
+    const method = total ? 'manual' : a.pricing_method || 'market'
+    const currency = a.currency.toUpperCase()
+    if (total && !FIAT.has(currency)) throw AppError.validation('Manual total assets need a supported fiat currency')
+    if ((category === 'stock' || category === 'etf') && currency !== 'SHARE') throw AppError.validation('Stocks and ETFs use SHARE units')
+    if (category === 'crypto' && !/^[A-Z0-9]{2,20}$/.test(currency)) throw AppError.validation('Crypto needs its coin unit')
+    const quote = total ? currency : a.quote_currency?.toUpperCase()
+    if (!quote || !FIAT.has(quote)) throw AppError.validation('Choose a supported fiat quote currency')
+    const symbol = a.symbol?.trim().toUpperCase() || undefined
+    if (method === 'market' && !symbol) throw AppError.validation('Market pricing needs a canonical provider symbol')
+    if (a.manual_price != null && (!validHoldingNumber(a.manual_price) || method !== 'manual' || total)) throw AppError.validation('A per-unit manual price is only valid for manually priced unit holdings')
+    return { ...a, currency, quote_currency: quote, unit: total ? 'ITEM' : currency, symbol,
+      pricing_method: method, provider: method === 'market' ? 'yahoo' : null,
+      exchange: a.exchange?.trim() || null, manual_price: method === 'manual' && !total ? a.manual_price ?? null : null,
+      manual_price_date: method === 'manual' && !total ? a.manual_price_date ?? null : null }
+  }
+
+  private anchor(balance: number, kind: PositionAnchor['kind'], date: string, now: number, opening?: HoldingOpeningDto): PositionAnchor {
+    if (!validHoldingNumber(balance)) throw AppError.validation('Invalid opening quantity/value')
+    if (opening?.cost_amount != null && (!Number.isFinite(opening.cost_amount) || opening.cost_amount < 0 || opening.cost_amount > 1e12 || !opening.cost_currency)) throw AppError.validation('Known opening cost needs a valid amount and fiat currency')
+    return { id: crypto.randomUUID(), kind, effective_date: date, balance,
+      owned: opening?.owned??null, cost_amount: opening?.cost_amount ?? null, cost_currency: opening?.cost_currency ?? null, trade_rowid_boundary: 0, created_at: now }
   }
 
   async lockAccount(id: string): Promise<Account> {

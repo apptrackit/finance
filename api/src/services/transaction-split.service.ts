@@ -1,3 +1,4 @@
+import { addDecimal } from '../../../shared/decimal-balance'
 import { AppError } from '../errors/codes'
 import { Account } from '../models/Account'
 import { Transaction } from '../models/Transaction'
@@ -12,6 +13,10 @@ export interface SavedSplit {
 }
 
 const round = (value: number) => Math.round(value * 1e8) / 1e8
+function sumAmounts(lines: {amount:number}[]) {
+  try { return addDecimal(...lines.map(line => line.amount)) }
+  catch(error) { throw AppError.validation((error as Error).message) }
+}
 
 export class TransactionSplitService {
   constructor(
@@ -50,7 +55,7 @@ export class TransactionSplitService {
       // An undone split keeps the shared payee as the transaction description.
       description: (dto.lines.length === 1 ? dto.description?.trim() : '') || line.note?.trim() || null,
     }))
-    const total = round(lines.reduce((sum, line) => sum + line.amount, 0))
+    const total = sumAmounts(lines)
     if (dto.balance_adjustment) {
       const { expected_balance, new_balance } = dto.balance_adjustment
       if (Math.abs(round(expected_balance + total) - new_balance) > 1e-6) {
@@ -78,7 +83,7 @@ export class TransactionSplitService {
     if (!allowed.includes(status)) {
       throw AppError.validation(status === 'cancelled' ? 'This split was declined' : status === 'posted' ? 'This split is already posted' : 'Only posted or pending splits can be changed')
     }
-    return { split, lines, total: round(lines.reduce((sum, line) => sum + line.amount, 0)) }
+    return { split, lines, total: sumAmounts(lines) }
   }
 
   /** Review provenance of a pending split, kept by edits so the split stays a review draft. */

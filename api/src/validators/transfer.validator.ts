@@ -1,6 +1,10 @@
 import { z } from 'zod'
 
 export const CreateTransferSchema = z.object({
+  idempotency_key: z.string().uuid().optional(),
+  execution_currency: z.string().optional(),
+  fee_status: z.enum(['known', 'unknown']).optional(),
+  fee_amount: z.number().finite().nonnegative().nullable().optional(),
   from_account_id: z.string().min(1, 'from_account_id is required'),
   to_account_id: z.string().min(1, 'to_account_id is required'),
   amount_from: z.number().positive('amount_from must be positive'),

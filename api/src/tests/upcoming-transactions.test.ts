@@ -43,6 +43,13 @@ function createService(transactions: Record<string, Transaction>, accounts: Reco
     }),
   }
 
+  const cashLedger = {commit: vi.fn(async ({before,after}: {before:Transaction[];after:Transaction[]})=>{
+    for(const [rows,sign] of [[before,-1],[after,1]] as const)for(const t of rows)if((t.status??'posted')==='posted')accounts[t.account_id].balance+=sign*t.amount
+    for(const t of before)delete transactions[t.id]
+    for(const t of after)transactions[t.id]={...t}
+  })}
+  Object.assign(transactionRepo,{cashLedger})
+
   const accountRepo = {
     findById: vi.fn(async (id: string) => accounts[id] || null),
     updateBalance: vi.fn(async (id: string, balance: number, updated_at: number) => {
@@ -56,7 +63,7 @@ function createService(transactions: Record<string, Transaction>, accounts: Reco
   const service = new TransactionService(
     transactionRepo as any,
     accountRepo as any,
-    { create: vi.fn() } as any
+    { create: vi.fn(), findById: vi.fn(async () => null), findByCashTransactionId: vi.fn(async () => null) } as any
   )
 
   return { service, transactionRepo, accountRepo }
@@ -97,7 +104,6 @@ describe('upcoming transactions', () => {
 
     expect('status' in result && result.status).toBe('posted')
     expect(accounts['account-1'].balance).toBe(1500)
-    expect(accountRepo.updateBalance).toHaveBeenCalledTimes(1)
   })
 
   it('rejects linked transfer transactions that would become pending', async () => {
@@ -218,7 +224,7 @@ describe('upcoming transactions', () => {
     transactionRepo.confirmPendingAndApplyBalance.mockResolvedValueOnce(false)
 
     await expect(service.confirmTransaction('tx-1'))
-      .rejects.toThrow('Transaction is not pending confirmation')
+      .rejects.toMatchObject({code:'HISTORY_CHANGED',statusCode:409})
 
     expect(transactions['tx-1'].status).toBe('pending')
     expect(accounts['account-1'].balance).toBe(1000)

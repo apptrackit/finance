@@ -1,3 +1,4 @@
+import type { HoldingFields } from '../../../../shared/holding'
 import { sumAvailable } from '../../../../shared/currency'
 import { useEffect, useMemo, useState } from 'react'
 import { addDays, endOfMonth, endOfWeek, format, isSameDay, isSameMonth, startOfMonth, startOfWeek } from 'date-fns'
@@ -17,7 +18,7 @@ type Transaction = {
   updated_at?: number | null
 }
 
-type Account = { id: string; name: string; balance: number; currency: string; type: 'cash' | 'investment' }
+type Account = HoldingFields & { id: string; name: string; balance: number; currency: string; type: 'cash' | 'investment' }
 type CalendarTransaction = Transaction & { relatedTx?: Transaction }
 type CalendarChartPoint = { dateKey: string; label: string; balance: number | null; day: Date }
 

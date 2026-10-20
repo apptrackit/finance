@@ -1,3 +1,5 @@
+import type { TradeFacts } from '../../shared/investment-trade'
+import type { HoldingFields } from '../../shared/holding'
 export type Env = {
   DB: D1Database
   CF_ACCESS_TEAM_DOMAIN: string
@@ -8,14 +10,15 @@ export type Env = {
 
 export const MCP_WORKER_VERSION = '1.6.0'
 
-export type AccountRow = {
+export type AccountRow = HoldingFields & {
   id: string
   name: string
   type: 'cash' | 'checking' | 'savings' | 'investment' | 'credit'
   balance: number
   currency: string
+  quote_currency?: string | null
   symbol?: string | null
-  asset_type?: 'stock' | 'crypto' | 'manual' | null
+  asset_type?: 'etf' | 'stock' | 'crypto' | 'manual' | null
   exclude_from_net_worth?: number | boolean
   exclude_from_cash_balance?: number | boolean
   archived_at?: number | null
@@ -97,7 +100,7 @@ export type RecurringScheduleRow = {
   end_date?: string | null
 }
 
-export type InvestmentTransactionRow = {
+export type InvestmentTransactionRow = TradeFacts & {
   id: string
   account_id: string
   type: 'buy' | 'sell'
@@ -106,6 +109,7 @@ export type InvestmentTransactionRow = {
   total_amount: number
   date: string
   notes?: string | null
+  linked_transaction_id?: string | null
   created_at?: number | null
 }
 

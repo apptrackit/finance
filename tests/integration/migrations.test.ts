@@ -3,6 +3,54 @@ import { migrate, useFinanceWorkers } from './harness'
 
 const f = useFinanceWorkers({ migrateBeforeEach: false })
 
+it('backfills only unambiguous investment cash links, preserving financial data and archived history', async () => {
+  await migrate(f.db, 16)
+  await f.seed()
+  await f.db.batch([
+    f.db.prepare("INSERT INTO accounts (id, name, type, balance, currency, asset_type) VALUES ('holding', 'Test holding', 'investment', 2, 'SHARE', 'stock')"),
+    f.db.prepare("INSERT INTO accounts (id, name, type, balance, currency, asset_type) VALUES ('closed', 'Closed holding', 'investment', 0, 'SHARE', 'stock')"),
+  ])
+  for (const [id, accountId, type] of [
+    ['purchase', 'holding', 'buy'], ['sale', 'holding', 'sell'], ['standalone', 'holding', 'buy'],
+    ['ambiguous', 'holding', 'buy'], ['wrong-sign', 'holding', 'buy'], ['wrong-date', 'holding', 'buy'],
+    ['pending-cash', 'holding', 'buy'], ['collision', 'holding', 'buy'], ['archived-buy', 'closed', 'buy'], ['archived-sell', 'closed', 'sell'],
+  ]) {
+    await f.db.prepare(`INSERT INTO investment_transactions (id, account_id, type, quantity, price, total_amount, date, notes, created_at)
+      VALUES (?, ?, ?, 0.125, 400, 50, '2026-01-15', 'Preserve this note', 1)`).bind(id, accountId, type).run()
+  }
+  for (const [id, link, amount, date, status] of [
+    ['cash-buy', 'purchase', -100, '2026-01-15', 'posted'], ['cash-sell', 'sale', 120, '2026-01-15', 'posted'],
+    ['cash-ambiguous-a', 'ambiguous', -100, '2026-01-15', 'posted'], ['cash-ambiguous-b', 'ambiguous', -100, '2026-01-15', 'posted'],
+    ['cash-wrong-sign', 'wrong-sign', 100, '2026-01-15', 'posted'], ['cash-wrong-date', 'wrong-date', -100, '2026-01-14', 'posted'],
+    ['cash-pending', 'pending-cash', -100, '2026-01-15', 'pending'], ['cash-collision', 'collision', -100, '2026-01-15', 'posted'],
+    ['collision', null, -1, '2026-01-15', 'posted'],
+    ['cash-archived-buy', 'archived-buy', -100, '2026-01-15', 'posted'], ['cash-archived-sell', 'archived-sell', 120, '2026-01-15', 'posted'],
+  ]) {
+    await f.db.prepare(`INSERT INTO transactions (id, account_id, linked_transaction_id, amount, date, status)
+      VALUES (?, 'cash', ?, ?, ?, ?)`).bind(id, link, amount, date, status).run()
+  }
+  await f.db.prepare("UPDATE accounts SET archived_at = 1, updated_at = 1 WHERE id = 'closed'").run()
+  const beforeTrades = (await f.db.prepare('SELECT rowid, * FROM investment_transactions ORDER BY id').all()).results
+  const beforeCash = (await f.db.prepare('SELECT rowid, * FROM transactions ORDER BY id').all()).results
+  const accounts = (await f.db.prepare('SELECT * FROM accounts ORDER BY id').all()).results
+  const revision = await f.db.prepare('SELECT revision FROM financial_data_revision WHERE id = 1').first('revision')
+  await migrate(f.db, 17)
+  const links: Record<string, string> = { purchase: 'cash-buy', sale: 'cash-sell', 'archived-buy': 'cash-archived-buy', 'archived-sell': 'cash-archived-sell' }
+  expect((await f.db.prepare('SELECT rowid, * FROM investment_transactions ORDER BY id').all()).results)
+    .toEqual(beforeTrades.map(row => ({ ...row, linked_transaction_id: links[String(row.id)] ?? null })))
+  // Both independent 017 migrations now apply: old cash facts are identical,
+  // and the split migration adds only an unassigned nullable membership.
+  expect((await f.db.prepare('SELECT rowid, * FROM transactions ORDER BY id').all()).results).toEqual(beforeCash.map(row => ({ ...row, split_id: null })))
+  expect((await f.db.prepare('SELECT * FROM accounts ORDER BY id').all()).results).toEqual(accounts)
+  expect(await f.db.prepare('SELECT revision FROM financial_data_revision WHERE id = 1').first('revision')).toBe(revision)
+  await expect(f.db.prepare("UPDATE investment_transactions SET notes = 'Changed' WHERE id = 'archived-buy'").run()).rejects.toThrow('ACCOUNT_ARCHIVED')
+  await f.db.prepare("UPDATE investment_transactions SET price = 401 WHERE id = 'purchase'").run()
+  expect(await f.db.prepare('SELECT revision FROM financial_data_revision WHERE id = 1').first('revision')).toBe((revision as number) + 1)
+  await expect(f.db.prepare("UPDATE investment_transactions SET linked_transaction_id = 'cash-buy' WHERE id = 'standalone'").run()).rejects.toThrow('UNIQUE')
+  await expect(f.db.prepare("UPDATE investment_transactions SET linked_transaction_id = 'missing' WHERE id = 'standalone'").run()).rejects.toThrow('FOREIGN KEY')
+  expect(await f.db.prepare('PRAGMA foreign_key_check').all()).toMatchObject({ results: [] })
+})
+
 it('builds a fresh schema, records every migration, and does not replay applied ALTERs', async () => {
   await migrate(f.db)
   const history = (await f.db.prepare('SELECT migration_name FROM migration_history ORDER BY migration_name').all()).results

@@ -87,6 +87,8 @@ export function useFinanceWorkers({ migrateBeforeEach = true, apiVars = {} }: {
       const url = input instanceof Request ? input.url : String(input)
       if (url === `${issuer}/cdn-cgi/access/certs`) return Response.json({ keys: [{ ...jwk, kid: 'integration-key' }] })
       if (url === 'https://open.er-api.com/v6/latest/HUF') return Response.json({ result: 'success', rates: { HUF: 1, EUR: 0.0025 } })
+      if (url === 'https://open.er-api.com/v6/latest/USD') return Response.json({result:'success',rates:{USD:1,HUF:400,EUR:1}})
+      if (url.startsWith('https://api.frankfurter.dev/')) return Response.json([])
       unexpectedRequests.push(url)
       throw new Error(`Unexpected outbound request: ${url}`)
     })

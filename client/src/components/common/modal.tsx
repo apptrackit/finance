@@ -6,8 +6,9 @@ interface ModalProps {
   isOpen: boolean
   onClose: () => void
   title?: string
-  subtitle?: string
+  subtitle?: React.ReactNode
   subtitleClassName?: string
+  headerLeading?: React.ReactNode
   initialFocus?: string
   headerClassName?: string
   contentClassName?: string
@@ -16,10 +17,11 @@ interface ModalProps {
   placement?: 'center' | 'drawer' | 'centered'
 }
 
-export function Modal({ isOpen, onClose, title, subtitle, subtitleClassName, initialFocus, headerClassName, contentClassName, children, className, placement = 'center' }: ModalProps) {
+export function Modal({ isOpen, onClose, title, subtitle, subtitleClassName, headerLeading, initialFocus, headerClassName, contentClassName, children, className, placement = 'center' }: ModalProps) {
   React.useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && isOpen) {
+        if (document.querySelector('[role="alertdialog"]')) return
         onClose()
       }
     }
@@ -84,7 +86,8 @@ export function Modal({ isOpen, onClose, title, subtitle, subtitleClassName, ini
         {/* Header */}
         {title && (
           <div className={cn("flex shrink-0 items-center justify-between gap-3 p-4 sm:p-6 border-b border-border/50", subtitle && "px-5 py-3 sm:px-6 sm:py-3", headerClassName)}>
-            <div className="min-w-0">
+            {headerLeading}
+            <div className="min-w-0 flex-1">
               <h2 id={titleId} className={subtitle ? "text-xs text-muted-foreground" : "text-lg sm:text-xl font-semibold text-foreground"}>{title}</h2>
               {subtitle && <p className={cn("mt-0.5 truncate text-[17px] font-semibold tracking-tight", subtitleClassName)}>{subtitle}</p>}
             </div>

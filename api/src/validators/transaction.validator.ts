@@ -15,6 +15,11 @@ export const CreateTransactionSchema = z.object({
 })
 
 export const UpdateTransactionSchema = z.object({
+  expected_version:z.number().int().nonnegative().optional(),
+  idempotency_key: z.string().uuid().optional(),
+  execution_currency: z.string().optional(),
+  fee_status: z.enum(['known', 'unknown']).optional(),
+  fee_amount: z.number().finite().nonnegative().nullable().optional(),
   account_id: z.string().min(1).optional(),
   to_account_id: z.string().min(1).optional(),
   category_id: z.string().nullable().optional(),

@@ -13,6 +13,11 @@ export interface CreateTransactionDto {
 }
 
 export interface UpdateTransactionDto {
+  expected_version?: number
+  idempotency_key?: string
+  execution_currency?: string
+  fee_status?: 'known' | 'unknown'
+  fee_amount?: number | null
   account_id?: string
   to_account_id?: string
   category_id?: string | null

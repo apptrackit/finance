@@ -82,7 +82,7 @@ describe('account locking enforcement', () => {
     const service = new TransactionService(
       transactionRepo as any,
       accountRepo as any,
-      { create: vi.fn() } as any
+      { create: vi.fn(), findById: vi.fn(async () => null), findByCashTransactionId: vi.fn(async () => null) } as any
     )
 
     await expect(service.updateTransaction('out', {

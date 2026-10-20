@@ -1,4 +1,8 @@
-import { convertCurrency, sumConversions, validRates, isValidRate } from '../../../shared/currency'
+import { readMarketQuotes, type ClientQuote } from '../lib/market-data'
+import type { TradeFacts } from '../../../shared/investment-trade'
+import { usesMarketPricing } from '../../../shared/holding'
+import type { HoldingFields } from '../../../shared/holding'
+import { sumConversions, validRates, isValidRate } from '../../../shared/currency'
 import type { ConversionResult } from '../../../shared/currency'
 import { accountValueForOrdering } from '../lib/account-order'
 import { useEffect, useState, useCallback, useRef } from 'react'
@@ -6,7 +10,7 @@ import { API_BASE_URL, apiFetch, ApiRequestError } from '../config'
 import { useLoadableData } from './useLoadableData'
 import type { PendingKind, ReviewSource } from '../lib/transaction-review'
 
-export type Account = {
+export type Account = HoldingFields & {
   id: string
   name: string
   type: 'cash' | 'investment'
@@ -14,7 +18,7 @@ export type Account = {
   currency: string
   quote_currency?: string
   symbol?: string
-  asset_type?: 'stock' | 'crypto' | 'manual'
+  asset_type?: 'etf' | 'stock' | 'crypto' | 'manual'
   exclude_from_net_worth?: boolean
   exclude_from_cash_balance?: boolean
   archived_at?: number | null
@@ -22,7 +26,7 @@ export type Account = {
   updated_at: number
 }
 
-export type Transaction = {
+export type Transaction = TradeFacts & {
   id: string
   account_id: string
   category_id?: string
@@ -64,6 +68,8 @@ const formatInvestmentTransactionDescription = (transaction: InvestmentTransacti
 }
 
 const mapInvestmentTransaction = (transaction: InvestmentTransaction) => ({
+  asset_event:transaction.asset_event, trade_version:transaction.trade_version, execution_currency:transaction.execution_currency, gross_amount:transaction.gross_amount, fee_amount:transaction.fee_amount,
+  fee_status:transaction.fee_status, fee_currency:transaction.fee_currency, cash_amount:transaction.cash_amount, cash_currency:transaction.cash_currency, effective_order:transaction.effective_order,
   id: transaction.id,
   account_id: transaction.account_id,
   amount: transaction.type === 'buy' ? transaction.total_amount : -transaction.total_amount,
@@ -73,7 +79,7 @@ const mapInvestmentTransaction = (transaction: InvestmentTransaction) => ({
   date: transaction.date,
   is_recurring: false,
   category_id: undefined,
-  linked_transaction_id: undefined,
+  linked_transaction_id: transaction.linked_transaction_id ?? undefined,
   created_at: transaction.created_at,
   updated_at: transaction.updated_at ?? transaction.created_at,
 })
@@ -85,13 +91,7 @@ export type Category = {
   type: 'income' | 'expense'
 }
 
-type MarketQuote = {
-  symbol: string
-  regularMarketPrice?: number
-  shortName?: string
-  currency?: string
-  regularMarketChangePercent?: number
-}
+type MarketQuote = ClientQuote
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -107,7 +107,7 @@ const isCategory = (value: unknown): value is Category => isRecord(value)
   && typeof value.id === 'string' && typeof value.name === 'string'
   && (value.type === 'income' || value.type === 'expense')
 
-type InvestmentTransaction = {
+type InvestmentTransaction = TradeFacts & {
   id: string
   account_id: string
   type: 'buy' | 'sell'
@@ -116,6 +116,7 @@ type InvestmentTransaction = {
   total_amount: number
   date: string
   notes?: string
+  linked_transaction_id?: string | null
   created_at?: number
   updated_at?: number
 }
@@ -124,6 +125,7 @@ const isInvestmentTransaction = (value: unknown): value is InvestmentTransaction
   && (value.type === 'buy' || value.type === 'sell') && typeof value.date === 'string'
   && isNumber(value.quantity) && isNumber(value.price) && isNumber(value.total_amount)
   && (value.notes == null || typeof value.notes === 'string')
+  && (value.linked_transaction_id == null || typeof value.linked_transaction_id === 'string')
 
 const readJson = async (url: string): Promise<unknown> => {
   const response = await apiFetch(url, { throwOnError: true })
@@ -254,34 +256,23 @@ export function useFinanceData(
 
   const fetchInvestmentValue = useCallback(async () => {
     await loadInvestmentValue(async () => {
-      const investmentAccounts = accounts.filter(a => a.type === 'investment' && a.archived_at == null)
+      const investmentAccounts = accounts.filter(a => a.type === 'investment' && a.archived_at == null && !a.exclude_from_net_worth)
       if (investmentAccounts.length === 0) {
         return { conversion: sumConversions([]), currency: masterCurrency, quotes: {} }
       }
 
       const symbolsToFetch = investmentAccounts
-        .filter(acc => acc.asset_type !== 'manual' && acc.symbol)
+        .filter(acc => usesMarketPricing(acc) && acc.balance !== 0 && acc.symbol)
         .map(acc => acc.symbol!)
       const uniqueSymbols = [...new Set(symbolsToFetch)]
 
-      const quotesArray = await Promise.all(uniqueSymbols.map(async symbol => {
-        const data = await readJson(`${API_BASE_URL}/market/quote?symbol=${encodeURIComponent(symbol)}`)
-        if (!isRecord(data) || !isNumber(data.regularMarketPrice)) {
-          throw new Error('Invalid market quote')
-        }
-        return { symbol, data: data as MarketQuote }
-      }))
-      const quotes: Record<string, MarketQuote> = Object.fromEntries(quotesArray.map(({ symbol, data }) => [symbol, data]))
+      const quotes = await readMarketQuotes(uniqueSymbols)
+      if (uniqueSymbols.some(symbol => !quotes[symbol] || quotes[symbol].regularMarketPrice == null || quotes[symbol].status === 'stale')) throw new Error('Investment prices unavailable')
 
       // A rate outage makes only required foreign conversions unavailable.
       // Same-currency values do not depend on the rate service.
       const rates = await readExchangeRates(masterCurrency).catch(() => ({}))
-      const conversions = investmentAccounts.map(acc => {
-        if (acc.asset_type === 'manual') return convertCurrency(acc.balance, acc.currency, masterCurrency, rates)
-        const quote = acc.symbol ? quotes[acc.symbol] : null
-        const quoteCurrency = (acc.quote_currency || quote?.currency || 'USD').toUpperCase()
-        return convertCurrency((quote?.regularMarketPrice || 0) * acc.balance, quoteCurrency, masterCurrency, rates)
-      })
+      const conversions = investmentAccounts.map(acc => accountValueForOrdering(acc, quotes, masterCurrency, rates))
       return { conversion: sumConversions(conversions), currency: masterCurrency, quotes }
     })
   }, [accounts, masterCurrency, loadInvestmentValue])

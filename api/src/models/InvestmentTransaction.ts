@@ -1,6 +1,7 @@
+import type { TradeFacts } from '../../../shared/investment-trade'
 export type InvestmentTransactionType = 'buy' | 'sell'
 
-export interface InvestmentTransaction {
+export interface InvestmentTransaction extends TradeFacts {
   id: string
   account_id: string
   type: InvestmentTransactionType
@@ -9,5 +10,6 @@ export interface InvestmentTransaction {
   total_amount: number
   date: string
   notes?: string
+  linked_transaction_id?: string | null
   created_at: number
 }

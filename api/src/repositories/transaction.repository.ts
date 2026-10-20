@@ -1,3 +1,6 @@
+import { CashLedgerRepository } from './cash-ledger.repository'
+import { AccountRepository } from './account.repository'
+import { AppError } from '../errors/codes'
 import {
   Transaction,
   TransactionPendingKind,
@@ -19,7 +22,10 @@ type D1Value = string | number | null
 const SELECT_WITH_SPLIT = 'SELECT t.*, s.description AS split_description FROM transactions t LEFT JOIN transaction_splits s ON s.id = t.split_id'
 
 export class TransactionRepository {
-  constructor(private db: D1Database) {}
+  readonly cashLedger: CashLedgerRepository
+  constructor(private db: D1Database) {
+    this.cashLedger = new CashLedgerRepository(db)
+  }
 
   private static parseReviewFlags(value?: string | null): string[] {
     if (!value) return []
@@ -154,29 +160,6 @@ export class TransactionRepository {
     await this.db.prepare('DELETE FROM transactions WHERE id = ?').bind(id).run()
   }
 
-  async deleteInvestmentTransferAndRevertBalances(id: string, investmentId: string, now: number): Promise<void> {
-    // Read deltas from rows still present inside the batch. Concurrent/repeated
-    // deletion cannot apply a stale balance delta, and a failed statement rolls
-    // back both balances and both ledger records.
-    await this.db.batch([
-      this.db.prepare(`UPDATE accounts SET
-        balance = balance - (SELECT amount FROM transactions WHERE id = ?), updated_at = ?
-        WHERE id = (SELECT account_id FROM transactions WHERE id = ? AND linked_transaction_id = ? AND status = 'posted')`
-      ).bind(id, now, id, investmentId),
-      this.db.prepare(`UPDATE accounts SET balance = balance - (
-          SELECT CASE WHEN type = 'buy' THEN quantity ELSE -quantity END
-          FROM investment_transactions WHERE id = ?
-        ), updated_at = ?
-        WHERE id = (SELECT account_id FROM investment_transactions WHERE id = ?)
-        AND EXISTS (SELECT 1 FROM transactions WHERE id = ? AND linked_transaction_id = ?)`
-      ).bind(investmentId, now, investmentId, id, investmentId),
-      this.db.prepare(`DELETE FROM investment_transactions WHERE id = ?
-        AND EXISTS (SELECT 1 FROM transactions WHERE id = ? AND linked_transaction_id = ?)`
-      ).bind(investmentId, id, investmentId),
-      this.db.prepare('DELETE FROM transactions WHERE id = ? AND linked_transaction_id = ?').bind(id, investmentId),
-    ])
-  }
-
   async deleteByAccountId(accountId: string): Promise<void> {
     await this.db.prepare('DELETE FROM transactions WHERE account_id = ?').bind(accountId).run()
   }
@@ -257,72 +240,37 @@ export class TransactionRepository {
   }
 
   async confirmPendingAndApplyBalance(transaction: Transaction, now: number, today: string): Promise<boolean> {
-    const confirmationToken = `confirming:${crypto.randomUUID()}`
-
-    const [claimResult, balanceResult, postResult, cleanupResult] = await this.db.batch([
-      this.db.prepare(
-        "UPDATE transactions SET status = ?, updated_at = ? WHERE id = ? AND status = 'pending' AND linked_transaction_id IS NULL AND date <= ? AND EXISTS (SELECT 1 FROM accounts WHERE id = ?)"
-      ).bind(confirmationToken, now, transaction.id, today, transaction.account_id),
-      this.db.prepare(
-        'UPDATE accounts SET balance = balance + ?, updated_at = ? WHERE id = ? AND EXISTS (SELECT 1 FROM transactions WHERE id = ? AND status = ?)'
-      ).bind(transaction.amount, now, transaction.account_id, transaction.id, confirmationToken),
-      this.db.prepare(
-        "UPDATE transactions SET status = 'posted', confirmed_at = ?, cancelled_at = NULL, updated_at = ? WHERE id = ? AND status = ? AND EXISTS (SELECT 1 FROM accounts WHERE id = ? AND updated_at = ?)"
-      ).bind(now, now, transaction.id, confirmationToken, transaction.account_id, now),
-      this.db.prepare(
-        "UPDATE transactions SET status = 'pending', updated_at = ? WHERE id = ? AND status = ? AND NOT EXISTS (SELECT 1 FROM accounts WHERE id = ? AND updated_at = ?)"
-      ).bind(now, transaction.id, confirmationToken, transaction.account_id, now),
-    ])
-
-    return claimResult.meta.changes === 1
-      && balanceResult.meta.changes === 1
-      && postResult.meta.changes === 1
-      && cleanupResult.meta.changes === 0
+    if (transaction.status !== 'pending' || transaction.linked_transaction_id || transaction.date > today) return false
+    const account = await new AccountRepository(this.db).findById(transaction.account_id)
+    if (!account || account.type === 'investment') return false
+    try {
+      await this.cashLedger.commit({ before:[transaction], after:[{...transaction,status:'posted',confirmed_at:now,cancelled_at:null,updated_at:now}], accounts:[account], now })
+      return true
+    } catch(error) {
+      if (error instanceof AppError && error.code === 'HISTORY_CHANGED') return false
+      throw error
+    }
   }
 
   async resolvePendingTransferPair(outgoing: Transaction, incoming: Transaction, action: 'confirm' | 'decline', now: number, today: string): Promise<boolean> {
-    const token = `resolving:${crypto.randomUUID()}`
-    const validPair = `SELECT COUNT(*) FROM transactions debit JOIN transactions credit ON credit.id = debit.linked_transaction_id
-      JOIN accounts source ON source.id = debit.account_id JOIN accounts destination ON destination.id = credit.account_id
-      WHERE debit.id = ? AND credit.id = ? AND credit.linked_transaction_id = debit.id
-      AND debit.status = 'pending' AND credit.status = 'pending'
-      AND debit.pending_kind = 'mcp_review' AND credit.pending_kind = 'mcp_review'
-      AND debit.review_source = 'chatgpt_mcp' AND credit.review_source = 'chatgpt_mcp'
-      AND debit.review_batch_id = credit.review_batch_id AND debit.review_batch_id IS NOT NULL
-      AND debit.account_id != credit.account_id
-      AND debit.amount < 0 AND credit.amount > 0
-      AND debit.date = credit.date AND source.type IN ('cash', 'checking', 'savings') AND destination.type IN ('cash', 'checking', 'savings')
-      AND (UPPER(source.currency) != UPPER(destination.currency) OR debit.amount + credit.amount = 0)
-      AND source.is_locked = 0 AND destination.is_locked = 0
-      AND debit.account_id = ? AND credit.account_id = ? AND debit.amount = ? AND credit.amount = ?
-      AND debit.date = ? AND debit.updated_at IS ? AND credit.updated_at IS ?
-      ${action === 'confirm' ? 'AND debit.date <= ?' : ''}`
-    const guard = [outgoing.id, incoming.id, outgoing.account_id, incoming.account_id,
-      outgoing.amount, incoming.amount, outgoing.date, outgoing.updated_at ?? null, incoming.updated_at ?? null,
-      ...(action === 'confirm' ? [today] : [])]
+    if (outgoing.id === incoming.id || outgoing.linked_transaction_id !== incoming.id || incoming.linked_transaction_id !== outgoing.id
+      || outgoing.status !== 'pending' || incoming.status !== 'pending' || outgoing.pending_kind !== 'mcp_review' || incoming.pending_kind !== 'mcp_review'
+      || outgoing.review_source !== 'chatgpt_mcp' || incoming.review_source !== 'chatgpt_mcp' || !outgoing.review_batch_id || outgoing.review_batch_id !== incoming.review_batch_id
+      || outgoing.account_id === incoming.account_id || outgoing.amount >= 0 || incoming.amount <= 0 || outgoing.date !== incoming.date
+      || (action === 'confirm' && outgoing.date > today)) return false
+    const repo = new AccountRepository(this.db)
+    const source = await repo.findById(outgoing.account_id), destination = await repo.findById(incoming.account_id)
+    if (!source || !destination || !['cash','checking','savings'].includes(source.type) || !['cash','checking','savings'].includes(destination.type)
+      || (source.currency.toUpperCase() === destination.currency.toUpperCase() && -outgoing.amount !== incoming.amount)) return false
     const status = action === 'confirm' ? 'posted' : 'cancelled'
-    const statements: D1PreparedStatement[] = [this.db.prepare(
-      `UPDATE transactions SET status = ?, updated_at = ?
-       WHERE id IN (?, ?) AND 1 = (${validPair})`
-    ).bind(token, now, outgoing.id, incoming.id, ...guard)]
-    if (action === 'confirm') {
-      for (const tx of [outgoing, incoming]) {
-        statements.push(this.db.prepare(
-          'UPDATE accounts SET balance = balance + ?, updated_at = ? WHERE id = ? AND 2 = (SELECT COUNT(*) FROM transactions WHERE id IN (?, ?) AND status = ?)'
-        ).bind(tx.amount, now, tx.account_id, outgoing.id, incoming.id, token))
-      }
+    try {
+      await this.cashLedger.commit({ before:[outgoing,incoming], after:[outgoing,incoming].map(t => ({...t,status,confirmed_at:action==='confirm'?now:null,cancelled_at:action==='decline'?now:null,updated_at:now})),
+        accounts:[source,destination], now, transfer_pair_id:outgoing.id })
+      return true
+    } catch(error) {
+      if (error instanceof AppError && error.code === 'HISTORY_CHANGED') return false
+      throw error
     }
-    for (const tx of [outgoing, incoming]) {
-      statements.push(this.db.prepare(
-        "INSERT INTO audit_log (id, action, entity, entity_id, details, created_at) SELECT ?, 'UPDATE', 'transaction', id, ?, ? FROM transactions WHERE id = ? AND status = ?"
-      ).bind(crypto.randomUUID(), JSON.stringify({ status, transfer_pair_id: outgoing.id }), now, tx.id, token))
-    }
-    statements.push(this.db.prepare(
-      'UPDATE transactions SET status = ?, confirmed_at = ?, cancelled_at = ?, updated_at = ? WHERE id IN (?, ?) AND status = ?'
-    ).bind(status, action === 'confirm' ? now : null, action === 'decline' ? now : null, now, outgoing.id, incoming.id, token))
-    const results = await this.db.batch(statements)
-    return results[0].meta.changes === 2 && results.at(-1)?.meta.changes === 2
-      && results.slice(1, -1).every(result => result.meta.changes === 1)
   }
 
   async updatePendingTransferReviewPair(

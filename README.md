@@ -28,7 +28,7 @@ The latest published release is [v3.3](https://github.com/apptrackit/finance/rel
 | Transactions | Income and expenses, categories and icons, linked transfers, search and date filters, split payments, save-and-add-another entry, balance adjustments, and recent-change indicators. |
 | Upcoming transactions | One-time future income and expenses, projected cash balances, and explicit confirmation or decline without changing the posted balance early. |
 | Recurring schedules | Daily, weekly, monthly, and yearly options; transaction and transfer schedules; pause/resume, end dates, occurrence limits, and a calendar view. |
-| Investments | Stock/crypto symbol search, Yahoo Finance quotes and price history, buy/sell records, manual assets, allocation, cost basis, and gain/loss views. |
+| Investments | Responsive portfolio history, allocation and sortable ETF/stock/crypto/manual holdings with native trends, coverage alerts, normalized free sources, dated manual values and exact linked cash trades. |
 | Analytics | Configurable widgets for cash trends, AI financial forecasts, income/expense trends and breakdowns, individual account trends, Money Map, and top expenses. |
 | AI financial forecasts | Saved HUF forecasts with 7/30/90-day ranges, daily cash paths, report history, source-data freshness, and privacy-aware narratives. |
 | MCP review | Prepare income, expense, or cash transfer drafts in conversation; list and correct ordinary drafts or transfer pairs; review and confirm or decline them in the app. |
@@ -52,17 +52,27 @@ Cash income is positive and expenses are negative. Posted transactions affect ac
 
 Future-dated ordinary transactions remain pending until confirmed. Confirmation is guarded against duplicate balance updates and cannot post a future-dated transaction. The client sends its local calendar date in `X-Client-Date` so the API and browser agree on what is due.
 
-Transfers link both sides of a movement and are excluded from income/expense aggregates. Cash-to-investment transfers link the cash transaction to a buy/sell record in `investment_transactions`.
+Transfers link both sides of a movement and are excluded from income/expense aggregates. Cash-linked investment purchases and sales store reciprocal `linked_transaction_id` values on the cash transaction and its buy/sell record in `investment_transactions`. Standalone investment records keep this field null. Linked trade creation, edits, and deletion update both records, native cash/holding balances, and audit entries in one guarded D1 batch. Edit the pair through its cash transaction; deleting either record removes the pair and reverses both movements once.
+
+Migration 017 backfills unambiguous existing investment links without changing financial values, balances, or financial-source revision. Ambiguous or inconsistent legacy links remain unchanged and require repair before pair mutation. The app records purchases and sales through the shared `/investment-trades` writer, with exact cash, included fees and validated execution facts. Unsupported standalone investment posting is read-only; legacy unverified pairs need reconciliation before mutation.
 
 ### Investments and currencies
 
+Matching recorded purchases/sales now supply unit history directly; zero-start holdings need no separate opening date. A dated starting position is for imported units missing from the trade ledger. Verified old linked cash payments can support reporting cost, while standalone purchase currency/fees remain explicitly unavailable. See [recorded-history rules](docs/recorded-investment-history.md).
+
 Market-priced holdings distinguish share/coin quantity from cash value. Their buy/sell history lives in `investment_transactions`; current portfolio valuation uses quantities, market quotes, and currency conversion. Manual assets use a separately managed value. Individual account trend charts keep the account's native currency, while aggregate views use the selected reporting currency.
 
-Market quotes and exchange rates come from external services and may be unavailable or delayed. Investment and conversion behavior differs between some API, client, and MCP paths; contributors should follow the [financial rules in AGENTS.md](AGENTS.md#financial-rules-to-preserve) when changing calculations.
+Market quotes and exchange rates come from external services and may be unavailable or delayed. The epic’s [market input contract](docs/investment-market-data.md) implements shared API/MCP quote normalization, bounded caching, actual source/session timestamps and dated ECB FX without a paid provider. Investment metrics use a shared calculator with documented complete/partial aggregate policies; contributors should follow the [financial rules in AGENTS.md](AGENTS.md#financial-rules-to-preserve) when changing calculations.
+
+The investment rework's [versioned accounting contract](docs/investment-accounting.md) retains the dated pre-implementation audit and specifies opening quantities, exact cash/fees, remaining cost basis, manual valuations, historical FX, and estimated return calculations. Its [synthetic worked examples](tests/fixtures/investment-accounting-v1.json) are checked by the API suite. The current source implements those rules through shared calculators and guarded writers; see the [integrated validation and rollout plan](docs/investment-rework-validation.md) for evidence and remaining release steps.
+
+The epic’s [holding model and account setup](docs/investment-holdings.md) implement explicit ETF/category/pricing selection, dated openings and safe current-position corrections. Migration 018 preserves existing balances and records while marking incomplete history. Cash-linked trades and dated manual values are implemented in their own epic steps; shared metrics and historical series consume that explicit opening coverage.
+
+Ordinary cash writes, pending confirmation, linked cash-transfer edits/deletions and account adjustments use guarded atomic batches with decimal balance arithmetic and audit. Account snapshot guards and bounded retries preserve concurrent trades; stale account correction drafts retain their original saved balance/version. [Decimal balance recovery](docs/decimal-balances.md) handles narrowly verified old arithmetic residue during a successful mutation without rounding genuine fractional cash or crypto units.
 
 ### Recurring schedules
 
-The API Worker runs recurring processing using the configured daily cron (`0 0 * * *`, midnight UTC). It creates posted transactions and updates balances for eligible schedules, respecting locks, archived accounts, end dates, remaining occurrences, and last-processed dates. Monthly days beyond the end of a month clamp to its final day.
+The API Worker runs recurring processing using the configured daily cron (`0 0 * * *`, midnight UTC). It creates posted transactions and updates balances for eligible schedules, respecting locks, archived accounts, end dates, remaining occurrences, and last-processed dates. Its ledger writes, balances and occurrence consumption commit together, including under repeated execution. Monthly days beyond the end of a month clamp to its final day.
 
 Yearly schedules keep their selected month across saves, API execution, client calendars, and MCP projections. Legacy schedules without a saved month fall back to their creation month until edited.
 
@@ -81,6 +91,8 @@ For cash-to-cash transfers, `prepare_mcp_transfer_drafts` previews both account 
 For forecasts, an AI client obtains context with `get_financial_outlook_context` and publishes a snapshot with `create_financial_outlook_snapshot`. The current format stores actual cash history and a daily 90-day HUF forecast. Source revisions and timestamps determine freshness; saved reports remain immutable. The API and Analytics UI read those reports without generating them automatically.
 
 See the [MCP guide](mcp/README.md) for tools, authentication, setup, and the complete workflow. This project does not require an OpenAI API key or run a model itself.
+
+Investment values, remaining cost, net invested and realized/unrealized gains use [shared accounting rules](docs/investment-metrics.md). Currency modes recompute acquisition-date FX; unknown legacy history stays unavailable. Market Today is a covered daily-close estimate. The combined [portfolio history chart](docs/investment-history.md) reconstructs dated units, prices, FX and appraisals, including sold and archived holdings, and reports covered range gain and daily-linked Estimated return. Missing history stays visible as gaps. The [responsive overview](docs/investment-overview.md) combines this chart with portfolio summaries, allocation and sortable holdings; category filters affect only the table, and unavailable values retain explicit coverage. The [holding panel and trade editor](docs/investment-detail.md) add native execution markers, current remaining-cost references, exact cash previews and version-protected linked edits/deletion.
 
 ## Architecture
 
@@ -129,7 +141,7 @@ Cloudflare Pages serves direct page paths using its SPA fallback (do not add a t
 | API | Cloudflare Workers, Hono, Zod, TypeScript |
 | MCP | Separate Cloudflare Worker with JSON-RPC tool handling and Access JWT verification |
 | Storage | Cloudflare D1 (SQLite), ordered SQL migrations, audit records |
-| Market data | Yahoo Finance via `yahoo-finance2`; exchange rates from `open.er-api.com` |
+| Market data | Yahoo Finance HTTP adapter; current FX from `open.er-api.com`; dated ECB FX via Frankfurter |
 | Verification | Vitest, Testing Library/jsdom, TypeScript, client ESLint, GitHub Actions |
 
 ```text
@@ -426,4 +438,10 @@ curl --fail-with-body \
 - **Stale UI or data after deployment:** inspect service-worker caching; Settings includes cache management and force-reload controls. Cached assets do not provide offline transaction writes.
 - **Empty or stale AI forecast:** a connected MCP client must publish a report first. Later ledger changes can make it stale; the UI does not automatically request a replacement.
 
+For the derived metrics and nonmutating preview endpoints, see [Investment metrics](docs/investment-metrics.md).
+
+For investment execution and migration 019, see [Direct cash investment trades](docs/investment-trades.md).
+
 For implementation conventions, financial invariants, and change-specific checks, see [AGENTS.md](AGENTS.md). For historical changes and upgrade context, see [CHANGELOG.md](CHANGELOG.md).
+
+For dated manual appraisals, whole-asset ownership/cash events and migration 020, see [Manual investment values](docs/manual-investment-valuations.md).

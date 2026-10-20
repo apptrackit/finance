@@ -70,6 +70,18 @@ const failureCases = [
 ] as const
 
 describe('useFinanceData', () => {
+  it('preserves reciprocal investment links in period and complete history snapshots', async () => {
+    payloads['/accounts'] = [mockAccount, investmentAccount]
+    payloads['/investment-transactions'] = [{ ...investmentTransaction, linked_transaction_id: 'tx-1' }]
+    payloads['/transactions/date-range'] = [{ ...mockTransaction, linked_transaction_id: 'investment-tx' }]
+    payloads['/transactions'] = payloads['/transactions/date-range']
+    const { result } = setup()
+    await settled(result)
+    for (const rows of [result.current.transactions, result.current.allTransactions]) {
+      expect(rows.find(row => row.id === 'investment-tx')).toMatchObject({ linked_transaction_id: 'tx-1', quantity: 2 })
+      expect(rows.find(row => row.id === 'tx-1')).toMatchObject({ linked_transaction_id: 'investment-tx' })
+    }
+  })
   it('loads only the selected period on Dashboard and fetches complete history when requested', async () => {
     const { result, rerender } = renderHook(({ enabled, range }) => useFinanceData(range, 'HUF', { historyEnabled: enabled }),
       { initialProps: { enabled: false, range: dateRange } })
@@ -358,4 +370,12 @@ describe('useFinanceData', () => {
     expect(result.current.investmentMissingCurrencies).toEqual([])
   })
 
+})
+
+it('Dashboard investment value honors net-worth exclusions without requiring excluded prices',async()=>{
+ payloads['/accounts']=[mockAccount,{...investmentAccount,balance:500},{...investmentAccount,id:'excluded',balance:20000,exclude_from_net_worth:true},
+  {...investmentAccount,id:'excluded-market',asset_type:'stock',symbol:'MISSING',currency:'SHARE',balance:2,exclude_from_net_worth:true}]
+ const {result}=setup()
+ await waitFor(()=>expect(result.current.investmentValue).toBe(500))
+ expect(fetchMock.mock.calls.some(([url])=>String(url).includes('MISSING'))).toBe(false)
 })

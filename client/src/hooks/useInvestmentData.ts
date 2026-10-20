@@ -1,4 +1,9 @@
+import type { InvestmentReportingCurrency } from '../components/investments-module/reporting-currencies'
 import { useCallback, useEffect, useRef, useState } from 'react'
+import {initialOverview} from '../components/investments-module/overview'
+import type {OverviewView} from '../components/investments-module/overview'
+import type {HoldingChartCache} from '../components/investments-module/InvestmentChart'
+import { usePortfolioHistory } from './usePortfolioHistory'
 import { useLoadableData } from './useLoadableData'
 import { readInvestmentSnapshot, type InvestmentSnapshot } from '../components/investments-module/data'
 
@@ -6,9 +11,12 @@ import { readInvestmentSnapshot, type InvestmentSnapshot } from '../components/i
 // Nothing financial is persisted in browser storage.
 export function useInvestmentData(active: boolean, refreshKey: number) {
   const { data, status, load, invalidate } = useLoadableData<InvestmentSnapshot | null>(null, false)
-  const [currencyDisplay, setCurrencyDisplay] = useState<'HUF' | 'USD'>('HUF')
+  const [currencyDisplay, setCurrencyDisplay] = useState<InvestmentReportingCurrency>('HUF')
+  const [detailCache]=useState<HoldingChartCache>(()=>new Map())
+  useEffect(()=>{detailCache.clear()},[refreshKey,detailCache])
   const controller = useRef<AbortController | null>(null)
-  const previousKey = useRef(refreshKey)
+  const [overviewView,setOverviewView]=useState(initialOverview)
+  const updateOverview=useCallback((patch:Partial<OverviewView>)=>setOverviewView(v=>({...v,...patch})),[])
   const refresh = useCallback(async () => {
     controller.current?.abort()
     const next = new AbortController()
@@ -17,14 +25,13 @@ export function useInvestmentData(active: boolean, refreshKey: number) {
   }, [load])
 
   useEffect(() => {
-    const changed = previousKey.current !== refreshKey
-    previousKey.current = refreshKey
     if (active) void refresh()
-    else if (changed) {
+    else {
       controller.current?.abort()
       invalidate()
     }
   }, [active, refreshKey, refresh, invalidate])
   useEffect(() => () => { controller.current?.abort() }, [])
-  return { data, status, refresh, currencyDisplay, setCurrencyDisplay }
+  const history=usePortfolioHistory(active && status.loaded && !status.loading && !status.stale,data,currencyDisplay,refreshKey)
+  return { data, status, refresh, currencyDisplay, setCurrencyDisplay, history, overviewView, updateOverview, detailCache }
 }

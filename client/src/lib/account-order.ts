@@ -1,7 +1,9 @@
+import { holdingNativeValue } from '../../../shared/holding'
+import type { HoldingFields } from '../../../shared/holding'
 import { convertCurrency } from '../../../shared/currency'
 import type { ConversionResult } from '../../../shared/currency'
 
-export type ValuedAccount = {
+export type ValuedAccount = HoldingFields & {
   id: string
   name: string
   type: string
@@ -12,7 +14,7 @@ export type ValuedAccount = {
   asset_type?: string
 }
 
-export type AccountQuote = { regularMarketPrice?: number; currency?: string }
+export type AccountQuote = { regularMarketPrice?: number | null; currency?: string | null }
 export type AccountSortValues = Record<string, number | null | undefined>
 
 // Use the same converted values as ordering. A missing valuation invalidates
@@ -34,14 +36,10 @@ export function accountValueForOrdering(
   if (account.type !== 'investment' || account.asset_type === 'manual') {
     return convertCurrency(account.balance, account.currency, currency, rates, baseCurrency)
   }
-  // An empty position is worth zero without requiring a market quote.
-  if (account.balance === 0) return { status: 'converted', value: 0, missingCurrencies: [] }
-  const quote = account.symbol ? quotes[account.symbol] : undefined
-  const price = quote?.regularMarketPrice
-  if (price === undefined || !Number.isFinite(price) || price <= 0) {
-    return { status: 'missing_rate', value: null, missingCurrencies: [] }
-  }
-  return convertCurrency(account.balance * price, account.quote_currency || quote?.currency || 'USD', currency, rates, baseCurrency)
+  const native = holdingNativeValue(account, account.symbol ? quotes[account.symbol] : undefined)
+  if (native.value === null) return { status: 'missing_rate', value: null, missingCurrencies: [] }
+  if (native.value === 0) return { status: 'converted', value: 0, missingCurrencies: [] }
+  return convertCurrency(native.value, native.currency, currency, rates, baseCurrency)
 }
 
 export function sortAccountsByValue<T extends Pick<ValuedAccount, 'id' | 'name'>>(

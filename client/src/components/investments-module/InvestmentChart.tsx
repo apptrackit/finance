@@ -1,295 +1,365 @@
-import { useState, useEffect, useMemo } from 'react'
-import { 
-  XAxis, 
-  YAxis, 
-  CartesianGrid, 
-  Tooltip, 
-  ResponsiveContainer,
-  ComposedChart,
+import type { ReactNode } from 'react'
+import type { MarketQuote } from './types'
+import { holdingSourceTime } from './holding-presentation'
+import { useEffect, useMemo, useState } from 'react'
+import {
   Area,
-  Scatter
+  ComposedChart,
+  ReferenceLine,
+  ResponsiveContainer,
+  Scatter,
+  Tooltip,
+  XAxis,
+  YAxis,
 } from 'recharts'
-import { format } from 'date-fns'
-import { Loader2, TrendingUp, TrendingDown } from 'lucide-react'
+import type { PriceHistory } from '../../../../shared/market-data'
 import { API_BASE_URL, apiFetch } from '../../config'
-
-type Transaction = {
+import { unitPrice } from './overview'
+import { Select } from '../common/select'
+type Trade = {
   id: string
-  account_id: string
-  category_id?: string
+  date: string
   amount: number
-  description?: string
-  date: string
-  is_recurring: boolean
-  linked_transaction_id?: string
+  quantity?: number
+  price?: number
+  execution_currency?: string | null
 }
-
-type ChartDataPoint = {
-  date: string
-  open: number
-  high: number
-  low: number
-  close: number
-  volume: number
-  buyPoint?: number
-  sellPoint?: number
-  transaction?: Transaction
+export type HoldingChartCache = Map<string, PriceHistory>
+const RANGES = [
+  ['1d', '1D'],
+  ['5d', '5D'],
+  ['1mo', '1M'],
+  ['6mo', '6M'],
+  ['1y', '1Y'],
+  ['5y', '5Y'],
+  ['max', '10Y'],
+] as const
+export function chartTrades(history: PriceHistory, transactions: Trade[]) {
+  return transactions
+    .filter((t) => t.date >= history.from && t.date <= history.to)
+    .sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id))
 }
-
-type InvestmentChartProps = {
-  symbol: string
-  transactions?: Transaction[]
-}
-
-type TimeRange = '1d' | '5d' | '1mo' | '6mo' | '1y' | '5y' | 'max'
-
-const RANGES: { label: string; value: TimeRange; interval: string }[] = [
-  { label: '1D', value: '1d', interval: '5m' },
-  { label: '5D', value: '5d', interval: '15m' },
-  { label: '1M', value: '1mo', interval: '1d' },
-  { label: '6M', value: '6mo', interval: '1d' },
-  { label: '1Y', value: '1y', interval: '1wk' },
-  { label: '5Y', value: '5y', interval: '1mo' },
-  { label: 'All', value: 'max', interval: '3mo' },
-]
-
-export function InvestmentChart({ symbol, transactions = [] }: InvestmentChartProps) {
-  const [range, setRange] = useState<TimeRange>('1mo')
-  const [data, setData] = useState<ChartDataPoint[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [hoveredPrice, setHoveredPrice] = useState<number | null>(null)
-
-  useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true)
-      setError(null)
-      try {
-        const selectedRange = RANGES.find(r => r.value === range)
-        const url = `${API_BASE_URL}/market/chart?symbol=${encodeURIComponent(symbol)}&range=${range}&interval=${selectedRange?.interval || '1d'}`
-        
-        const res = await apiFetch(url)
-        
-        if (!res.ok) {
-          const errorData = await res.json().catch(() => ({}))
-          console.error('Chart API error, status:', res.status)
-          throw new Error(errorData.error || `Failed to fetch chart data: ${res.status}`)
-        }
-        
-        const json = await res.json()
-        
-        let points: ChartDataPoint[] = []
-        
-        if (json.quotes && Array.isArray(json.quotes)) {
-          const quotes = json.quotes
-          const txMap = new Map<number, Transaction>()
-          
-          // Map each transaction to the closest data point
-          if (quotes.length > 0) {
-            const firstQuoteTime = new Date(quotes[0].date).getTime()
-            const lastQuoteTime = new Date(quotes[quotes.length - 1].date).getTime()
-            
-            transactions.forEach(tx => {
-              const txTime = new Date(tx.date).getTime()
-              
-              // Only consider transactions within the chart's time range
-              if (txTime >= firstQuoteTime && txTime <= lastQuoteTime) {
-                let closestIdx = -1
-                let minDiff = Infinity
-                
-                quotes.forEach((q: any, i: number) => {
-                  const qTime = new Date(q.date).getTime()
-                  const diff = Math.abs(qTime - txTime)
-                  if (diff < minDiff) {
-                    minDiff = diff
-                    closestIdx = i
-                  }
-                })
-                
-                if (closestIdx !== -1) {
-                  txMap.set(closestIdx, tx)
-                }
-              }
-            })
-          }
-
-          points = quotes.map((q: any, i: number) => {
-            const tx = txMap.get(i)
-            
-            return {
-              date: q.date,
-              open: q.open,
-              high: q.high,
-              low: q.low,
-              close: q.close,
-              volume: q.volume,
-              buyPoint: tx && tx.amount > 0 ? q.close : undefined,
-              sellPoint: tx && tx.amount < 0 ? q.close : undefined,
-              transaction: tx
-            }
-          }).filter((p: any) => p.close !== null)
-        }
-        
-        setData(points)
-      } catch (err: any) {
-        setError(err.message || 'Could not load chart data')
-      } finally {
-        setLoading(false)
-      }
-    }
-
-    fetchData()
-  }, [symbol, range, transactions])
-
-  // Compute EMA (Exponential Moving Average) smoothed baseline for the price chart
-  const chartData = useMemo(() => {
-    if (data.length === 0) return data
-    const span = Math.max(3, Math.min(Math.round(data.length * 0.3), 20))
-    const k = 2 / (span + 1)
-    let ema = data[0].close
-    return data.map((point, i) => {
-      if (i === 0) return { ...point, smoothed: ema }
-      ema = point.close * k + ema * (1 - k)
-      return { ...point, smoothed: ema }
-    })
-  }, [data])
-
-  const currentPrice = data.length > 0 ? data[data.length - 1].close : 0
-  const startPrice = data.length > 0 ? data[0].close : 0
-  const priceChange = currentPrice - startPrice
-  const percentChange = (priceChange / startPrice) * 100
-  const isPositive = priceChange >= 0
-
-  const CustomTooltip = ({ active, payload }: any) => {
-    if (active && payload && payload.length) {
-      const point = payload[0].payload
-      return (
-        <div className="bg-card/95 backdrop-blur border border-border p-3 rounded-lg shadow-xl text-xs">
-          <p className="font-medium mb-1">{format(new Date(point.date), 'MMM d, yyyy HH:mm')}</p>
-          <p className="text-foreground font-bold">
-            ${point.close.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-          </p>
-          {point.transaction && (
-            <div className="mt-1 pt-1 border-t border-border/50">
-              <p className={`font-medium ${point.transaction.amount > 0 ? 'text-green-500' : 'text-red-500'}`}>
-                {point.transaction.amount > 0 ? 'BUY' : 'SELL'}: ${Math.abs(point.transaction.amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                {point.transaction.description && <span className="text-muted-foreground text-xs"> • {point.transaction.description}</span>}
-              </p>
-            </div>
-          )}
-        </div>
-      )
-    }
-    return null
+/** Presentation only: recorded fills retain their original price and units. */
+export function splitAdjustedTradePrice(trade:Pick<Trade,'date'|'price'>,history:PriceHistory):number|null {
+  if(trade.price==null||!Number.isFinite(trade.price)||trade.price<=0)return null
+  let factor=1
+  for(const event of history.events)if(event.type==='split'&&event.date>trade.date){
+    if(event.ratio==null||!Number.isFinite(event.ratio)||event.ratio<=0)return null
+    factor*=event.ratio
   }
-
+  const price=trade.price/factor
+  return Number.isFinite(factor)&&factor>0&&Number.isFinite(price)&&price>0?price:null
+}
+export function InvestmentChart({
+  symbol,
+  transactions = [],
+  averageCost,
+  costCurrency,
+  cache,
+  revisionKey = '',
+  quote,
+  children,
+}: {
+  symbol: string
+  transactions?: Trade[]
+  averageCost?: number | null
+  costCurrency?: string
+  cache?: HoldingChartCache
+  revisionKey?: string
+  quote?: MarketQuote
+  children?: ReactNode
+}) {
+  const [localCache] = useState<HoldingChartCache>(() => new Map())
+  const store = cache ?? localCache
+  const [range, setRange] = useState('1mo'),
+    [retry, setRetry] = useState(0)
+  const key = `${revisionKey}:${symbol}:${range}`
+  const [snapshot, setSnapshot] = useState<{ key: string; value: PriceHistory } | null>(null)
+  const [loading, setLoading] = useState(true),
+    [error, setError] = useState<string | null>(null),
+    [selected, setSelected] = useState<{ key: string; date: string } | null>(null)
+  useEffect(() => {
+    const controller = new AbortController(),
+      saved = store.get(key)
+    if (saved && retry === 0) {
+      setSnapshot({ key, value: saved })
+      setLoading(false)
+      setError(null)
+      return () => controller.abort()
+    }
+    setLoading(true)
+    setError(null)
+    void (async () => {
+      try {
+        const response = await apiFetch(
+          `${API_BASE_URL}/market/chart?symbol=${encodeURIComponent(symbol)}&range=${range}&interval=1d`,
+          { throwOnError: true, signal: controller.signal },
+        )
+        const value = (await response.json()) as PriceHistory
+        if (
+          !value ||
+          value.symbol !== symbol.toUpperCase() ||
+          !Array.isArray(value.points) ||
+          !Array.isArray(value.events) ||
+          !Number.isFinite(Date.parse(value.from)) ||
+          !Number.isFinite(Date.parse(value.to)) ||
+          !value.currency ||
+          value.points.some(
+            (p) => !Number.isFinite(p.close) || p.close <= 0 || !Number.isFinite(p.provider_close) || p.provider_close<=0 || !/^\d{4}-\d{2}-\d{2}$/.test(p.date),
+          )
+        )
+          throw new Error('Invalid price history')
+        if (!controller.signal.aborted) {
+          store.delete(key)
+          store.set(key, value)
+          while (store.size > 12) store.delete(store.keys().next().value!)
+          setSnapshot({ key, value })
+        }
+      } catch {
+        if (!controller.signal.aborted) setError('Price history could not be refreshed.')
+      } finally {
+        if (!controller.signal.aborted) setLoading(false)
+      }
+    })()
+    return () => controller.abort()
+  }, [key, symbol, range, retry, store])
+  const history = snapshot?.key === key ? snapshot.value : (store.get(key) ?? null)
+  const trades = useMemo(() => (history ? chartTrades(history, transactions) : []), [history, transactions])
+  const points = useMemo(() => {
+    const display=history?.points.map(p=>({...p,close:p.provider_close,time:Date.parse(`${p.date}T00:00:00Z`)}))??[]
+    const price=quote?.price??quote?.regularMarketPrice,time=Date.parse(quote?.as_of??'')
+    if(!history||!quote||quote.symbol.toUpperCase()!==symbol.toUpperCase()||quote.currency!==history.currency||price==null||!Number.isFinite(price)||price<=0||!Number.isFinite(time)||quote.status==='missing'||quote.status==='unsupported'||quote.status==='stale')return display
+    try {
+      const date=quote.session_date??new Intl.DateTimeFormat('sv-SE',{timeZone:quote.timezone??history.timezone,year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(time))
+      const last=display.at(-1)
+      if(!last||date<last.date||date<history.from||date>history.to||time<Date.parse(last.period_start))return display
+      const endpoint={...last,date,period_start:quote.as_of!,close:price,provider_close:price,time:Date.parse(`${date}T00:00:00Z`),provisional:quote.session!=='closed'}
+      if(date===last.date)display[display.length-1]=endpoint
+      else display.push(endpoint)
+    }catch{/* A source without valid session timing cannot extend the chart. */}
+    return display
+  },[history,quote,symbol])
+  const markers = useMemo(() => {
+    // Date-only markers sit in a separate bottom lane, never at an inferred fill.
+    const lowest = Math.min(...points.map(p => p.close))
+    const highest = Math.max(...points.map(p => p.close))
+    const lane = Math.max(0, lowest - Math.max((highest - lowest) * 0.12, lowest * 0.03))
+    return trades.map(t => {
+      const adjusted=history&&t.execution_currency===history.currency?splitAdjustedTradePrice(t,history):null
+      return {...t, time: Date.parse(`${t.date}T00:00:00Z`), markerPrice: adjusted ?? lane, dateOnly: adjusted==null}
+    })
+  }, [trades, points, history?.currency])
+  const buys = markers.filter((t) => (t.quantity ?? t.amount) > 0)
+  const sells = markers.filter((t) => (t.quantity ?? t.amount) < 0)
+  const dates = [...new Set([...points.map((p) => p.date), ...trades.map((t) => t.date)])].sort()
+  const first = points.at(0),last = points.at(-1)
+  const change = first && last ? last.close - first.close : null,
+    rawPercent = change !== null && first ? (change / first.close) * 100 : null
+  const percent = rawPercent !== null && Number.isFinite(rawPercent) ? rawPercent : null
+  const money = (n: number | null | undefined) => n==null?'Unavailable':Math.abs(n)>=1||Math.abs(last?.close??0)>=1?`${n.toLocaleString('hu-HU',{minimumFractionDigits:2,maximumFractionDigits:2})} ${history?.currency??''}`:unitPrice(n,history?.currency??'')
+  const date = selected?.key === key ? selected.date : last?.date
+  const dayTrades = trades.filter((t) => t.date === date),
+    close = points.find((p) => p.date === date)?.close
+  const tradeText = (t: Trade) =>
+    `${(t.quantity ?? t.amount) > 0 ? 'Buy' : 'Sell'} · ${Math.abs(t.quantity ?? 0).toLocaleString(undefined, { maximumFractionDigits: 12 })} units · ${unitPrice(t.price, t.execution_currency ?? 'unverified currency')} · ${t.date}`
+  const updatedAt=quote?.as_of&&last?.period_start===quote.as_of?quote.as_of:history?.retrieved_at
+  const currentCost = averageCost != null && costCurrency === history?.currency ? averageCost : null
+  const domain = [
+    Math.min(...points.map((p) => p.time), ...markers.map((t) => t.time)),
+    Math.max(...points.map((p) => p.time), ...markers.map((t) => t.time)),
+  ]
   return (
-    <div className="space-y-4">
-      {/* Header with Price and Range Controls */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <div className="text-2xl font-bold">
-            ${(hoveredPrice ?? currentPrice).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-          </div>
-          <div className={`flex items-center gap-1 text-sm ${isPositive ? 'text-green-500' : 'text-red-500'}`}>
-            {isPositive ? <TrendingUp className="h-4 w-4" /> : <TrendingDown className="h-4 w-4" />}
-            <span>{priceChange > 0 ? '+' : ''}{priceChange.toFixed(2)} ({percentChange.toFixed(2)}%)</span>
-            <span className="text-muted-foreground ml-1">
-              {RANGES.find(r => r.value === range)?.label}
-            </span>
+    <section aria-label="Instrument price history" className="space-y-3">
+      <div className="flex flex-wrap items-end justify-between gap-x-3 gap-y-3">
+        <div className="min-w-0 flex-1">
+          <h3 className="text-xs font-medium text-muted-foreground">Price</h3>
+          <p className="mt-1 text-lg font-semibold tabular-nums">{close!=null?money(close):date?'Daily close unavailable':'Price unavailable'}</p>
+          {/* Keep both captions in the same grid cell so wrapped range text reserves
+              its height while the selected date is visible. */}
+          <div className="mt-0.5 grid min-h-4 text-xs leading-4">
+            <p aria-hidden={selected?.key!==key} className={`col-start-1 row-start-1 text-muted-foreground ${selected?.key===key?'':'invisible'}`}>{holdingSourceTime(date)?.short??date}</p>
+            <p aria-hidden={selected?.key===key} className={`col-start-1 row-start-1 font-medium tabular-nums ${selected?.key===key?'invisible ':''}${change===0?'text-muted-foreground':change!=null&&change>0?'text-success':'text-destructive'}`}>
+              {change!=null&&percent!=null&&<>{change>0?'+':''}{money(change)} ({percent>0?'+':''}{percent.toLocaleString('hu-HU',{minimumFractionDigits:2,maximumFractionDigits:2})}%) · {{'1d':'past day','5d':'past 5 days','1mo':'past month','6mo':'past 6 months','1y':'past year','5y':'past 5 years','max':'past 10 years'}[range]}</>}
+            </p>
           </div>
         </div>
-        
-        <div className="flex bg-secondary/50 p-1 rounded-lg overflow-x-auto">
-          {RANGES.map((r) => (
-            <button
-              key={r.value}
-              onClick={() => setRange(r.value)}
-              className={`px-3 py-1 text-xs font-medium rounded-md transition-all whitespace-nowrap ${
-                range === r.value
-                  ? 'bg-background shadow-sm text-foreground'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
-              }`}
-            >
-              {r.label}
-            </button>
-          ))}
+        <div role="group" aria-label="Instrument chart range" className="flex max-w-full overflow-x-auto rounded-lg border border-border bg-background p-0.5">
+          {RANGES.map(([value,label])=><button type="button" key={value} aria-pressed={range===value} onClick={()=>setRange(value)} className={`min-h-8 rounded-md px-2 text-[11px] font-semibold ${range===value?'bg-secondary':'text-muted-foreground'}`}>{label}</button>)}
         </div>
       </div>
-
-      {/* Chart Area */}
-      <div className="h-[300px] w-full relative">
-        {loading ? (
-          <div className="absolute inset-0 flex items-center justify-center bg-card/50 backdrop-blur-sm z-10">
-            <Loader2 className="h-8 w-8 animate-spin text-primary" />
-          </div>
-        ) : error ? (
-          <div className="absolute inset-0 flex items-center justify-center text-muted-foreground text-sm">
-            {error}
-          </div>
+      {error && (
+        <p role="alert" className="text-xs text-destructive">
+          {error}{' '}
+          <button
+            type="button"
+            className="min-h-10 text-primary underline"
+            onClick={() => setRetry((n) => n + 1)}
+          >
+            Retry
+          </button>
+        </p>
+      )}
+      {loading && (
+        <p role="status" className="text-xs text-muted-foreground">
+          {history ? 'Refreshing price history…' : 'Loading price history…'}
+        </p>
+      )}
+      <div className="h-[200px] w-full" aria-label="Daily instrument price history">
+        {!points.length ? (
+          <p className="p-4 text-xs text-muted-foreground">
+            {loading ? 'Loading daily observations…' : 'No known daily closes in this range.'}
+          </p>
         ) : (
           <ResponsiveContainer width="100%" height="100%">
             <ComposedChart
-              data={chartData}
-              onMouseMove={(e: any) => {
-                if (e.activePayload) {
-                  setHoveredPrice(e.activePayload[0].payload.close)
-                }
+              data={points}
+              onMouseMove={(s) => {
+                const time = Number(s.activeLabel)
+                if (
+                  s.activeLabel != null &&
+                  Number.isFinite(time) &&
+                  time >= Date.parse(history!.from) &&
+                  time <= Date.parse(history!.to)
+                )
+                  setSelected({ key, date: new Date(time).toISOString().slice(0, 10) })
               }}
-              onMouseLeave={() => setHoveredPrice(null)}
+              onClick={(s) => {
+                const time = Number(s.activeLabel)
+                if (
+                  s.activeLabel != null &&
+                  Number.isFinite(time) &&
+                  time >= Date.parse(history!.from) &&
+                  time <= Date.parse(history!.to)
+                )
+                  setSelected({ key, date: new Date(time).toISOString().slice(0, 10) })
+              }}
+              onMouseLeave={() => setSelected(null)}
+              margin={{ left: 6, right: 6, top: 8, bottom: 0 }}
             >
-              <defs>
-                <linearGradient id="colorPrice" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor={isPositive ? 'hsl(var(--primary))' : '#ef4444'} stopOpacity={0.3}/>
-                  <stop offset="95%" stopColor={isPositive ? 'hsl(var(--primary))' : '#ef4444'} stopOpacity={0}/>
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" opacity={0.4} />
-              <XAxis 
-                dataKey="date" 
-                hide 
+              <XAxis
+                dataKey="time"
+                type="number"
+                domain={domain}
+                scale="time"
+                tickFormatter={t=>new Intl.DateTimeFormat(undefined,{month:'short',...(history&&Date.parse(history.to)-Date.parse(history.from)>200*86400000?{year:'numeric' as const}:{day:'numeric' as const}),timeZone:'UTC'}).format(new Date(Number(t)))}
+                tickLine={false}
+                axisLine={false}
+                tickCount={4}
+                minTickGap={50}
+                tick={{ fontSize: 10 }}
               />
-              <YAxis 
-                domain={['auto', 'auto']} 
-                hide 
+              <YAxis
+                hide
+                width={0}
+                domain={['auto', 'auto']}
+                tick={{ fontSize: 10 }}
+                tickFormatter={(n) => Number(n).toLocaleString(undefined, { maximumFractionDigits: Math.abs(Number(n))>=1?2:12 })}
               />
-              <Tooltip content={<CustomTooltip />} />
-              
+              <Tooltip
+                filterNull={false}
+                content={({ active, payload }) => {
+                  const p = (active ? payload?.[0]?.payload : undefined) as
+                    { date?: string; close?: number; time?: number; dateOnly?: boolean; markerPrice?:number } | undefined
+                  const d = p?.date ?? (p?.time ? new Date(p.time).toISOString().slice(0, 10) : null)
+                  return d ? (
+                    <div className="max-w-64 rounded-lg border border-border bg-card p-3 text-xs shadow-lg">
+                      <p>{d}</p>
+                      {p?.dateOnly && <p className="text-muted-foreground">Date only · execution price unavailable in chart currency</p>}
+                      {p?.close != null && <p>Split-adjusted close: {money(p.close)}</p>}
+                      {p?.markerPrice!=null&&!p.dateOnly&&<p>Split-adjusted execution: {money(p.markerPrice)}</p>}
+                      {trades
+                        .filter((t) => t.date === d)
+                        .map((t) => (
+                          <p key={t.id}>{tradeText(t)}</p>
+                        ))}
+                    </div>
+                  ) : null
+                }}
+              />
               <Area
-                type="monotone"
-                dataKey="smoothed"
-                stroke="hsl(var(--muted-foreground))"
-                strokeWidth={1.5}
-                strokeDasharray="6 3"
-                fillOpacity={0}
-                fill="none"
-                dot={false}
-                activeDot={false}
-              />
-              <Area
-                type="monotone"
+                // Recharts prioritizes item-level data when scatter series are
+                // present. Keep closes in that same axis-domain collection.
+                data={points}
+                type="linear"
                 dataKey="close"
-                stroke={isPositive ? 'hsl(var(--primary))' : '#ef4444'}
-                strokeWidth={2}
-                fillOpacity={1}
-                fill="url(#colorPrice)"
+                stroke="hsl(var(--primary))"
+                fill="hsl(var(--primary) / 0.1)"
+                isAnimationActive={false}
+                connectNulls={false}
               />
-              
-              <Scatter
-                dataKey="buyPoint"
-                fill="hsl(var(--primary))"
-                shape="circle"
-              />
-              
-              <Scatter
-                dataKey="sellPoint"
-                fill="#ef4444"
-                shape="circle"
-              />
+              {buys.length > 0 && (
+                <Scatter
+                  name="Buy executions"
+                  data={buys}
+                  dataKey="markerPrice"
+                  fill="hsl(var(--foreground))"
+                  isAnimationActive={false}
+                  shape={<TradeDot />}
+                  onClick={entry => setSelected({key, date: entry.date})}
+                />
+              )}
+              {sells.length > 0 && (
+                <Scatter
+                  name="Sell executions"
+                  data={sells}
+                  dataKey="markerPrice"
+                  fill="hsl(var(--destructive))"
+                  isAnimationActive={false}
+                  shape={<TradeDot />}
+                  onClick={entry => setSelected({key, date: entry.date})}
+                />
+              )}
+              {currentCost !== null && (
+                <ReferenceLine
+                  y={currentCost}
+                  stroke="hsl(var(--muted-foreground))"
+                  strokeDasharray="4 4"
+                  ifOverflow="extendDomain"
+                />
+              )}
             </ComposedChart>
           </ResponsiveContainer>
         )}
       </div>
-    </div>
+      {(trades.length>0||currentCost!=null)&& <div className="flex flex-wrap gap-4 text-xs text-muted-foreground" aria-label="Trade marker legend">
+        {buys.length>0&&<span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-foreground"/>Your buys · {buys.length}</span>}
+        {sells.length>0&&<span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-destructive"/>Your sells · {sells.length}</span>}
+        {currentCost!=null&&<span className="inline-flex items-center gap-1.5"><span className="w-3.5 border-t border-dashed border-muted-foreground"/>Average cost {money(currentCost)}</span>}
+        {markers.some(t => t.dateOnly) && <span title="Hollow markers show the actual trade date in the bottom lane, not an execution price.">○ Date only</span>}
+      </div>}
+      {dates.length > 0 && (
+        <label className="sr-only text-xs text-muted-foreground focus-within:not-sr-only">
+          Read chart day
+          <Select
+            aria-label="Read instrument history by date"
+            value={date ?? dates.at(-1)}
+            onChange={(e) => setSelected({ key, date: e.target.value })}
+          >
+            {dates.map((d) => (
+              <option key={d}>{d}</option>
+            ))}
+          </Select>
+        </label>
+      )}
+      {selected?.key===key&&dayTrades.length > 0 && (
+        <ul aria-label={`Executions on ${date}`} className="space-y-1 text-xs">
+          {dayTrades.map((t) => (
+            <li key={t.id}>{tradeText(t)}</li>
+          ))}
+        </ul>
+      )}
+      {children}
+      {history&&<div className="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-[11px] leading-relaxed text-muted-foreground">
+        <p className="min-w-0 flex-1">Prices from Yahoo Finance: daily close, split-adjusted, excluding dividends. {history.status==='stale'||error?'Saved history; refresh unavailable. ':''}Updated <time dateTime={updatedAt??undefined} title={updatedAt??undefined}>{holdingSourceTime(updatedAt)?.short??'time unavailable'}</time>{last?.provisional?' · provisional':''}.</p>
+        <button type="button" disabled={loading} className="min-h-8 text-primary hover:underline" onClick={()=>setRetry(n=>n+1)}>Refresh history</button>
+      </div>}
+    </section>
   )
+}
+
+function TradeDot({cx,cy,fill,payload}:{cx?:number;cy?:number;fill?:string;payload?:{dateOnly?:boolean;date?:string;quantity?:number;amount?:number}}) {
+  if(cx==null||cy==null)return <g />
+  return <circle cx={cx} cy={cy} r={5} fill={payload?.dateOnly?'hsl(var(--card))':fill} stroke={fill} strokeWidth={2}>
+    <title>{(payload?.quantity??payload?.amount??0)>0?'Buy':'Sell'} · {payload?.date}{payload?.dateOnly?' · date only':''}</title>
+  </circle>
 }

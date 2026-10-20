@@ -1,3 +1,4 @@
+import { HoldingAccountFields } from './HoldingAccountFields'
 import type { FormEvent, ReactNode } from 'react'
 import { Archive, Lock, LockOpen, Trash2 } from 'lucide-react'
 import { AmountInput } from '../common/amount-input'
@@ -13,6 +14,7 @@ import { accountCurrencies, accountControlClass } from './account-form'
 import { AccountTotalsSwitches } from './AccountTotalsSwitches'
 
 type Props = {
+  metadataLocked?: boolean
   value: AccountFormData
   savedBalance: number
   savedCurrency: string
@@ -56,8 +58,9 @@ export function EditAccountForm(props: Props) {
   const balance = value.balance.trim() === '' ? 0 : parseAmount(value.balance)
   const difference = balance === null ? null : balance - props.savedBalance
   const changed = difference !== null && difference !== 0
-  const quantity = value.type === 'investment'
-  const amountOptions = { maximumFractionDigits: 8, minimumFractionDigits: quantity ? 0 : 2 }
+  const holding = value.type === 'investment'
+  const quantity = holding && value.asset_type !== 'manual'
+  const amountOptions = { maximumFractionDigits: quantity ? 12 : 8, minimumFractionDigits: quantity ? 0 : 2 }
   const differenceText = hidden ? '••••••' : `${difference !== null && difference > 0 ? '+' : ''}${formatAmount(difference ?? 0, amountOptions)}`
   const update = <K extends keyof AccountFormData>(key: K, next: AccountFormData[K]) => onChange({ ...value, [key]: next })
 
@@ -71,16 +74,16 @@ export function EditAccountForm(props: Props) {
       <fieldset disabled={readOnly || busy} className="min-w-0 space-y-2.5">
         <div className="space-y-2">
           <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-            <Label htmlFor="edit-balance" className="text-[13px]">{quantity ? 'Quantity' : 'Balance'}</Label>
+            <Label htmlFor="edit-balance" className="text-[13px]">{quantity ? 'Quantity' : holding ? 'Current value' : 'Balance'}</Label>
             <span className="text-xs tabular-nums text-muted-foreground">Saved: {hidden ? '••••••' : formatAmount(props.savedBalance, amountOptions)} {props.savedCurrency}</span>
           </div>
           <div className="flex h-[52px] items-center gap-2.5 rounded-xl border border-border bg-background px-4 focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/15">
-            {readOnly && hidden ? <Input id="edit-balance" value="••••••" readOnly className="border-0 bg-transparent p-0 text-[26px]" /> : <AmountInput id="edit-balance" value={value.balance} onValueChange={next => update('balance', next)} allowNegative placeholder="0"
+            {readOnly && hidden ? <Input id="edit-balance" value="••••••" readOnly className="border-0 bg-transparent p-0 text-[26px]" /> : <AmountInput id="edit-balance" value={value.balance} onValueChange={next => update('balance', next)} readOnly={holding && !quantity} allowNegative placeholder="0"
               className="h-auto min-w-0 flex-1 rounded-none border-0 bg-transparent p-0 text-[26px] font-semibold tracking-tight tabular-nums hover:bg-transparent focus-visible:bg-transparent focus-visible:ring-0" />}
             <span className="text-[15px] font-medium text-muted-foreground">{value.currency}</span>
           </div>
           {balance === null && <p role="status" className="text-xs text-destructive">Enter a complete balance to save.</p>}
-          {changed && <div className="space-y-2.5 rounded-xl bg-secondary p-3">
+          {changed && !holding && <div className="space-y-2.5 rounded-xl bg-secondary p-3">
             <div className="flex flex-wrap items-center gap-2 text-[13px]"><span className="text-muted-foreground">Difference</span>
               <span className={cn('rounded-full px-2 py-0.5 font-semibold tabular-nums', hidden ? 'bg-background text-muted-foreground' : difference! > 0 ? 'bg-success/10 text-success' : 'bg-destructive/10 text-destructive')}>{differenceText} {value.currency}</span>
             </div>
@@ -93,19 +96,18 @@ export function EditAccountForm(props: Props) {
               : 'The balance is replaced directly. No transaction is created and past totals won’t reflect the difference.'}</p>
           </div>}
         </div>
+        {holding && !quantity && <p className="text-xs text-muted-foreground">Update this asset’s dated value in Investments → holding details.</p>}
+        {changed && holding && <p className="text-xs text-muted-foreground">Saving records a current position correction, with no cash movement or invented purchase. Earlier history remains unverified.</p>}
+        {holding && <HoldingAccountFields value={value} onChange={onChange} editing metadataLocked={props.metadataLocked} hideAmounts={readOnly && hidden} />}
         <div className="space-y-2">
           <div className="space-y-1"><Label htmlFor="edit-name" className="text-[13px]">Name</Label><Input id="edit-name" value={value.name} onChange={event => update('name', event.target.value)} required className={accountControlClass} /></div>
           <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1"><Label htmlFor="edit-type" className="text-[13px]">Type</Label><Select id="edit-type" value={value.type} onChange={event => update('type', event.target.value as AccountFormData['type'])} className={accountControlClass}><option value="cash">💵 Cash / Bank</option><option value="investment">📈 Investment</option></Select></div>
-            {(!quantity || value.asset_type === 'manual') && <div className="space-y-1"><Label htmlFor="edit-currency" className="text-[13px]">Currency</Label><Select id="edit-currency" value={value.currency} onChange={event => update('currency', event.target.value)} className={accountControlClass}>
+            <div className="space-y-1"><Label htmlFor="edit-type" className="text-[13px]">Type</Label><Select disabled={holding} id="edit-type" value={value.type} onChange={event => update('type', event.target.value as AccountFormData['type'])} className={accountControlClass}><option value="cash">💵 Cash / Bank</option><option value="investment">📈 Investment</option></Select></div>
+            {(!quantity || value.asset_type === 'manual') && <div className="space-y-1"><Label htmlFor="edit-currency" className="text-[13px]">Currency</Label><Select disabled={holding && props.metadataLocked} id="edit-currency" value={value.currency} onChange={event => update('currency', event.target.value)} className={accountControlClass}>
               {[...new Set([...accountCurrencies, value.currency])].map(currency => <option key={currency} value={currency}>{currency}</option>)}
             </Select></div>}
-            {quantity && value.asset_type !== 'manual' && <div className="space-y-1"><Label htmlFor="edit-quote-currency" className="text-[13px]">Trading currency</Label><Select id="edit-quote-currency" value={value.quote_currency} onChange={event => update('quote_currency', event.target.value)} className={accountControlClass}>
-              {[...new Set([...accountCurrencies, value.quote_currency])].map(currency => <option key={currency} value={currency}>{currency}</option>)}
-            </Select></div>}
           </div>
-          {quantity && value.asset_type === 'manual' && <div className="space-y-1"><Label htmlFor="edit-symbol" className="text-[13px]">Symbol (optional)</Label><Input id="edit-symbol" value={value.symbol} onChange={event => update('symbol', event.target.value.slice(0, 5))} maxLength={5} className={accountControlClass} /></div>}
-          {quantity && value.asset_type !== 'manual' && value.symbol && <div className="rounded-xl bg-secondary/50 p-3 text-sm"><span className="font-semibold">{value.symbol}</span><span className="ml-2 text-muted-foreground">Holding unit: {value.currency}</span></div>}
+          {holding && value.asset_type === 'manual' && <div className="space-y-1"><Label htmlFor="edit-symbol" className="text-[13px]">Symbol (optional)</Label><Input id="edit-symbol" value={value.symbol} onChange={event => update('symbol', event.target.value.slice(0, 5))} maxLength={5} className={accountControlClass} /></div>}
         </div>
         <AccountTotalsSwitches value={value} onChange={onChange} />
       </fieldset>

@@ -1,3 +1,4 @@
+import { HoldingAccountFields } from './HoldingAccountFields'
 import type { FormEvent } from 'react'
 import { Search, TrendingUp, Wallet } from 'lucide-react'
 import { AmountInput } from '../common/amount-input'
@@ -28,7 +29,7 @@ export function AddAccountForm({ value, onChange, onTypeChange, onSubmit, onCanc
   const investment = value.type === 'investment'
   const manual = investment && value.asset_type === 'manual'
   const marketAsset = investment && !manual
-  const assetMissing = marketAsset && !value.symbol
+  const assetMissing = marketAsset && value.pricing_method !== 'manual' && !value.symbol
   const invalidBalance = value.balance.trim() !== '' && parseAmount(value.balance) === null
   const invalid = !value.name.trim() || invalidBalance || assetMissing
   const update = <K extends keyof AccountFormData>(key: K, next: AccountFormData[K]) => onChange({ ...value, [key]: next })
@@ -64,24 +65,19 @@ export function AddAccountForm({ value, onChange, onTypeChange, onSubmit, onCanc
             <h3 className="text-[13px] font-medium">Asset</h3>
             {manual && <button type="button" onClick={onSearchAsset} className="text-xs text-primary hover:underline disabled:opacity-50">Search instead</button>}
           </div>
-          {manual ? <div className="space-y-1">
+          {manual || value.pricing_method === 'manual' ? <div className="space-y-1">
             <Label htmlFor="create-account-symbol" className="text-xs">Symbol (optional)</Label>
-            <Input id="create-account-symbol" value={value.symbol} onChange={event => update('symbol', event.target.value.slice(0, 5))}
-              placeholder="e.g. MÁP+" maxLength={5} className={accountControlClass} />
+            <Input id="create-account-symbol" value={value.symbol} onChange={event => update('symbol', event.target.value.slice(0, 20))}
+              placeholder="e.g. MÁP+" maxLength={20} className={accountControlClass} />
           </div> : value.symbol ? <div className="flex items-center justify-between gap-3 rounded-xl bg-secondary/50 px-3 py-2">
-            <div className="min-w-0"><p className="text-sm font-semibold">{value.symbol}</p><p className="text-xs text-muted-foreground">{value.asset_type === 'crypto' ? 'Cryptocurrency' : 'Stock'} · {value.currency}</p></div>
+            <div className="min-w-0"><p className="text-sm font-semibold">{value.symbol}</p><p className="text-xs text-muted-foreground">{value.asset_type === 'crypto' ? 'Cryptocurrency' : value.asset_type === 'etf' ? 'ETF' : 'Stock'} · {value.currency}</p></div>
             <button type="button" onClick={onSearchAsset} className="text-xs text-primary hover:underline disabled:opacity-50">Change</button>
           </div> : <div className="flex flex-wrap items-center gap-2">
             <Button type="button" variant="outline" className="h-9 flex-1 justify-start text-muted-foreground" onClick={onSearchAsset}><Search className="h-4 w-4" />Search for asset…</Button>
             <button type="button" onClick={onManualAsset} className="text-xs text-primary hover:underline disabled:opacity-50">Enter manually</button>
           </div>}
-          {marketAsset && value.symbol && <div className="space-y-1">
-            <Label htmlFor="create-quote-currency" className="text-[13px]">Trading currency</Label>
-            <Select id="create-quote-currency" value={value.quote_currency} onChange={event => update('quote_currency', event.target.value)} className={accountControlClass}>
-              {[...new Set([...accountCurrencies, value.quote_currency])].map(currency => <option key={currency} value={currency}>{currency}</option>)}
-            </Select>
-          </div>}
         </section>}
+        {investment && <HoldingAccountFields value={value} onChange={onChange} section="identity" />}
         <div className="space-y-2">
           <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
             <Label htmlFor="create-account-balance" className="text-[13px]">{marketAsset ? 'Starting quantity' : 'Starting balance'}</Label>
@@ -89,7 +85,7 @@ export function AddAccountForm({ value, onChange, onTypeChange, onSubmit, onCanc
           </div>
           <div className="flex h-[52px] items-center gap-1.5 rounded-xl border border-border bg-background pl-4 pr-1.5 focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/15">
             <AmountInput id="create-account-balance" value={value.balance} onValueChange={next => update('balance', next)}
-              allowNegative placeholder={marketAsset ? '0' : '0.00'}
+              allowNegative={!investment} placeholder={marketAsset ? '0' : '0.00'}
               className="h-auto min-w-0 flex-1 rounded-none border-0 bg-transparent p-0 text-[26px] font-semibold tracking-tight tabular-nums hover:bg-transparent focus-visible:bg-transparent focus-visible:ring-0" />
             {marketAsset ? <span className="shrink-0 px-2 text-sm font-medium text-muted-foreground">{assetMissing ? 'Units' : value.currency}</span> : <div className="shrink-0">
               <Select aria-label="Currency" value={value.currency} onChange={event => update('currency', event.target.value)} className="h-9 w-auto rounded-lg border-border/50 bg-secondary pl-2.5 pr-8 text-sm font-medium">
@@ -99,6 +95,7 @@ export function AddAccountForm({ value, onChange, onTypeChange, onSubmit, onCanc
           </div>
           {invalidBalance && <p role="status" className="text-xs text-destructive">Enter a complete balance to create the account.</p>}
         </div>
+        {investment && <HoldingAccountFields value={value} onChange={onChange} section="opening" />}
         <AccountTotalsSwitches value={value} onChange={onChange} />
       </fieldset>
     </div>

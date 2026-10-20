@@ -1,0 +1,480 @@
+import { AppError } from '../errors/codes'
+import { addDecimal } from '../../../shared/decimal-balance'
+import { recoverCashBalance } from './decimal-balance.repository'
+import type { Account } from '../models/Account'
+import type { Transaction } from '../models/Transaction'
+import type { RecurringSchedule } from '../models/RecurringSchedule'
+
+type Value = string | number | null
+const columns = [
+  'id',
+  'account_id',
+  'category_id',
+  'amount',
+  'description',
+  'date',
+  'linked_transaction_id',
+  'exclude_from_estimate',
+  'status',
+  'pending_kind',
+  'review_source',
+  'review_batch_id',
+  'review_flags',
+  'confirmed_at',
+  'cancelled_at',
+  'created_at',
+  'updated_at',
+  'split_id',
+] as const
+function values(t: Transaction, now: number): Value[] {
+  return [
+    t.id,
+    t.account_id,
+    t.category_id ?? null,
+    t.amount,
+    t.description ?? null,
+    t.date,
+    t.linked_transaction_id ?? null,
+    t.exclude_from_estimate ? 1 : 0,
+    t.status ?? 'posted',
+    t.pending_kind ?? 'upcoming',
+    t.review_source ?? 'manual',
+    t.review_batch_id ?? null,
+    JSON.stringify(t.review_flags ?? []),
+    t.confirmed_at ?? null,
+    t.cancelled_at ?? null,
+    t.created_at ?? now,
+    t.updated_at ?? now,
+    t.split_id ?? null,
+  ]
+}
+type CashSplit = {
+  id: string
+  description: string | null
+  created_at: number
+  updated_at: number | null
+}
+export type CashMutation = {
+  before: Transaction[]
+  after: Transaction[]
+  accounts: Account[]
+  now: number
+  split?: {
+    before: CashSplit | null
+    after: CashSplit | null
+    expected_balance?: { account_id: string; balance: number }
+  }
+  correction?: { before: Account; after: Account; revision: number }
+  schedule?: RecurringSchedule
+  transfer_pair_id?: string
+}
+/** Cash rows, their balance deltas, audit and optional schedule consumption are
+ * one D1 batch. Decimal deltas use guarded account snapshots and bounded
+ * retries to preserve concurrent trades; row guards keep stale editors pinned. */
+export class CashLedgerRepository {
+  constructor(private db: D1Database) {}
+  async commit(op: CashMutation): Promise<void> {
+    let accounts = op.accounts
+    for (let attempt = 0; attempt < 5; attempt++) {
+      if (await this.commitAttempt({ ...op, accounts })) return
+      if (op.correction) break
+      // Refresh only commutative account snapshots. The original row/schedule
+      // guards remain pinned, so this never retries a stale ledger edit.
+      const fresh: Account[] = []
+      for (const a of accounts) {
+        const row = await this.db
+          .prepare('SELECT * FROM accounts WHERE id=?')
+          .bind(a.id)
+          .first<Account>()
+        if (
+          !row ||
+          row.type !== a.type ||
+          row.currency !== a.currency ||
+          row.is_locked ||
+          row.archived_at != null
+        ) {
+          throw new AppError(
+            'HISTORY_CHANGED',
+            'Cash records changed or became protected; refresh before saving.',
+            409,
+          )
+        }
+        fresh.push({ ...a, balance: row.balance, updated_at: row.updated_at })
+      }
+      accounts = fresh
+    }
+    throw new AppError(
+      'HISTORY_CHANGED',
+      'Cash records changed or became protected; refresh before saving.',
+      409,
+    )
+  }
+  private async commitAttempt(op: CashMutation): Promise<boolean> {
+    const claim = crypto.randomUUID(),
+      guard = 'EXISTS (SELECT 1 FROM audit_log WHERE id = ?)'
+    const conditions: string[] = [],
+      bindings: Value[] = []
+    const accounts = [...new Map(op.accounts.map((a) => [a.id, a])).values()]
+    if (
+      [...op.before, ...op.after].some(
+        (t) => !accounts.some((a) => a.id === t.account_id),
+      ) ||
+      new Set(op.before.map((t) => t.id)).size !== op.before.length ||
+      new Set(op.after.map((t) => t.id)).size !== op.after.length
+    )
+      throw AppError.validation(
+        'Cash mutations require distinct rows and every affected account snapshot',
+      )
+    for (const a of accounts) {
+      conditions.push(
+        "EXISTS (SELECT 1 FROM accounts WHERE id=? AND type=? AND currency=? AND balance IS ? AND updated_at IS ? AND type IN ('cash','checking','savings','credit') AND COALESCE(is_locked,0)=0 AND archived_at IS NULL)",
+      )
+      bindings.push(a.id, a.type, a.currency, a.balance, a.updated_at ?? null)
+    }
+    for (const t of op.before) {
+      const expected = values(t, op.now)
+      // MapRow normalizes nullable legacy booleans/defaults and JSON flags.
+      const expression = (c: (typeof columns)[number]) =>
+        c === 'exclude_from_estimate'
+          ? `COALESCE(${c},0)`
+          : c === 'status'
+            ? "COALESCE(status,'posted')"
+            : c === 'pending_kind'
+              ? "COALESCE(pending_kind,'upcoming')"
+              : c === 'review_source'
+                ? "COALESCE(review_source,'manual')"
+                : c === 'review_flags'
+                  ? "CASE WHEN json_valid(review_flags) THEN json(review_flags) ELSE '[]' END"
+                  : c
+      conditions.push(
+        `EXISTS (SELECT 1 FROM transactions WHERE ${columns.map((c) => `${expression(c)} IS ?`).join(' AND ')})`,
+      )
+      // Preserve an actual null legacy timestamp in snapshot guards.
+      expected[15] = t.created_at ?? null
+      expected[16] = t.updated_at ?? null
+      bindings.push(...expected)
+    }
+    if (op.split) {
+      const split = op.split.before ?? op.split.after
+      if (
+        !split ||
+        (op.split.before &&
+          op.split.after &&
+          op.split.before.id !== op.split.after.id)
+      )
+        throw AppError.validation('Split metadata must identify one payment')
+      if (op.split.before) {
+        const previous = op.split.before
+        conditions.push(
+          'EXISTS (SELECT 1 FROM transaction_splits WHERE id=? AND description IS ? AND created_at IS ? AND updated_at IS ?)',
+        )
+        bindings.push(
+          previous.id,
+          previous.description,
+          previous.created_at,
+          previous.updated_at,
+        )
+        conditions.push(
+          '(SELECT COUNT(*) FROM transactions WHERE split_id=?)=?',
+        )
+        bindings.push(previous.id, op.before.length)
+      } else {
+        conditions.push(
+          'NOT EXISTS (SELECT 1 FROM transaction_splits WHERE id=?)',
+        )
+        bindings.push(split.id)
+      }
+      if (op.split.expected_balance) {
+        conditions.push(
+          'EXISTS (SELECT 1 FROM accounts WHERE id=? AND balance IS ?)',
+        )
+        bindings.push(
+          op.split.expected_balance.account_id,
+          op.split.expected_balance.balance,
+        )
+      }
+    }
+    // New row IDs are protected by their primary key. A duplicate insert aborts
+    // the complete batch, including this claim and all balance changes.
+    if (op.correction) {
+      conditions.push(
+        '(SELECT revision FROM financial_data_revision WHERE id=1)=?',
+      )
+      bindings.push(op.correction.revision)
+    }
+    if (op.schedule) {
+      const s = op.schedule
+      const fields = [
+        'id',
+        'type',
+        'frequency',
+        'day_of_week',
+        'day_of_month',
+        'month',
+        'account_id',
+        'to_account_id',
+        'category_id',
+        'amount',
+        'amount_to',
+        'description',
+        'is_active',
+        'created_at',
+        'last_processed_date',
+        'remaining_occurrences',
+        'end_date',
+      ] as const
+      conditions.push(
+        `EXISTS (SELECT 1 FROM recurring_schedules WHERE ${fields.map((f) => `${f} IS ?`).join(' AND ')})`,
+      )
+      bindings.push(
+        ...fields.map((f) =>
+          f === 'is_active' ? (s.is_active ? 1 : 0) : (s[f] ?? null),
+        ),
+      )
+    }
+    const deltas = new Map<string, number[]>()
+    for (const [rows, sign] of [
+      [op.before, -1],
+      [op.after, 1],
+    ] as const)
+      for (const t of rows)
+        if ((t.status ?? 'posted') === 'posted')
+          deltas.set(t.account_id, [
+            ...(deltas.get(t.account_id) ?? []),
+            sign * t.amount,
+          ])
+    const recoveryRevision = accounts.some(
+      (a) => Number(a.balance.toPrecision(15)) !== a.balance,
+    )
+      ? await this.db
+          .prepare('SELECT revision FROM financial_data_revision WHERE id=1')
+          .first<number>('revision')
+      : null
+    const balanceChanges: {
+      account_id: string
+      before: number
+      delta: number
+      after: number
+      decimal_recovery?: { value: number; evidence_count: number }
+    }[] = []
+    try {
+      for (const [id, terms] of deltas) {
+        const delta = addDecimal(...terms)
+        if (delta === 0 || id === op.correction?.before.id) continue
+        const a = accounts.find((a) => a.id === id)!
+        const recovery = await recoverCashBalance(this.db, id, a.balance)
+        balanceChanges.push({
+          account_id: id,
+          before: a.balance,
+          delta,
+          after: addDecimal(recovery?.value ?? a.balance, delta),
+          ...(recovery ? { decimal_recovery: recovery } : {}),
+        })
+      }
+    } catch (error) {
+      throw AppError.validation((error as Error).message)
+    }
+    if (balanceChanges.some((c) => c.decimal_recovery)) {
+      conditions.push(
+        '(SELECT revision FROM financial_data_revision WHERE id=1)=?',
+      )
+      bindings.push(recoveryRevision)
+    }
+    const entity = op.split
+        ? 'transaction_split'
+        : op.correction
+          ? 'account'
+          : 'transaction',
+      entityId =
+        op.split?.before?.id ??
+        op.split?.after?.id ??
+        op.correction?.before.id ??
+        op.after[0]?.id ??
+        op.before[0]?.id
+    if (!entityId || !accounts.length)
+      throw AppError.validation(
+        'A cash mutation requires its account and ledger facts',
+      )
+    const action =
+      op.correction || (op.before.length && op.after.length)
+        ? 'UPDATE'
+        : op.after.length
+          ? 'CREATE'
+          : 'DELETE'
+    const statements = [
+      this.db
+        .prepare(
+          `INSERT INTO audit_log(id,action,entity,entity_id,details,created_at) SELECT ?,?,?,?,?,? WHERE ${conditions.join(' AND ')}`,
+        )
+        .bind(
+          claim,
+          action,
+          entity,
+          entityId,
+          JSON.stringify({
+            before: op.before,
+            after: op.after,
+            account: op.correction,
+            split: op.split,
+            schedule_id: op.schedule?.id,
+            transfer_pair_id: op.transfer_pair_id,
+            balance_changes: balanceChanges,
+          }),
+          op.now,
+          ...bindings,
+        ),
+    ]
+    for (const change of balanceChanges)
+      statements.push(
+        this.db
+          .prepare(
+            `UPDATE accounts SET balance=?,updated_at=? WHERE id=? AND ${guard}`,
+          )
+          .bind(change.after, op.now, change.account_id, claim),
+      )
+    if (op.correction) {
+      const a = op.correction.after
+      const fields = [
+        'name',
+        'type',
+        'balance',
+        'currency',
+        'quote_currency',
+        'symbol',
+        'asset_type',
+        'exclude_from_net_worth',
+        'exclude_from_cash_balance',
+        'updated_at',
+      ] as const
+      statements.push(
+        this.db
+          .prepare(
+            `UPDATE accounts SET ${fields.map((f) => `${f}=?`).join(',')} WHERE id=? AND ${guard}`,
+          )
+          .bind(
+            ...fields.map((f) =>
+              f === 'exclude_from_net_worth' ||
+              f === 'exclude_from_cash_balance'
+                ? a[f]
+                  ? 1
+                  : 0
+                : (a[f] ?? null),
+            ),
+            a.id,
+            claim,
+          ),
+      )
+    }
+    // Detach old members before deletion so split_cleanup cannot delete the
+    // shared row while its replacement/confirmation is still being written.
+    if (op.split?.before)
+      statements.push(
+        this.db
+          .prepare(
+            `UPDATE transactions SET split_id=NULL WHERE split_id=? AND ${guard}`,
+          )
+          .bind(op.split.before.id, claim),
+      )
+    if (op.split?.after) {
+      const next = op.split.after
+      statements.push(
+        op.split.before
+          ? this.db
+              .prepare(
+                `UPDATE transaction_splits SET description=?,updated_at=? WHERE id=? AND ${guard}`,
+              )
+              .bind(next.description, next.updated_at, next.id, claim)
+          : this.db
+              .prepare(
+                `INSERT INTO transaction_splits(id,description,created_at,updated_at) SELECT ?,?,?,? WHERE ${guard}`,
+              )
+              .bind(
+                next.id,
+                next.description,
+                next.created_at,
+                next.updated_at,
+                claim,
+              ),
+      )
+    }
+    for (const t of op.before.filter(
+      (t) => !op.after.some((a) => a.id === t.id),
+    ))
+      statements.push(
+        this.db
+          .prepare(`DELETE FROM transactions WHERE id=? AND ${guard}`)
+          .bind(t.id, claim),
+      )
+    for (const t of op.after) {
+      if (op.before.some((b) => b.id === t.id))
+        statements.push(
+          this.db
+            .prepare(
+              `UPDATE transactions SET ${columns
+                .slice(1)
+                .map((c) => `${c}=?`)
+                .join(',')} WHERE id=? AND ${guard}`,
+            )
+            .bind(...values(t, op.now).slice(1), t.id, claim),
+        )
+      else
+        statements.push(
+          this.db
+            .prepare(
+              `INSERT INTO transactions(${columns.join(',')}) SELECT ${columns.map(() => '?').join(',')} WHERE ${guard}`,
+            )
+            .bind(...values(t, op.now), claim),
+        )
+    }
+    if (op.split?.before && !op.split.after)
+      statements.push(
+        this.db
+          .prepare(`DELETE FROM transaction_splits WHERE id=? AND ${guard}`)
+          .bind(op.split.before.id, claim),
+      )
+    const otherIds = new Set([...op.before, ...op.after].map((t) => t.id))
+    if (entity === 'transaction') otherIds.delete(entityId)
+    for (const id of otherIds) {
+      const before = op.before.find((t) => t.id === id),
+        after = op.after.find((t) => t.id === id)
+      statements.push(
+        this.db
+          .prepare(
+            `INSERT INTO audit_log(id,action,entity,entity_id,details,created_at) SELECT ?,?,'transaction',?,?,? WHERE ${guard}`,
+          )
+          .bind(
+            crypto.randomUUID(),
+            before && after ? 'UPDATE' : after ? 'CREATE' : 'DELETE',
+            id,
+            JSON.stringify({
+              before,
+              after,
+              transfer_pair_id: op.transfer_pair_id,
+            }),
+            op.now,
+            claim,
+          ),
+      )
+    }
+    if (op.schedule) {
+      const s = op.schedule,
+        remaining =
+          s.remaining_occurrences == null ? null : s.remaining_occurrences - 1
+      statements.push(
+        this.db
+          .prepare(
+            `UPDATE recurring_schedules SET last_processed_date=?,remaining_occurrences=?,is_active=? WHERE id=? AND ${guard}`,
+          )
+          .bind(
+            op.after[0].date,
+            remaining,
+            remaining === 0 ? 0 : 1,
+            s.id,
+            claim,
+          ),
+      )
+    }
+    const result = await this.db.batch(statements)
+    return (result[0].meta.changes ?? 0) > 0
+  }
+}

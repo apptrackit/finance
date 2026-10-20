@@ -90,6 +90,8 @@ export function AlertProvider({ children }: { children: ReactNode }) {
   }
 
   const confirm = (options: Omit<AlertOptions, 'type'>): Promise<boolean> => {
+    const previous = document.activeElement as HTMLElement | null
+    const restoreFocus = () => setTimeout(() => { if (previous?.isConnected) previous.focus() }, 0)
     return new Promise((resolve) => {
       const id = Math.random().toString(36).substring(7)
       const alert: Alert = {
@@ -103,6 +105,7 @@ export function AlertProvider({ children }: { children: ReactNode }) {
             await options.onConfirm()
           }
           removeAlert(id)
+          restoreFocus()
           resolve(true)
         },
         onCancel: () => {
@@ -110,6 +113,7 @@ export function AlertProvider({ children }: { children: ReactNode }) {
             options.onCancel()
           }
           removeAlert(id)
+          restoreFocus()
           resolve(false)
         },
       }
@@ -180,6 +184,20 @@ export function AlertProvider({ children }: { children: ReactNode }) {
                   role={alert.type === 'confirm' ? 'alertdialog' : undefined}
                   aria-modal={alert.type === 'confirm' ? true : undefined}
                   aria-label={alert.type === 'confirm' ? alert.title || 'Confirmation' : undefined}
+                  onKeyDown={event => {
+                    if (alert.type !== 'confirm') return
+                    if (event.key === 'Escape') {
+                      event.preventDefault(); event.stopPropagation(); alert.onCancel?.()
+                    } else if (event.key === 'Tab') {
+                      const buttons = [...event.currentTarget.querySelectorAll<HTMLButtonElement>('button:not(:disabled)')]
+                      const first = buttons[0], last = buttons.at(-1)
+                      if (event.shiftKey && document.activeElement === first) {
+                        event.preventDefault(); last?.focus()
+                      } else if (!event.shiftKey && document.activeElement === last) {
+                        event.preventDefault(); first?.focus()
+                      }
+                    }
+                  }}
                   className={`rounded-lg border shadow-lg p-4 ${getAlertStyles(
                     alert.type || 'info'
                   )} backdrop-blur-sm`}

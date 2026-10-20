@@ -1,7 +1,8 @@
+import type { HoldingFields } from '../../../shared/holding'
 export type AccountType = 'cash' | 'investment'
-export type AssetType = 'stock' | 'crypto' | 'manual'
+export type AssetType = 'etf' | 'stock' | 'crypto' | 'manual'
 
-export interface Account {
+export interface Account extends HoldingFields {
   id: string
   name: string
   type: AccountType

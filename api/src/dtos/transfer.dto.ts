@@ -1,4 +1,8 @@
 export interface CreateTransferDto {
+  idempotency_key?: string
+  execution_currency?: string
+  fee_status?: 'known' | 'unknown'
+  fee_amount?: number | null
   from_account_id: string
   to_account_id: string
   amount_from: number

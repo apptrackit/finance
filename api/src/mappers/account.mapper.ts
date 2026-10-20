@@ -12,6 +12,9 @@ export class AccountMapper {
       quote_currency: account.quote_currency,
       symbol: account.symbol,
       asset_type: account.asset_type,
+      pricing_method: account.pricing_method, unit: account.unit, provider: account.provider, exchange: account.exchange,
+      manual_price: account.manual_price, manual_price_date: account.manual_price_date, holding_position: account.holding_position,
+      manual_valuation: account.manual_valuation, manual_ownership: account.manual_ownership,
       exclude_from_net_worth: Boolean(account.exclude_from_net_worth),
       exclude_from_cash_balance: Boolean(account.exclude_from_cash_balance),
       is_locked: Boolean(account.is_locked),
@@ -30,6 +33,8 @@ export class AccountMapper {
       quote_currency: dto.quote_currency,
       symbol: dto.symbol,
       asset_type: dto.asset_type,
+      pricing_method: dto.pricing_method, provider: dto.provider, exchange: dto.exchange,
+      manual_price: dto.manual_price, manual_price_date: dto.manual_price_date,
       exclude_from_net_worth: dto.exclude_from_net_worth,
       exclude_from_cash_balance: dto.exclude_from_cash_balance,
       updated_at

@@ -1,3 +1,7 @@
+import { readMarketQuotes, type ClientQuote } from '../../lib/market-data'
+import { usesMarketPricing } from '../../../../shared/holding'
+import { holdingFormDefaults, localAccountDate } from './account-form'
+import type { HoldingFields } from '../../../../shared/holding'
 import { useUnsavedChanges } from '../../navigation/UnsavedChanges'
 import { convertCurrency, sumAvailable, validRates } from '../../../../shared/currency'
 import { accountBalanceShares, accountValueForOrdering, sortAccountsByValue } from '../../lib/account-order'
@@ -21,7 +25,7 @@ import { format } from 'date-fns'
 import { AdjustmentComposer, type AdjustmentSave } from './AdjustmentComposer'
 import { formatAmount, parseAmount } from '../../lib/amount'
 
-type Account = {
+type Account = HoldingFields & {
   id: string
   name: string
   type: 'cash' | 'investment'
@@ -29,11 +33,12 @@ type Account = {
   currency: string
   quote_currency?: string
   symbol?: string
-  asset_type?: 'stock' | 'crypto' | 'manual'
+  asset_type?: 'etf' | 'stock' | 'crypto' | 'manual'
   exclude_from_net_worth?: boolean
   exclude_from_cash_balance?: boolean
   archived_at?: number | null
   is_locked?: boolean
+  updated_at?: number
 }
 
 type Category = {
@@ -52,30 +57,26 @@ const currencySymbols: Record<string, string> = {
   MXN: 'MX$',
 }
 
-type MarketQuote = {
-  symbol: string
-  regularMarketPrice?: number
-  shortName?: string
-  currency?: string
-  regularMarketChangePercent?: number
-}
+type MarketQuote = ClientQuote
 
-export function AccountList({ accounts, onAccountAdded, loading, manage = false, editAccountId, addRequest = false, requestKey = '', sortValues }: {
-  accounts: Account[]; onAccountAdded: () => void; loading?: boolean; manage?: boolean; editAccountId?: string; addRequest?: boolean; requestKey?: string; sortValues?: AccountSortValues
+export function AccountList({ accounts, onAccountAdded, loading, manage = false, editAccountId, addRequest = false, initialInvestment = false, requestKey = '', sortValues }: {
+  accounts: Account[]; initialInvestment?: boolean; onAccountAdded: () => void; loading?: boolean; manage?: boolean; editAccountId?: string; addRequest?: boolean; requestKey?: string; sortValues?: AccountSortValues
 }) {
   const { confirm, showAlert } = useAlert()
   const isLocked = (id: string) => accounts.find(a => a.id === id)?.is_locked ?? false
   const [isAdding, setIsAdding] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
+  const savedAccountVersion = useRef<number | undefined>(undefined)
   const [savedFormData, setSavedFormData] = useState<AccountFormData | null>(null)
   const [formData, setFormData] = useState<AccountFormData>({
+    ...holdingFormDefaults(),
     name: '',
     type: 'cash',
     balance: '',
     currency: 'HUF',
     quote_currency: 'USD',
     symbol: '',
-    asset_type: 'stock' as 'stock' | 'crypto' | 'manual',
+    asset_type: 'stock' as 'etf' | 'stock' | 'crypto' | 'manual',
     adjustWithTransaction: false,
     exclude_from_net_worth: false,
     exclude_from_cash_balance: false
@@ -166,31 +167,20 @@ export function AccountList({ accounts, onAccountAdded, loading, manage = false,
 
   // Fetch market quotes for investment accounts
   useEffect(() => {
+    const controller = new AbortController()
     const fetchQuotes = async () => {
-      const investmentAccounts = activeAccounts.filter(a => a.type === 'investment' && a.symbol && a.asset_type !== 'manual')
+      const investmentAccounts = activeAccounts.filter(a => a.type === 'investment' && a.balance !== 0 && a.symbol && usesMarketPricing(a))
       if (investmentAccounts.length === 0) return
 
       const symbols = [...new Set(investmentAccounts.map(a => a.symbol!))]
-      const newQuotes: Record<string, MarketQuote> = {}
-
-      await Promise.all(symbols.map(async (symbol) => {
-        try {
-          const res = await apiFetch(`${API_BASE_URL}/market/quote?symbol=${encodeURIComponent(symbol)}`)
-          if (res.ok) {
-            const data = await res.json()
-            newQuotes[symbol] = data
-          }
-        } catch (error) {
-          console.error(`Failed to fetch quote for ${symbol}:`, error)
-        }
-      }))
-
-      setQuotes(newQuotes)
+      const nextQuotes = await readMarketQuotes(symbols,controller.signal)
+      if (!controller.signal.aborted) setQuotes(nextQuotes)
     }
 
     if (accounts.length > 0) {
-      fetchQuotes()
+      void fetchQuotes().catch(() => {})
     }
+    return () => controller.abort()
   }, [accounts])
 
   const missingCurrencies = new Set<string>()
@@ -216,7 +206,7 @@ export function AccountList({ accounts, onAccountAdded, loading, manage = false,
   if (accounts.length) convertCurrency(1, 'USD', 'HUF', exchangeRates, 'USD').missingCurrencies.forEach(item => missingCurrencies.add(item))
 
   const resetForm = () => {
-    setFormData({ name: '', type: 'cash', balance: '', currency: 'HUF', quote_currency: 'USD', symbol: '', asset_type: 'stock', adjustWithTransaction: false, exclude_from_net_worth: false, exclude_from_cash_balance: false })
+    setFormData({ ...holdingFormDefaults(), name: '', type: 'cash', balance: '', currency: 'HUF', quote_currency: 'USD', symbol: '', asset_type: 'stock', adjustWithTransaction: false, exclude_from_net_worth: false, exclude_from_cash_balance: false })
     setShowSymbolSearch(false)
     setSearchQuery('')
     setSearchResults([])
@@ -226,6 +216,7 @@ export function AccountList({ accounts, onAccountAdded, loading, manage = false,
 
   const handleTypeChange = (type: AccountFormData['type']) => {
     setFormData(current => ({ ...current, type,
+      ...(type === 'investment' && current.type === 'cash' ? { currency: 'SHARE', pricing_method: 'market' as const } : {}),
       ...(type === 'cash' && current.type === 'investment'
         ? { currency: 'HUF', quote_currency: 'USD', symbol: '', asset_type: 'stock' as const }
         : {})
@@ -254,15 +245,15 @@ export function AccountList({ accounts, onAccountAdded, loading, manage = false,
   }
 
   const handleSelectAsset = async (asset: any) => {
-    const assetType = asset.quoteType === 'CRYPTOCURRENCY' ? 'crypto' : 'stock'
+    const assetType = asset.quoteType === 'CRYPTOCURRENCY' ? 'crypto' : asset.quoteType === 'ETF' ? 'etf' : 'stock'
     // For crypto, currency is the crypto symbol (e.g., BTC). For stocks, use 'SHARE'
     const currency = assetType === 'crypto' ? asset.symbol.split('-')[0] : 'SHARE'
-    const initialQuoteCurrency = typeof asset.currency === 'string' ? asset.currency.toUpperCase() : 'USD'
+    const initialQuoteCurrency = typeof asset.currency === 'string' ? asset.currency.toUpperCase() : ''
     setFormData({
       ...formData,
       name: asset.shortname || asset.longname || asset.symbol,
       symbol: asset.symbol,
-      asset_type: assetType,
+      asset_type: assetType, pricing_method: 'market', exchange: asset.exchange || '',
       currency: currency,
       quote_currency: initialQuoteCurrency
     })
@@ -289,7 +280,7 @@ export function AccountList({ accounts, onAccountAdded, loading, manage = false,
       ...formData,
       currency: 'HUF',
       quote_currency: 'HUF',
-      asset_type: 'manual',
+      asset_type: 'manual', pricing_method: 'manual',
       symbol: ''
     })
     setShowSymbolSearch(false)
@@ -300,7 +291,7 @@ export function AccountList({ accounts, onAccountAdded, loading, manage = false,
     if (isSubmitting || accountActionBusy || editorReadOnly || deleteTarget || (editingId && !editorDirty)) return
     
     if (!editingId && (!formData.name.trim() ||
-      (formData.type === 'investment' && formData.asset_type !== 'manual' && !formData.symbol))) return
+      (formData.type === 'investment' && formData.asset_type !== 'manual' && formData.pricing_method !== 'manual' && !formData.symbol))) return
     setIsSubmitting(true)
     try {
       const wasEditing = !!editingId
@@ -319,20 +310,51 @@ export function AccountList({ accounts, onAccountAdded, loading, manage = false,
       }
 
       if (formData.type === 'investment') {
-        payload.symbol = formData.symbol || (editingId ? null : undefined)
+        payload.symbol = formData.symbol || undefined
         payload.asset_type = formData.asset_type
+        payload.pricing_method = formData.asset_type === 'manual' ? 'manual' : formData.pricing_method || 'market'
+        if (formData.exchange) payload.exchange = formData.exchange
+        if (!editingId && formData.manual_price?.trim()) {
+          const price = parseAmount(formData.manual_price)
+          if (price === null) throw new Error('Enter a complete manual unit price')
+          payload.manual_price = price
+          payload.manual_price_date = formData.manual_price_date || localAccountDate()
+        }
+        if (!formData.quote_currency) delete payload.quote_currency
+        if ((!editingId && (formData.asset_type === 'manual' || payload.balance !== 0)) || formData.confirm_opening) {
+          const openingBalance = editingId ? parseAmount(formData.opening_balance || '') : payload.balance
+          if (openingBalance === null) throw new Error('Enter a complete opening quantity/value')
+          let date = formData.opening_date || ''
+          if (!editingId && openingBalance === 0 && date === localAccountDate() && !(formData.asset_type === 'manual' && formData.manual_owned === true)) {
+            const prior = new Date(`${date}T12:00:00`); prior.setDate(prior.getDate() - 1)
+            date = `${prior.getFullYear()}-${String(prior.getMonth() + 1).padStart(2, '0')}-${String(prior.getDate()).padStart(2, '0')}`
+          }
+          if (!date) throw new Error('Choose the opening date')
+          payload.opening = { balance: openingBalance, date, ...(formData.asset_type==='manual' && formData.manual_owned !== undefined ? {owned:formData.manual_owned} : {}) }
+          if (formData.opening_cost?.trim()) {
+            const cost = parseAmount(formData.opening_cost)
+            if (cost === null) throw new Error('Enter a complete opening cost or leave it blank')
+            payload.opening.cost_amount = cost
+            payload.opening.cost_currency = formData.opening_cost_currency || formData.quote_currency || formData.currency
+          }
+        }
+
+      }
+      if (editingId) {
+        payload.expected_balance = savedFormData ? parseAmount(savedFormData.balance) : undefined
+        payload.expected_updated_at = typeof savedAccountVersion.current === 'number' ? savedAccountVersion.current : undefined
       }
 
       if (editingId) {
         // Check if we need to show adjustment choice modal
-        if (formData.adjustWithTransaction) {
+        if (formData.type !== 'investment' && formData.adjustWithTransaction) {
           const account = accounts.find(a => a.id === editingId)
           if (account && account.balance !== payload.balance) {
             // Store pending adjustment and show choice modal
             setPendingAdjustment({
               payload,
               accountId: editingId,
-              oldBalance: account.balance,
+              oldBalance: payload.expected_balance ?? account.balance,
               newBalance: payload.balance
             })
             setShowAdjustment(true)
@@ -341,7 +363,7 @@ export function AccountList({ accounts, onAccountAdded, loading, manage = false,
         }
 
         // Include the adjustWithTransaction flag when editing
-        payload.adjustWithTransaction = formData.adjustWithTransaction
+        payload.adjustWithTransaction = formData.type === 'investment' ? false : formData.adjustWithTransaction
 
         await apiFetch(`${API_BASE_URL}/accounts/${editingId}`, {
           method: 'PUT',
@@ -375,15 +397,26 @@ export function AccountList({ accounts, onAccountAdded, loading, manage = false,
   }
 
   const handleEdit = (account: Account) => {
+    savedAccountVersion.current = account.updated_at
+    const anchor = account.holding_position?.anchor
     const draft: AccountFormData = {
+      ...holdingFormDefaults(),
       name: account.name,
       type: account.type,
       balance: formatAmount(account.balance),
       currency: account.currency,
-      quote_currency: account.quote_currency || (account.symbol ? quotes[account.symbol]?.currency : undefined) || 'USD',
+      quote_currency: account.quote_currency || '',
       symbol: account.symbol || '',
       asset_type: account.asset_type || 'stock',
-      adjustWithTransaction: true,
+      pricing_method: account.pricing_method || (account.asset_type === 'manual' ? 'manual' : 'market'),
+      manual_owned:account.manual_ownership === 'owned',
+      exchange: account.exchange || '', manual_price: account.manual_price == null ? '' : formatAmount(account.manual_price, { maximumFractionDigits: 12 }),
+      manual_price_date: account.manual_price_date || localAccountDate(),
+      opening_date: anchor?.kind === 'opening' ? anchor.effective_date : localAccountDate(),
+      opening_balance: formatAmount(anchor?.kind === 'opening' ? anchor.balance : account.balance, { maximumFractionDigits: 12 }),
+      opening_cost: anchor?.cost_amount == null ? '' : formatAmount(anchor.cost_amount),
+      opening_cost_currency: anchor?.cost_currency || account.quote_currency || account.currency,
+      adjustWithTransaction: account.type !== 'investment',
       exclude_from_net_worth: Boolean(account.exclude_from_net_worth),
       exclude_from_cash_balance: Boolean(account.exclude_from_cash_balance)
     }
@@ -426,9 +459,10 @@ export function AccountList({ accounts, onAccountAdded, loading, manage = false,
       handleEdit(account)
     } else {
       handledRequest.current = request
+      if (initialInvestment) setFormData(current => ({ ...current, type: 'investment', currency: 'SHARE' }))
       setIsAdding(true)
     }
-  }, [accounts, editAccountId, addRequest, requestKey])
+  }, [accounts, editAccountId, addRequest, initialInvestment, requestKey])
 
   const confirmAccountAction = async (id: string, options: Parameters<typeof confirm>[0]) => {
     const fromEditor = isAdding && editingId === id
@@ -647,7 +681,7 @@ export function AccountList({ accounts, onAccountAdded, loading, manage = false,
         className="flex max-w-[520px] flex-col overflow-hidden rounded-2xl sm:max-w-[520px]"
         contentClassName="flex min-h-0 flex-1 flex-col p-0 sm:p-0">
         {editingAccount ? <EditAccountForm
-          value={formData} savedBalance={editingAccount.balance} savedCurrency={editingAccount.currency} savedName={editingAccount.name}
+          value={formData} metadataLocked={Boolean(editingAccount.holding_position?.has_history || editingAccount.balance)} savedBalance={editingAccount.balance} savedCurrency={editingAccount.currency} savedName={editingAccount.name}
           onChange={setFormData} onSubmit={handleSubmit} dirty={editorDirty}
           onRevert={() => { if (savedFormData) setFormData({ ...savedFormData }); setDeleteTarget(null); setDeleteName('') }} onCancel={handleCancel}
           locked={editorStatus.locked} archived={editorStatus.archived} busy={isSubmitting || accountActionBusy} saving={isSubmitting} hidden={privacyMode === 'hidden'}
@@ -841,7 +875,7 @@ export function AccountList({ accounts, onAccountAdded, loading, manage = false,
               {sortAccountsByValue(activeAccounts.filter(a => a.type === 'investment'), orderingValues).map(account => {
                 const percentage = allocation(accountValues[account.id], totalInvestmentUSD)
                 const quote = account.symbol ? quotes[account.symbol] : null
-                const priceChange = quote?.regularMarketChangePercent || 0
+                const priceChange = quote?.regularMarketChangePercent ?? null
                 
                 return (
                   <div
@@ -879,7 +913,7 @@ export function AccountList({ accounts, onAccountAdded, loading, manage = false,
                             <span className="inline-flex items-center justify-center h-4 sm:h-5 px-1.5 sm:px-2 rounded-full bg-blue-500/20 text-blue-600 dark:text-blue-400 text-[10px] sm:text-xs font-medium">
                               {privacyMode === 'hidden' ? '••••' : percentage === null ? 'Unavailable' : `${percentage.toFixed(1)}%`}
                             </span>
-                            {account.asset_type !== 'manual' && priceChange !== 0 && (
+                            {usesMarketPricing(account) && priceChange !== null && (
                               <span className={`inline-flex items-center justify-center h-4 sm:h-5 px-1.5 sm:px-2 rounded-full text-[10px] sm:text-xs font-medium ${
                                 priceChange >= 0 
                                   ? 'bg-green-500/20 text-green-600 dark:text-green-400' 
@@ -894,12 +928,12 @@ export function AccountList({ accounts, onAccountAdded, loading, manage = false,
                               {privacyMode === 'hidden' || shouldHideInvestment() ? (
                                 '••••••'
                               ) : (
-                                `${account.balance.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 8 })} ${account.currency}`
+                                `${account.balance.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 12 })} ${account.currency}`
                               )}
                             </p>
                             {quote?.regularMarketPrice && (
                               <p className="text-[10px] sm:text-xs text-muted-foreground">
-                                @ {currencySymbols[(account.quote_currency || quote.currency || 'USD').toUpperCase()] || (account.quote_currency || quote.currency || 'USD')} {quote.regularMarketPrice.toFixed(2)}
+                                @ {currencySymbols[(quote.currency || account.quote_currency || '').toUpperCase()] || (quote.currency || account.quote_currency || '')} {quote.regularMarketPrice.toFixed(2)}
                               </p>
                             )}
                           </div>
@@ -1098,10 +1132,10 @@ export function AccountList({ accounts, onAccountAdded, loading, manage = false,
                       <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] ${account.type === 'investment' ? 'bg-violet-500/10 text-violet-400' : 'bg-primary/10 text-primary'}`}>{account.type === 'cash' ? <Wallet className="h-[18px] w-[18px]" /> : <span className="text-xs font-bold">{(account.symbol || account.name).slice(0,3).toUpperCase()}</span>}</span>
                       <span className="min-w-0 flex-1">
                         <span className="flex items-center gap-2 text-[15px] font-medium"><span className="truncate">{account.name}</span>{locked && <Lock aria-label="Locked account" className="h-3.5 w-3.5 shrink-0 text-destructive" />}</span>
-                        <span className="block truncate text-xs text-muted-foreground">{archived ? `Archived ${new Date(account.archived_at!).toLocaleDateString()}` : `${account.type === 'cash' ? 'Cash / bank' : account.asset_type === 'manual' ? 'Manual asset' : account.symbol || 'Investment'} · ${account.currency}`}</span>
+                        <span className="block truncate text-xs text-muted-foreground">{archived ? `Archived ${new Date(account.archived_at!).toLocaleDateString()}` : `${account.type === 'cash' ? 'Cash / bank' : account.asset_type === 'manual' ? 'Manual asset' : `${account.asset_type?.toUpperCase() || 'Investment'}${account.pricing_method === 'manual' ? ' · Manual price' : account.symbol ? ` · ${account.symbol}` : ''}`} · ${account.currency}`}</span>
                         {Boolean(account.exclude_from_net_worth || account.exclude_from_cash_balance) && <span className="block text-[11px] text-muted-foreground">{[account.exclude_from_net_worth && 'Excluded from net worth', account.exclude_from_cash_balance && 'Excluded from cash balance'].filter(Boolean).join(' · ')}</span>}
                       </span>
-                      <span className="max-w-full text-right text-sm font-semibold tabular-nums">{hidden ? '••••••' : market ? `${account.balance.toLocaleString('hu-HU', { maximumFractionDigits: 8 })} ${account.currency}` : formatCurrency(account.balance, account.currency)}
+                      <span className="max-w-full text-right text-sm font-semibold tabular-nums">{hidden ? '••••••' : market ? `${account.balance.toLocaleString('hu-HU', { maximumFractionDigits: 12 })} ${account.currency}` : formatCurrency(account.balance, account.currency)}
                         {market && <span className="block text-xs font-normal text-muted-foreground">{hidden ? '••••••' : archived ? 'No position' : formatHufTotal(accountValues[account.id])}</span>}
                         {!archived && <span className="mt-2 flex items-center justify-end gap-2 text-[11px] font-normal text-muted-foreground">
                           <span aria-hidden="true" className="h-1 w-16 overflow-hidden rounded-full bg-secondary sm:w-24"><span className={`block h-full rounded-full ${account.type === 'investment' ? 'bg-violet-400' : 'bg-primary'}`} style={{ width: `${hidden ? 0 : share ?? 0}%` }} /></span>

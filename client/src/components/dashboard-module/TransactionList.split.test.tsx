@@ -124,13 +124,11 @@ describe('transaction composer: split mode', () => {
     expect(within(dialog()).getByLabelText('Amount for line 2')).toHaveValue('70')
   })
 
-  it('offers undo, and blocks splits for investment accounts and future dates with the reason', async () => {
+  it('offers undo, excludes investment posting accounts, and blocks future splits with the reason', async () => {
     const user = userEvent.setup()
     renderList()
     await user.click(screen.getByRole('button', { name: 'New' }))
-    await user.selectOptions(within(dialog()).getByLabelText('Account', { selector: '#account' }), 'stock')
-    expect(within(dialog()).getByRole('button', { name: 'Split into categories' })).toBeDisabled()
-    expect(dialog()).toHaveTextContent('Investment accounts cannot be split.')
+    expect([...within(dialog()).getByLabelText<HTMLSelectElement>('Account', { selector: '#account' }).options].map(option => option.value)).not.toContain('stock')
     await user.selectOptions(within(dialog()).getByLabelText('Account', { selector: '#account' }), 'otp')
     await user.click(within(dialog()).getByRole('button', { name: 'Split into categories' }))
     await user.selectOptions(within(dialog()).getByLabelText('Category for line 1'), 'groceries')

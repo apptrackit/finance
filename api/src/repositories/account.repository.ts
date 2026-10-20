@@ -1,15 +1,22 @@
-import { Account } from '../models/Account'
+import { HOLDING_ACCOUNT_SELECT, mapHoldingAccount } from '../../../shared/holding'
+import type { PositionAnchor } from '../../../shared/holding'
+import type { Account } from '../models/Account'
+
+type D1Value = string | number | null
 
 export class AccountRepository {
   constructor(private db: D1Database) {}
 
-  async findAll(): Promise<Account[]> {
-    const { results } = await this.db.prepare('SELECT * FROM accounts').all<Account>()
-    return results
+  async financialRevision() { return (await this.db.prepare('SELECT revision FROM financial_data_revision WHERE id = 1').first<number>('revision'))! }
+
+  async findAll(today?:string): Promise<Account[]> {
+    const { results } = await this.db.prepare(`${HOLDING_ACCOUNT_SELECT} ORDER BY a.name, a.id`).all<Account>()
+    return results.map(row => mapHoldingAccount(row,today))
   }
 
   async findById(id: string): Promise<Account | null> {
-    return await this.db.prepare('SELECT * FROM accounts WHERE id = ?').bind(id).first<Account>()
+    const row = await this.db.prepare(`${HOLDING_ACCOUNT_SELECT} WHERE a.id = ?`).bind(id).first<Account>()
+    return row ? mapHoldingAccount(row) : null
   }
 
   async create(account: Account): Promise<void> {
@@ -47,6 +54,78 @@ export class AccountRepository {
       updates.updated_at || Date.now(),
       id
     ).run()
+  }
+
+  async hasInvestmentCashHistory(id: string): Promise<boolean> {
+    return Boolean(await this.db.prepare(`SELECT 1 FROM transactions c JOIN investment_transactions t
+      ON t.linked_transaction_id=c.id AND c.linked_transaction_id=t.id WHERE c.account_id=? LIMIT 1`).bind(id).first())
+  }
+
+  async hasManualAssetEvents(id: string) { return Boolean(await this.db.prepare('SELECT 1 FROM investment_transactions WHERE account_id = ? AND asset_event IS NOT NULL LIMIT 1').bind(id).first()) }
+
+  async hasFutureInvestmentActivity(id: string, today: string): Promise<boolean> {
+    return Boolean(await this.db.prepare('SELECT 1 AS found FROM investment_transactions WHERE account_id = ? AND date > ? LIMIT 1').bind(id, today).first())
+  }
+
+  private holdingValues(a: Account): D1Value[] {
+    return [a.name, a.type, a.balance, a.currency, a.quote_currency ?? null, a.symbol ?? null, a.asset_type ?? null,
+      a.pricing_method ?? null, a.unit ?? null, a.provider ?? null, a.exchange ?? null, a.manual_price ?? null,
+      a.manual_price_date ?? null, a.exclude_from_net_worth ? 1 : 0, a.exclude_from_cash_balance ? 1 : 0, a.updated_at]
+  }
+
+  private anchorStatement(a: Account, anchor: PositionAnchor, auditId?: string): D1PreparedStatement {
+    return this.db.prepare(`INSERT INTO investment_position_anchors
+      (id, account_id, kind, effective_date, balance, cost_amount, cost_currency, trade_rowid_boundary, created_at, trade_order_boundary, owned)
+      SELECT ?, ?, ?, ?, ?, ?, ?, COALESCE((SELECT MAX(rowid) FROM investment_transactions WHERE account_id = ?), 0), ?, COALESCE((SELECT MAX(effective_order) FROM investment_transactions WHERE account_id = ?), 0), ?
+      ${auditId ? 'WHERE EXISTS (SELECT 1 FROM audit_log WHERE id = ?)' : ''}`)
+      .bind(anchor.id, a.id, anchor.kind, anchor.effective_date, anchor.balance, anchor.cost_amount, anchor.cost_currency,
+        a.id, anchor.created_at, a.id, anchor.owned == null ? null : anchor.owned ? 1 : 0, ...(auditId ? [auditId] : []))
+  }
+
+  async createHolding(a: Account, anchor: PositionAnchor): Promise<void> {
+    const total = a.asset_type === 'manual'
+    const value = total ? a.balance : a.manual_price
+    const observation = a.pricing_method === 'manual' && value != null ? [this.db.prepare(`INSERT INTO investment_valuations
+      (id,account_id,effective_date,kind,amount,currency,source,version,created_at,updated_at) VALUES (?,?,?,?,?,?,'initial',1,?,?)`)
+      .bind(crypto.randomUUID(),a.id,total?anchor.effective_date:a.manual_price_date!,total?'total':'per_unit',value,total?a.currency:a.quote_currency!,a.updated_at,a.updated_at)] : []
+    await this.db.batch([
+      this.db.prepare(`INSERT INTO accounts
+        (id, name, type, balance, currency, quote_currency, symbol, asset_type, pricing_method, unit, provider, exchange,
+         manual_price, manual_price_date, exclude_from_net_worth, exclude_from_cash_balance, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+        .bind(a.id, ...this.holdingValues(a)),
+      this.anchorStatement(a, anchor),
+      ...observation,
+      this.db.prepare("INSERT INTO audit_log (id, action, entity, entity_id, details, created_at) VALUES (?, 'CREATE', 'account', ?, ?, ?)")
+        .bind(crypto.randomUUID(), a.id, JSON.stringify({ name: a.name, asset_type: a.asset_type, opening: anchor, initial_valuation: observation.length ? {amount:value,kind:total?'total':'per_unit',currency:total?a.currency:a.quote_currency,effective_date:total?anchor.effective_date:a.manual_price_date} : null }), a.updated_at),
+    ])
+  }
+
+  async updateHolding(before: Account, after: Account, anchor: PositionAnchor | null, revision: number): Promise<boolean> {
+    const auditId = crypto.randomUUID()
+    // The audit insertion claims the complete account snapshot. All following
+    // writes depend on that unique claim, so a stale/locked request changes none.
+    const fields = ['name', 'type', 'balance', 'currency', 'quote_currency', 'symbol', 'asset_type', 'pricing_method',
+      'unit', 'provider', 'exchange', 'manual_price', 'manual_price_date', 'exclude_from_net_worth', 'exclude_from_cash_balance', 'updated_at']
+    const snapshot = this.holdingValues(before)
+    snapshot[13] = before.exclude_from_net_worth == null ? null : before.exclude_from_net_worth ? 1 : 0
+    snapshot[14] = before.exclude_from_cash_balance == null ? null : before.exclude_from_cash_balance ? 1 : 0
+    const statements = [
+      this.db.prepare(`INSERT INTO audit_log (id, action, entity, entity_id, details, created_at)
+        SELECT ?, 'UPDATE', 'account', a.id, ?, ? FROM accounts a
+        WHERE a.id = ? AND COALESCE(a.is_locked, 0) = 0 AND a.archived_at IS NULL
+        AND ${fields.map(f => `a.${f} IS ?`).join(' AND ')}
+        AND (SELECT revision FROM financial_data_revision WHERE id = 1) = ?`)
+        .bind(auditId, JSON.stringify({ before: Object.fromEntries(fields.map(field => [field, before[field as keyof Account]])),
+          after: Object.fromEntries(fields.map(field => [field, after[field as keyof Account]])), anchor }),
+          after.updated_at, before.id, ...snapshot, revision),
+      this.db.prepare(`UPDATE accounts SET ${fields.map(f => `${f} = ?`).join(', ')}
+        WHERE id = ? AND EXISTS (SELECT 1 FROM audit_log WHERE id = ?)`)
+        .bind(...this.holdingValues(after), after.id, auditId),
+    ]
+    if (anchor) statements.push(this.anchorStatement(after, anchor, auditId))
+    const results = await this.db.batch(statements)
+    return (results[0].meta.changes ?? 0) > 0
   }
 
   async updateBalance(id: string, balance: number, updated_at: number): Promise<void> {

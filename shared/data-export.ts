@@ -1,12 +1,15 @@
 // Explicit coverage: adding a durable table requires updating this contract.
 export const EXPORT_TABLES = [
-  'accounts', 'categories', 'transaction_splits', 'transactions', 'investment_transactions',
+  'accounts', 'categories', 'transaction_splits', 'transactions', 'investment_transactions', 'investment_position_anchors',
+  'investment_trade_sequence', 'investment_valuations',
   'recurring_schedules', 'app_settings', 'audit_log',
   'financial_outlook_snapshots', 'financial_data_revision', 'mcp_draft_batches',
   'mcp_draft_correction_runs', 'mcp_transfer_correction_runs',
 ] as const
 
 export const EXPORT_EXCLUSIONS = {
+  market_data_cache: 'Reconstructible bounded provider quote/history/FX/search cache; no user financial records.',
+  investment_trade_operations: 'Bounded expiring trade replay receipts; durable trades, settlements and audits are included.',
   mcp_draft_proposals: 'Expiring proposal capabilities; completed drafts are in transactions.',
   mcp_draft_correction_proposals: 'Expiring correction capabilities; completed runs are included.',
   mcp_transfer_correction_proposals: 'Expiring transfer correction capabilities; completed runs are included.',
