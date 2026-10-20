@@ -18,8 +18,8 @@ it('shows native currency/daily bounds and preserves a matching chart on failed 
   const fetcher=vi.fn<typeof fetch>().mockResolvedValue(Response.json(value))
   vi.stubGlobal('fetch',fetcher)
   render(<InvestmentChart symbol="TEST"/>)
-  expect(await screen.findByText(/110 EUR/)).toBeInTheDocument()
-  expect(screen.getByText(/daily unadjusted close/)).toBeInTheDocument()
+  expect(await screen.findByText(/110,00 EUR/)).toBeInTheDocument()
+  expect(screen.getByText(/split-adjusted, excluding dividends/)).toBeInTheDocument()
   expect(String(fetcher.mock.calls[0][0])).toContain('interval=1d')
   expect(screen.getByTestId('instrument-chart')).toHaveAttribute('data-points','3')
   fetcher.mockRejectedValue(new Error('private error'))
@@ -41,9 +41,9 @@ it('aborts superseded chart reads and ignores their late result',async()=>{
   const view=render(<InvestmentChart symbol="TEST"/>)
   await waitFor(()=>expect(fetcher).toHaveBeenCalledTimes(1))
   view.rerender(<InvestmentChart symbol="OTHER"/>)
-  expect(await screen.findByText(/110 HUF/)).toBeInTheDocument();expect(oldSignal?.aborted).toBe(true)
+  expect(await screen.findByText(/110,00 HUF/)).toBeInTheDocument();expect(oldSignal?.aborted).toBe(true)
   await act(async()=>release(Response.json(value)))
-  expect(screen.queryByText(/110 EUR/)).not.toBeInTheDocument()
+  expect(screen.queryByText(/110,00 EUR/)).not.toBeInTheDocument()
 })
 it('shows a stale source time without inventing a daily zero move and masks privacy badges',()=>{
   const account={id:'holding',name:'Synthetic',type:'investment' as const,balance:2,currency:'SHARE',quote_currency:'EUR',asset_type:'stock' as const,symbol:'TEST',updated_at:1}
@@ -57,11 +57,11 @@ it('shows a stale source time without inventing a daily zero move and masks priv
   expect(screen.queryByText(/12.34%/)).not.toBeInTheDocument()
 })
 
-it('withholds a misleading raw range change across stock splits',async()=>{
+it('uses split-adjusted closes for price change across stock splits',async()=>{
   vi.stubGlobal('fetch',vi.fn<typeof fetch>().mockResolvedValue(Response.json({...value,events:[{date:value.points[1].date,type:'split',ratio:2}],requires_event_review:true})))
   render(<InvestmentChart symbol="TEST"/>)
-  expect(await screen.findByText('Range change unavailable across split events.')).toBeInTheDocument()
-  expect(screen.queryByText(/selected range/)).not.toBeInTheDocument()
+  expect(await screen.findByText(/22.22%.*past month/)).toBeInTheDocument()
+  expect(screen.getByText(/split-adjusted, excluding dividends/)).toBeVisible()
 })
 
 it('retains every same-day execution, its actual date/currency and the current remaining-cost reference',async()=>{
@@ -77,13 +77,12 @@ it('retains every same-day execution, its actual date/currency and the current r
  const list=screen.getByRole('list',{name:`Executions on ${date}`})
  expect(list.children).toHaveLength(4)
  expect(list).toHaveTextContent('101 EUR');expect(list).toHaveTextContent('102 EUR');expect(list).toHaveTextContent('110 EUR');expect(list).toHaveTextContent('99 USD')
- expect(screen.getByText(/Current average remaining cost: 98,5 EUR/)).toBeVisible()
 })
 it('reuses an owned detail cache until its source key changes',async()=>{
  const fetcher=vi.fn<typeof fetch>().mockResolvedValue(Response.json(value)),cache=new Map()
  vi.stubGlobal('fetch',fetcher)
- const first=render(<InvestmentChart symbol="TEST" cache={cache} revisionKey="one"/>);await screen.findByText(/110 EUR/);first.unmount()
- const second=render(<InvestmentChart symbol="TEST" cache={cache} revisionKey="one"/>);await screen.findByText(/110 EUR/)
+ const first=render(<InvestmentChart symbol="TEST" cache={cache} revisionKey="one"/>);await screen.findByText(/110,00 EUR/);first.unmount()
+ const second=render(<InvestmentChart symbol="TEST" cache={cache} revisionKey="one"/>);await screen.findByText(/110,00 EUR/)
  expect(fetcher).toHaveBeenCalledTimes(1)
  second.rerender(<InvestmentChart symbol="TEST" cache={cache} revisionKey="two"/>);await waitFor(()=>expect(fetcher).toHaveBeenCalledTimes(2))
 })

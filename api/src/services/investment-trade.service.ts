@@ -148,7 +148,9 @@ export class InvestmentTradeService {
     if (!trade) throw conflict()
     const {cash} = await this.pair(state,trade)
     if ((await this.repo.revision()) !== state.revision) throw conflict()
-    return {trade,cash_account_id:cash.account_id,source_revision:state.revision}
+    return {trade,cash_account_id:cash.account_id,
+      linked_cash:{amount:Math.abs(cash.amount),currency:state.accounts.find(a=>a.id===cash.account_id)!.currency},
+      source_revision:state.revision}
   }
   private execute(input: TradeInput, clientDate: string | undefined, id: string | undefined, preview: false): Promise<TradeResult>
   private execute(input: TradeInput, clientDate: string | undefined, id: string | undefined, preview: true): Promise<{account: Account; trades: InvestmentTransaction[]; trade_id:string;revision:number;cash_after:{account_id:string;currency:string;balance:number}}>

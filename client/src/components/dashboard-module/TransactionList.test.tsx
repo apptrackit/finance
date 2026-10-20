@@ -119,103 +119,7 @@ function mockRates(rate = 0.2) {
   vi.mocked(apiFetch).mockImplementation(async () => ({ ok: true, json: async () => ({ rate }) }) as Response)
 }
 
-it.each(['buy','sell'] as const)('keeps a same-fiat manual %s as 1 ITEM plus separate cash, including zero disposal proceeds',async type=>{
-  mockRates();localStorage.clear()
-  const user=userEvent.setup()
-  const added=renderTransfers({composerOnly:true,openRequest:1,transactions:[],accounts:[...transferAccounts,
-    {id:'manual',name:'Whole manual asset',balance:type==='buy'?0:500,currency:'HUF',quote_currency:'HUF',type:'investment',asset_type:'manual'}]})
-  await user.click(screen.getByRole('button',{name:'Transfer'}))
-  const dialog=screen.getByRole('dialog')
-  await user.selectOptions(within(dialog).getByRole('combobox',{name:'From account'}),type==='buy'?'source':'manual')
-  await user.selectOptions(within(dialog).getByRole('combobox',{name:'To account'}),type==='buy'?'manual':'source')
-  await user.type(within(dialog).getByLabelText('Whole asset (1 ITEM)'),'1')
-  await user.type(within(dialog).getByLabelText(type==='buy'?'Amount to Send (HUF)':'Amount to Receive (HUF)'),type==='buy'?'100':'0')
-  await user.type(within(dialog).getByLabelText('Executed total asset price'),type==='buy'?'100':'0')
-  await user.type(within(dialog).getByLabelText('Fee (HUF)'),'0')
-  await user.click(within(dialog).getByRole('button',{name:type==='buy'?'Record purchase':'Record sale'}))
-  await waitFor(()=>expect(added).toHaveBeenCalledOnce())
-  const save=vi.mocked(apiFetch).mock.calls.find(([url,o])=>url==='/api/investment-trades'&&o?.method==='POST')
-  expect(JSON.parse(String(save?.[1]?.body))).toMatchObject({type,quantity:1,cash_amount:type==='buy'?100:0,price:type==='buy'?100:0,execution_currency:'HUF'})
-})
-
-it.each([0,180])('edits a whole-asset disposal with %s proceeds using its unit direction rather than the cash sign',async proceeds=>{
-  mockRates()
-  const user=userEvent.setup()
-  const added=renderTransfers({accounts:[...transferAccounts,{id:'manual',name:'Whole manual asset',balance:0,currency:'HUF',quote_currency:'HUF',type:'investment',asset_type:'manual'}],transactions:[
-    {id:'cash-sale',account_id:'source',amount:proceeds,linked_transaction_id:'sale',date:'2020-01-01'},
-    {id:'sale',account_id:'manual',amount:-proceeds,quantity:-1,price:proceeds,asset_event:'disposal',execution_currency:'HUF',fee_status:'known',fee_amount:0,trade_version:1,linked_transaction_id:'cash-sale',date:'2020-01-01'},
-  ]})
-  expect(screen.getByText('1 ITEM')).toBeInTheDocument()
-  await user.click(screen.getAllByRole('button',{name:'Edit transfer'})[0])
-  const dialog=screen.getByRole('dialog')
-  expect(within(dialog).getByLabelText('Whole asset (1 ITEM)')).toHaveValue('1')
-  expect(within(dialog).getByLabelText('Amount to Receive (HUF)')).toHaveValue(String(proceeds))
-  await user.type(within(dialog).getByLabelText('Note (optional)'),'Corrected note')
-  await user.click(within(dialog).getByRole('button',{name:'Save changes'}))
-  await waitFor(()=>expect(added).toHaveBeenCalledOnce())
-  const save=vi.mocked(apiFetch).mock.calls.find(([url,o])=>url==='/api/investment-trades/sale'&&o?.method==='PUT')
-  expect(JSON.parse(String(save?.[1]?.body))).toMatchObject({type:'sell',quantity:1,cash_amount:proceeds,price:proceeds,expected_version:1})
-})
-
 describe('TransactionList redesigned transfers', () => {
-  it('records a sale with exact proceeds and preserves the draft and request key after a failed save', async () => {
-    mockRates()
-    localStorage.clear()
-    let attempts=0
-    vi.mocked(apiFetch).mockImplementation(async (url,options) => {
-      if (url==='/api/investment-trades' && options?.method==='POST' && attempts++===0) throw new Error('Temporary failure')
-      return {ok:true,json:async()=>({})} as Response
-    })
-    const user=userEvent.setup()
-    const added=renderTransfers({composerOnly:true,openRequest:1,transactions:[],accounts:[...transferAccounts,
-      {id:'holding',name:'Sale holding',balance:1.5,currency:'SHARE',quote_currency:'EUR',type:'investment'}]})
-    await user.click(screen.getByRole('button',{name:'Transfer'}))
-    const dialog=screen.getByRole('dialog')
-    await user.selectOptions(within(dialog).getByRole('combobox',{name:'From account'}),'holding')
-    await user.selectOptions(within(dialog).getByRole('combobox',{name:'To account'}),'source')
-    await user.type(within(dialog).getByLabelText('Units to Sell'),'0.25')
-    await user.type(within(dialog).getByLabelText('Amount to Receive (HUF)'),'100')
-    await user.type(within(dialog).getByLabelText('Executed unit price'),'1')
-    await user.type(within(dialog).getByLabelText('Fee (HUF)'),'0')
-    await user.click(within(dialog).getByRole('button',{name:'Record sale'}))
-    expect(await within(dialog).findByText('Temporary failure')).toBeInTheDocument()
-    expect(within(dialog).getByLabelText('Units to Sell')).toHaveValue('0.25')
-    expect(within(dialog).getByLabelText('Amount to Receive (HUF)')).toHaveValue('100')
-    await user.click(within(dialog).getByRole('button',{name:'Record sale'}))
-    await waitFor(()=>expect(added).toHaveBeenCalledOnce())
-    const saves=vi.mocked(apiFetch).mock.calls.filter(([url,o])=>url==='/api/investment-trades'&&o?.method==='POST').map(([,o])=>JSON.parse(String(o?.body)))
-    expect(saves).toHaveLength(2)
-    expect(saves[0]).toEqual(saves[1])
-    expect(saves[0]).toMatchObject({type:'sell',quantity:0.25,cash_amount:100,execution_currency:'EUR',fee_amount:0})
-    expect(vi.mocked(apiFetch).mock.calls.some(([url])=>String(url).includes('/market/'))).toBe(false)
-  })
-  it('groups a reciprocal investment pair once and edits it through the cash transaction', async () => {
-    mockRates()
-    const user = userEvent.setup()
-    const added = renderTransfers({
-      accounts: [...transferAccounts, { id: 'holding', name: 'Test holding', balance: 2.125, currency: 'SHARE', quote_currency: 'EUR', type: 'investment' }],
-      transactions: [
-        { id: 'buy', account_id: 'holding', amount: 50, quantity: 0.125, price: 400,
-          linked_transaction_id: 'purchase-cash', date: '2020-01-01', description: 'Transfer from Savings' },
-        { id: 'purchase-cash', account_id: 'source', amount: -100, linked_transaction_id: 'buy',
-          date: '2020-01-01', description: 'Transfer to Test holding' },
-      ],
-    })
-    expect(screen.getByText('1 posted')).toBeInTheDocument()
-    await user.click(screen.getAllByRole('button', { name: 'Edit transfer' })[0])
-    const dialog = screen.getByRole('dialog')
-    expect(within(dialog).getByLabelText('Amount to Send (HUF)')).toHaveValue('100')
-    const quantity = within(dialog).getByLabelText('Units to Buy')
-    expect(quantity).toHaveValue('0.125')
-    await user.clear(quantity)
-    await user.type(quantity, '0.25')
-    await user.click(within(dialog).getByRole('button', { name: 'Save changes' }))
-    await waitFor(() => expect(added).toHaveBeenCalledOnce())
-    const save = vi.mocked(apiFetch).mock.calls.find(([url, options]) => url === '/api/investment-trades/purchase-cash' && options?.method === 'PUT')
-    expect(save).toBeDefined()
-    expect(JSON.parse(String(save?.[1]?.body))).toMatchObject({ cash_amount:100,quantity:0.25,price:400,execution_currency:'EUR',fee_status:'unknown' })
-  })
-
   it('previews posted edit deltas, preserves both native amounts when swapping, and reverts the full edit', async () => {
     mockRates()
     const user = userEvent.setup()
@@ -302,29 +206,7 @@ describe('TransactionList redesigned transfers', () => {
     expect(JSON.parse(String(save?.[1]?.body))).toMatchObject({ from_account_id: 'source', to_account_id: 'other', amount_from: 12.5, amount_to: 12.5 })
   })
 
-  it('keeps investment quantities precise and includes the manual price in the save', async () => {
-    mockRates(0.001)
-    localStorage.clear()
-    const user = userEvent.setup()
-    const added = renderTransfers({ composerOnly: true, openRequest: 1, transactions: [], accounts: [
-      ...transferAccounts,
-      { id: 'holding', name: 'Example holding', balance: 1.5, currency: 'UNIT', quote_currency: 'EUR', type: 'investment' },
-    ] })
-    await user.click(screen.getByRole('button', { name: 'Transfer' }))
-    const dialog = screen.getByRole('dialog')
-    await user.selectOptions(within(dialog).getByRole('combobox', { name: 'From account' }), 'source')
-    await user.selectOptions(within(dialog).getByRole('combobox', { name: 'To account' }), 'holding')
-    await user.type(within(dialog).getByLabelText('Amount to Send (HUF)'), '100')
-    const quantity = within(dialog).getByLabelText('Units to Buy')
-    await user.clear(quantity)
-    await user.type(quantity, '0.123456789123')
-    await user.type(within(dialog).getByLabelText('Executed unit price'), '123.45')
-    await user.type(within(dialog).getByLabelText('Fee (HUF)'), '0')
-    await user.click(within(dialog).getByRole('button', { name:'Record purchase' }))
-    await waitFor(() => expect(added).toHaveBeenCalledOnce())
-    const save = vi.mocked(apiFetch).mock.calls.find(([url, options]) => url === '/api/investment-trades' && options?.method === 'POST')
-    expect(JSON.parse(String(save?.[1]?.body))).toMatchObject({ quantity:0.123456789123,price:123.45,execution_currency:'EUR',fee_status:'known',fee_amount:0,cash_amount:100 })
-  })
+
 })
 
 it('hides balances in cards, account options, projected balances, and insufficient-balance warnings', async () => {

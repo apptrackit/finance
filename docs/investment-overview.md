@@ -14,7 +14,13 @@ The history chart remains a separate bounded request for the selected calendar r
 
 Values, cash invested, gains, Today and allocation weights come from the shared accounting and FX contracts. Native market unit prices retain small-coin precision and the provider's actual quote currency. Missing conversion rates never become rate 1 or raw foreign totals. Incomplete allocation withholds full-portfolio weights and the proportional bar. Currency allocation groups quote/appraisal currency, not geographical exposure.
 
-Total gain is the known lifetime realized plus unrealized amount. Its Estimated return remains unavailable when complete daily history is absent; the UI does not attach a selected-range percentage to a lifetime gain. The history chart reports its own covered range gain and daily-linked estimate. Today shows eligible market holdings and exposes its coverage; manual appraisals and stale inputs are excluded. See [metrics](investment-metrics.md) and [market inputs](investment-market-data.md).
+Total gain is the known lifetime realized plus unrealized amount. The summary shows **Gain on net invested** as total gain / net invested × 100 only when both amounts are finite and net invested is positive; otherwise it omits the percentage. This simple ratio does not account for cash-flow timing, and withdrawals can make it less useful. It is distinct from Estimated return; the UI does not attach a selected-range percentage to a lifetime gain. The history chart reports its own covered range gain and daily-linked estimate. Today includes eligible market holdings; manual appraisals and stale inputs are excluded. Coverage metadata stays in the read contract; the overview omits the About this view, summary notes and coverage/method prose panels at the user's request (#171). See [metrics](investment-metrics.md) and [market inputs](investment-market-data.md).
+
+The history tooltip shows the selected calendar date, total gain (`value − net_invested`) and its gain-on-net-invested ratio, with portfolio value secondary. Both dated amounts must be known and finite for gain; the percentage additionally requires positive net invested. Unknown gain stays unavailable and unsupported percentages are omitted. This is lifetime gain as of that date, not the selected range's daily-linked return. Observation/flow diagnostics remain in the API contract rather than the tooltip. Calendar dates are formatted without a local-timezone day shift.
+
+## Layout
+
+The overview stacks a responsive summary strip, a full-width history chart and Allocation before Holdings. Total gain leads the strip; narrow containers place it above Net invested and Today. The plot uses an explicit 220px/300px responsive height rather than stretching to a neighboring column. Allocation entries use one, two or four compact columns based on available container width. The initial skeleton follows the same arrangement.
 
 ## Interaction and retained state
 

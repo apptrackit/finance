@@ -1,3 +1,5 @@
+import { TradeEditor } from '../investments-module/TradeEditor'
+import type { TradeEdit } from '../investments-module/trade-editor'
 import { LegacyTradeDetails } from '../investments-module/LegacyTradeDetails'
 import type { TradeFacts } from '../../../../shared/investment-trade'
 import type { HoldingFields } from '../../../../shared/holding'
@@ -174,6 +176,10 @@ export function TransactionList({
   const [activeTxId, setActiveTxId] = useState<string | null>(null)
   const [pendingDetails, setPendingDetails] = useState<string | null>(null)
   const [legacyTradeId,setLegacyTradeId]=useState<string|null>(null)
+  const [tradeEditor,setTradeEditor]=useState<{edit:TradeEdit}|null>(null)
+  const [loadingTrade,setLoadingTrade]=useState(false)
+  const tradeRead=useRef<AbortController|null>(null)
+  useEffect(()=>()=>tradeRead.current?.abort(),[])
   const [formData, setFormData] = useState({
     account_id: '',
     to_account_id: '',
@@ -186,10 +192,6 @@ export function TransactionList({
     manual_price: '', // For investment accounts - manual price override
     exclude_from_estimate: false
   })
-  const [tradeDraft, setTradeDraft] = useState({ execution_currency:'', fee_status:'known' as 'known'|'unknown', fee_amount:'' })
-  const originalTradeVersion = useRef<number | undefined>(undefined)
-  const originalTradeDraft = useRef<typeof tradeDraft | null>(null)
-  const tradeRequest = useRef<{ signature:string; key:string } | null>(null)
   const originalTransferRef = useRef<{ data: typeof formData; rate: number | null; rateDraft: string } | null>(null)
   const [transferSaveError, setTransferSaveError] = useState<string | null>(null)
   const [exchangeRate, setExchangeRate] = useState<number | null>(null)
@@ -410,7 +412,7 @@ export function TransactionList({
 
   // Load saved defaults when opening the form
   const loadSavedDefaults = (type: 'expense' | 'income' | 'transfer') => {
-    const availableAccount = (id: string) => accounts.some(account => account.id === id && !isLocked(id)) ? id : ''
+    const availableAccount = (id: string) => accounts.some(account => account.id === id && account.type === 'cash' && account.archived_at == null && !isLocked(id)) ? id : ''
     if (type === 'expense') {
       const savedAccount = localStorage.getItem(STORAGE_KEYS.expenseAccount) || ''
       const savedCategory = localStorage.getItem(STORAGE_KEYS.expenseCategory) || ''
@@ -500,9 +502,9 @@ export function TransactionList({
   useEffect(() => {
     if (openRequest > lastOpenRequest.current) {
       lastOpenRequest.current = openRequest
-      if (!isAdding) handleOpenForm()
+      if (!isAdding && !tradeEditor && !loadingTrade) handleOpenForm()
     }
-  }, [openRequest, isAdding, handleOpenForm])
+  }, [openRequest, isAdding, tradeEditor, loadingTrade, handleOpenForm])
 
   // Handle type change with saved defaults
   const handleTypeChange = (newType: 'expense' | 'income' | 'transfer') => {
@@ -524,8 +526,10 @@ export function TransactionList({
     field: 'account_id' | 'to_account_id',
     accountId: string,
   ) => {
+    if(accountId&&!accounts.some(account=>account.id===accountId&&account.type==='cash'&&account.archived_at==null&&!isLocked(account.id)))return
     resetTransferRateState(false)
-    setFormData(prev => ({ ...prev, [field]: accountId, amount_to: '', manual_price: '' }))
+    manuallyEditedTransferFieldsRef.current.amount_to=false
+    setFormData(prev => ({ ...prev, [field]: accountId, amount_to:'', manual_price: '' }))
   }
 
   // Which submit button was used: only expense and income entries can stay open for the next payment.
@@ -652,26 +656,8 @@ export function TransactionList({
           price = parsedPrice
         }
 
-        const holding = sourceAccount.type === 'investment' ? sourceAccount : toAccount.type === 'investment' ? toAccount : null
-        if (holding) {
-          if (sourceAccount.type === 'investment' && toAccount.type === 'investment') throw new Error('Choose one cash account and one holding')
-          const executedPrice = parseAmount(formData.manual_price)
-          const fee = tradeDraft.fee_status === 'known' ? parseAmount(tradeDraft.fee_amount) : null
-          if (executedPrice === null || executedPrice < 0 || (executedPrice === 0 && !(holding.asset_type === 'manual' && sourceAccount.type === 'investment'))) throw new Error('Enter the executed unit price')
-          if (tradeDraft.fee_status === 'known' && fee === null) throw new Error('Enter the included fee, including zero')
-          const body = { ...(editingId ? { expected_version:originalTradeVersion.current } : {}),holding_account_id:holding.id, cash_account_id:sourceAccount.type === 'investment' ? toAccount.id : sourceAccount.id,
-            type:sourceAccount.type === 'investment' ? 'sell' : 'buy', quantity:sourceAccount.type === 'investment' ? amount : amountTo,
-            cash_amount:sourceAccount.type === 'investment' ? amountTo : amount, price:executedPrice,
-            execution_currency:tradeDraft.execution_currency, fee_status:tradeDraft.fee_status, fee_amount:fee,
-            date:formData.date, notes:formData.description }
-          const signature = JSON.stringify([editingId,body])
-          if (tradeRequest.current?.signature !== signature) tradeRequest.current = { signature,key:crypto.randomUUID() }
-          await apiFetch(`${API_BASE_URL}/investment-trades${editingId ? `/${editingId}` : ''}`, {
-            method:editingId ? 'PUT' : 'POST', headers:{ 'Content-Type':'application/json' },
-            body:JSON.stringify({ ...body,idempotency_key:tradeRequest.current.key }) })
-          tradeRequest.current = null
-          setEditingId(null)
-        } else if (editingId) {
+        if(sourceAccount.type==='investment'||toAccount.type==='investment')throw new Error('Use the Buy / Sell editor for investment trades.')
+        if (editingId) {
           await apiFetch(`${API_BASE_URL}/transactions/${editingId}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
@@ -835,7 +821,7 @@ export function TransactionList({
     }
   }
 
-  const handleEdit = (tx: Transaction) => {
+  const handleEdit = async (tx: Transaction) => {
     // Prevent editing if the account is locked
     if (isLocked(tx.account_id)) {
       return
@@ -862,6 +848,18 @@ export function TransactionList({
     const relatedTx = (tx as Transaction & { relatedTx?: Transaction }).relatedTx
       || (tx.linked_transaction_id ? allKnownTransactions.find(t => t.id === tx.linked_transaction_id) : undefined)
 
+    if(tx.linked_transaction_id && (accounts.some(a=>a.type==='investment'&&(a.id===tx.account_id||a.id===relatedTx?.account_id)))) {
+      tradeRead.current?.abort(); const controller=new AbortController();tradeRead.current=controller;setLoadingTrade(true)
+      try {
+        const response=await apiFetch(`${API_BASE_URL}/investment-trades/${encodeURIComponent(tx.id)}`,{throwOnError:true,signal:controller.signal})
+        const edit=await response.json() as TradeEdit
+        const shownTrade=accounts.some(a=>a.id===tx.account_id&&a.type==='investment')?tx:relatedTx
+        if(!edit.trade || (edit.trade.id!==tx.id&&edit.trade.linked_transaction_id!==tx.id) || (shownTrade?.trade_version!=null&&shownTrade.trade_version!==edit.trade.trade_version) || !Number.isSafeInteger(edit.trade.trade_version) || !accounts.some(a=>a.id===edit.trade.account_id&&a.type==='investment') || !accounts.some(a=>a.id===edit.cash_account_id&&a.type==='cash'))throw new Error('Investment records changed. Refresh and reopen the trade.')
+        if(!controller.signal.aborted){setIsAdding(false);setTradeEditor({edit})}
+      }catch(error){if(!controller.signal.aborted)showAlert({type:'error',message:error instanceof Error?error.message:'Could not read the linked trade'})}
+      finally{if(!controller.signal.aborted)setLoadingTrade(false)}
+      return
+    }
     resetTransferRateState()
 
     if (tx.linked_transaction_id && relatedTx) {
@@ -875,15 +873,6 @@ export function TransactionList({
       const incomingValue = incomingAccount?.type === 'investment' && incoming.quantity !== undefined
         ? Math.abs(incoming.quantity)
         : Math.abs(incoming.amount)
-      const investmentRow = outgoingAccount?.type === 'investment' ? outgoing : incoming
-      const investmentPrice = investmentRow.price !== undefined
-        ? formatNumber(investmentRow.price)
-        : ''
-      const tradeRow = outgoingAccount?.type === 'investment' ? outgoing : incomingAccount?.type === 'investment' ? incoming : undefined
-      originalTradeVersion.current = tradeRow?.trade_version ?? 0
-      const draft = { execution_currency:tradeRow?.execution_currency || (outgoingAccount?.type === 'investment' ? outgoingAccount : incomingAccount)?.quote_currency || '',
-        fee_status:tradeRow?.fee_status || 'unknown' as 'known'|'unknown', fee_amount:tradeRow?.fee_amount == null ? '' : formatAmount(tradeRow.fee_amount) }
-      setTradeDraft(draft); originalTradeDraft.current = draft; tradeRequest.current = null
       const existingRate = Math.abs(outgoing.amount) > 0
         ? incomingValue / Math.abs(outgoing.amount)
         : null
@@ -897,7 +886,7 @@ export function TransactionList({
         description: transferNote,
         date: outgoing.date,
         type: 'transfer' as const,
-        manual_price: investmentPrice,
+        manual_price: '',
         exclude_from_estimate: false
       }
       setFormData(transferData)
@@ -1137,19 +1126,7 @@ export function TransactionList({
     return acc ? acc.currency : 'HUF'
   }
 
-  const selectedHoldingId = formData.type === 'transfer' ? accounts.find(a => a.type === 'investment' && (a.id === formData.account_id || a.id === formData.to_account_id))?.id : undefined
-  const selectedHoldingQuote = accounts.find(a => a.id === selectedHoldingId)?.quote_currency || ''
-  useEffect(() => {
-    if (!editingId) setTradeDraft({ execution_currency:selectedHoldingQuote,fee_status:'known',fee_amount:'' })
-  },[selectedHoldingId,selectedHoldingQuote,editingId])
-  const handleTransferPatch = (patch: Partial<TransferFormData>) => {
-    const { execution_currency,fee_status,fee_amount,...regular } = patch
-    setFormData(prev => ({ ...prev,...regular }))
-    setTradeDraft(prev => ({ ...prev,
-      ...(execution_currency !== undefined ? { execution_currency } : {}),
-      ...(fee_status !== undefined ? { fee_status } : {}),
-      ...(fee_amount !== undefined ? { fee_amount } : {}) }))
-  }
+  const handleTransferPatch = (patch: Partial<TransferFormData>) => setFormData(prev=>({...prev,...patch}))
 
   // For transfer preview
   const fromAccount = accounts.find(a => a.id === formData.account_id)
@@ -1163,7 +1140,6 @@ export function TransactionList({
     (['account_id', 'to_account_id', 'date', 'description'] as const).some(key => formData[key] !== originalTransfer.data[key])
     || (['amount', 'amount_to', 'manual_price'] as const).some(key => parseAmount(formData[key]) !== parseAmount(originalTransfer.data[key]))
     || parseAmount(exchangeRateDraft) !== parseAmount(originalTransfer.rateDraft)
-    || !!originalTradeDraft.current && JSON.stringify(tradeDraft) !== JSON.stringify(originalTradeDraft.current)
   )
   // Posted balances already include the old legs. Undo them before previewing
   // the replacement, including when either selected account has changed.
@@ -1237,7 +1213,6 @@ export function TransactionList({
     manuallyEditedTransferFieldsRef.current = { amount_to: true, manual_price: !!originalTransfer.data.manual_price }
     editedTransferPairRef.current = getTransferPairKey(originalTransfer.data.account_id, originalTransfer.data.to_account_id)
     setFormData({ ...originalTransfer.data })
-    if (originalTradeDraft.current) setTradeDraft({ ...originalTradeDraft.current })
     setExchangeRate(originalTransfer.rate)
     setExchangeRateDraft(originalTransfer.rateDraft)
     setIsLoadingRate(false)
@@ -1537,7 +1512,7 @@ export function TransactionList({
       </CardHeader>}
 
       <Modal 
-        isOpen={isAdding} 
+        isOpen={isAdding}
         onClose={handleCancel} 
         placement={formData.type === 'transfer' ? 'centered' : 'center'}
         className={formData.type === 'transfer' ? 'sm:max-w-[480px] rounded-2xl flex min-h-0 flex-col overflow-hidden' : undefined}
@@ -1551,10 +1526,8 @@ export function TransactionList({
             {/* Transfer Form */}
             {formData.type === 'transfer' ? (
               <TransferForm
-                tradeId={editingId || undefined}
-                tradeVersion={originalTradeVersion.current}
-                accounts={accounts}
-                data={{ ...formData,...tradeDraft }}
+                accounts={accounts.filter(a=>a.type==='cash')}
+                data={formData}
                 editing={!!editingId}
                 reviewDraft={editingReviewTransfer}
                 dirty={transferDirty}
@@ -1573,10 +1546,6 @@ export function TransactionList({
                 onUseMarket={() => suggestedRate && handleTransferRateChange(formatCalculatedAmount(suggestedRate, { maximumFractionDigits: 12 }))}
                 onSwap={handleSwapTransfer}
                 onChange={handleTransferPatch}
-                onPriceChange={manualPrice => {
-                  manuallyEditedTransferFieldsRef.current.manual_price = true
-                  setFormData(prev => ({ ...prev, manual_price: manualPrice }))
-                }}
                 onRevert={handleRevertTransfer}
                 onCancel={handleCancel}
               />
@@ -1803,6 +1772,11 @@ export function TransactionList({
         </div>}
       </CardContent>}
 
+      {loadingTrade&&<p role="status" className="p-3 text-sm text-muted-foreground">Loading linked trade…</p>}
+      {tradeEditor&&<TradeEditor accounts={accounts.map(a=>({...a,updated_at:0}))} {...tradeEditor}
+        quotes={{}} rates={{}} hidden={privacyMode==='hidden'||shouldHideInvestment()} currency={masterCurrency}
+        sourceRevision={tradeEditor.edit?.source_revision} onClose={()=>{setTradeEditor(null);resetForm()}}
+        onSaved={async()=>{await onTransactionAdded()}}/>}
       {legacyTradeId&&<LegacyTradeDetails tradeId={legacyTradeId} hidden={privacyMode==='hidden'||shouldHideInvestment()} onClose={()=>setLegacyTradeId(null)} onSaved={async()=>{await onTransactionAdded()}}/>}
     </Card>
   )

@@ -15,7 +15,7 @@ it('hides financial values, return percentage, axes and tooltips in privacy mode
  expect(screen.getAllByText('••••••')).toHaveLength(2)
  expect(screen.getByText('•••••• estimated return')).toBeVisible()
 })
-it('preserves the selected range and displays coverage without inventing missing totals',()=>{
+it('preserves the selected range without inventing missing totals',()=>{
  const history=fixture();history.data.summary.gain=null;history.data.summary.estimated_return_percent=null
  history.data.points=history.data.points.map(p=>({...p,value:null}))
  history.data.summary.status='partial';history.data.summary.reasons=['unknown_opening']
@@ -24,8 +24,6 @@ it('preserves the selected range and displays coverage without inventing missing
  expect(screen.getByText('Unavailable estimated return')).toBeVisible()
  expect(screen.getByText('No known portfolio values in this range.')).toBeVisible()
  fireEvent.click(screen.getByRole('button',{name:'YTD'}));expect(history.setRange).toHaveBeenCalledWith('ytd')
- fireEvent.click(screen.getByText('History method and coverage · incomplete'))
- expect(screen.getByText('Range coverage: unknown opening.')).toBeVisible()
 })
 it('retains saved data with an actionable retry after a failed refresh',()=>{
  const history=fixture();history.error=true

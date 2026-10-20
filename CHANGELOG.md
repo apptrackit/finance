@@ -8,6 +8,13 @@ Intermediate package/UI version bumps are grouped under the next published GitHu
 
 ### Fixed
 
+- Investment overview uses a clearly named Gain on net invested ratio, a compact responsive summary/chart/allocation layout, and simpler selected-day gain tooltips. Remove requested explanatory copy and the duplicate privacy button (#171).
+- Holding price charts display split-only-adjusted history and consistently adjusted trade dots, preventing artificial NVDA split crashes while retaining original executions and raw accounting inputs. Format normal chart prices to cents and preserve tiny-coin precision (#171).
+- Apply holding popup design 2a: compact centered 600px layout, instrument header, value/gain summary, chart-first flow, six-cell position grid, readable source footer and smaller Buy/Sell actions. Remove gain bars and duplicate summary cards. Keep chart caption height stable when hovering between range returns and dates. Make the full holding row open details, retaining keyboard-accessible controls. Preserve split-adjusted trade markers, full quantity access and review history; only compatible current quotes can extend the display endpoint (#171).
+- Put asset search/manual selection before category, pricing, trading currency and holding unit in new investment account setup (#171).
+- Place cross-currency settlement confirmation after the full trade review in a prominent required-action card. Show read-only totals before acknowledgement while keeping saves blocked until confirmed (#171).
+- Restrict Dashboard income, expense and transfer creation to cash accounts; new investment trades start on Investments. Ignore saved investment-account defaults while preserving canonical linked-trade editing from existing ledger rows (#171).
+
 - Main/investment-epic integration preserves both existing 017 migration filenames, transaction split exports/history and direct investment trade paths. Split mutations share guarded decimal cash arithmetic so concurrent trades, pending confirmation and fractional payments retain exact balances (#169).
 
 - Investment price returns explicitly exclude dividends. Dividend events no longer block known purchase costs, gains or history or trigger misleading purchase-review warnings; split and missing-history safeguards remain (#161).

@@ -25,6 +25,7 @@ type Props = {
   holdingId?: string
   type?: 'buy' | 'sell'
   edit?: TradeEdit
+  initialDraft?: Partial<TradeDraft>
   quotes: Record<string, MarketQuote>
   rates: Record<string, number>
   hidden: boolean
@@ -46,6 +47,7 @@ export function TradeEditor({
   holdingId,
   type = 'buy',
   edit: providedEdit,
+  initialDraft,
   quotes,
   rates,
   hidden,
@@ -57,7 +59,7 @@ export function TradeEditor({
   const [edit] = useState(providedEdit)
   const holdings = accounts.filter((a) => a.type === 'investment'),
     cashAccounts = accounts.filter((a) => a.type === 'cash')
-  const [draft, setDraft] = useState(() => initialTrade(holdings, cashAccounts, holdingId, type, edit))
+  const [draft, setDraft] = useState(() => ({...initialTrade(holdings, cashAccounts, holdingId, type, edit),...(!edit?initialDraft:{})}))
   const [initial] = useState(draft)
   const [busy, setBusy] = useState(false),
     busyRef = useRef(false),
@@ -85,8 +87,11 @@ export function TradeEditor({
   const holding = holdings.find((a) => a.id === draft.holding),
     cash = cashAccounts.find((a) => a.id === draft.cash),
     total = holding?.asset_type === 'manual'
-  const validation = validateTrade(draft, holding, cash, edit),
-    signature = tradePreviewKey(validation.input, edit?.trade.id, sourceRevision)
+  const validation = validateTrade(draft, holding, cash, edit)
+  // Read-only review can precede acknowledgement; saving still uses the fully
+  // validated draft, including the user's explicit settlement confirmation.
+  const reviewValidation = validateTrade({ ...draft, cashConfirmed: true }, holding, cash, edit),
+    signature = tradePreviewKey(reviewValidation.input, edit?.trade.id, sourceRevision)
   const cashPreview = preview?.cashAfter
   const serverCash =
     !recovering &&
@@ -497,14 +502,7 @@ export function TradeEditor({
                   : ''}
                 Enter your actual settlement. Market FX does not establish fees or execution cash.
               </p>
-              <Label className="flex min-h-10 items-center gap-2 text-xs">
-                <input
-                  type="checkbox"
-                  checked={draft.cashConfirmed}
-                  onChange={(e) => patch({ cashConfirmed: e.target.checked })}
-                />
-                I confirm this is the actual cash settlement, including fees.
-              </Label>
+
             </>
           )}
           <p className="text-[11px] text-muted-foreground">
@@ -545,8 +543,8 @@ export function TradeEditor({
               balance.
             </p>
           )}
-          {!recovering && validation.error && (
-            <p className="text-xs text-muted-foreground">{validation.error}</p>
+          {!recovering && reviewValidation.error && (
+            <p className="text-xs text-muted-foreground">{reviewValidation.error}</p>
           )}
           {recovering && (
             <p className="rounded-lg bg-secondary p-3 text-xs text-muted-foreground">
@@ -558,7 +556,7 @@ export function TradeEditor({
             </p>
           )}
           <TradeMetricsPreview
-            input={recovering ? null : validation.input}
+            input={recovering ? null : reviewValidation.input}
             tradeId={edit?.trade.id}
             hidden={hidden}
             currency={currency}
@@ -569,6 +567,25 @@ export function TradeEditor({
             <p role="alert" className="text-sm text-destructive">
               {preview.error}
             </p>
+          )}
+          {cash && draft.currency !== cash.currency && (
+            <section aria-labelledby="settlement-confirmation-title" className={`rounded-xl border p-4 ${draft.cashConfirmed ? 'border-border bg-background' : 'border-primary/40 bg-primary/5'}`}>
+              <h3 id="settlement-confirmation-title" className="text-sm font-semibold">Confirm settlement</h3>
+              <p id="settlement-confirmation-help" className="mt-1 text-xs text-muted-foreground">
+                Review the trade details and totals above, then confirm the actual cash amount to enable saving.
+              </p>
+              <Label className="mt-3 flex min-h-11 cursor-pointer items-start gap-3 rounded-lg py-2 text-sm leading-5">
+                <input
+                  type="checkbox"
+                  className="mt-0.5 h-5 w-5 shrink-0 accent-primary"
+                  checked={draft.cashConfirmed}
+                  aria-describedby="settlement-confirmation-help"
+                  onChange={(e) => patch({ cashConfirmed: e.target.checked })}
+                />
+                I confirm this is the actual cash settlement, including fees.
+              </Label>
+              {!draft.cashConfirmed && <p className="mt-1 text-xs font-medium text-primary">Required before saving</p>}
+            </section>
           )}
         </fieldset>
         {hidden && (
