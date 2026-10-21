@@ -18,7 +18,7 @@ import {
 type Category = { id: string; name: string; icon?: string; type: 'income' | 'expense' }
 
 // Data colours for the allocation bar and line markers; they identify lines, not meaning.
-const LINE_COLORS = ['#5189D8', '#9B8AF0', '#5CC7C0', '#F0A35C', '#E58AB0', '#8A9BB4']
+const LINE_COLORS = Array.from({ length: 6 }, (_, index) => `var(--split-line-${index + 1})`)
 
 interface SplitLinesEditorProps {
   lines: SplitLineDraft[]

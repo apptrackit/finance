@@ -6,7 +6,9 @@ Intermediate package/UI version bumps are grouped under the next published GitHu
 
 ## Unreleased
 
-- Refreshed cash-balance, account and portfolio history charts with EasyUI’s neutral cards, smooth monochrome area curves, animated reveals and range pills. Dated value readouts and keyboard/touch inspection preserve native currencies, history gaps and privacy.
+- Monochrome now uses a dedicated neutral light/dark palette for surfaces, controls, statuses and charts instead of a page-wide filter. Area charts follow the selected palette, with blue accents in Original and neutral accents in Monochrome.
+
+- Refreshed cash-balance, account and portfolio history charts with EasyUI-style cards, smooth area curves, animated reveals and range pills. Dated value readouts and keyboard/touch inspection preserve native currencies, history gaps and privacy.
 
 ## v4.0 — 2026-10-20
 

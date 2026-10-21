@@ -24,7 +24,7 @@ export function AccountTotalsSwitches({ value, onChange }: {
           <span className="mt-0.5 block text-xs text-muted-foreground">{toggle.description}</span>
         </span>
         <span aria-hidden="true" className={cn('relative h-5 w-9 shrink-0 rounded-full transition-colors', value[toggle.key] ? 'bg-border' : 'bg-primary')}>
-          <span className={cn('absolute top-0.5 h-4 w-4 rounded-full bg-white shadow-sm transition-[left]', value[toggle.key] ? 'left-0.5' : 'left-[18px]')} />
+          <span className={cn('absolute top-0.5 h-4 w-4 rounded-full shadow-sm transition-[left]', value[toggle.key] ? 'left-0.5 bg-foreground' : 'left-[18px] bg-primary-foreground')} />
         </span>
       </button>)}
     </div>

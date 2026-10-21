@@ -3,14 +3,20 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from '
 export type ColorMode = 'dark' | 'light'
 export type ThemeId = 'emerald' | 'mono' | 'redfilter'
 
-export interface Theme {
-  id: ThemeId
-  name: string
-  description: string
+type ThemePreview = {
   primaryColor: string
   bgColor: string
   cardColor: string
-  /** CSS filter applied to the whole page via the html element */
+  foregroundColor: string
+  primaryForegroundColor: string
+}
+
+export interface Theme extends ThemePreview {
+  id: ThemeId
+  name: string
+  description: string
+  lightPreview: ThemePreview
+  /** Optional filter shared by the app and its portalled controls. */
   cssFilter?: string
 }
 
@@ -22,15 +28,20 @@ export const THEMES: Theme[] = [
     primaryColor: '#5189D8',
     bgColor: '#000610',
     cardColor: '#010E21',
+    foregroundColor: '#f8fafc',
+    primaryForegroundColor: '#ffffff',
+    lightPreview: { primaryColor: '#3b70bf', bgColor: '#f4f6fa', cardColor: '#ffffff', foregroundColor: '#0b1c32', primaryForegroundColor: '#ffffff' },
   },
   {
     id: 'mono',
     name: 'Monochrome',
-    description: 'Pure black, white & gray — zero color',
-    primaryColor: '#5189D8',
-    bgColor: '#000610',
-    cardColor: '#010E21',
-    cssFilter: 'grayscale(1)',
+    description: 'Black, white and gray surfaces and accents',
+    primaryColor: '#ebebeb',
+    bgColor: '#0a0a0a',
+    cardColor: '#181818',
+    foregroundColor: '#f5f5f5',
+    primaryForegroundColor: '#171717',
+    lightPreview: { primaryColor: '#1f1f1f', bgColor: '#f7f7f7', cardColor: '#ffffff', foregroundColor: '#171717', primaryForegroundColor: '#ffffff' },
   },
   {
     id: 'redfilter',
@@ -39,6 +50,9 @@ export const THEMES: Theme[] = [
     primaryColor: '#5189D8',
     bgColor: '#000610',
     cardColor: '#010E21',
+    foregroundColor: '#f8fafc',
+    primaryForegroundColor: '#ffffff',
+    lightPreview: { primaryColor: '#3b70bf', bgColor: '#f4f6fa', cardColor: '#ffffff', foregroundColor: '#0b1c32', primaryForegroundColor: '#ffffff' },
     cssFilter: 'sepia(1) saturate(6) hue-rotate(315deg) brightness(0.75)',
   },
 ]

@@ -301,35 +301,14 @@ button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
   *, *::before, *::after { animation-duration:.01ms !important; transition-duration:.01ms !important; scroll-behavior:auto !important; }
 }
 
-/* EasyUI area-chart surfaces use the reference's neutral palette locally. */
+/* Chart geometry is shared; colors come from the selected app palette. */
 .easyui-area-card {
-  --card: 0 0% 9.5%;
-  --foreground: 0 0% 96%;
-  --card-foreground: 0 0% 96%;
-  --primary: 0 0% 92%;
-  --primary-foreground: 0 0% 9%;
-  --muted-foreground: 0 0% 52%;
-  --border: 0 0% 17%;
-  --secondary: 0 0% 15%;
-  --background: 0 0% 7%;
-  --ring: 0 0% 60%;
   min-width: 0;
   padding: 24px;
   border: 1px solid hsl(var(--border));
   border-radius: 24px;
   background: hsl(var(--card));
   color: hsl(var(--foreground));
-}
-:root[data-color-mode='light'] .easyui-area-card {
-  --card: 0 0% 100%;
-  --foreground: 0 0% 9%;
-  --card-foreground: 0 0% 9%;
-  --primary: 0 0% 12%;
-  --primary-foreground: 0 0% 100%;
-  --muted-foreground: 0 0% 45%;
-  --border: 0 0% 89%;
-  --secondary: 0 0% 95%;
-  --background: 0 0% 98%;
 }
 .easyui-chart-ranges { display:flex; flex-shrink:0; align-self:flex-start; max-width:100%; overflow-x:auto; padding:2px; border-radius:999px; background:hsl(var(--background) / .55); }
 .easyui-chart-ranges button { position:relative; isolation:isolate; flex-shrink:0; padding:5px 12px; border-radius:999px; font-size:12px; font-weight:500; color:hsl(var(--muted-foreground)); }
@@ -338,8 +317,154 @@ button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
 .easyui-chart-control { padding:4px 8px; border-radius:999px; font-size:11px; color:hsl(var(--muted-foreground)); transition:background .15s,color .15s; }
 .easyui-chart-control:hover, .easyui-chart-control[aria-pressed='true'] { color:hsl(var(--foreground)); background:hsl(var(--secondary)); }
 .easyui-chart-control:disabled { cursor:default; opacity:.45; }
-.easyui-chart-positive { color:#6ee7b7; }
-.easyui-chart-negative { color:#fb7185; }
-:root[data-color-mode='light'] .easyui-chart-positive { color:#059669; }
-:root[data-color-mode='light'] .easyui-chart-negative { color:#e11d48; }
+.easyui-chart-positive { color:hsl(var(--success)); }
+.easyui-chart-negative { color:hsl(var(--destructive)); }
 @media (max-width:479px) { .easyui-area-card { padding:20px; } }
+
+/* Data colors are theme inputs, including SVG charts and split allocations. */
+:root {
+  accent-color: hsl(var(--primary));
+  --warning: 38 92% 50%;
+  --chart-category-1: #8b5cf6;
+  --chart-category-2: #f59e0b;
+  --chart-category-3: #06b6d4;
+  --chart-category-4: #ec4899;
+  --chart-category-5: #84cc16;
+  --chart-category-6: #ef4444;
+  --chart-category-7: #3b82f6;
+  --chart-category-8: #14b8a6;
+  --chart-category-9: #f97316;
+  --chart-category-10: #a855f7;
+  --chart-category-11: #5189D8;
+  --chart-category-12: #eab308;
+  --chart-category-13: #0ea5e9;
+  --chart-category-14: #d946ef;
+  --chart-category-15: #64748b;
+  --split-line-1: #5189D8;
+  --split-line-2: #9B8AF0;
+  --split-line-3: #5CC7C0;
+  --split-line-4: #F0A35C;
+  --split-line-5: #E58AB0;
+  --split-line-6: #8A9BB4;
+}
+
+/* A native neutral palette. No filter is used, including on portalled controls. */
+:root.theme-mono {
+  --canvas: 0 0% 4%;
+  --background: 0 0% 7%;
+  --foreground: 0 0% 96%;
+  --card: 0 0% 9.5%;
+  --card-foreground: 0 0% 96%;
+  --popover: 0 0% 9.5%;
+  --popover-foreground: 0 0% 96%;
+  --primary: 0 0% 92%;
+  --primary-foreground: 0 0% 9%;
+  --secondary: 0 0% 15%;
+  --secondary-foreground: 0 0% 96%;
+  --muted: 0 0% 12%;
+  --muted-foreground: 0 0% 65%;
+  --accent: 0 0% 15%;
+  --accent-foreground: 0 0% 96%;
+  --border: 0 0% 17%;
+  --input: 0 0% 12%;
+  --ring: 0 0% 65%;
+  --destructive: 0 0% 67%;
+  --destructive-foreground: 0 0% 9%;
+  --success: 0 0% 88%;
+  --success-foreground: 0 0% 9%;
+  --forecast: 0 0% 58%;
+  --cash-flow-income: 0 0% 78%;
+  --warning: 0 0% 72%;
+  --chart-category-1: #e5e5e5;
+  --chart-category-2: #858585;
+  --chart-category-3: #b8b8b8;
+  --chart-category-4: #737373;
+  --chart-category-5: #d4d4d4;
+  --chart-category-6: #999999;
+  --chart-category-7: #f5f5f5;
+  --chart-category-8: #808080;
+  --chart-category-9: #c4c4c4;
+  --chart-category-10: #6b6b6b;
+  --chart-category-11: #dedede;
+  --chart-category-12: #a3a3a3;
+  --chart-category-13: #ededed;
+  --chart-category-14: #909090;
+  --chart-category-15: #adadad;
+  --split-line-1: var(--chart-category-1);
+  --split-line-2: var(--chart-category-2);
+  --split-line-3: var(--chart-category-3);
+  --split-line-4: var(--chart-category-4);
+  --split-line-5: var(--chart-category-5);
+  --split-line-6: var(--chart-category-6);
+
+  /* Legacy utility accents participate in the palette instead of being filtered. */
+  --color-amber-300: var(--color-neutral-300);
+  --color-amber-400: var(--color-neutral-400);
+  --color-amber-500: var(--color-neutral-500);
+  --color-amber-600: var(--color-neutral-600);
+  --color-amber-700: var(--color-neutral-700);
+  --color-blue-400: var(--color-neutral-400);
+  --color-blue-500: var(--color-neutral-500);
+  --color-blue-600: var(--color-neutral-600);
+  --color-green-50: var(--color-neutral-50);
+  --color-green-400: var(--color-neutral-400);
+  --color-green-500: var(--color-neutral-500);
+  --color-green-600: var(--color-neutral-600);
+  --color-green-700: var(--color-neutral-700);
+  --color-orange-300: var(--color-neutral-300);
+  --color-orange-500: var(--color-neutral-500);
+  --color-orange-600: var(--color-neutral-600);
+  --color-orange-700: var(--color-neutral-700);
+  --color-purple-500: var(--color-neutral-500);
+  --color-red-400: var(--color-neutral-400);
+  --color-red-500: var(--color-neutral-500);
+  --color-red-600: var(--color-neutral-600);
+  --color-violet-300: var(--color-neutral-300);
+  --color-violet-400: var(--color-neutral-400);
+  --color-violet-500: var(--color-neutral-500);
+  --color-violet-600: var(--color-neutral-600);
+  --color-yellow-500: var(--color-neutral-500);
+}
+:root.theme-mono[data-color-mode='light'] {
+  --canvas: 0 0% 97%;
+  --background: 0 0% 98%;
+  --foreground: 0 0% 9%;
+  --card: 0 0% 100%;
+  --card-foreground: 0 0% 9%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 0 0% 9%;
+  --primary: 0 0% 12%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 0 0% 95%;
+  --secondary-foreground: 0 0% 12%;
+  --muted: 0 0% 95%;
+  --muted-foreground: 0 0% 45%;
+  --accent: 0 0% 95%;
+  --accent-foreground: 0 0% 12%;
+  --border: 0 0% 89%;
+  --input: 0 0% 98%;
+  --ring: 0 0% 45%;
+  --destructive: 0 0% 40%;
+  --destructive-foreground: 0 0% 100%;
+  --success: 0 0% 24%;
+  --success-foreground: 0 0% 100%;
+  --forecast: 0 0% 40%;
+  --color-violet-400: var(--color-neutral-600);
+  --cash-flow-income: 0 0% 24%;
+  --warning: 0 0% 35%;
+  --chart-category-1: #262626;
+  --chart-category-2: #737373;
+  --chart-category-3: #525252;
+  --chart-category-4: #8a8a8a;
+  --chart-category-5: #404040;
+  --chart-category-6: #666666;
+  --chart-category-7: #171717;
+  --chart-category-8: #595959;
+  --chart-category-9: #888888;
+  --chart-category-10: #454545;
+  --chart-category-11: #707070;
+  --chart-category-12: #333333;
+  --chart-category-13: #7d7d7d;
+  --chart-category-14: #4b4b4b;
+  --chart-category-15: #949494;
+}

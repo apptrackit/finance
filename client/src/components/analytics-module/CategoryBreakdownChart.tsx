@@ -40,7 +40,7 @@ export const CategoryBreakdownChart = memo(function CategoryBreakdownChart({ dat
                     cy="50%"
                     labelLine={false}
                     outerRadius={80}
-                    fill="#8884d8"
+                    fill={COLORS[0]}
                     dataKey="value"
                   >
                     {data.map((_entry, index) => (

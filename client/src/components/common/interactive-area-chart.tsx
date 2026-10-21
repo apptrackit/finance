@@ -32,7 +32,7 @@ const finite = (value: number | null | undefined): value is number => value != n
 const shortDate = (date: string) => new Date(`${date}T00:00:00Z`).toLocaleDateString('en', { month: 'short', day: 'numeric', timeZone: 'UTC' })
 const fullDate = (date: string) => new Date(`${date}T00:00:00Z`).toLocaleDateString('en', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' })
 
-export function InteractiveAreaChart({ data, label, formatValue, color = 'hsl(var(--foreground))', title, controls, showChange = false, periodLabel = 'in period', reference, hidden = false, showReadout = false, className, activeIndex, onInspect, renderTooltip }: InteractiveAreaChartProps) {
+export function InteractiveAreaChart({ data, label, formatValue, color = 'hsl(var(--primary))', title, controls, showChange = false, periodLabel = 'in period', reference, hidden = false, showReadout = false, className, activeIndex, onInspect, renderTooltip }: InteractiveAreaChartProps) {
   const uid = useId().replaceAll(':', '')
   const reduce = useReducedMotion()
   const wrapRef = useRef<HTMLDivElement>(null)
