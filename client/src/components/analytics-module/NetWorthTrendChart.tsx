@@ -19,7 +19,7 @@ type NetWorthTrendChartProps = {
 export const NetWorthTrendChart = memo(function NetWorthTrendChart({ data, masterCurrency, title = 'Cash Balance Trend', controls, periodLabel, comparison, comparisonDisabledReason }: NetWorthTrendChartProps) {
   const { privacyMode } = usePrivacy()
   const [compare, setCompare] = useState(false)
-  const [showTrend, setShowTrend] = useState(false)
+  const [showTrend, setShowTrend] = useState(true)
   const reasonId = useId()
   const unavailableReason = comparisonDisabledReason || comparison?.unavailableReason
   const comparing = compare && comparison !== undefined && !unavailableReason

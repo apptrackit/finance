@@ -36,11 +36,13 @@ const toggle = () => fireEvent.click(screen.getByRole('button', { name: /^(Compa
 describe('Cash Balance Trend comparison', () => {
   beforeEach(() => { state.privacyMode = 'visible'; state.tooltipDay = 2; state.points = [] })
 
-  it('keeps trend and comparison opt-in and labels both months', () => {
+  it('shows the trend by default, lets it be hidden, and keeps comparison opt-in', () => {
     renderChart()
+    expect(screen.getByRole('button', { name: 'Trend' })).toHaveAttribute('aria-pressed', 'true')
+    expect(document.querySelector('[data-series=reference] path')).toHaveAttribute('stroke-dasharray', '6 3')
+    fireEvent.click(screen.getByRole('button', { name: 'Trend' }))
     expect(document.querySelector('[data-series=reference]')).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'Trend' }))
-    expect(document.querySelector('[data-series=reference] path')).toHaveAttribute('stroke-dasharray', '6 3')
     expect(screen.queryByTestId('series-previous')).not.toBeInTheDocument()
     toggle()
     expect(screen.getByRole('button', { name: 'Hide comparison' })).toHaveAttribute('aria-pressed', 'true')

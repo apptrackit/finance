@@ -13,7 +13,7 @@ type PerAccountTrendChartProps = {
 
 export const PerAccountTrendChart = memo(function PerAccountTrendChart({ account, data, className }: PerAccountTrendChartProps) {
   const { privacyMode } = usePrivacy()
-  const [showTrend, setShowTrend] = useState(false)
+  const [showTrend, setShowTrend] = useState(true)
 
   return <section className={cn('easyui-area-card', className)} aria-label={`${account.name} trend`}>
     {data.length > 0 ? <InteractiveAreaChart
