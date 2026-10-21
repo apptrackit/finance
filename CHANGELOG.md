@@ -6,6 +6,8 @@ Intermediate package/UI version bumps are grouped under the next published GitHu
 
 ## Unreleased
 
+- Refreshed cash-balance, account and portfolio history charts with an EasyUI-inspired SVG area presentation, dated value readouts and keyboard/touch inspection, preserving native currencies, history gaps and privacy.
+
 ## v4.0 — 2026-10-20
 
 [GitHub release](https://github.com/apptrackit/finance/releases/tag/v4.0) · [Compare v3.3…v4.0](https://github.com/apptrackit/finance/compare/v3.3...v4.0)
