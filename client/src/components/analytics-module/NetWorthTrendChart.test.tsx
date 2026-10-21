@@ -36,8 +36,10 @@ const toggle = () => fireEvent.click(screen.getByRole('button', { name: /^(Compa
 describe('Cash Balance Trend comparison', () => {
   beforeEach(() => { state.privacyMode = 'visible'; state.tooltipDay = 2; state.points = [] })
 
-  it('is opt-in, labels both months, and replaces the EMA only while comparing', () => {
+  it('keeps trend and comparison opt-in and labels both months', () => {
     renderChart()
+    expect(document.querySelector('[data-series=reference]')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Trend' }))
     expect(document.querySelector('[data-series=reference] path')).toHaveAttribute('stroke-dasharray', '6 3')
     expect(screen.queryByTestId('series-previous')).not.toBeInTheDocument()
     toggle()

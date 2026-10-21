@@ -89,3 +89,41 @@ describe('InteractiveAreaChart', () => {
     expect(within(screen.getByRole('region', { name: 'first' })).getByRole('slider')).toBeVisible()
   })
 })
+
+it('draws a smooth curve without overshooting adjacent observations at plateaus or sharp changes', () => {
+  const values = [0, 0, 100, 100, -100, 25]
+  const data = values.map((value, i) => ({ date: `2026-10-${String(i + 1).padStart(2, '0')}`, value }))
+  const { container } = render(<InteractiveAreaChart {...props} data={data} />)
+  const path = container.querySelector('[data-series=value] path[fill=none]')!.getAttribute('d')!
+  const [move, ...curves] = path.split(' C')
+  expect(curves).toHaveLength(values.length - 1)
+  let previous = move.slice(1).split(' ').map(Number)
+  for (const command of curves) {
+    const [x1, y1, x2, y2, x, y] = command.split(' ').map(Number)
+    for (let t = 0; t <= 1; t += 0.05) {
+      const sampleX = (1-t)**3 * previous[0] + 3*(1-t)**2*t*x1 + 3*(1-t)*t*t*x2 + t**3*x
+      const sampleY = (1-t)**3 * previous[1] + 3*(1-t)**2*t*y1 + 3*(1-t)*t*t*y2 + t**3*y
+      expect(sampleX).toBeGreaterThanOrEqual(previous[0] - 0.001)
+      expect(sampleX).toBeLessThanOrEqual(x + 0.001)
+      expect(sampleY).toBeGreaterThanOrEqual(Math.min(previous[1], y) - 0.001)
+      expect(sampleY).toBeLessThanOrEqual(Math.max(previous[1], y) + 0.001)
+    }
+    previous = [x, y]
+  }
+})
+
+it('does not invent percentage changes for an unknown, zero or negative opening balance', () => {
+  const { container, rerender } = render(<InteractiveAreaChart {...props} data={[points[1], points[3]]} showChange />)
+  expect(container).not.toHaveTextContent('%')
+  for (const first of [0, -100]) {
+    rerender(<InteractiveAreaChart {...props} data={[{ ...points[0], value: first }, points[3]]} showChange />)
+    expect(container).not.toHaveTextContent('%')
+  }
+  rerender(<InteractiveAreaChart {...props} data={[{ ...points[0], value: 100 }, points[3]]} showChange />)
+  expect(container).toHaveTextContent('+100.0%')
+  rerender(<InteractiveAreaChart {...props} hidden showChange title="Cash balance" controls={<button>1M</button>} />)
+  expect(screen.getByRole('heading', { name: 'Cash balance' })).toBeVisible()
+  expect(screen.getByRole('button', { name: '1M' })).toBeVisible()
+  expect(container).not.toHaveTextContent('%')
+  expect(container).not.toHaveTextContent('EUR')
+})

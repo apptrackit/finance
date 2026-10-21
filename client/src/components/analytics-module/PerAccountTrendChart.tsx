@@ -1,8 +1,7 @@
-import { memo } from 'react'
-import { Card, CardContent, CardHeader, CardTitle } from '../common/card'
+import { memo, useState } from 'react'
 import { InteractiveAreaChart } from '../common/interactive-area-chart'
 import { usePrivacy } from '../../context/PrivacyContext'
-import { COLORS } from './constants'
+import { cn } from '../../lib/utils'
 import type { Account, TrendDataPoint } from './types'
 
 type PerAccountTrendChartProps = {
@@ -12,38 +11,20 @@ type PerAccountTrendChartProps = {
   className?: string
 }
 
-export const PerAccountTrendChart = memo(function PerAccountTrendChart({ account, data, index, className }: PerAccountTrendChartProps) {
+export const PerAccountTrendChart = memo(function PerAccountTrendChart({ account, data, className }: PerAccountTrendChartProps) {
   const { privacyMode } = usePrivacy()
+  const [showTrend, setShowTrend] = useState(false)
 
-  return (
-    <Card className={className}>
-      <CardHeader className="pb-2 px-4 sm:px-6">
-        <div className="flex items-center gap-2">
-          <span className="text-base sm:text-lg">{account.icon || '💳'}</span>
-          <CardTitle className="text-sm sm:text-base truncate flex-1">{account.name}</CardTitle>
-          <span className={`text-xs text-muted-foreground flex-shrink-0 ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
-            {privacyMode === 'hidden' ? '••••••' : account.balance.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})} {account.currency}
-          </span>
-        </div>
-      </CardHeader>
-      <CardContent className="px-2 sm:px-6">
-        {data.length > 0 ? (
-          <InteractiveAreaChart
-            data={data.map(point => ({ date: point.date, value: point.balance, reference: point.smoothed }))}
-            label={`${account.name} balance`}
-            color={COLORS[index % COLORS.length]}
-            formatValue={value => value === null ? 'Unavailable' : `${value.toLocaleString('hu-HU', { maximumFractionDigits: 0 })} ${account.currency}`}
-            reference={{ label: 'Trend', color: 'hsl(var(--muted-foreground))', dashed: true }}
-            hidden={privacyMode === 'hidden'}
-            showReadout
-            className="h-36 sm:h-48"
-          />
-        ) : (
-          <div className="h-36 sm:h-48 flex items-center justify-center text-muted-foreground text-sm">
-            No transaction data in this period
-          </div>
-        )}
-      </CardContent>
-    </Card>
-  )
+  return <section className={cn('easyui-area-card', className)} aria-label={`${account.name} trend`}>
+    {data.length > 0 ? <InteractiveAreaChart
+      data={data.map(point => ({ date: point.date, value: point.balance, reference: point.smoothed }))}
+      label={`${account.name} balance`} title={account.name}
+      formatValue={value => value === null ? 'Unavailable' : `${value.toLocaleString('hu-HU', { maximumFractionDigits: 0 })} ${account.currency}`}
+      reference={showTrend ? { label: 'Trend', color: 'hsl(var(--muted-foreground))', dashed: true } : undefined}
+      hidden={privacyMode === 'hidden'} showReadout showChange className="h-[200px] sm:h-[240px]"
+    /> : <><h3 className="text-[13px] text-muted-foreground">{account.name}</h3><div className="flex h-48 items-center justify-center text-sm text-muted-foreground">No transaction data in this period</div></>}
+    <div className="mt-3 flex flex-wrap items-center justify-between gap-2"><p className="text-[11px] text-muted-foreground">Current balance: {privacyMode === 'hidden' ? '••••••' : account.balance.toLocaleString('hu-HU', { maximumFractionDigits: 0 })} {account.currency}</p>
+      {privacyMode !== 'hidden' && data.length > 0 && <button type="button" aria-pressed={showTrend} onClick={() => setShowTrend(previous => !previous)} className="easyui-chart-control">Trend</button>}
+    </div>
+  </section>
 })

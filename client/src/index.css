@@ -300,3 +300,46 @@ button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration:.01ms !important; transition-duration:.01ms !important; scroll-behavior:auto !important; }
 }
+
+/* EasyUI area-chart surfaces use the reference's neutral palette locally. */
+.easyui-area-card {
+  --card: 0 0% 9.5%;
+  --foreground: 0 0% 96%;
+  --card-foreground: 0 0% 96%;
+  --primary: 0 0% 92%;
+  --primary-foreground: 0 0% 9%;
+  --muted-foreground: 0 0% 52%;
+  --border: 0 0% 17%;
+  --secondary: 0 0% 15%;
+  --background: 0 0% 7%;
+  --ring: 0 0% 60%;
+  min-width: 0;
+  padding: 24px;
+  border: 1px solid hsl(var(--border));
+  border-radius: 24px;
+  background: hsl(var(--card));
+  color: hsl(var(--foreground));
+}
+:root[data-color-mode='light'] .easyui-area-card {
+  --card: 0 0% 100%;
+  --foreground: 0 0% 9%;
+  --card-foreground: 0 0% 9%;
+  --primary: 0 0% 12%;
+  --primary-foreground: 0 0% 100%;
+  --muted-foreground: 0 0% 45%;
+  --border: 0 0% 89%;
+  --secondary: 0 0% 95%;
+  --background: 0 0% 98%;
+}
+.easyui-chart-ranges { display:flex; flex-shrink:0; align-self:flex-start; max-width:100%; overflow-x:auto; padding:2px; border-radius:999px; background:hsl(var(--background) / .55); }
+.easyui-chart-ranges button { position:relative; isolation:isolate; flex-shrink:0; padding:5px 12px; border-radius:999px; font-size:12px; font-weight:500; color:hsl(var(--muted-foreground)); }
+.easyui-chart-ranges button[aria-pressed='true'] { color:hsl(var(--foreground)); }
+.easyui-chart-pill { position:absolute; inset:0; z-index:-1; border-radius:999px; background:hsl(var(--secondary)); box-shadow:0 1px 3px #00000012; }
+.easyui-chart-control { padding:4px 8px; border-radius:999px; font-size:11px; color:hsl(var(--muted-foreground)); transition:background .15s,color .15s; }
+.easyui-chart-control:hover, .easyui-chart-control[aria-pressed='true'] { color:hsl(var(--foreground)); background:hsl(var(--secondary)); }
+.easyui-chart-control:disabled { cursor:default; opacity:.45; }
+.easyui-chart-positive { color:#6ee7b7; }
+.easyui-chart-negative { color:#fb7185; }
+:root[data-color-mode='light'] .easyui-chart-positive { color:#059669; }
+:root[data-color-mode='light'] .easyui-chart-negative { color:#e11d48; }
+@media (max-width:479px) { .easyui-area-card { padding:20px; } }
