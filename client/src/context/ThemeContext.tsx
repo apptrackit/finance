@@ -44,7 +44,7 @@ export const THEMES: Theme[] = [
   {
     id: 'redfilter',
     name: 'Red Filter',
-    description: 'Deep red surfaces and warm red accents',
+    description: 'Red surfaces with meaningful color accents',
     primaryColor: '#ff7575',
     bgColor: '#110707',
     cardColor: '#231010',

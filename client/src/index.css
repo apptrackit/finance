@@ -404,9 +404,9 @@ button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
   --warning: 32 90% 35%;
 }
 
-:root.theme-mono .dashboard-cash-flow-expense { --cash-flow-color: var(--destructive); }
+:root:is(.theme-mono, .theme-redfilter) .dashboard-cash-flow-expense { --cash-flow-color: var(--destructive); }
 
-/* Native red palette: surfaces, portalled controls and charts share red tones. */
+/* Red surfaces and primary charts retain semantic status/category colors. */
 :root.theme-redfilter {
   --canvas: 0 42% 4.7%;
   --background: 0 40% 6%;
@@ -428,64 +428,11 @@ button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
   --ring: 0 100% 73%;
   --destructive: 0 94% 68%;
   --destructive-foreground: 0 60% 10%;
-  --success: 0 72% 85%;
-  --success-foreground: 0 60% 10%;
-  --forecast: 0 42% 66%;
-  --cash-flow-income: 0 72% 85%;
-  --warning: 0 95% 79%;
-  --red-accent-50: hsl(0 100% 97%);
-  --red-accent-300: hsl(0 90% 85%);
-  --red-accent-400: hsl(0 94% 75%);
-  --red-accent-500: hsl(0 85% 65%);
-  --red-accent-600: hsl(0 75% 55%);
-  --red-accent-700: hsl(0 70% 43%);
-  --chart-category-1: #ffb3b3;
-  --chart-category-2: #b95a5a;
-  --chart-category-3: #eb8585;
-  --chart-category-4: #9e6161;
-  --chart-category-5: #ffd1d1;
-  --chart-category-6: #cc7373;
-  --chart-category-7: #ffe5e5;
-  --chart-category-8: #a94b4b;
-  --chart-category-9: #e4a2a2;
-  --chart-category-10: #ac7777;
-  --chart-category-11: #ff9292;
-  --chart-category-12: #d58e8e;
-  --chart-category-13: #f7c2c2;
-  --chart-category-14: #c06363;
-  --chart-category-15: #e0b0b0;
-  --split-line-1: var(--chart-category-1);
-  --split-line-2: var(--chart-category-2);
-  --split-line-3: var(--chart-category-3);
-  --split-line-4: var(--chart-category-4);
-  --split-line-5: var(--chart-category-5);
-  --split-line-6: var(--chart-category-6);
-  --color-amber-300: var(--red-accent-300);
-  --color-amber-400: var(--red-accent-400);
-  --color-amber-500: var(--red-accent-500);
-  --color-amber-600: var(--red-accent-600);
-  --color-amber-700: var(--red-accent-700);
-  --color-blue-400: var(--red-accent-400);
-  --color-blue-500: var(--red-accent-500);
-  --color-blue-600: var(--red-accent-600);
-  --color-green-50: var(--red-accent-50);
-  --color-green-400: var(--red-accent-400);
-  --color-green-500: var(--red-accent-500);
-  --color-green-600: var(--red-accent-600);
-  --color-green-700: var(--red-accent-700);
-  --color-orange-300: var(--red-accent-300);
-  --color-orange-500: var(--red-accent-500);
-  --color-orange-600: var(--red-accent-600);
-  --color-orange-700: var(--red-accent-700);
-  --color-purple-500: var(--red-accent-500);
-  --color-red-400: var(--red-accent-400);
-  --color-red-500: var(--red-accent-500);
-  --color-red-600: var(--red-accent-600);
-  --color-violet-300: var(--red-accent-300);
-  --color-violet-400: var(--red-accent-400);
-  --color-violet-500: var(--red-accent-500);
-  --color-violet-600: var(--red-accent-600);
-  --color-yellow-500: var(--red-accent-500);
+  --success: 142 65% 58%;
+  --success-foreground: 144 80% 10%;
+  --forecast: 256 80% 80%;
+  --cash-flow-income: 142 65% 58%;
+  --warning: 38 92% 60%;
 }
 :root.theme-redfilter[data-color-mode='light'] {
   --canvas: 0 100% 98%;
@@ -508,29 +455,9 @@ button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
   --ring: 0 74% 42%;
   --destructive: 0 80% 40%;
   --destructive-foreground: 0 100% 99%;
-  --success: 0 45% 32%;
+  --success: 146 65% 32%;
   --success-foreground: 0 100% 99%;
-  --forecast: 0 35% 43%;
-  --cash-flow-income: 0 45% 32%;
-  --warning: 0 60% 38%;
-  --red-accent-300: hsl(0 65% 72%);
-  --red-accent-400: hsl(0 60% 42%);
-  --red-accent-500: hsl(0 70% 43%);
-  --red-accent-600: hsl(0 75% 36%);
-  --red-accent-700: hsl(0 70% 29%);
-  --chart-category-1: #b91c1c;
-  --chart-category-2: #a65b5b;
-  --chart-category-3: #d14d4d;
-  --chart-category-4: #8c4444;
-  --chart-category-5: #761b1b;
-  --chart-category-6: #bf7373;
-  --chart-category-7: #571717;
-  --chart-category-8: #b83d3d;
-  --chart-category-9: #974f4f;
-  --chart-category-10: #c76565;
-  --chart-category-11: #902929;
-  --chart-category-12: #a97676;
-  --chart-category-13: #6b3535;
-  --chart-category-14: #d17f7f;
-  --chart-category-15: #ad3e3e;
+  --forecast: 262 65% 50%;
+  --cash-flow-income: 146 65% 32%;
+  --warning: 32 90% 35%;
 }
