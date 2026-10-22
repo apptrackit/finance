@@ -33,7 +33,7 @@ export const THEMES: Theme[] = [
   {
     id: 'mono',
     name: 'Monochrome',
-    description: 'Black, white and gray surfaces and accents',
+    description: 'Neutral surfaces with meaningful color accents',
     primaryColor: '#ebebeb',
     bgColor: '#0a0a0a',
     cardColor: '#181818',
