@@ -16,6 +16,7 @@ import { convertToMasterCurrency as convertUtil } from './utils'
 import { SummaryCards } from './SummaryCards'
 import { FinancialOutlook } from './FinancialOutlook'
 import { NetWorthTrendChart } from './NetWorthTrendChart'
+import { AreaChartRanges } from '../common/area-chart-ranges'
 import { IncomeChart } from './IncomeChart'
 import { ExpensesChart } from './ExpensesChart'
 import {
@@ -923,7 +924,9 @@ export function Analytics({
 
   const cashTrendChart = show('cash-balance-trend') && accounts.some(account => account.type !== 'investment' && !account.exclude_from_cash_balance) ? (
     <NetWorthTrendChart data={displayedCashBalanceData} masterCurrency={masterCurrency}
-      title="Cash Balance Trend" comparison={cashBalanceComparison} comparisonDisabledReason={cashComparisonDisabledReason} />
+      title="Cash Balance Trend" periodLabel={periodDisplayLabel}
+      controls={<AreaChartRanges label="Cash balance range" options={[['month', '1M'], ['year', '1Y'], ['allTime', 'All']] as const} value={period} onChange={next => changeFilters({ period: next, mode: 'actual', resolution: 'default' })} />}
+      comparison={cashBalanceComparison} comparisonDisabledReason={cashComparisonDisabledReason} />
   ) : null
 
   return (

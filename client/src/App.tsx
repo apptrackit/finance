@@ -148,7 +148,7 @@ function App() {
     <aside className="finance-sidebar fixed inset-y-0 left-0 z-40 hidden flex-col border-r border-border bg-card px-3.5 py-5 lg:flex overflow-hidden">
       <div className="mb-5 flex shrink-0 items-center gap-2">
         <NavLink to="/dashboard" className="flex min-w-0 flex-1 items-center gap-2.5 px-1.5" aria-label="Finance home">
-          <span className="flex h-8 w-8 items-center justify-center rounded-[9px] bg-primary text-white"><Wallet className="h-[17px] w-[17px]" /></span>
+          <span className="flex h-8 w-8 items-center justify-center rounded-[9px] bg-primary text-primary-foreground"><Wallet className="h-[17px] w-[17px]" /></span>
           <span><span className="block text-[15px] font-semibold">Finance</span><span className="block text-[11px] text-muted-foreground">Self-hosted</span></span>
         </NavLink>
         {privacyControl}

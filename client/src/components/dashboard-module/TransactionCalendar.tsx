@@ -274,7 +274,7 @@ export function TransactionCalendar({
               {selectedTotals.net === null && <span>Day totals unavailable: missing exchange rates.</span>}
               {(selectedTotals.income ?? 0) > 0 && <SummaryPill label="Income" value={selectedTotals.income!} hidden={privacyMode === 'hidden'} tone="text-success bg-success/10" />}
               {(selectedTotals.expense ?? 0) > 0 && <SummaryPill label="Expenses" value={selectedTotals.expense!} hidden={privacyMode === 'hidden'} tone="text-destructive bg-destructive/10" />}
-              {(selectedTotals.transfer ?? 0) > 0 && <SummaryPill label="Transfer" value={selectedTotals.transfer!} hidden={privacyMode === 'hidden'} tone="text-blue-500 bg-blue-500/10" />}
+              {(selectedTotals.transfer ?? 0) > 0 && <SummaryPill label="Transfer" value={selectedTotals.transfer!} hidden={privacyMode === 'hidden'} tone="text-primary bg-primary/10" />}
             </div>
           </div>
           <div className="max-h-[22rem] divide-y divide-border/60 overflow-y-auto">
@@ -282,9 +282,9 @@ export function TransactionCalendar({
               const transfer = !!tx.linked_transaction_id
               const label = transfer ? `Transfer to ${tx.relatedTx ? getAccountName(tx.relatedTx.account_id) : 'account'}` : (tx.description || getCategoryName(tx.category_id))
               return <div key={tx.id} className="flex items-center gap-2.5 p-3">
-                <div className={`flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg text-sm ${transfer ? 'bg-blue-500/10 text-blue-500' : tx.amount >= 0 ? 'bg-success/10' : 'bg-secondary'}`}>{transfer ? <ArrowRightLeft className="h-4 w-4" /> : getCategoryIcon(tx.category_id)}</div>
+                <div className={`flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg text-sm ${transfer ? 'bg-primary/10 text-primary' : tx.amount >= 0 ? 'bg-success/10' : 'bg-secondary'}`}>{transfer ? <ArrowRightLeft className="h-4 w-4" /> : getCategoryIcon(tx.category_id)}</div>
                 <div className="min-w-0 flex-1"><div className="truncate text-xs font-medium">{label}</div><div className="truncate text-[10px] text-muted-foreground">{getAccountName(tx.account_id)} · {transfer ? 'Transfer' : getCategoryName(tx.category_id)}</div></div>
-                <div className={`text-right text-xs font-bold ${transfer ? 'text-blue-500' : tx.amount >= 0 ? 'text-success' : 'text-destructive'}`}>{transfer ? '' : tx.amount >= 0 ? '+' : '−'}{nativeAmount(tx.amount, tx.account_id, true)}</div>
+                <div className={`text-right text-xs font-bold ${transfer ? 'text-primary' : tx.amount >= 0 ? 'text-success' : 'text-destructive'}`}>{transfer ? '' : tx.amount >= 0 ? '+' : '−'}{nativeAmount(tx.amount, tx.account_id, true)}</div>
               </div>
             }) : <div className="px-3 py-10 text-center text-xs text-muted-foreground">No transactions on this day.</div>}
           </div>
@@ -338,7 +338,7 @@ function CalendarTransactionRow({
 }) {
   const isTransfer = !!transaction.linked_transaction_id
   const isIncome = transaction.amount >= 0 && !isTransfer
-  const tone = isTransfer ? 'text-blue-500 bg-blue-500/10' : isIncome ? 'text-success bg-success/10' : 'text-destructive bg-destructive/10'
+  const tone = isTransfer ? 'text-primary bg-primary/10' : isIncome ? 'text-success bg-success/10' : 'text-destructive bg-destructive/10'
   const sign = isTransfer ? '' : isIncome ? '+' : '−'
 
   return (

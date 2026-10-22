@@ -310,7 +310,7 @@ export function CategoriesCard() {
 
         <div className="space-y-3">
           <div className="flex items-center justify-between">
-            <h3 className="text-sm font-medium text-green-600">Income Categories</h3>
+            <h3 className="text-sm font-medium text-success">Income Categories</h3>
             {!isLoadingCategories && incomeCategories.length > 0 && (
               <Button
                 variant="ghost"
@@ -374,7 +374,7 @@ export function CategoriesCard() {
                       size="sm"
                       onClick={() => handleUpdateCategory(category.id)}
                       disabled={isUpdatingCategory}
-                      className="text-green-600 hover:text-green-700 hover:bg-green-50"
+                      className="text-success hover:text-success hover:bg-success/10"
                     >
                       <Check className="h-4 w-4" />
                     </Button>
@@ -424,7 +424,7 @@ export function CategoriesCard() {
 
         <div className="space-y-3">
           <div className="flex items-center justify-between">
-            <h3 className="text-sm font-medium text-red-600">Expense Categories</h3>
+            <h3 className="text-sm font-medium text-destructive">Expense Categories</h3>
             {!isLoadingCategories && expenseCategories.length > 0 && (
               <Button
                 variant="ghost"
@@ -488,7 +488,7 @@ export function CategoriesCard() {
                       size="sm"
                       onClick={() => handleUpdateCategory(category.id)}
                       disabled={isUpdatingCategory}
-                      className="text-green-600 hover:text-green-700 hover:bg-green-50"
+                      className="text-success hover:text-success hover:bg-success/10"
                     >
                       <Check className="h-4 w-4" />
                     </Button>

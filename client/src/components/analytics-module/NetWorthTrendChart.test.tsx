@@ -36,13 +36,17 @@ const toggle = () => fireEvent.click(screen.getByRole('button', { name: /^(Compa
 describe('Cash Balance Trend comparison', () => {
   beforeEach(() => { state.privacyMode = 'visible'; state.tooltipDay = 2; state.points = [] })
 
-  it('is opt-in, labels both months, and replaces the EMA only while comparing', () => {
+  it('shows the trend by default, lets it be hidden, and keeps comparison opt-in', () => {
     renderChart()
-    expect(screen.getByTestId('series-smoothed')).toHaveAttribute('data-dashes', '6 3')
+    expect(screen.getByRole('button', { name: 'Trend' })).toHaveAttribute('aria-pressed', 'true')
+    expect(document.querySelector('[data-series=reference] path')).toHaveAttribute('stroke-dasharray', '6 3')
+    fireEvent.click(screen.getByRole('button', { name: 'Trend' }))
+    expect(document.querySelector('[data-series=reference]')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Trend' }))
     expect(screen.queryByTestId('series-previous')).not.toBeInTheDocument()
     toggle()
     expect(screen.getByRole('button', { name: 'Hide comparison' })).toHaveAttribute('aria-pressed', 'true')
-    expect(screen.queryByTestId('series-smoothed')).not.toBeInTheDocument()
+    expect(document.querySelector('[data-series=reference]')).toBeNull()
     expect(screen.getByTestId('series-previous')).not.toHaveAttribute('data-dashes')
     expect(screen.getByText('October 2026')).toBeInTheDocument()
     expect(screen.getByText('September 2026')).toBeInTheDocument()
@@ -52,8 +56,8 @@ describe('Cash Balance Trend comparison', () => {
     expect(screen.queryByText(/Inspect day/)).not.toBeInTheDocument()
     toggle()
     expect(screen.getByRole('button', { name: 'Compare previous month' })).toHaveAttribute('aria-pressed', 'false')
-    expect(screen.getByTestId('series-smoothed')).toBeInTheDocument()
-    expect(screen.queryByRole('slider')).not.toBeInTheDocument()
+    expect(document.querySelector('[data-series=reference]')).toBeInTheDocument()
+    expect(screen.getByRole('slider', { name: /Cash balance/ })).toBeInTheDocument()
   })
 
   it('shows only the prior actual value on current-month future days in the tooltip', () => {

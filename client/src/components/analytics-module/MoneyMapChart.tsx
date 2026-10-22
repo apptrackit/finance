@@ -66,7 +66,7 @@ const COLORS: Record<FlowKind, string> = {
   'cash-flow': 'hsl(var(--primary))',
   expense: 'hsl(var(--destructive))',
   surplus: 'hsl(var(--success))',
-  deficit: 'hsl(38 92% 50%)',
+  deficit: 'hsl(var(--warning))',
 }
 
 function consolidateCategories(data: CategoryData[], maxItems: number) {

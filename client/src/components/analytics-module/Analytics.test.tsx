@@ -1,4 +1,5 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import type { ReactNode } from 'react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Analytics } from './Analytics'
 import { WIDGET_DEFS } from './widgetConfig'
@@ -18,8 +19,8 @@ vi.mock('./IncomeExpensesTrendChart', () => ({
   ),
 }))
 vi.mock('./NetWorthTrendChart', () => ({
-  NetWorthTrendChart: ({ data, comparison, comparisonDisabledReason }: { data: Array<{ date: string; balance: number }>; comparison?: CashBalanceComparison; comparisonDisabledReason?: string }) => (
-    <div data-testid="cash-trend" data-points={JSON.stringify(data)} data-comparison={JSON.stringify(comparison)} data-disabled-reason={comparisonDisabledReason} />
+  NetWorthTrendChart: ({ data, comparison, comparisonDisabledReason, controls }: { controls?: ReactNode; data: Array<{ date: string; balance: number }>; comparison?: CashBalanceComparison; comparisonDisabledReason?: string }) => (
+    <div data-testid="cash-trend" data-points={JSON.stringify(data)} data-comparison={JSON.stringify(comparison)} data-disabled-reason={comparisonDisabledReason}>{controls}</div>
   ),
 }))
 
@@ -58,6 +59,15 @@ describe('Analytics Projected mode', () => {
 
   afterEach(() => {
     vi.useRealTimers()
+  })
+
+  it('applies the chart range pill to the page filters and returns projected data to Actual in one update', () => {
+    localStorage.setItem('analytics-widget-visibility', JSON.stringify({ 'cash-balance-trend': true }))
+    const onFiltersChange = vi.fn()
+    render(<Analytics transactions={[posted]} upcomingTransactions={[upcoming('future', '2026-09-20')]} accounts={accounts} categories={[]}
+      filters={{ period: 'month', date: '2026-09-01', pinned: false, mode: 'projected', expenseCategory: 'all', incomeCategory: 'all', resolution: 'quarter' }} onFiltersChange={onFiltersChange} />)
+    fireEvent.click(within(screen.getByRole('group', { name: 'Cash balance range' })).getByRole('button', { name: '1Y' }))
+    expect(onFiltersChange).toHaveBeenCalledExactlyOnceWith({ period: 'year', mode: 'actual', resolution: 'default' }, false)
   })
 
   it('hides the switch and keeps Actual values when only other periods or ineligible rows exist', () => {
