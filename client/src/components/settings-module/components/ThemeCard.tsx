@@ -40,7 +40,6 @@ export function ThemeCard() {
                 cardColor={preview.cardColor}
                 foregroundColor={preview.foregroundColor}
                 primaryForegroundColor={preview.primaryForegroundColor}
-                previewFilter={t.cssFilter}
                 isSelected={theme === t.id}
                 onSelect={setTheme}
               />
@@ -61,13 +60,8 @@ interface ThemeSwatchProps {
   cardColor: string
   foregroundColor: string
   primaryForegroundColor: string
-  previewFilter?: string
   isSelected: boolean
   onSelect: (id: ThemeId) => void
-}
-
-const FILTER_LABELS: Partial<Record<ThemeId, string>> = {
-  redfilter: 'RED FILTER',
 }
 
 function ThemeSwatch({
@@ -79,12 +73,9 @@ function ThemeSwatch({
   cardColor,
   foregroundColor,
   primaryForegroundColor,
-  previewFilter,
   isSelected,
   onSelect,
 }: ThemeSwatchProps) {
-  const filterLabel = FILTER_LABELS[themeId]
-
   return (
     <button
       type="button"
@@ -101,7 +92,6 @@ function ThemeSwatch({
         className="h-16 w-full rounded-lg overflow-hidden relative"
         style={{
           backgroundColor: bgColor,
-          filter: previewFilter ?? 'none',
         }}
       >
         <div
@@ -115,14 +105,6 @@ function ThemeSwatch({
           <div className="h-1 w-12 rounded-full mb-1 opacity-20" style={{ backgroundColor: foregroundColor }} />
           <div className="h-2 w-10 rounded-full" style={{ backgroundColor: primaryColor, opacity: 0.9 }} />
         </div>
-
-        {/* Filter badge inside preview */}
-        {filterLabel && (
-          <div className="absolute bottom-1 right-1.5 text-[7px] font-bold tracking-wider opacity-70"
-            style={{ color: foregroundColor }}>
-            {filterLabel}
-          </div>
-        )}
       </div>
 
       <div>

@@ -16,8 +16,6 @@ export interface Theme extends ThemePreview {
   name: string
   description: string
   lightPreview: ThemePreview
-  /** Optional filter shared by the app and its portalled controls. */
-  cssFilter?: string
 }
 
 export const THEMES: Theme[] = [
@@ -46,14 +44,13 @@ export const THEMES: Theme[] = [
   {
     id: 'redfilter',
     name: 'Red Filter',
-    description: 'Blue-light blocking — all hues shifted to red',
-    primaryColor: '#5189D8',
-    bgColor: '#000610',
-    cardColor: '#010E21',
-    foregroundColor: '#f8fafc',
-    primaryForegroundColor: '#ffffff',
-    lightPreview: { primaryColor: '#3b70bf', bgColor: '#f4f6fa', cardColor: '#ffffff', foregroundColor: '#0b1c32', primaryForegroundColor: '#ffffff' },
-    cssFilter: 'sepia(1) saturate(6) hue-rotate(315deg) brightness(0.75)',
+    description: 'Deep red surfaces and warm red accents',
+    primaryColor: '#ff7575',
+    bgColor: '#110707',
+    cardColor: '#231010',
+    foregroundColor: '#ffe6e6',
+    primaryForegroundColor: '#280a0a',
+    lightPreview: { primaryColor: '#b91c1c', bgColor: '#fff5f5', cardColor: '#fffafa', foregroundColor: '#3b1414', primaryForegroundColor: '#fffafa' },
   },
 ]
 
@@ -95,9 +92,8 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       html.classList.add(`theme-${theme}`)
     }
 
-    // Apply CSS filter for filter-based themes
-    const activeTheme = THEMES.find(t => t.id === theme)
-    html.style.setProperty('--app-color-filter', activeTheme?.cssFilter || 'none')
+    // Clear legacy page filters when restoring saved Monochrome/Red Filter preferences.
+    html.style.setProperty('--app-color-filter', 'none')
   }, [theme])
 
   const setTheme = (newTheme: ThemeId) => {
