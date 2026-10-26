@@ -1,12 +1,8 @@
 import { memo, useId, useState } from 'react'
-import { format, parseISO } from 'date-fns'
-import { Card, CardContent, CardHeader, CardTitle } from '../common/card'
-import { TrendingUp } from 'lucide-react'
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
+import type { ReactNode } from 'react'
+import { InteractiveAreaChart } from '../common/interactive-area-chart'
 import { usePrivacy } from '../../context/PrivacyContext'
-import { calculateYAxisDomain } from './utils'
 import type { TrendDataPoint } from './types'
-import { Button } from '../common/button'
 import { CashBalanceComparisonChart } from './CashBalanceComparisonChart'
 import type { CashBalanceComparison } from './cash-balance-comparison'
 
@@ -14,118 +10,40 @@ type NetWorthTrendChartProps = {
   data: TrendDataPoint[]
   masterCurrency: string
   title?: string
+  controls?: ReactNode
+  periodLabel?: string
   comparison?: CashBalanceComparison
   comparisonDisabledReason?: string
 }
 
-export const NetWorthTrendChart = memo(function NetWorthTrendChart({ data, masterCurrency, title = 'Cash Balance Trend', comparison, comparisonDisabledReason }: NetWorthTrendChartProps) {
+export const NetWorthTrendChart = memo(function NetWorthTrendChart({ data, masterCurrency, title = 'Cash Balance Trend', controls, periodLabel, comparison, comparisonDisabledReason }: NetWorthTrendChartProps) {
   const { privacyMode } = usePrivacy()
   const [compare, setCompare] = useState(false)
+  const [showTrend, setShowTrend] = useState(true)
   const reasonId = useId()
   const unavailableReason = comparisonDisabledReason || comparison?.unavailableReason
   const comparing = compare && comparison !== undefined && !unavailableReason
+  const hidden = privacyMode === 'hidden'
 
-  return (
-    <Card className="lg:col-span-2">
-      <CardHeader className="pb-2 px-4 sm:px-6">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-center gap-2">
-            <TrendingUp className="h-4 w-4 text-muted-foreground" />
-            <CardTitle className="text-sm sm:text-base">{title}</CardTitle>
-          </div>
-          {comparison && <Button type="button" size="sm" variant={comparing ? 'default' : 'outline'} className="self-start enabled:cursor-pointer sm:self-auto"
-            aria-pressed={comparing} disabled={Boolean(unavailableReason)} aria-describedby={unavailableReason ? reasonId : undefined} onClick={() => setCompare(previous => !previous)}>
-            {comparing ? 'Hide comparison' : 'Compare previous month'}
-          </Button>}
-        </div>
-        {comparison && unavailableReason && <p id={reasonId} className="text-xs text-muted-foreground">{unavailableReason}</p>}
-      </CardHeader>
-      <CardContent className="px-2 sm:px-6">
-        {comparing ? <CashBalanceComparisonChart key={comparison.selectedMonth} comparison={comparison} currency={masterCurrency} /> : data.length > 1 ? (
-          <div className="h-48 sm:h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={data.map(point => ({ ...point, timestamp: parseISO(point.date).getTime() }))} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
-                <defs>
-                  <linearGradient id="netWorthGradient" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.3}/>
-                    <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0}/>
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.5} />
-                <XAxis 
-                  dataKey="timestamp"
-                  type="number"
-                  scale="time"
-                  domain={['dataMin', 'dataMax']}
-                  tickFormatter={value => format(new Date(value), 'MMM d')}
-                  stroke="hsl(var(--muted-foreground))" 
-                  fontSize={10}
-                  minTickGap={24}
-                  tickLine={false}
-                  axisLine={false}
-                  interval="preserveStartEnd"
-                />
-                <YAxis 
-                  stroke="hsl(var(--muted-foreground))" 
-                  fontSize={10}
-                  tickLine={false}
-                  axisLine={false}
-                  domain={calculateYAxisDomain(data)}
-                  tickFormatter={(value) => {
-                    if (privacyMode === 'hidden') return '••••'
-                    if (value >= 1000000) return `${(value / 1000000).toFixed(1)}M`
-                    if (value >= 1000) return `${(value / 1000).toFixed(0)}K`
-                    return value.toFixed(0)
-                  }}
-                  width={50}
-                />
-                <Tooltip 
-                  content={({ active, payload, label }) => {
-                    if (active && payload && payload.length) {
-                      const balanceEntry = payload.find(p => p.dataKey === 'balance')
-                      const value = balanceEntry?.value ?? payload[0].value
-                      return (
-                        <div className="bg-card border border-border rounded-lg p-2 shadow-lg">
-                          <p className="text-xs text-muted-foreground mb-1">{format(new Date(Number(label)), 'MMM d, yyyy')}</p>
-                          <p className={`text-sm font-bold text-primary ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
-                            {privacyMode === 'hidden' ? '••••••' : `${Number(value)?.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})} ${masterCurrency}`}
-                          </p>
-                        </div>
-                      )
-                    }
-                    return null
-                  }}
-                />
-                <Area
-                  type="monotone"
-                  dataKey="smoothed"
-                  name="Trend"
-                  stroke="hsl(var(--muted-foreground))"
-                  strokeWidth={1.5}
-                  strokeDasharray="6 3"
-                  fillOpacity={0}
-                  fill="none"
-                  dot={false}
-                  activeDot={false}
-                />
-                <Area
-                  type="linear"
-                  dataKey="balance"
-                  name="Cash balance"
-                  stroke="hsl(var(--primary))"
-                  strokeWidth={2}
-                  fillOpacity={1}
-                  fill="url(#netWorthGradient)"
-                />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
-        ) : (
-          <div className="h-48 sm:h-64 flex items-center justify-center text-muted-foreground text-sm">
-            Need more data points to show trend
-          </div>
-        )}
-      </CardContent>
-    </Card>
-  )
+  return <section className="easyui-area-card lg:col-span-2" aria-label={title}>
+    {comparing ? <>
+      <div className="mb-5 flex flex-wrap items-start justify-between gap-3"><h3 className="text-[13px] text-muted-foreground">{title}</h3>{controls}</div>
+      <CashBalanceComparisonChart key={comparison.selectedMonth} comparison={comparison} currency={masterCurrency} />
+    </> : data.length > 1 ? <InteractiveAreaChart
+      data={data.map(point => ({ date: point.date, value: point.balance, reference: point.smoothed }))}
+      label="Cash balance" title={title} controls={controls} periodLabel={periodLabel}
+      formatValue={value => value === null ? 'Unavailable' : `${value.toLocaleString('hu-HU', { maximumFractionDigits: 0 })} ${masterCurrency}`}
+      reference={showTrend ? { label: 'Trend', color: 'hsl(var(--muted-foreground))', dashed: true } : undefined}
+      hidden={hidden} showReadout showChange
+      className="h-[240px] sm:h-[280px]"
+    /> : <><h3 className="text-[13px] text-muted-foreground">{title}</h3><div className="flex h-[280px] items-center justify-center text-sm text-muted-foreground">Need more data points to show trend</div></>}
+    <div className="mt-3 flex flex-wrap items-center justify-end gap-2">
+      {!comparing && !hidden && <button type="button" aria-pressed={showTrend} className="easyui-chart-control" onClick={() => setShowTrend(previous => !previous)}>Trend</button>}
+      {comparison && <button type="button" className="easyui-chart-control" aria-pressed={comparing}
+        disabled={Boolean(unavailableReason)} aria-describedby={unavailableReason ? reasonId : undefined} onClick={() => setCompare(previous => !previous)}>
+        {comparing ? 'Hide comparison' : 'Compare previous month'}
+      </button>}
+    </div>
+    {comparison && unavailableReason && <p id={reasonId} className="mt-1 text-xs text-muted-foreground">{unavailableReason}</p>}
+  </section>
 })

@@ -3,15 +3,19 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from '
 export type ColorMode = 'dark' | 'light'
 export type ThemeId = 'emerald' | 'mono' | 'redfilter'
 
-export interface Theme {
-  id: ThemeId
-  name: string
-  description: string
+type ThemePreview = {
   primaryColor: string
   bgColor: string
   cardColor: string
-  /** CSS filter applied to the whole page via the html element */
-  cssFilter?: string
+  foregroundColor: string
+  primaryForegroundColor: string
+}
+
+export interface Theme extends ThemePreview {
+  id: ThemeId
+  name: string
+  description: string
+  lightPreview: ThemePreview
 }
 
 export const THEMES: Theme[] = [
@@ -22,24 +26,31 @@ export const THEMES: Theme[] = [
     primaryColor: '#5189D8',
     bgColor: '#000610',
     cardColor: '#010E21',
+    foregroundColor: '#f8fafc',
+    primaryForegroundColor: '#ffffff',
+    lightPreview: { primaryColor: '#3b70bf', bgColor: '#f4f6fa', cardColor: '#ffffff', foregroundColor: '#0b1c32', primaryForegroundColor: '#ffffff' },
   },
   {
     id: 'mono',
     name: 'Monochrome',
-    description: 'Pure black, white & gray — zero color',
-    primaryColor: '#5189D8',
-    bgColor: '#000610',
-    cardColor: '#010E21',
-    cssFilter: 'grayscale(1)',
+    description: 'Neutral surfaces with meaningful color accents',
+    primaryColor: '#ebebeb',
+    bgColor: '#0a0a0a',
+    cardColor: '#181818',
+    foregroundColor: '#f5f5f5',
+    primaryForegroundColor: '#171717',
+    lightPreview: { primaryColor: '#1f1f1f', bgColor: '#f7f7f7', cardColor: '#ffffff', foregroundColor: '#171717', primaryForegroundColor: '#ffffff' },
   },
   {
     id: 'redfilter',
     name: 'Red Filter',
-    description: 'Blue-light blocking — all hues shifted to red',
-    primaryColor: '#5189D8',
-    bgColor: '#000610',
-    cardColor: '#010E21',
-    cssFilter: 'sepia(1) saturate(6) hue-rotate(315deg) brightness(0.75)',
+    description: 'Red surfaces with meaningful color accents',
+    primaryColor: '#ff7575',
+    bgColor: '#110707',
+    cardColor: '#231010',
+    foregroundColor: '#ffe6e6',
+    primaryForegroundColor: '#280a0a',
+    lightPreview: { primaryColor: '#b91c1c', bgColor: '#fff5f5', cardColor: '#fffafa', foregroundColor: '#3b1414', primaryForegroundColor: '#fffafa' },
   },
 ]
 
@@ -81,9 +92,8 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       html.classList.add(`theme-${theme}`)
     }
 
-    // Apply CSS filter for filter-based themes
-    const activeTheme = THEMES.find(t => t.id === theme)
-    html.style.setProperty('--app-color-filter', activeTheme?.cssFilter || 'none')
+    // Clear legacy page filters when restoring saved Monochrome/Red Filter preferences.
+    html.style.setProperty('--app-color-filter', 'none')
   }, [theme])
 
   const setTheme = (newTheme: ThemeId) => {

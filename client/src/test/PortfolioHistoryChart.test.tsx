@@ -35,7 +35,30 @@ it('retains saved data with an actionable retry after a failed refresh',()=>{
 it('reads a selected day by keyboard/touch control without substituting a current value for a gap',()=>{
  const history=fixture();history.data.points[0].value=null
  render(<PortfolioHistoryChart history={history} hidden={false} currency="HUF" currentValue={6000}/>)
- fireEvent.change(screen.getByRole('slider',{name:'Read portfolio history by date'}),{target:{value:'0'}})
+ fireEvent.keyDown(screen.getByRole('slider',{name:/Portfolio value/}),{key:'Home'})
  expect(screen.getByRole('heading',{name:'Portfolio value · 2026-10-01'})).toBeInTheDocument()
- expect(screen.getByText('Unavailable')).toBeVisible()
+ expect(screen.getAllByText('Unavailable').length).toBeGreaterThan(0)
+})
+
+it('keeps saved history inspectable after refresh failure and resets the readout for a new currency',()=>{
+ const history=fixture();history.error=true
+ const {rerender}=render(<PortfolioHistoryChart history={history} hidden={false} currency="HUF" currentValue={6000}/>)
+ fireEvent.keyDown(screen.getByRole('slider',{name:/Portfolio value/}),{key:'Home'})
+ expect(screen.getByRole('heading',{name:'Portfolio value · 2026-10-01'})).toBeVisible()
+ expect(screen.getByRole('alert')).toHaveTextContent('Showing saved history. Refresh failed.')
+ rerender(<PortfolioHistoryChart history={history} hidden={false} currency="USD" currentValue={15}/>)
+ expect(screen.getByRole('heading',{name:'Portfolio value'})).toBeVisible()
+ expect(screen.getByText('15 USD')).toBeVisible()
+})
+
+it('shows loading and unavailable history without disabling range selection or retry',()=>{
+ const history={...fixture(),data:null,loading:true} as ReturnType<typeof usePortfolioHistory>
+ const {rerender}=render(<PortfolioHistoryChart history={history} hidden={false} currency="HUF"/>)
+ expect(screen.getByRole('status')).toHaveTextContent('Loading portfolio history…')
+ expect(screen.getByText('Loading daily values…')).toBeVisible()
+ history.loading=false;history.error=true
+ rerender(<PortfolioHistoryChart history={history} hidden={false} currency="HUF"/>)
+ expect(screen.getByText('History unavailable')).toBeVisible()
+ fireEvent.click(screen.getByRole('button',{name:'Retry history'}));expect(history.refresh).toHaveBeenCalledOnce()
+ fireEvent.click(screen.getByRole('button',{name:'3M'}));expect(history.setRange).toHaveBeenCalledWith('3m')
 })

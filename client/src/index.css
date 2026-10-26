@@ -300,3 +300,164 @@ button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration:.01ms !important; transition-duration:.01ms !important; scroll-behavior:auto !important; }
 }
+
+/* Chart geometry is shared; colors come from the selected app palette. */
+.easyui-area-card {
+  min-width: 0;
+  padding: 24px;
+  border: 1px solid hsl(var(--border));
+  border-radius: 24px;
+  background: hsl(var(--card));
+  color: hsl(var(--foreground));
+}
+.easyui-chart-ranges { display:flex; flex-shrink:0; align-self:flex-start; max-width:100%; overflow-x:auto; padding:2px; border-radius:999px; background:hsl(var(--background) / .55); }
+.easyui-chart-ranges button { position:relative; isolation:isolate; flex-shrink:0; padding:5px 12px; border-radius:999px; font-size:12px; font-weight:500; color:hsl(var(--muted-foreground)); }
+.easyui-chart-ranges button[aria-pressed='true'] { color:hsl(var(--foreground)); }
+.easyui-chart-pill { position:absolute; inset:0; z-index:-1; border-radius:999px; background:hsl(var(--secondary)); box-shadow:0 1px 3px #00000012; }
+.easyui-chart-control { padding:4px 8px; border-radius:999px; font-size:11px; color:hsl(var(--muted-foreground)); transition:background .15s,color .15s; }
+.easyui-chart-control:hover, .easyui-chart-control[aria-pressed='true'] { color:hsl(var(--foreground)); background:hsl(var(--secondary)); }
+.easyui-chart-control:disabled { cursor:default; opacity:.45; }
+.easyui-chart-positive { color:hsl(var(--success)); }
+.easyui-chart-negative { color:hsl(var(--destructive)); }
+@media (max-width:479px) { .easyui-area-card { padding:20px; } }
+
+/* Data colors are theme inputs, including SVG charts and split allocations. */
+:root {
+  accent-color: hsl(var(--primary));
+  --warning: 38 92% 50%;
+  --chart-category-1: #8b5cf6;
+  --chart-category-2: #f59e0b;
+  --chart-category-3: #06b6d4;
+  --chart-category-4: #ec4899;
+  --chart-category-5: #84cc16;
+  --chart-category-6: #ef4444;
+  --chart-category-7: #3b82f6;
+  --chart-category-8: #14b8a6;
+  --chart-category-9: #f97316;
+  --chart-category-10: #a855f7;
+  --chart-category-11: #5189D8;
+  --chart-category-12: #eab308;
+  --chart-category-13: #0ea5e9;
+  --chart-category-14: #d946ef;
+  --chart-category-15: #64748b;
+  --split-line-1: #5189D8;
+  --split-line-2: #9B8AF0;
+  --split-line-3: #5CC7C0;
+  --split-line-4: #F0A35C;
+  --split-line-5: #E58AB0;
+  --split-line-6: #8A9BB4;
+}
+
+/* Neutral surfaces and primary charts retain semantic status/category colors. */
+:root.theme-mono {
+  --canvas: 0 0% 4%;
+  --background: 0 0% 7%;
+  --foreground: 0 0% 96%;
+  --card: 0 0% 9.5%;
+  --card-foreground: 0 0% 96%;
+  --popover: 0 0% 9.5%;
+  --popover-foreground: 0 0% 96%;
+  --primary: 0 0% 92%;
+  --primary-foreground: 0 0% 9%;
+  --secondary: 0 0% 15%;
+  --secondary-foreground: 0 0% 96%;
+  --muted: 0 0% 12%;
+  --muted-foreground: 0 0% 65%;
+  --accent: 0 0% 15%;
+  --accent-foreground: 0 0% 96%;
+  --border: 0 0% 17%;
+  --input: 0 0% 12%;
+  --ring: 0 0% 65%;
+  --destructive: 0 74% 65%;
+  --destructive-foreground: 0 60% 10%;
+  --success: 142 65% 58%;
+  --success-foreground: 144 80% 10%;
+  --forecast: 256 80% 80%;
+  --cash-flow-income: 142 65% 58%;
+  --warning: 38 92% 60%;
+}
+:root.theme-mono[data-color-mode='light'] {
+  --canvas: 0 0% 97%;
+  --background: 0 0% 98%;
+  --foreground: 0 0% 9%;
+  --card: 0 0% 100%;
+  --card-foreground: 0 0% 9%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 0 0% 9%;
+  --primary: 0 0% 12%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 0 0% 95%;
+  --secondary-foreground: 0 0% 12%;
+  --muted: 0 0% 95%;
+  --muted-foreground: 0 0% 45%;
+  --accent: 0 0% 95%;
+  --accent-foreground: 0 0% 12%;
+  --border: 0 0% 89%;
+  --input: 0 0% 98%;
+  --ring: 0 0% 45%;
+  --destructive: 0 65% 45%;
+  --destructive-foreground: 0 0% 100%;
+  --success: 146 65% 32%;
+  --success-foreground: 0 0% 100%;
+  --forecast: 262 65% 50%;
+  --cash-flow-income: 146 65% 32%;
+  --warning: 32 90% 35%;
+}
+
+:root:is(.theme-mono, .theme-redfilter) .dashboard-cash-flow-expense { --cash-flow-color: var(--destructive); }
+
+/* Red surfaces and primary charts retain semantic status/category colors. */
+:root.theme-redfilter {
+  --canvas: 0 42% 4.7%;
+  --background: 0 40% 6%;
+  --foreground: 0 100% 95%;
+  --card: 0 37% 10%;
+  --card-foreground: 0 100% 95%;
+  --popover: 0 37% 10%;
+  --popover-foreground: 0 100% 95%;
+  --primary: 0 100% 73%;
+  --primary-foreground: 0 60% 10%;
+  --secondary: 0 35% 16%;
+  --secondary-foreground: 0 100% 95%;
+  --muted: 0 30% 13%;
+  --muted-foreground: 0 30% 68%;
+  --accent: 0 35% 16%;
+  --accent-foreground: 0 100% 95%;
+  --border: 0 32% 21%;
+  --input: 0 30% 13%;
+  --ring: 0 100% 73%;
+  --destructive: 0 94% 68%;
+  --destructive-foreground: 0 60% 10%;
+  --success: 142 65% 58%;
+  --success-foreground: 144 80% 10%;
+  --forecast: 256 80% 80%;
+  --cash-flow-income: 142 65% 58%;
+  --warning: 38 92% 60%;
+}
+:root.theme-redfilter[data-color-mode='light'] {
+  --canvas: 0 100% 98%;
+  --background: 0 100% 98%;
+  --foreground: 0 49% 15.5%;
+  --card: 0 100% 99%;
+  --card-foreground: 0 49% 15.5%;
+  --popover: 0 100% 99%;
+  --popover-foreground: 0 49% 15.5%;
+  --primary: 0 74% 42%;
+  --primary-foreground: 0 100% 99%;
+  --secondary: 0 75% 95%;
+  --secondary-foreground: 0 49% 20%;
+  --muted: 0 60% 95%;
+  --muted-foreground: 0 26% 42%;
+  --accent: 0 75% 95%;
+  --accent-foreground: 0 49% 20%;
+  --border: 0 45% 88%;
+  --input: 0 100% 98%;
+  --ring: 0 74% 42%;
+  --destructive: 0 80% 40%;
+  --destructive-foreground: 0 100% 99%;
+  --success: 146 65% 32%;
+  --success-foreground: 0 100% 99%;
+  --forecast: 262 65% 50%;
+  --cash-flow-income: 146 65% 32%;
+  --warning: 32 90% 35%;
+}

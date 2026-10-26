@@ -6,6 +6,10 @@ Intermediate package/UI version bumps are grouped under the next published GitHu
 
 ## Unreleased
 
+- Monochrome now uses a dedicated neutral light/dark palette for surfaces, controls and primary balance charts instead of a page-wide filter, retaining meaningful colors for income/expenses, gains/losses, statuses, forecasts and categories. Area charts follow the selected palette, with blue accents in Original and neutral accents in Monochrome. Red Filter also replaces its page filter with native red surfaces, controls and primary charts in light/dark modes, retaining the same meaningful financial/status and category colors.
+
+- Refreshed cash-balance, account and portfolio history charts with EasyUI-style cards, smooth area curves, animated reveals and range pills. Dated value readouts and keyboard/touch inspection preserve native currencies, history gaps and privacy.
+
 ## v4.0 — 2026-10-20
 
 [GitHub release](https://github.com/apptrackit/finance/releases/tag/v4.0) · [Compare v3.3…v4.0](https://github.com/apptrackit/finance/compare/v3.3...v4.0)

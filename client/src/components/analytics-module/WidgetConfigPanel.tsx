@@ -36,8 +36,8 @@ function Toggle({ checked, onChange }: { checked: boolean; onChange: () => void 
       }`}
     >
       <span
-        className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow-lg ring-0 transition-transform duration-200 ${
-          checked ? 'translate-x-5' : 'translate-x-0'
+        className={`pointer-events-none inline-block h-5 w-5 rounded-full shadow-lg ring-0 transition-transform duration-200 ${
+          checked ? 'translate-x-5 bg-primary-foreground' : 'translate-x-0 bg-foreground'
         }`}
       />
     </button>

@@ -745,7 +745,7 @@ export function AccountList({ accounts, onAccountAdded, loading, manage = false,
                             ? 'bg-gradient-to-br from-gray-600 to-gray-700 shadow-gray-600/30'
                             : 'bg-gradient-to-br from-primary to-primary/80 shadow-primary/25'
                         }`}>
-                          <Wallet className="h-4 w-4 sm:h-6 sm:w-6 text-white" />
+                          <Wallet className={`h-4 w-4 sm:h-6 sm:w-6 ${isExcluded ? 'text-white' : 'text-primary-foreground'}`} />
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-1.5 sm:gap-2 mb-0.5 sm:mb-1">
