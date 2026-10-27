@@ -32,7 +32,8 @@ import { MoneyMapChart } from './MoneyMapChart'
 import { TopExpensesList } from './TopExpensesList'
 import type { Transaction, Category, Account, TimePeriod, FinancialOutlookSnapshot, ChartDataPoint, TrendDataPoint } from './types'
 import { isUpcomingProjectionTransaction } from '../../lib/transaction-review'
-import { buildCashBalanceMonthComparison } from './cash-balance-comparison'
+import { buildCashBalanceComparison } from './cash-balance-comparison'
+import { clipBalancesToPeriod } from './cash-balance-trend'
 
 type AnalyticsProps = {
   transactions: Transaction[]
@@ -346,26 +347,12 @@ export function Analytics({
       runningBalance -= transactionsByDate[date]
     })
 
-    const rawData = Object.entries(dateBalances)
-      .map(([date, balance]) => ({
-        date,
-        formattedDate: format(parseISO(date), 'MMM d'),
-        balance
-      }))
-      .filter(d => {
-        const txDate = parseISO(d.date)
-        switch (period) {
-          case 'month':
-          case 'year':
-            return isWithinInterval(txDate, {
-              start: parseISO(customDateRange.startDate),
-              end: parseISO(customDateRange.endDate)
-            })
-          default:
-            return true
-        }
-      })
-      .sort((a, b) => parseISO(a.date).getTime() - parseISO(b.date).getTime())
+    const balances = Object.entries(dateBalances)
+      .map(([date, balance]) => ({ date, balance }))
+      .sort((a, b) => a.date.localeCompare(b.date))
+    const rawData = (period === 'allTime' ? balances : clipBalancesToPeriod(balances, {
+      start: customDateRange.startDate, end: customDateRange.endDate, daily: period === 'month',
+    })).map(point => ({ ...point, formattedDate: format(parseISO(point.date), 'MMM d') }))
 
     // Calculate EMA (Exponential Moving Average) as a smoothed baseline
     if (rawData.length === 0) return rawData
@@ -380,16 +367,16 @@ export function Analytics({
   }, [conversionsAvailable, transactionsForAnalytics, accounts, period, exchangeRates, masterCurrency, customDateRange])
 
   const today = format(new Date(), 'yyyy-MM-dd')
-  const cashBalanceComparison = useMemo(() => period === 'month' ? buildCashBalanceMonthComparison({
-    accounts, transactions, selectedMonth: customDateRange.startDate, today, masterCurrency, exchangeRates,
-  }) : undefined, [period, accounts, transactions, customDateRange.startDate, today, masterCurrency, exchangeRates])
-  const cashComparisonDisabledReason = isProjected ? 'Switch to Actual to compare previous-month balances.'
+  const cashBalanceComparison = useMemo(() => period === 'allTime' ? undefined : buildCashBalanceComparison({
+    accounts, transactions, unit: period, selectedDate: customDateRange.startDate, today, masterCurrency, exchangeRates,
+  }), [period, accounts, transactions, customDateRange.startDate, today, masterCurrency, exchangeRates])
+  const cashComparisonDisabledReason = isProjected ? `Switch to Actual to compare previous-${period === 'year' ? 'year' : 'month'} balances.`
     : !comparisonReady ? 'Comparison is unavailable until account and transaction history refresh succeeds.' : undefined
 
   // A month with no movements still has a balance history. The existing sparse
   // chart can be empty or have only today's point in those months.
-  const quietMonthBalanceData = cashBalanceComparison?.points.flatMap(point => point.selected !== null && point.selectedDate
-    ? [{ date: point.selectedDate, formattedDate: format(parseISO(point.selectedDate), 'MMM d'), balance: point.selected, smoothed: point.selected }] : []) ?? []
+  const quietMonthBalanceData = cashBalanceComparison?.unit !== 'month' ? [] : cashBalanceComparison.points.flatMap(point => point.selected !== null && point.selectedDate
+    ? [{ date: point.selectedDate, formattedDate: format(parseISO(point.selectedDate), 'MMM d'), balance: point.selected, smoothed: point.selected }] : [])
   const displayedCashBalanceData = !isProjected && cashBalanceTrendData.length < 2 && quietMonthBalanceData.length > 1
     ? quietMonthBalanceData : cashBalanceTrendData
 
