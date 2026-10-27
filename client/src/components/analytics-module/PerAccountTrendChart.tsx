@@ -22,9 +22,8 @@ export const PerAccountTrendChart = memo(function PerAccountTrendChart({ account
       formatValue={value => value === null ? 'Unavailable' : `${value.toLocaleString('hu-HU', { maximumFractionDigits: 0 })} ${account.currency}`}
       reference={showTrend ? { label: 'Trend', color: 'hsl(var(--muted-foreground))', dashed: true } : undefined}
       hidden={privacyMode === 'hidden'} showReadout showChange className="h-[200px] sm:h-[240px]"
+      footer={privacyMode !== 'hidden' && <button type="button" aria-pressed={showTrend} onClick={() => setShowTrend(previous => !previous)} className="easyui-chart-control">Trend</button>}
     /> : <><h3 className="text-[13px] text-muted-foreground">{account.name}</h3><div className="flex h-48 items-center justify-center text-sm text-muted-foreground">No transaction data in this period</div></>}
-    <div className="mt-3 flex flex-wrap items-center justify-between gap-2"><p className="text-[11px] text-muted-foreground">Current balance: {privacyMode === 'hidden' ? '••••••' : account.balance.toLocaleString('hu-HU', { maximumFractionDigits: 0 })} {account.currency}</p>
-      {privacyMode !== 'hidden' && data.length > 0 && <button type="button" aria-pressed={showTrend} onClick={() => setShowTrend(previous => !previous)} className="easyui-chart-control">Trend</button>}
-    </div>
+    <p className="mt-3 text-[11px] text-muted-foreground">Current balance: {privacyMode === 'hidden' ? '••••••' : account.balance.toLocaleString('hu-HU', { maximumFractionDigits: 0 })} {account.currency}</p>
   </section>
 })

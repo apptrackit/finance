@@ -32,9 +32,9 @@ export function PortfolioHistoryChart({history,hidden,currency,currentValue}:{hi
      label="Portfolio value" formatValue={money} className="h-[220px] @min-[640px]:h-[300px]"
      reference={showInvested?{label:'Net invested',color:'hsl(var(--muted-foreground))',dashed:true,step:true}:undefined}
      activeIndex={selected?selection!.index:null} onInspect={index=>index===null?setSelection(null):readDay(index)}
-     renderTooltip={index=><PortfolioHistoryTooltip point={data.points[index]} currency={currency}/>}/>}
+     renderTooltip={index=><PortfolioHistoryTooltip point={data.points[index]} currency={currency}/>}
+     footer={<button type="button" aria-pressed={showInvested} onClick={()=>setShowInvested(previous=>!previous)} className="easyui-chart-control">Net invested</button>}/>}
   </div>
-  {!hidden&&data&&<div className="flex justify-end"><button type="button" aria-pressed={showInvested} onClick={()=>setShowInvested(previous=>!previous)} className="easyui-chart-control">Net invested</button></div>}
   {data&&<>
    <p className="text-[10px] leading-relaxed text-muted-foreground">{data.from} – {data.to} · {data.timezone} · read {new Date(data.as_of).toLocaleString()}{data.points.at(-1)?.provisional?' · today is provisional':''}</p>
   </>}

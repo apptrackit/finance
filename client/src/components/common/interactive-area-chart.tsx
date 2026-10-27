@@ -25,6 +25,8 @@ type InteractiveAreaChartProps = {
   activeIndex?: number | null
   onInspect?: (index: number | null) => void
   renderTooltip?: (index: number) => ReactNode
+  // Shares the legend row, so toggling the reference line keeps it in place.
+  footer?: ReactNode
 }
 
 const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max)
@@ -32,7 +34,7 @@ const finite = (value: number | null | undefined): value is number => value != n
 const shortDate = (date: string) => new Date(`${date}T00:00:00Z`).toLocaleDateString('en', { month: 'short', day: 'numeric', timeZone: 'UTC' })
 const fullDate = (date: string) => new Date(`${date}T00:00:00Z`).toLocaleDateString('en', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' })
 
-export function InteractiveAreaChart({ data, label, formatValue, color = 'hsl(var(--primary))', title, controls, showChange = false, periodLabel = 'in period', reference, hidden = false, showReadout = false, className, activeIndex, onInspect, renderTooltip }: InteractiveAreaChartProps) {
+export function InteractiveAreaChart({ data, label, formatValue, color = 'hsl(var(--primary))', title, controls, showChange = false, periodLabel = 'in period', reference, hidden = false, showReadout = false, className, activeIndex, onInspect, renderTooltip, footer }: InteractiveAreaChartProps) {
   const uid = useId().replaceAll(':', '')
   const reduce = useReducedMotion()
   const wrapRef = useRef<HTMLDivElement>(null)
@@ -125,7 +127,7 @@ export function InteractiveAreaChart({ data, label, formatValue, color = 'hsl(va
     inspect(nearest)
   }
 
-  if (hidden) return <><div className="flex flex-wrap items-start justify-between gap-3">{title && <h3 className="text-[13px] text-muted-foreground">{title}</h3>}{controls}</div><div className={cn('flex h-60 items-center justify-center text-sm text-muted-foreground', className)}>Chart hidden for privacy</div></>
+  if (hidden) return <><div className="flex flex-wrap items-start justify-between gap-3">{title && <h3 className="text-[13px] text-muted-foreground">{title}</h3>}{controls}</div><div className={cn('flex h-60 items-center justify-center text-sm text-muted-foreground', className)}>Chart hidden for privacy</div>{footer && <div className="mt-3 flex flex-wrap items-center justify-end gap-2">{footer}</div>}</>
   if (!data.length) return <div className={cn('flex h-60 items-center justify-center text-sm text-muted-foreground', className)}>No data in this period</div>
 
   return <div className="min-w-0">
@@ -188,9 +190,12 @@ export function InteractiveAreaChart({ data, label, formatValue, color = 'hsl(va
         </div>}
       </motion.div>}
     </div>
-    {reference && <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 px-2 text-xs text-muted-foreground sm:px-0">
-      <span className="inline-flex items-center gap-1.5"><span className="h-0.5 w-4" style={{ background: color }} />{label}</span>
-      <span className="inline-flex items-center gap-1.5"><span className="w-4 border-t" style={{ borderColor: reference.color, borderStyle: reference.dashed ? 'dashed' : 'solid' }} />{reference.label}</span>
+    {(reference || footer) && <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+      {reference && <div className="flex flex-wrap gap-x-5 gap-y-1 px-2 text-xs text-muted-foreground sm:px-0">
+        <span className="inline-flex items-center gap-1.5"><span className="h-0.5 w-4" style={{ background: color }} />{label}</span>
+        <span className="inline-flex items-center gap-1.5"><span className="w-4 border-t" style={{ borderColor: reference.color, borderStyle: reference.dashed ? 'dashed' : 'solid' }} />{reference.label}</span>
+      </div>}
+      {footer && <div className="ml-auto flex flex-wrap items-center justify-end gap-2">{footer}</div>}
     </div>}
   </div>
 }

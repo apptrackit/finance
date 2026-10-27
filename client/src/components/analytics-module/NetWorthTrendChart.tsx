@@ -24,6 +24,14 @@ export const NetWorthTrendChart = memo(function NetWorthTrendChart({ data, maste
   const unavailableReason = comparisonDisabledReason || comparison?.unavailableReason
   const comparing = compare && comparison !== undefined && !unavailableReason
   const hidden = privacyMode === 'hidden'
+  const showsChart = !comparing && data.length > 1
+  const buttons = <>
+    {!comparing && !hidden && <button type="button" aria-pressed={showTrend} className="easyui-chart-control" onClick={() => setShowTrend(previous => !previous)}>Trend</button>}
+    {comparison && <button type="button" className="easyui-chart-control" aria-pressed={comparing}
+      disabled={Boolean(unavailableReason)} aria-describedby={unavailableReason ? reasonId : undefined} onClick={() => setCompare(previous => !previous)}>
+      {comparing ? 'Hide comparison' : 'Compare previous month'}
+    </button>}
+  </>
 
   return <section className="easyui-area-card lg:col-span-2" aria-label={title}>
     {comparing ? <>
@@ -36,14 +44,9 @@ export const NetWorthTrendChart = memo(function NetWorthTrendChart({ data, maste
       reference={showTrend ? { label: 'Trend', color: 'hsl(var(--muted-foreground))', dashed: true } : undefined}
       hidden={hidden} showReadout showChange
       className="h-[240px] sm:h-[280px]"
+      footer={(comparison || !hidden) ? buttons : undefined}
     /> : <><h3 className="text-[13px] text-muted-foreground">{title}</h3><div className="flex h-[280px] items-center justify-center text-sm text-muted-foreground">Need more data points to show trend</div></>}
-    <div className="mt-3 flex flex-wrap items-center justify-end gap-2">
-      {!comparing && !hidden && <button type="button" aria-pressed={showTrend} className="easyui-chart-control" onClick={() => setShowTrend(previous => !previous)}>Trend</button>}
-      {comparison && <button type="button" className="easyui-chart-control" aria-pressed={comparing}
-        disabled={Boolean(unavailableReason)} aria-describedby={unavailableReason ? reasonId : undefined} onClick={() => setCompare(previous => !previous)}>
-        {comparing ? 'Hide comparison' : 'Compare previous month'}
-      </button>}
-    </div>
+    {!showsChart && (comparison || (!comparing && !hidden)) && <div className="mt-3 flex flex-wrap items-center justify-end gap-2">{buttons}</div>}
     {comparison && unavailableReason && <p id={reasonId} className="mt-1 text-xs text-muted-foreground">{unavailableReason}</p>}
   </section>
 })
