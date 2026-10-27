@@ -247,6 +247,27 @@ it('retains a manual conversion when a late market-rate request completes', asyn
 })
 
 describe('dashboard transaction presentation', () => {
+  it('groups review items by descending date while keeping same-day rows together and future drafts unconfirmable', () => {
+    renderTransfers({ transactions: [], upcomingTransactions: [
+      { id: 'old', account_id: 'source', amount: -10, date: '2020-01-01', description: 'Old bill', pending_kind: 'upcoming' },
+      { id: 'new', account_id: 'source', amount: -20, date: '2020-01-03', description: 'New bill', pending_kind: 'upcoming' },
+      { id: 'same', account_id: 'source', amount: -30, date: '2020-01-03', description: 'Same-day draft', pending_kind: 'mcp_review' },
+      { id: 'future', account_id: 'source', amount: -40, date: '2099-01-01', description: 'Future draft', pending_kind: 'mcp_review' },
+    ] })
+    const queue = within(screen.getByRole('region', { name: 'Needs review' }))
+    expect(queue.getAllByRole('heading', { level: 4 }).map(heading => heading.textContent)).toEqual([
+      'Thu, Jan 1, 2099', 'Fri, Jan 3, 2020', 'Wed, Jan 1, 2020',
+    ])
+    const sameDay = within(queue.getByRole('region', { name: 'Friday, Jan 3, 2020' }))
+    expect(sameDay.getByText('New bill')).toBeInTheDocument()
+    expect(sameDay.getByText('Same-day draft')).toBeInTheDocument()
+    expect(sameDay.getAllByRole('button', { name: /^Confirm/ })).toHaveLength(2)
+    const future = within(queue.getByRole('region', { name: 'Thursday, Jan 1, 2099' }))
+    expect(future.getByText('Future draft')).toBeInTheDocument()
+    expect(future.getByRole('button', { name: /^Confirm/ })).toBeDisabled()
+    expect(queue.queryByLabelText('Daily total')).not.toBeInTheDocument()
+  })
+
   it('combines due items and MCP drafts, keeps future drafts unconfirmable, and resolves both transfer legs once', async () => {
     const user = userEvent.setup()
     vi.mocked(apiFetch).mockReset()

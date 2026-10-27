@@ -1362,7 +1362,13 @@ export function TransactionList({
     const values = cashFlowTransactions(items).map(convertCash)
     return values.some(value => value === null) ? null : values.reduce<number>((sum, value) => sum + value!, 0)
   }
-  const reviewTransactions = [...readyTransactions, ...mcpReviewTransactions].sort((a, b) => a.date.localeCompare(b.date))
+  const reviewTransactions = [...readyTransactions, ...mcpReviewTransactions].sort((a, b) => b.date.localeCompare(a.date))
+  const reviewDateGroups = reviewTransactions.reduce((groups, tx) => {
+    const items = groups.get(tx.date) ?? []
+    items.push(tx)
+    groups.set(tx.date, items)
+    return groups
+  }, new Map<string, PendingItem[]>())
 
   // Preview only the review items currently shown that can be confirmed now.
   // A transfer contributes both native legs, even if only one matches a filter.
@@ -1735,7 +1741,12 @@ export function TransactionList({
         : <div className="space-y-4">
           {reviewTransactions.length > 0 && <section aria-labelledby="review-heading" className="overflow-hidden rounded-xl border border-border">
             <div className="flex items-center gap-2 px-4 py-3"><h3 id="review-heading" className="text-sm font-semibold">Needs review</h3><span className="rounded-full bg-secondary px-2 py-0.5 text-xs">{reviewTransactions.length}</span><span className="ml-auto hidden text-xs text-muted-foreground sm:block">Balances change only after confirmation</span></div>
-            {reviewTransactions.map(tx => renderPendingTransaction(tx, tx.date <= today))}
+            {Array.from(reviewDateGroups, ([date, items]) => <section key={date} aria-label={format(parseISO(date), 'EEEE, MMM d, yyyy')}>
+              <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 border-t border-border bg-secondary/30 px-3 py-2 text-xs text-muted-foreground sm:px-4">
+                <h4>{format(parseISO(date), 'EEE, MMM d, yyyy')}</h4>
+              </div>
+              {items.map(tx => renderPendingTransaction(tx, tx.date <= today))}
+            </section>)}
             {confirmationBalancePreviews.length > 0 && <div role="region" aria-label="Confirmation balance preview" className="border-t border-border bg-background/40 px-4 py-3 text-xs text-muted-foreground"><p className="mb-1 font-medium">If all ready transactions are confirmed</p><div className="grid gap-y-1 sm:flex sm:flex-wrap sm:gap-x-4">{confirmationBalancePreviews.map(({ account, acceptedBalance }) => <p key={account.id}>{account.name}: {previewBalance(account.balance, account.id)} → {previewBalance(acceptedBalance, account.id)}</p>)}</div></div>}
           </section>}
           {futureTransactions.length > 0 && <section className="overflow-hidden rounded-xl border border-border">
