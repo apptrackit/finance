@@ -1,541 +1,391 @@
-import { useEffect, useState } from 'react'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../common/card'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { ChevronRight, Pencil, Plus, Trash2 } from 'lucide-react'
 import { Button } from '../../common/button'
 import { Input } from '../../common/input'
-import { Label } from '../../common/label'
-import { Select } from '../../common/select'
-import { Plus, Trash2, Tag, Pencil, Check, X, ChevronDown } from 'lucide-react'
+import { Modal } from '../../common/modal'
 import { API_BASE_URL, apiFetch } from '../../../config'
 import { useAlert } from '../../../context/AlertContext'
-import { EmojiPicker } from './EmojiPicker'
-import type { Category } from '../types'
 import { useUnsavedChanges } from '../../../navigation/UnsavedChanges'
+import { EMOJI_OPTIONS } from '../constants'
+import type { Category } from '../types'
+import { useSettingsMobile } from '../useSettingsMobile'
+import { EmojiPicker } from './EmojiPicker'
 
-export function CategoriesCard() {
-  const { showAlert, confirm } = useAlert()
+type CategoryType = Category['type']
+type Draft = { id?: string; name: string; icon: string; type: CategoryType }
+const emptyDraft = (type: CategoryType): Draft => ({ name: '', icon: '📌', type })
 
-  const [categories, setCategories] = useState<Category[]>([])
-  const [isLoadingCategories, setIsLoadingCategories] = useState(true)
-  const [newCategoryName, setNewCategoryName] = useState('')
-  const [newCategoryType, setNewCategoryType] = useState<'income' | 'expense'>('expense')
-  const [newCategoryIcon, setNewCategoryIcon] = useState('📌')
-  const [isAddingCategory, setIsAddingCategory] = useState(false)
-
-  const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null)
-  const [editCategoryName, setEditCategoryName] = useState('')
-  const [editCategoryType, setEditCategoryType] = useState<'income' | 'expense'>('expense')
-  const [editCategoryIcon, setEditCategoryIcon] = useState('📌')
-  const [isUpdatingCategory, setIsUpdatingCategory] = useState(false)
-  const [deletingCategoryId, setDeletingCategoryId] = useState<string | null>(null)
-
-  const [showNewEmojiPicker, setShowNewEmojiPicker] = useState(false)
-  const [showEditEmojiPicker, setShowEditEmojiPicker] = useState<string | null>(null)
-
-  const [showIncomeCategoryList, setShowIncomeCategoryList] = useState(false)
-  const [showExpenseCategoryList, setShowExpenseCategoryList] = useState(false)
-  useUnsavedChanges(newCategoryName !== '' || !!editingCategoryId || isAddingCategory || isUpdatingCategory)
-
+export function CategoriesCard({
+  onCountChange,
+  active = true
+}: {
+  onCountChange?: (count: number) => void
+  active?: boolean
+}) {
+  const { showAlert } = useAlert()
+  const alertRef = useRef(showAlert)
   useEffect(() => {
-    loadCategories()
-  }, [])
+    alertRef.current = showAlert
+  }, [showAlert])
+  const mobile = useSettingsMobile()
+  const [categories, setCategories] = useState<Category[]>([])
+  const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState(false)
+  const [tab, setTab] = useState<CategoryType>('expense')
+  const [newDraft, setNewDraft] = useState<Draft>(() => emptyDraft('expense'))
+  const [editDraft, setEditDraft] = useState<Draft | null>(null)
+  const [mobileAdding, setMobileAdding] = useState(false)
+  const [deleting, setDeleting] = useState<Category | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [picker, setPicker] = useState<'new' | 'edit' | null>(null)
+  useUnsavedChanges(newDraft.name !== '' || !!editDraft || mobileAdding || busy)
 
-  const loadCategories = async () => {
-    try {
-      setIsLoadingCategories(true)
-      const res = await apiFetch(`${API_BASE_URL}/categories`)
-      const data = await res.json()
-      setCategories(data)
-    } catch (error) {
-      console.error('Failed to load categories:', error)
-    } finally {
-      setIsLoadingCategories(false)
-    }
-  }
-
-  const extractSingleEmoji = (str: string): string => {
-    const emojiRegex = /\p{Emoji_Presentation}|\p{Emoji}\uFE0F/gu
-    const matches = str.match(emojiRegex)
-    return matches ? matches[0] : '📌'
-  }
-
-  const handleNewIconChange = (value: string) => {
-    if (value === '') {
-      setNewCategoryIcon('📌')
-    } else {
-      setNewCategoryIcon(extractSingleEmoji(value))
-    }
-  }
-
-  const handleEditIconChange = (value: string) => {
-    if (value === '') {
-      setEditCategoryIcon('📌')
-    } else {
-      setEditCategoryIcon(extractSingleEmoji(value))
-    }
-  }
-
-  const handleAddCategory = async () => {
-    if (!newCategoryName.trim()) {
-      showAlert({
-        type: 'warning',
-        title: 'Missing Information',
-        message: 'Please enter a category name'
-      })
-      return
-    }
-
-    setIsAddingCategory(true)
-    try {
-      const res = await apiFetch(`${API_BASE_URL}/categories`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: newCategoryName.trim(),
-          type: newCategoryType,
-          icon: newCategoryIcon
-        })
-      })
-
-      if (!res.ok) {
-        const error = await res.json()
-        throw new Error(error.error || 'Failed to create category')
+  const load = useCallback(
+    async (signal: AbortSignal) => {
+      setLoading(true)
+      setLoadError(false)
+      try {
+        const res = await apiFetch(`${API_BASE_URL}/categories`, { signal, throwOnError: true })
+        const data = (await res.json()) as Category[]
+        if (!signal.aborted) {
+          setCategories(data)
+          onCountChange?.(data.length)
+        }
+      } catch (error) {
+        if (!signal.aborted) {
+          setLoadError(true)
+          alertRef.current({
+            type: 'error',
+            title: 'Categories unavailable',
+            message: error instanceof Error ? error.message : 'Could not load categories.'
+          })
+        }
+      } finally {
+        if (!signal.aborted) setLoading(false)
       }
+    },
+    [onCountChange]
+  )
+  useEffect(() => {
+    const controller = new AbortController()
+    void load(controller.signal)
+    return () => controller.abort()
+  }, [load])
+  useEffect(() => {
+    if (!loading && !loadError) onCountChange?.(categories.length)
+  }, [categories.length, onCountChange, loading, loadError])
 
-      const newCategory = await res.json()
-      setCategories([...categories, newCategory])
-
-      setNewCategoryName('')
-      setNewCategoryIcon('📌')
-      setNewCategoryType('expense')
-
+  const save = async (draft: Draft) => {
+    if (busy || !draft.name.trim()) return
+    setBusy(true)
+    try {
+      const res = await apiFetch(`${API_BASE_URL}/categories${draft.id ? `/${draft.id}` : ''}`, {
+        method: draft.id ? 'PUT' : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: draft.name.trim(), icon: draft.icon, type: draft.type })
+      })
+      const saved = (await res.json()) as Category
+      setCategories((previous) =>
+        draft.id ? previous.map((c) => (c.id === draft.id ? saved : c)) : [...previous, saved]
+      )
+      setTab(saved.type)
+      if (draft.id) setEditDraft(null)
+      else {
+        setNewDraft(emptyDraft(saved.type))
+        setMobileAdding(false)
+      }
+      setPicker(null)
       showAlert({
         type: 'success',
-        title: 'Category Added',
-        message: `"${newCategory.name}" has been created successfully`
+        title: draft.id ? 'Category Updated' : 'Category Added',
+        message: `“${saved.name}” has been saved.`
       })
     } catch (error) {
-      console.error('Failed to add category:', error)
       showAlert({
         type: 'error',
-        title: 'Failed to Add Category',
-        message: error instanceof Error ? error.message : 'Failed to add category'
+        title: 'Category not saved',
+        message: error instanceof Error ? error.message : 'Please try again.'
       })
     } finally {
-      setIsAddingCategory(false)
+      setBusy(false)
     }
   }
-
-  const handleDeleteCategory = async (id: string, name: string) => {
-    const confirmed = await confirm({
-      title: 'Delete Category',
-      message: `Are you sure you want to delete "${name}"? This action cannot be undone.`,
-      confirmText: 'Delete',
-      cancelText: 'Cancel'
-    })
-
-    if (!confirmed) {
-      return
-    }
-
-    setDeletingCategoryId(id)
+  const remove = async () => {
+    if (!deleting || busy) return
+    setBusy(true)
     try {
-      const res = await apiFetch(`${API_BASE_URL}/categories/${id}`, {
-        method: 'DELETE'
-      })
-
-      if (!res.ok) {
-        const error = await res.json()
-        throw new Error(error.error || 'Failed to delete category')
-      }
-
-      setCategories(categories.filter(c => c.id !== id))
-
+      await apiFetch(`${API_BASE_URL}/categories/${deleting.id}`, { method: 'DELETE' })
+      setCategories((previous) => previous.filter((c) => c.id !== deleting.id))
+      setDeleting(null)
+      setEditDraft(null)
       showAlert({
         type: 'success',
         title: 'Category Deleted',
-        message: `"${name}" has been removed`
+        message: `“${deleting.name}” has been removed.`
       })
     } catch (error) {
-      console.error('Failed to delete category:', error)
       showAlert({
         type: 'error',
-        title: 'Failed to Delete Category',
-        message: error instanceof Error ? error.message : 'Failed to delete category'
+        title: 'Category not deleted',
+        message: error instanceof Error ? error.message : 'Please try again.'
       })
     } finally {
-      setDeletingCategoryId(null)
+      setBusy(false)
     }
   }
-
-  const handleStartEdit = (category: Category) => {
-    setEditingCategoryId(category.id)
-    setEditCategoryName(category.name)
-    setEditCategoryType(category.type)
-    setEditCategoryIcon(category.icon || '📌')
+  const startEdit = (category: Category) => {
+    setEditDraft({ ...category, icon: category.icon || '📌' })
+    setDeleting(null)
+    setPicker(null)
   }
-
-  const handleCancelEdit = () => {
-    setEditingCategoryId(null)
-    setEditCategoryName('')
-    setEditCategoryType('expense')
-    setEditCategoryIcon('📌')
-  }
-
-  const handleUpdateCategory = async (id: string) => {
-    if (!editCategoryName.trim()) {
-      showAlert({
-        type: 'warning',
-        title: 'Missing Information',
-        message: 'Please enter a category name'
-      })
-      return
-    }
-
-    setIsUpdatingCategory(true)
-    try {
-      const res = await apiFetch(`${API_BASE_URL}/categories/${id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: editCategoryName.trim(),
-          type: editCategoryType,
-          icon: editCategoryIcon
-        })
-      })
-
-      if (!res.ok) {
-        const error = await res.json()
-        throw new Error(error.error || 'Failed to update category')
-      }
-
-      const updatedCategory = await res.json()
-      setCategories(categories.map(c => (c.id === id ? updatedCategory : c)))
-
-      handleCancelEdit()
-
-      showAlert({
-        type: 'success',
-        title: 'Category Updated',
-        message: `"${updatedCategory.name}" has been updated successfully`
-      })
-    } catch (error) {
-      console.error('Failed to update category:', error)
-      showAlert({
-        type: 'error',
-        title: 'Failed to Update Category',
-        message: error instanceof Error ? error.message : 'Failed to update category'
-      })
-    } finally {
-      setIsUpdatingCategory(false)
+  const cancelEdit = () => {
+    if (!busy) {
+      setEditDraft(null)
+      setMobileAdding(false)
+      setDeleting(null)
+      setPicker(null)
     }
   }
-
-  const incomeCategories = categories.filter(c => c.type === 'income')
-  const expenseCategories = categories.filter(c => c.type === 'expense')
+  const switchTab = (type: CategoryType) => {
+    if (busy || editDraft) return
+    setTab(type)
+    setNewDraft((previous) => ({ ...previous, type }))
+    setPicker(null)
+    setDeleting(null)
+  }
+  const renderForm = (draft: Draft, editing: boolean, inSheet = false) => {
+    const update = (next: Draft) => (editing ? setEditDraft(next) : setNewDraft(next))
+    const pickerId = editing ? 'edit' : 'new'
+    return (
+      <form
+        className="settings-category-form"
+        onSubmit={(event) => {
+          event.preventDefault()
+          void save(draft)
+        }}
+      >
+        <div className="relative">
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            aria-label="Choose category icon"
+            disabled={busy}
+            aria-expanded={picker === pickerId}
+            onClick={() => setPicker(picker === pickerId ? null : pickerId)}
+            className="text-xl"
+          >
+            {draft.icon}
+          </Button>
+          {!inSheet && picker === pickerId && (
+            <EmojiPicker onChange={(icon) => update({ ...draft, icon })} onClose={() => setPicker(null)} />
+          )}
+        </div>
+        <Input
+          aria-label={editing ? 'Category name' : 'New category name'}
+          placeholder={`New ${draft.type} category`}
+          value={draft.name}
+          disabled={busy || loading || loadError}
+          onChange={(event) => update({ ...draft, name: event.target.value })}
+        />
+        {(editing || inSheet) && (
+          <div className="settings-segments" role="group" aria-label="Category type">
+            {(['expense', 'income'] as const).map((type) => (
+              <button
+                key={type}
+                type="button"
+                disabled={busy}
+                aria-pressed={draft.type === type}
+                onClick={() => update({ ...draft, type })}
+                className="capitalize"
+              >
+                {type}
+              </button>
+            ))}
+          </div>
+        )}
+        {inSheet && (
+          <div className="grid grid-cols-8 gap-1 max-h-44 w-full overflow-y-auto rounded-xl border border-border p-2">
+            {EMOJI_OPTIONS.map((icon, index) => (
+              <button
+                key={index}
+                type="button"
+                aria-label={`Use ${icon}`}
+                aria-pressed={draft.icon === icon}
+                disabled={busy}
+                onClick={() => update({ ...draft, icon })}
+                className={`h-10 rounded-lg text-xl hover:bg-accent ${draft.icon === icon ? 'bg-accent' : ''}`}
+              >
+                {icon}
+              </button>
+            ))}
+          </div>
+        )}
+        <div className="settings-form-actions">
+          {editing && !inSheet && (
+            <Button type="button" variant="outline" size="sm" onClick={cancelEdit} disabled={busy}>
+              Cancel
+            </Button>
+          )}
+          <Button type="submit" disabled={busy || loading || loadError || !draft.name.trim()}>
+            {!editing && !inSheet && <Plus className="h-4 w-4" />}
+            {busy ? 'Saving...' : editing || inSheet ? 'Save' : 'Add'}
+          </Button>
+        </div>
+      </form>
+    )
+  }
+  const deleteConfirmation = deleting && (
+    <div
+      className="flex flex-wrap items-center gap-2 rounded-lg bg-destructive/5 p-3"
+      role="group"
+      aria-label={`Delete ${deleting.name}?`}
+    >
+      <p className="min-w-0 flex-1 text-sm">Delete “{deleting.name}”? This can’t be undone.</p>
+      <Button variant="outline" size="sm" disabled={busy} onClick={() => setDeleting(null)}>
+        Cancel
+      </Button>
+      <Button variant="destructive" size="sm" disabled={busy} onClick={() => void remove()}>
+        {busy ? 'Deleting...' : 'Delete'}
+      </Button>
+    </div>
+  )
 
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex items-center gap-3">
-          <div className="h-8 w-8 rounded-lg bg-secondary flex items-center justify-center">
-            <Tag className="h-4 w-4 text-muted-foreground" />
-          </div>
-          <div>
-            <CardTitle>Categories</CardTitle>
-            <CardDescription>Manage your income and expense categories</CardDescription>
-          </div>
+    <section aria-label="Categories">
+      <div className="settings-category-heading">
+        <div>
+          <h2>Categories</h2>
+          <p className="settings-description">Income and expense categories for your transactions.</p>
         </div>
-      </CardHeader>
-      <CardContent className="space-y-6">
-        <div className="space-y-4">
-          <h3 className="text-sm font-medium">Add New Category</h3>
-          <div className="flex flex-col sm:grid sm:grid-cols-[auto_1fr_auto_auto] gap-3 sm:gap-2 sm:items-end">
-            <div className="space-y-2 relative">
-              <Label htmlFor="category-icon">Icon</Label>
-              <div className="relative">
-                <Input
-                  id="category-icon"
-                  type="text"
-                  value={newCategoryIcon}
-                  onChange={e => handleNewIconChange(e.target.value)}
-                  onClick={() => setShowNewEmojiPicker(!showNewEmojiPicker)}
-                  placeholder="📌"
-                  maxLength={4}
-                  className="w-16 h-10 text-center text-2xl p-0 cursor-pointer"
-                  title="Click to choose emoji"
-                />
-                {showNewEmojiPicker && (
-                  <EmojiPicker
-                    onChange={(emoji) => {
-                      setNewCategoryIcon(emoji)
-                      setShowNewEmojiPicker(false)
-                    }}
-                    onClose={() => setShowNewEmojiPicker(false)}
-                  />
-                )}
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="category-name">Name</Label>
-              <Input
-                id="category-name"
-                type="text"
-                placeholder="e.g., Dining Out"
-                value={newCategoryName}
-                onChange={e => setNewCategoryName(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && handleAddCategory()}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="category-type">Type</Label>
-              <Select
-                id="category-type"
-                value={newCategoryType}
-                onChange={e => setNewCategoryType(e.target.value as 'income' | 'expense')}
-              >
-                <option value="expense">Expense</option>
-                <option value="income">Income</option>
-              </Select>
-            </div>
-            <Button
-              onClick={handleAddCategory}
-              disabled={isAddingCategory || !newCategoryName.trim()}
-              className="w-full sm:w-auto"
+        <Button
+          className="settings-category-mobile"
+          variant="ghost"
+          size="icon"
+          aria-label="Add category"
+          disabled={busy || loading || loadError}
+          onClick={() => {
+            setMobileAdding(true)
+            setEditDraft(null)
+            setDeleting(null)
+          }}
+        >
+          <Plus className="h-5 w-5" />
+        </Button>
+        <div className="settings-segments" role="group" aria-label="Category filter">
+          {(['expense', 'income'] as const).map((type) => (
+            <button
+              key={type}
+              type="button"
+              aria-pressed={tab === type}
+              disabled={busy || !!editDraft}
+              onClick={() => switchTab(type)}
             >
-              <Plus className="h-4 w-4 mr-2" />
-              Add
+              <span className="capitalize">{type}</span>{' '}
+              <span className="opacity-60 tabular-nums">
+                {categories.filter((c) => c.type === type).length}
+              </span>
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="settings-group" aria-busy={loading || busy}>
+        <div className="settings-category-add">{renderForm(newDraft, false)}</div>
+        {loading ? (
+          <p className="settings-category-status" role="status">
+            Loading categories...
+          </p>
+        ) : loadError ? (
+          <div className="settings-category-status">
+            <p>Could not load categories.</p>
+            <Button variant="outline" size="sm" onClick={() => void load(new AbortController().signal)}>
+              Retry
             </Button>
           </div>
-        </div>
-
-        <div className="space-y-3">
-          <div className="flex items-center justify-between">
-            <h3 className="text-sm font-medium text-success">Income Categories</h3>
-            {!isLoadingCategories && incomeCategories.length > 0 && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setShowIncomeCategoryList(!showIncomeCategoryList)}
-                className="text-xs"
-              >
-                {showIncomeCategoryList ? 'Collapse' : 'Expand List'}
-                <ChevronDown className={`ml-1 h-3 w-3 transition-transform ${showIncomeCategoryList ? 'rotate-180' : ''}`} />
-              </Button>
-            )}
-          </div>
-          {isLoadingCategories ? (
-            <p className="text-sm text-muted-foreground">Loading...</p>
-          ) : incomeCategories.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No income categories yet</p>
-          ) : showIncomeCategoryList ? (
-            <div className="space-y-2">
-              {incomeCategories.map(category => (
-                editingCategoryId === category.id ? (
-                  <div
-                    key={category.id}
-                    className="grid grid-cols-[auto_1fr_auto_auto_auto] gap-2 items-center p-3 rounded-lg border bg-accent"
-                  >
-                    <div className="relative">
-                      <Input
-                        type="text"
-                        value={editCategoryIcon}
-                        onChange={e => handleEditIconChange(e.target.value)}
-                        onClick={() => setShowEditEmojiPicker(showEditEmojiPicker === category.id ? null : category.id)}
-                        placeholder="📌"
-                        maxLength={4}
-                        className="w-14 h-10 text-center text-2xl p-0 cursor-pointer"
-                        title="Click to choose emoji"
-                      />
-                      {showEditEmojiPicker === category.id && (
-                        <EmojiPicker
-                          onChange={(emoji) => {
-                            setEditCategoryIcon(emoji)
-                            setShowEditEmojiPicker(null)
-                          }}
-                          onClose={() => setShowEditEmojiPicker(null)}
-                        />
-                      )}
-                    </div>
-                    <Input
-                      type="text"
-                      value={editCategoryName}
-                      onChange={e => setEditCategoryName(e.target.value)}
-                      onKeyDown={e => e.key === 'Enter' && handleUpdateCategory(category.id)}
-                    />
-                    <Select
-                      value={editCategoryType}
-                      onChange={e => setEditCategoryType(e.target.value as 'income' | 'expense')}
-                    >
-                      <option value="expense">Expense</option>
-                      <option value="income">Income</option>
-                    </Select>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleUpdateCategory(category.id)}
-                      disabled={isUpdatingCategory}
-                      className="text-success hover:text-success hover:bg-success/10"
-                    >
-                      <Check className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={handleCancelEdit}
-                      disabled={isUpdatingCategory}
-                    >
-                      <X className="h-4 w-4" />
-                    </Button>
-                  </div>
+        ) : categories.filter((c) => c.type === tab).length === 0 ? (
+          <p className="settings-category-status">No {tab} categories yet</p>
+        ) : (
+          categories
+            .filter((c) => c.type === tab)
+            .map((category) => (
+              <div key={category.id} className="settings-category-row">
+                {!mobile && editDraft?.id === category.id ? (
+                  renderForm(editDraft, true)
+                ) : !mobile && deleting?.id === category.id ? (
+                  deleteConfirmation
                 ) : (
-                  <div
-                    key={category.id}
-                    className="flex items-center justify-between p-3 rounded-lg border bg-card hover:bg-accent/50 transition-colors"
+                  <>
+                    <span className="settings-category-icon">{category.icon || '📌'}</span>
+                    <span className="settings-category-name">{category.name}</span>
+                    {!mobile && (
+                      <div className="settings-category-actions">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          aria-label={`Edit ${category.name}`}
+                          disabled={busy || !!editDraft}
+                          onClick={() => startEdit(category)}
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          aria-label={`Delete ${category.name}`}
+                          disabled={busy || !!editDraft}
+                          onClick={() => setDeleting(category)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    )}
+                    {mobile && (
+                      <Button
+                        className="settings-category-mobile"
+                        variant="ghost"
+                        size="icon"
+                        aria-label={`Edit ${category.name}`}
+                        disabled={busy}
+                        onClick={() => startEdit(category)}
+                      >
+                        <ChevronRight className="h-4 w-4" />
+                      </Button>
+                    )}
+                  </>
+                )}
+              </div>
+            ))
+        )}
+      </div>
+      {mobile && active && (mobileAdding || editDraft) && (
+        <Modal
+          isOpen
+          onClose={cancelEdit}
+          title={deleting ? 'Delete category?' : editDraft ? 'Edit category' : 'New category'}
+          initialFocus="input"
+        >
+          {deleting ? (
+            deleteConfirmation
+          ) : (
+            <>
+              <div className="mb-4 flex justify-end">
+                {editDraft && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-destructive"
+                    disabled={busy}
+                    onClick={() => setDeleting({ ...editDraft, id: editDraft.id! })}
                   >
-                    <div className="flex items-center gap-3">
-                      <span className="text-xl">{category.icon}</span>
-                      <span className="font-medium">{category.name}</span>
-                    </div>
-                    <div className="flex gap-1">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleStartEdit(category)}
-                        className="hover:bg-accent"
-                      >
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        disabled={deletingCategoryId === category.id}
-                        onClick={() => handleDeleteCategory(category.id, category.name)}
-                        className="text-destructive hover:text-destructive hover:bg-destructive/10"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
-                )
-              ))}
-            </div>
-          ) : null}
-        </div>
-
-        <div className="space-y-3">
-          <div className="flex items-center justify-between">
-            <h3 className="text-sm font-medium text-destructive">Expense Categories</h3>
-            {!isLoadingCategories && expenseCategories.length > 0 && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setShowExpenseCategoryList(!showExpenseCategoryList)}
-                className="text-xs"
-              >
-                {showExpenseCategoryList ? 'Collapse' : 'Expand List'}
-                <ChevronDown className={`ml-1 h-3 w-3 transition-transform ${showExpenseCategoryList ? 'rotate-180' : ''}`} />
-              </Button>
-            )}
-          </div>
-          {isLoadingCategories ? (
-            <p className="text-sm text-muted-foreground">Loading...</p>
-          ) : expenseCategories.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No expense categories yet</p>
-          ) : showExpenseCategoryList ? (
-            <div className="space-y-2">
-              {expenseCategories.map(category => (
-                editingCategoryId === category.id ? (
-                  <div
-                    key={category.id}
-                    className="grid grid-cols-[auto_1fr_auto_auto_auto] gap-2 items-center p-3 rounded-lg border bg-accent"
-                  >
-                    <div className="relative">
-                      <Input
-                        type="text"
-                        value={editCategoryIcon}
-                        onChange={e => handleEditIconChange(e.target.value)}
-                        onClick={() => setShowEditEmojiPicker(showEditEmojiPicker === category.id ? null : category.id)}
-                        placeholder="📌"
-                        maxLength={4}
-                        className="w-14 h-10 text-center text-2xl p-0 cursor-pointer"
-                        title="Click to choose emoji"
-                      />
-                      {showEditEmojiPicker === category.id && (
-                        <EmojiPicker
-                          onChange={(emoji) => {
-                            setEditCategoryIcon(emoji)
-                            setShowEditEmojiPicker(null)
-                          }}
-                          onClose={() => setShowEditEmojiPicker(null)}
-                        />
-                      )}
-                    </div>
-                    <Input
-                      type="text"
-                      value={editCategoryName}
-                      onChange={e => setEditCategoryName(e.target.value)}
-                      onKeyDown={e => e.key === 'Enter' && handleUpdateCategory(category.id)}
-                    />
-                    <Select
-                      value={editCategoryType}
-                      onChange={e => setEditCategoryType(e.target.value as 'income' | 'expense')}
-                    >
-                      <option value="expense">Expense</option>
-                      <option value="income">Income</option>
-                    </Select>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleUpdateCategory(category.id)}
-                      disabled={isUpdatingCategory}
-                      className="text-success hover:text-success hover:bg-success/10"
-                    >
-                      <Check className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={handleCancelEdit}
-                      disabled={isUpdatingCategory}
-                    >
-                      <X className="h-4 w-4" />
-                    </Button>
-                  </div>
-                ) : (
-                  <div
-                    key={category.id}
-                    className="flex items-center justify-between p-3 rounded-lg border bg-card hover:bg-accent/50 transition-colors"
-                  >
-                    <div className="flex items-center gap-3">
-                      <span className="text-xl">{category.icon}</span>
-                      <span className="font-medium">{category.name}</span>
-                    </div>
-                    <div className="flex gap-1">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleStartEdit(category)}
-                        className="hover:bg-accent"
-                      >
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        disabled={deletingCategoryId === category.id}
-                        onClick={() => handleDeleteCategory(category.id, category.name)}
-                        className="text-destructive hover:text-destructive hover:bg-destructive/10"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
-                )
-              ))}
-            </div>
-          ) : null}
-        </div>
-      </CardContent>
-    </Card>
+                    Delete
+                  </Button>
+                )}
+              </div>
+              {renderForm(editDraft || newDraft, !!editDraft, true)}
+            </>
+          )}
+        </Modal>
+      )}
+    </section>
   )
 }

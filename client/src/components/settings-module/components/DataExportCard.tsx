@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../common/card'
+import { SettingsSection } from './SettingsSection'
 import { Button } from '../../common/button'
 import { Download } from 'lucide-react'
 import { useAlert } from '../../../context/AlertContext'
@@ -40,51 +40,33 @@ export function DataExportCard() {
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex items-center gap-3">
-          <div className="h-8 w-8 rounded-lg bg-secondary flex items-center justify-center">
-            <Download className="h-4 w-4 text-muted-foreground" />
+    <SettingsSection
+      title="Data export"
+      description="Exports contain unmasked financial data, including when privacy mode is on."
+    >
+      {(['csv', 'json'] as const).map((format) => (
+        <div className="settings-row settings-export-row" key={format}>
+          <span className="settings-export-badge">{format.toUpperCase()}</span>
+          <div className="settings-row-copy">
+            <p className="settings-row-label">{format === 'csv' ? 'Cash ledger' : 'Full archive'}</p>
+            <p className="settings-description">
+              {format === 'csv'
+                ? 'Posted cash transactions, including transfer legs and native currencies.'
+                : 'All saved app data, including history and settings.'}
+            </p>
+            <p className="settings-description settings-export-detail">
+              {format === 'csv'
+                ? 'Excludes pending/cancelled rows and investment buy/sell history.'
+                : 'Accounts, categories, every transaction state, investment history, recurring schedules, saved app/browser settings, audit logs, and forecast history. Includes durable MCP batch/replay records; excludes expiring proposals and credentials. Preserves stored values and links.'}
+            </p>
           </div>
-          <div>
-            <CardTitle>Data Export</CardTitle>
-            <CardDescription>Download your financial data</CardDescription>
-          </div>
-        </div>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="space-y-2">
-          <p className="text-sm text-muted-foreground">
-            Download a posted cash ledger as CSV or a versioned archive of your saved app data as JSON.
-          </p>
-        </div>
-
-        <div className="grid grid-cols-2 gap-3">
-          <Button
-            onClick={() => handleExport('csv')}
-            variant="outline"
-            disabled={isExporting}
-          >
-            <Download className="h-4 w-4 mr-2" />
-            {isExporting ? 'Exporting...' : 'CSV'}
-          </Button>
-
-          <Button
-            onClick={() => handleExport('json')}
-            variant="outline"
-            disabled={isExporting}
-          >
-            <Download className="h-4 w-4 mr-2" />
-            {isExporting ? 'Exporting...' : 'JSON'}
+          <Button onClick={() => handleExport(format)} variant="outline" size="sm" disabled={isExporting}>
+            <Download className="h-4 w-4" />
+            {isExporting ? 'Exporting...' : format.toUpperCase()}
           </Button>
         </div>
-
-        <div className="text-xs text-muted-foreground space-y-1">
-          <p><strong>CSV:</strong> Posted cash transactions, including transfer legs and native currencies. Excludes pending/cancelled rows and investment buy/sell history.</p>
-          <p><strong>JSON:</strong> Accounts, categories, every transaction state, investment history, recurring schedules, saved app/browser settings, audit logs, and forecast history. Includes durable MCP batch/replay records; excludes expiring proposals and credentials.</p>
-          <p>JSON preserves stored values and links. Import and restore are not supported. Exports contain unmasked financial data, including when privacy mode is on.</p>
-        </div>
-      </CardContent>
-    </Card>
+      ))}
+      <p className="settings-footnote px-4 pb-4">Import and restore are not supported.</p>
+    </SettingsSection>
   )
 }
