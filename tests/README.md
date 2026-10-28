@@ -30,7 +30,28 @@ npm run test:integration -- -t 'rolls back'
 
 The workflow runs on pull requests and pushes to `main` and `epic/**`, merge queues, and manual dispatch. It cancels superseded runs, uses timeouts and read-only repository permissions, pins Actions to commits, and uploads JUnit reports for seven days. Failed integration tests print the harness's Worker logs. Reports use synthetic fixtures only.
 
-Require **CI passed** in GitHub branch protection or a ruleset to make these checks block merging. Adding the workflow does not itself change repository protection settings. The original four check names are retained for existing rules.
+### Merge enforcement
+
+The main-branch ruleset **Require complete CI on main** requires **CI passed** from GitHub Actions (application ID `15368`). It has no bypass actors, so administrators also wait for CI. Strict checks require the PR branch to include the latest `main`; update an out-of-date branch and wait for the new run. Failed, cancelled, skipped or unfinished prerequisites cannot produce a successful aggregate result. Adding a CI job also requires adding it to the aggregate job’s `needs` list.
+
+The source policy is [`.github/rulesets/main-ci.json`](../.github/rulesets/main-ci.json). GitHub stores the effective rules separately from Git: editing that file alone does not apply a settings change. Audit the live rules with:
+
+```bash
+gh api repos/apptrackit/finance/rules/branches/main
+gh api repos/apptrackit/finance/rulesets
+# Inspect the matching ID to verify enforcement, branch scope, and bypass_actors:
+gh api repos/apptrackit/finance/rulesets/RULESET_ID
+```
+
+This CI-only ruleset is separate from the existing review/force-push/deletion protection. In particular, making CI mandatory for administrators does not change the existing administrator review exemption. The original check names are retained for compatibility.
+
+A green individual job is insufficient. PR #188’s Node 26 client job failed before the PR merged, but the repository previously required no status checks. That incident was a missing merge gate, rather than a missing test.
+
+### CI and local deployment boundaries
+
+Run deployment with the Node 22 runtime pinned in `.node-version`, the same runtime used for primary CI and real Worker/D1 integration. CI additionally exercises the client suite on Node 26; it does not establish support for running the full Worker toolchain on every newer runtime. Use `npm ci` after switching runtimes or updating the lockfile so the installation matches CI.
+
+Deployment still reruns the selected workspace tests, typechecks, Worker bundles and client build before remote mutations. These overlap the required CI checks; local uncommitted changes, a different runtime, local configuration or a different dependency installation can still change the result. CI’s synthetic configurations and disposable D1 database cannot prove production credentials, Cloudflare availability, quotas, custom domains or remote migration state. Those remain deployment checks; a successful CI run is not permission to bypass them.
 
 ## Integration design
 
