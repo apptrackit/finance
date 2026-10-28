@@ -381,71 +381,36 @@ export function Analytics({
     ? quietMonthBalanceData : cashBalanceTrendData
 
   // Per-account trends remain in each account's native currency (exclude investment accounts).
+  // Balances are rebuilt from the whole ledger, then clipped like Cash Balance Trend,
+  // so past periods exclude later movements and 1M/1Y open on the period's first day.
   const perAccountTrendData = useMemo(() => {
+    const today = format(new Date(), 'yyyy-MM-dd')
+    const bounded = period === 'month' || period === 'year'
     return accounts
       .filter(account => account.type !== 'investment')
       .map(account => {
-        const accountTransactions = transactionsForAnalytics.filter(t => {
-          const txDate = parseISO(t.date)
-          const matchesAccount = t.account_id === account.id
-          if (!matchesAccount) return false
-          
-          switch (period) {
-            case 'month':
-            case 'year':
-              return isWithinInterval(txDate, {
-                start: parseISO(customDateRange.startDate),
-                end: parseISO(customDateRange.endDate)
-              })
-            default:
-              return true
-          }
-        })
-        
+        const accountTransactions = transactionsForAnalytics.filter(t => t.account_id === account.id)
+        const hasTransactions = accountTransactions.some(t => !bounded
+          || (t.date >= customDateRange.startDate && t.date <= customDateRange.endDate))
+
         const transactionsByDate: Record<string, number> = {}
         accountTransactions.forEach(tx => {
           transactionsByDate[tx.date] = (transactionsByDate[tx.date] || 0) + tx.amount
         })
-        
-        const dateBalances: Record<string, number> = {}
+
+        const dateBalances: Record<string, number> = { [today]: account.balance }
         let runningBalance = account.balance
-        
-        const today = format(new Date(), 'yyyy-MM-dd')
-        
-        const todayInRange = (() => {
-          const todayDate = parseISO(today)
-          switch (period) {
-            case 'month':
-            case 'year':
-              return isWithinInterval(todayDate, {
-                start: parseISO(customDateRange.startDate),
-                end: parseISO(customDateRange.endDate)
-              })
-            default:
-              return true
-          }
-        })()
-        
-        if (todayInRange) {
-          dateBalances[today] = account.balance
-        }
-        
-        const uniqueDates = Object.keys(transactionsByDate).sort(
-          (a, b) => parseISO(b).getTime() - parseISO(a).getTime()
-        )
-        
-        uniqueDates.forEach(date => {
+        Object.keys(transactionsByDate).sort((a, b) => b.localeCompare(a)).forEach(date => {
           dateBalances[date] = runningBalance
           runningBalance -= transactionsByDate[date]
         })
-        
-        const rawData: TrendDataPoint[] = Object.entries(dateBalances)
-          .map(([date, balance]) => ({
-            date,
-            formattedDate: format(parseISO(date), 'MMM d'),
-            balance
-          }))
-          .sort((a, b) => parseISO(a.date).getTime() - parseISO(b.date).getTime())
+
+        const balances = Object.entries(dateBalances)
+          .map(([date, balance]) => ({ date, balance }))
+          .sort((a, b) => a.date.localeCompare(b.date))
+        const rawData: TrendDataPoint[] = (bounded ? clipBalancesToPeriod(balances, {
+          start: customDateRange.startDate, end: customDateRange.endDate, daily: period === 'month',
+        }) : balances).map(point => ({ ...point, formattedDate: format(parseISO(point.date), 'MMM d') }))
 
         // Calculate EMA (Exponential Moving Average) as a smoothed baseline
         let data = rawData
@@ -460,11 +425,7 @@ export function Analytics({
           })
         }
 
-        return {
-          account,
-          data,
-          hasTransactions: accountTransactions.length > 0
-        }
+        return { account, data, hasTransactions }
       })
       .filter(({ hasTransactions }) => hasTransactions)
   }, [accounts, transactionsForAnalytics, period, customDateRange])

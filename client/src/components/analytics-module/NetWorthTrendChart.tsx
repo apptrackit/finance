@@ -58,7 +58,7 @@ export const NetWorthTrendChart = memo(function NetWorthTrendChart({ data, maste
       label="Cash balance" title={title} controls={controls} periodLabel={periodLabel}
       formatValue={value => value === null ? 'Unavailable' : `${value.toLocaleString('hu-HU', { maximumFractionDigits: 0 })} ${masterCurrency}`}
       reference={showTrend ? { label: 'Trend', color: 'hsl(var(--muted-foreground))', dashed: true } : undefined}
-      showReadout showChange calendarAxis
+      showReadout showChange
       className={chartHeight}
       footer={buttons}
     /> : <><h3 className="text-[13px] text-muted-foreground">{title}</h3><div className="flex h-[280px] items-center justify-center text-sm text-muted-foreground">Need more data points to show trend</div></>}

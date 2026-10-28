@@ -23,6 +23,12 @@ describe('calendar axis ticks', () => {
     expect(labels('2016-01-01', '2026-10-27', 280)).toEqual(['2016', '2018', '2020', '2022', '2024', '2026'])
   })
 
+  it('marks year labels as major only when they appear among month labels', () => {
+    expect(calendarTicks('2024-10-27', '2026-10-27', 280).map(tick => tick.major ?? false)).toEqual([true, false, true, false])
+    expect(calendarTicks('2026-01-01', '2026-10-27', 900).some(tick => tick.major)).toBe(false)
+    expect(calendarTicks('2016-01-01', '2026-10-27', 280).some(tick => tick.major)).toBe(false)
+  })
+
   it('never crowds the 1st of a month after a month-end tick and handles short or invalid spans', () => {
     expect(labels('2026-01-25', '2026-02-10', 900).filter(label => label.startsWith('Jan 3'))).toEqual([])
     expect(labels('2026-10-26', '2026-10-27', 300)).toEqual(['Oct 26', 'Oct 27'])
