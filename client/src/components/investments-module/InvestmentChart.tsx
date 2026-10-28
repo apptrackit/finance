@@ -12,6 +12,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
+import { useCalendarAxis } from '../common/calendar-axis'
 import type { PriceHistory } from '../../../../shared/market-data'
 import { API_BASE_URL, apiFetch } from '../../config'
 import { unitPrice } from './overview'
@@ -168,6 +169,7 @@ export function InvestmentChart({
     Math.min(...points.map((p) => p.time), ...markers.map((t) => t.time)),
     Math.max(...points.map((p) => p.time), ...markers.map((t) => t.time)),
   ]
+  const { ref: axisRef, axisProps } = useCalendarAxis(points.length ? domain[0] : undefined, points.length ? domain[1] : undefined, { plotInset: 12 })
   return (
     <section aria-label="Instrument price history" className="space-y-3">
       <div className="flex flex-wrap items-end justify-between gap-x-3 gap-y-3">
@@ -204,7 +206,7 @@ export function InvestmentChart({
           {history ? 'Refreshing price history…' : 'Loading price history…'}
         </p>
       )}
-      <div className="h-[200px] w-full" aria-label="Daily instrument price history">
+      <div ref={axisRef} className="h-[200px] w-full" aria-label="Daily instrument price history">
         {!points.length ? (
           <p className="p-4 text-xs text-muted-foreground">
             {loading ? 'Loading daily observations…' : 'No known daily closes in this range.'}
@@ -241,12 +243,9 @@ export function InvestmentChart({
                 type="number"
                 domain={domain}
                 scale="time"
-                tickFormatter={t=>new Intl.DateTimeFormat(undefined,{month:'short',...(history&&Date.parse(history.to)-Date.parse(history.from)>200*86400000?{year:'numeric' as const}:{day:'numeric' as const}),timeZone:'UTC'}).format(new Date(Number(t)))}
+                {...axisProps}
                 tickLine={false}
                 axisLine={false}
-                tickCount={4}
-                minTickGap={50}
-                tick={{ fontSize: 10 }}
               />
               <YAxis
                 hide

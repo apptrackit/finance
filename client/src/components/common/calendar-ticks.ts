@@ -1,6 +1,7 @@
 // Calendar-aligned x-axis ticks for date-proportional charts. The finest unit
 // whose label spacing fits the plot width wins: days, months, then years.
-export type CalendarTick = { date: string; label: string }
+// A year label among month labels is `major`, so charts can emphasize it.
+export type CalendarTick = { date: string; label: string; major?: boolean }
 
 type Unit = 'day' | 'month' | 'year'
 type Candidate = { unit: Unit; step: number; spacing: number; minimum: number }
@@ -56,10 +57,11 @@ export function calendarTicks(startDate: string, endDate: string, width: number)
     if (!dates.length || dates.length > MAX_LABELS) continue
     return dates.map(time => {
       const date = new Date(time), month = date.getUTCMonth()
+      const yearStart = candidate.unit === 'month' && multiYear && month === 0
       const label = candidate.unit === 'day' ? `${months[month]} ${date.getUTCDate()}`
-        : candidate.unit === 'year' || (multiYear && month === 0) ? String(date.getUTCFullYear())
+        : candidate.unit === 'year' || yearStart ? String(date.getUTCFullYear())
           : months[month]
-      return { date: iso(time), label }
+      return yearStart ? { date: iso(time), label, major: true } : { date: iso(time), label }
     })
   }
   return [{ date: endDate, label: `${months[new Date(end).getUTCMonth()]} ${new Date(end).getUTCDate()}` }]

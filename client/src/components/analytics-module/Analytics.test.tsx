@@ -24,6 +24,12 @@ vi.mock('./NetWorthTrendChart', () => ({
   ),
 }))
 
+vi.mock('./PerAccountTrendChart', () => ({
+  PerAccountTrendChart: ({ account, data }: { account: Account; data: Array<{ date: string; balance: number }> }) => (
+    <div data-testid={`account-trend-${account.id}`} data-points={JSON.stringify(data.map(({ date, balance }) => ({ date, balance })))} />
+  ),
+}))
+
 const accounts: Account[] = [
   { id: 'cash', name: 'Cash', type: 'checking', balance: 100, currency: 'HUF' },
   { id: 'investment', name: 'Investments', type: 'investment', balance: 0, currency: 'HUF' },
@@ -195,6 +201,26 @@ describe('Analytics Projected mode', () => {
       { date: '2026-09-10', balance: 1000 },
       { date: '2026-09-15', balance: 1000 },
     ])
+  })
+
+  it('rebuilds per-account trends from the whole ledger and opens month views on the 1st', () => {
+    localStorage.setItem('analytics-widget-visibility', JSON.stringify({ 'account-trends': true }))
+    const ledger: Transaction[] = [
+      { id: 'august', account_id: 'cash', date: '2026-08-10', amount: 300, status: 'posted' },
+      { id: 'september', account_id: 'cash', date: '2026-09-05', amount: -100, status: 'posted' },
+    ]
+    const cash: Account = { id: 'cash', name: 'Cash', type: 'checking', balance: 1000, currency: 'HUF' }
+    const filters = (date: string) => ({ period: 'month' as const, date, pinned: false, mode: 'actual' as const, expenseCategory: 'all', incomeCategory: 'all', resolution: 'default' as const })
+    const points = () => JSON.parse(screen.getByTestId('account-trend-cash').getAttribute('data-points')!)
+    const { rerender } = render(<Analytics accounts={[cash]} transactions={ledger} categories={[]} filters={filters('2026-09-01')} onFiltersChange={vi.fn()} />)
+    expect(points()).toHaveLength(15)
+    expect(points()[0]).toEqual({ date: '2026-09-01', balance: 1100 })
+    expect(points()[4]).toEqual({ date: '2026-09-05', balance: 1000 })
+    expect(points().at(-1)).toEqual({ date: '2026-09-15', balance: 1000 })
+    // A past month excludes later movements and carries its closing balance to month end.
+    rerender(<Analytics accounts={[cash]} transactions={ledger} categories={[]} filters={filters('2026-08-01')} onFiltersChange={vi.fn()} />)
+    expect(points()[0]).toEqual({ date: '2026-08-10', balance: 1100 })
+    expect(points().at(-1)).toEqual({ date: '2026-08-31', balance: 1100 })
   })
 
   it('requires FX for accounts included in cash even when excluded from net worth', () => {

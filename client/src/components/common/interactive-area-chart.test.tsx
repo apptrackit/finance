@@ -127,3 +127,12 @@ it('does not invent percentage changes for an unknown, zero or negative opening 
   expect(container).not.toHaveTextContent('%')
   expect(container).not.toHaveTextContent('EUR')
 })
+
+it('labels the axis on calendar boundaries and emphasizes years among months', () => {
+  const data = ['2024-10-27', '2025-06-01', '2026-10-27'].map((date, index) => ({ date, value: index }))
+  const { container } = render(<InteractiveAreaChart {...props} data={data} />)
+  const labels = [...container.querySelectorAll('[data-axis-label="x"]')]
+  expect(labels.map(label => label.textContent)).toEqual(['2025', 'Apr', 'Jul', 'Oct', '2026', 'Apr', 'Jul', 'Oct'])
+  expect(labels.filter(label => label.hasAttribute('data-major')).map(label => label.textContent)).toEqual(['2025', '2026'])
+  expect(labels.find(label => label.textContent === '2025')).toHaveClass('fill-foreground', 'font-semibold')
+})

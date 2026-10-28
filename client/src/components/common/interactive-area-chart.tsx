@@ -28,16 +28,13 @@ type InteractiveAreaChartProps = {
   renderTooltip?: (index: number) => ReactNode
   // Shares the legend row, so toggling the reference line keeps it in place.
   footer?: ReactNode
-  // Labels calendar boundaries (days, months, years) instead of evenly spaced points.
-  calendarAxis?: boolean
 }
 
 const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max)
 const finite = (value: number | null | undefined): value is number => value != null && Number.isFinite(value)
-const shortDate = (date: string) => new Date(`${date}T00:00:00Z`).toLocaleDateString('en', { month: 'short', day: 'numeric', timeZone: 'UTC' })
 const fullDate = (date: string) => new Date(`${date}T00:00:00Z`).toLocaleDateString('en', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' })
 
-export function InteractiveAreaChart({ data, label, formatValue, color = 'hsl(var(--primary))', title, controls, showChange = false, periodLabel = 'in period', reference, hidden = false, showReadout = false, className, activeIndex, onInspect, renderTooltip, footer, calendarAxis = false }: InteractiveAreaChartProps) {
+export function InteractiveAreaChart({ data, label, formatValue, color = 'hsl(var(--primary))', title, controls, showChange = false, periodLabel = 'in period', reference, hidden = false, showReadout = false, className, activeIndex, onInspect, renderTooltip, footer }: InteractiveAreaChartProps) {
   const uid = useId().replaceAll(':', '')
   const reduce = useReducedMotion()
   const wrapRef = useRef<HTMLDivElement>(null)
@@ -87,11 +84,9 @@ export function InteractiveAreaChart({ data, label, formatValue, color = 'hsl(va
   const first = data[0]?.value
   const change = finite(first) && first > 0 && finite(shown?.value) ? (shown.value - first) / first * 100 : null
   const seriesKey = `${data[0]?.date}:${data.at(-1)?.date}:${data.length}`
-  const labelCount = width < 400 ? 3 : 5
-  const labels = !data.length ? [] : calendarAxis
-    ? calendarTicks(data[0].date, data[data.length - 1].date, innerWidth).map(tick => ({ key: tick.date, x: at(Date.parse(`${tick.date}T00:00:00Z`)), text: tick.label }))
-    : [...new Set(Array.from({ length: labelCount }, (_, i) => Math.round(i / (labelCount - 1) * (data.length - 1))))]
-      .map(i => ({ key: data[i].date, x: x(i), text: shortDate(data[i].date) }))
+  // Calendar boundaries (days, months, years) placed by time, not by point index.
+  const labels = !data.length ? [] : calendarTicks(data[0].date, data[data.length - 1].date, innerWidth)
+    .map(tick => ({ key: tick.date, x: at(Date.parse(`${tick.date}T00:00:00Z`)), text: tick.label, major: tick.major }))
 
   const paths = (key: 'value' | 'reference', step = false) => {
     const segments: { line: string; area: string; single: number | null }[] = []
@@ -174,9 +169,12 @@ export function InteractiveAreaChart({ data, label, formatValue, color = 'hsl(va
             <line x1={pad.left} x2={width - pad.right} y1={y(value)} y2={y(value)} stroke="hsl(var(--border))" strokeOpacity={0.55} />
             <text x={pad.left - 10} y={y(value)} textAnchor="end" dominantBaseline="middle" className="fill-muted-foreground text-[11px] tabular-nums">{Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 }).format(value)}</text>
           </g>)}
-          {labels.map((tick, j) => <text key={tick.key} x={tick.x} y={height - 6} data-axis-label="x"
-            textAnchor={calendarAxis ? tick.x - pad.left < 20 ? 'start' : width - pad.right - tick.x < 20 ? 'end' : 'middle' : j === 0 ? 'start' : j === labels.length - 1 ? 'end' : 'middle'}
-            className="fill-muted-foreground text-[11px]">{tick.text}</text>)}
+          {labels.map(tick => <g key={tick.key}>
+            {tick.major && <line x1={tick.x} x2={tick.x} y1={pad.top} y2={bottom} stroke="hsl(var(--border))" strokeDasharray="2 4" />}
+            <text x={tick.x} y={height - 6} data-axis-label="x" data-major={tick.major ? '' : undefined}
+              textAnchor={tick.x - pad.left < 20 ? 'start' : width - pad.right - tick.x < 20 ? 'end' : 'middle'}
+              className={cn('text-[11px]', tick.major ? 'fill-foreground font-semibold' : 'fill-muted-foreground')}>{tick.text}</text>
+          </g>)}
           {reference && <g data-series="reference">{paths('reference', reference.step).map((path, i) => <g key={i}>
             <path d={path.line} fill="none" stroke={reference.color} strokeWidth={1.5} strokeDasharray={reference.dashed ? '6 3' : undefined} />
             {path.single !== null && <circle cx={x(path.single)} cy={y(data[path.single].reference!)} r={2} fill={reference.color} />}

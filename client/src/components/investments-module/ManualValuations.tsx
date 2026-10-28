@@ -2,6 +2,7 @@ import { useUnsavedChanges } from '../../navigation/UnsavedChanges'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import { Line, LineChart, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
+import { useCalendarAxis } from '../common/calendar-axis'
 import type { ManualValuation } from '../../../../shared/manual-valuation'
 import { validHoldingNumber, validLocalDate } from '../../../../shared/holding'
 import { API_BASE_URL, apiFetch } from '../../config'
@@ -103,6 +104,7 @@ export function ManualValuations({ account, hidden, onSaved, referenceCost, onBu
   const points = [...observations].reverse().map(v => ({date:v.effective_date,time:Date.parse(`${v.effective_date}T00:00:00Z`),value:v.amount}))
   const through = history?.at ?? localAccountDate()
   if (points.length && points[points.length-1].date < through) points.push({date:through,time:Date.parse(`${through}T00:00:00Z`),value:points[points.length-1].value})
+  const { ref: axisRef, axisProps } = useCalendarAxis(points[0]?.time, points.at(-1)?.time, { plotInset: 82 })
   const status = account.manual_valuation
   return <section aria-label="Manual valuation history" className="space-y-4 rounded-xl border border-border p-4">
     <div className="flex flex-wrap items-start justify-between gap-3">
@@ -126,8 +128,8 @@ export function ManualValuations({ account, hidden, onSaved, referenceCost, onBu
     </form>}
     {saving&&<p ref={savingFeedback} tabIndex={-1} role="status" className="text-xs text-muted-foreground">Saving valuation…</p>}
     {error && <div ref={feedback} tabIndex={-1} role="alert" className="text-sm text-destructive">{error} <button className="underline" onClick={() => { setLoading(true);void read().then(setHistory).then(() => setError(null)).catch(e => setError(e.message)).finally(() => setLoading(false)) }}>Retry history</button></div>}
-    {!hidden && points.length>1 && <div className="h-40" role="img" aria-label={`${total?'Total value':'Unit price'} step chart in ${currency}`}>
-      <ResponsiveContainer width="100%" height="100%"><LineChart data={points}><XAxis dataKey="time" type="number" scale="time" domain={['dataMin','dataMax']} tickFormatter={value => new Date(Number(value)).toISOString().slice(0,10)} tick={{fontSize:11,fill:'hsl(var(--muted-foreground))'}} minTickGap={50} /><YAxis width={72} tick={{fontSize:11,fill:'hsl(var(--muted-foreground))'}} />
+    {!hidden && points.length>1 && <div ref={axisRef} className="h-40" role="img" aria-label={`${total?'Total value':'Unit price'} step chart in ${currency}`}>
+      <ResponsiveContainer width="100%" height="100%"><LineChart data={points}><XAxis dataKey="time" type="number" scale="time" domain={['dataMin','dataMax']} {...axisProps} tickLine={false} /><YAxis width={72} tick={{fontSize:11,fill:'hsl(var(--muted-foreground))'}} />
         <Tooltip labelFormatter={value => new Date(Number(value)).toISOString().slice(0,10)} formatter={value => [`${amountText(Number(value))} ${currency}`,total?'Total value':'Unit price']} contentStyle={{background:'hsl(var(--card))',borderColor:'hsl(var(--border))',color:'hsl(var(--foreground))'}} />
         {referenceCost!=null&&<ReferenceLine y={referenceCost} stroke="hsl(var(--muted-foreground))" strokeDasharray="4 4" ifOverflow="extendDomain" />}
         <Line type="stepAfter" dataKey="value" stroke="hsl(var(--primary))" strokeWidth={2} dot={false} isAnimationActive={false} /></LineChart></ResponsiveContainer>

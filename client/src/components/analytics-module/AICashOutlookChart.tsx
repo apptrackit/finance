@@ -1,5 +1,6 @@
 import { useId, useMemo, useState } from 'react'
 import { Area, CartesianGrid, ComposedChart, Line, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
+import { useCalendarAxis } from '../common/calendar-axis'
 import { addDays, format, isLastDayOfMonth, startOfDay, subMonths } from 'date-fns'
 import { usePrivacy } from '../../context/PrivacyContext'
 import type { Account, FinancialOutlookHistoricalCashPoint, FinancialOutlookSnapshot, Transaction } from './types'
@@ -181,10 +182,10 @@ export function AICashOutlookChart({ snapshot, transactions, accounts, convertTo
     return [min - padding, max + padding]
   }, [chartData])
 
+  // Chart times are local midnights.
+  const { ref: axisRef, axisProps } = useCalendarAxis(chartData[0]?.timestamp, chartData.at(-1)?.timestamp, { plotInset: 50, local: true })
+
   if (!snapshot || chartData.length < 8) return null
-  const firstTimestamp = chartData[0].timestamp
-  const lastTimestamp = chartData.at(-1)!.timestamp
-  const xTicks = Array.from({ length: 8 }, (_, index) => startOfDay(new Date(firstTimestamp + (lastTimestamp - firstTimestamp) * index / 7)).getTime())
 
   return (
     <section className="px-5 pb-5 pt-6 sm:px-7">
@@ -208,7 +209,7 @@ export function AICashOutlookChart({ snapshot, transactions, accounts, convertTo
       {usesReconstruction && <p className="mt-1 text-xs text-muted-foreground">Earlier history is reconstructed using current transactions, account settings, and exchange rates, so it may change.</p>}
       {hasMissingFx && <p className="mt-1 text-xs text-muted-foreground">Some account currencies have no exchange rate; their earlier movements are excluded.</p>}
       {hasMonthlyHistory && <p className="mt-1 text-xs text-muted-foreground">History before {format(dateFromHistory(dailyHistoryStart!), 'MMM d, yyyy')} uses saved monthly balances; the past year uses daily balances.</p>}
-      <div className="mt-5 h-64 sm:h-80">
+      <div ref={axisRef} className="mt-5 h-64 sm:h-80">
         <ResponsiveContainer width="100%" height="100%">
           <ComposedChart data={chartData} margin={{ top: 24, right: 10, left: -10, bottom: 0 }}>
             <defs>
@@ -218,7 +219,7 @@ export function AICashOutlookChart({ snapshot, transactions, accounts, convertTo
               </linearGradient>
             </defs>
             <CartesianGrid vertical={false} stroke="hsl(var(--border))" />
-            <XAxis dataKey="timestamp" type="number" scale="time" domain={['dataMin', 'dataMax']} ticks={xTicks} interval="preserveStartEnd" minTickGap={24} tickFormatter={value => format(new Date(value), historyRange === 'all' ? 'MMM d, yy' : 'MMM d')} stroke="hsl(var(--muted-foreground))" fontSize={10} tickLine={false} axisLine={false} />
+            <XAxis dataKey="timestamp" type="number" scale="time" domain={['dataMin', 'dataMax']} {...axisProps} stroke="hsl(var(--muted-foreground))" fontSize={10} tickLine={false} axisLine={false} />
             <YAxis stroke="hsl(var(--muted-foreground))" fontSize={10} tickLine={false} axisLine={false} domain={yDomain} width={50} tickFormatter={value => hidden ? '••••' : Math.abs(value) >= 1_000_000 ? `${(value / 1_000_000).toFixed(1)}M` : `${Math.round(value / 1_000)}K`} />
             <Tooltip content={({ active, payload }) => {
               const point = payload?.[0]?.payload as ChartPoint | undefined
