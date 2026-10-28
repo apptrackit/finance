@@ -1,24 +1,17 @@
 import { useState } from 'react'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../common/card'
+import { ActionConfirmation } from './ActionConfirmation'
 import { Button } from '../../common/button'
 import { Clock } from 'lucide-react'
 import { API_BASE_URL, apiFetch } from '../../../config'
 import { useAlert } from '../../../context/AlertContext'
 
-export function ScheduledTasksCard() {
-  const { showAlert, confirm } = useAlert()
+export function ScheduledTasksCard({ active = true }: { active?: boolean }) {
+  const { showAlert } = useAlert()
+  const [asking, setAsking] = useState(false)
   const [isTestingSchedule, setIsTestingSchedule] = useState(false)
 
   const handleTestScheduledTask = async () => {
-    const confirmed = await confirm({
-      title: 'Test Scheduled Task',
-      message: 'This will process all active recurring schedules and create transactions for any that are due today. Continue?',
-      confirmText: 'Run Task',
-      cancelText: 'Cancel'
-    })
-
-    if (!confirmed) return
-
+    if (isTestingSchedule) return
     setIsTestingSchedule(true)
     try {
       await apiFetch(`${API_BASE_URL}/test-scheduled-task`, {
@@ -36,7 +29,8 @@ export function ScheduledTasksCard() {
       console.error('Failed to test scheduled task:', error)
       showAlert({
         type: 'error',
-        message: error instanceof Error ? error.message : 'Failed to execute scheduled task. Please try again.'
+        message:
+          error instanceof Error ? error.message : 'Failed to execute scheduled task. Please try again.'
       })
     } finally {
       setIsTestingSchedule(false)
@@ -44,39 +38,29 @@ export function ScheduledTasksCard() {
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex items-center gap-3">
-          <div className="h-8 w-8 rounded-lg bg-secondary flex items-center justify-center">
-            <Clock className="h-4 w-4 text-muted-foreground" />
-          </div>
-          <div>
-            <CardTitle>Scheduled Tasks</CardTitle>
-            <CardDescription>Test recurring schedule processing</CardDescription>
-          </div>
-        </div>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="space-y-2">
-          <p className="text-sm text-muted-foreground">
-            Manually trigger the scheduled task that processes recurring schedules. This will create transactions for any recurring schedules that are due today.
+    <div>
+      <div className="settings-row">
+        <div className="settings-row-copy">
+          <p className="settings-row-label">Run recurring schedules now</p>
+          <p className="settings-description">
+            Creates transactions for schedules due today. This runs automatically every day.
           </p>
         </div>
-
-        <Button
-          onClick={handleTestScheduledTask}
-          variant="outline"
-          className="w-full"
-          disabled={isTestingSchedule}
-        >
-          <Clock className="h-4 w-4 mr-2" />
-          {isTestingSchedule ? 'Processing...' : 'Run Scheduled Task'}
+        <Button onClick={() => setAsking(true)} variant="outline" size="sm" disabled={isTestingSchedule}>
+          <Clock className="h-4 w-4" />
+          {isTestingSchedule ? 'Processing...' : 'Run now'}
         </Button>
-
-        <div className="text-xs text-muted-foreground">
-          <p><strong>Note:</strong> This runs the same process that executes automatically daily. It won't create duplicate transactions.</p>
-        </div>
-      </CardContent>
-    </Card>
+      </div>
+      {asking && active && (
+        <ActionConfirmation
+          title="Run recurring schedules now?"
+          message="Process all active schedules and create transactions for those due today?"
+          confirmText="Run task"
+          busy={isTestingSchedule}
+          onCancel={() => setAsking(false)}
+          onConfirm={handleTestScheduledTask}
+        />
+      )}
+    </div>
   )
 }

@@ -6,6 +6,8 @@ Intermediate package/UI version bumps are grouped under the next published GitHu
 
 ## Unreleased
 
+- Redesign Settings with General, Categories, Data export and Advanced areas, row-based preferences, expense/income category tabs, inline desktop category editing/deletion confirmation, and mobile editor sheets. Appearance, privacy and navigation apply immediately; main currency changes offer explicit save/cancel.
+
 - Group Dashboard Needs review items under date headings, newest first, while preserving confirmation eligibility and grouped transfers/splits.
 
 - Monochrome now uses a dedicated neutral light/dark palette for surfaces, controls and primary balance charts instead of a page-wide filter, retaining meaningful colors for income/expenses, gains/losses, statuses, forecasts and categories. Area charts follow the selected palette, with blue accents in Original and neutral accents in Monochrome. Red Filter also replaces its page filter with native red surfaces, controls and primary charts in light/dark modes, retaining the same meaningful financial/status and category colors.

@@ -1,30 +1,26 @@
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../common/card'
+import { useState } from 'react'
+import { ActionConfirmation } from './ActionConfirmation'
 import { Button } from '../../common/button'
 import { RefreshCw } from 'lucide-react'
 import { useAlert } from '../../../context/AlertContext'
 
-export function CacheManagementCard() {
-  const { showAlert, confirm } = useAlert()
+export function CacheManagementCard({ active = true }: { active?: boolean }) {
+  const { showAlert } = useAlert()
+  const [asking, setAsking] = useState(false)
+  const [isClearing, setIsClearing] = useState(false)
 
   const handleClearCacheAndReload = async () => {
-    const confirmed = await confirm({
-      title: 'Clear Cache & Reload',
-      message: 'This will clear all cached data and reload the app. You may need to log in again. Continue?',
-      confirmText: 'Clear & Reload',
-      cancelText: 'Cancel'
-    })
-
-    if (!confirmed) return
-
+    if (isClearing) return
+    setIsClearing(true)
     try {
       if ('caches' in window) {
         const cacheNames = await caches.keys()
-        await Promise.all(cacheNames.map(name => caches.delete(name)))
+        await Promise.all(cacheNames.map((name) => caches.delete(name)))
       }
 
       if ('serviceWorker' in navigator) {
         const registrations = await navigator.serviceWorker.getRegistrations()
-        await Promise.all(registrations.map(registration => registration.unregister()))
+        await Promise.all(registrations.map((registration) => registration.unregister()))
       }
 
       localStorage.clear()
@@ -38,42 +34,43 @@ export function CacheManagementCard() {
         title: 'Error',
         message: 'Failed to clear cache. Please try manually clearing your browser cache.'
       })
+    } finally {
+      setIsClearing(false)
     }
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex items-center gap-3">
-          <div className="h-8 w-8 rounded-lg bg-secondary flex items-center justify-center">
-            <RefreshCw className="h-4 w-4 text-muted-foreground" />
-          </div>
-          <div>
-            <CardTitle>Cache Management</CardTitle>
-            <CardDescription>Clear cached data and force update</CardDescription>
-          </div>
-        </div>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="space-y-2">
-          <p className="text-sm text-muted-foreground">
-            If you're not seeing the latest updates after deployment, clear the cache to force a fresh download of all app data.
+    <div className="settings-divider">
+      <div className="settings-row">
+        <div className="settings-row-copy">
+          <p className="settings-row-label">Clear cache and reload</p>
+          <p className="settings-description">
+            Use this if you don’t see the latest version after an update. Clears browser preferences and
+            stored credentials, so you may need to log in again.
           </p>
         </div>
-
         <Button
-          onClick={handleClearCacheAndReload}
+          onClick={() => setAsking(true)}
           variant="outline"
-          className="w-full"
+          size="sm"
+          disabled={isClearing}
+          className="text-destructive border-destructive/35"
         >
-          <RefreshCw className="h-4 w-4 mr-2" />
-          Clear Cache & Reload
+          <RefreshCw className="h-4 w-4" />
+          Clear cache
         </Button>
-
-        <div className="text-xs text-muted-foreground">
-          <p><strong>Warning:</strong> This will clear all cached data including stored credentials. You may need to log in again.</p>
-        </div>
-      </CardContent>
-    </Card>
+      </div>
+      {asking && active && (
+        <ActionConfirmation
+          title="Clear cache and reload?"
+          message="All cached data and browser preferences will be cleared and the app reloads. You may need to log in again."
+          confirmText="Clear and reload"
+          destructive
+          busy={isClearing}
+          onCancel={() => setAsking(false)}
+          onConfirm={handleClearCacheAndReload}
+        />
+      )}
+    </div>
   )
 }
