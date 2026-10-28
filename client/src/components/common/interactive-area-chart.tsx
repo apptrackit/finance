@@ -2,6 +2,7 @@ import { useEffect, useId, useRef, useState } from 'react'
 import type { PointerEvent, ReactNode } from 'react'
 import { motion, useReducedMotion } from 'framer-motion'
 import { cn } from '../../lib/utils'
+import { calendarTicks } from './calendar-ticks'
 
 // Adapted from EasyUI's Interactive Area Chart (MIT; see licenses/easyui.txt).
 // Retains the reference's smooth SVG curve, reveal and scrubbing treatment.
@@ -27,6 +28,8 @@ type InteractiveAreaChartProps = {
   renderTooltip?: (index: number) => ReactNode
   // Shares the legend row, so toggling the reference line keeps it in place.
   footer?: ReactNode
+  // Labels calendar boundaries (days, months, years) instead of evenly spaced points.
+  calendarAxis?: boolean
 }
 
 const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max)
@@ -34,7 +37,7 @@ const finite = (value: number | null | undefined): value is number => value != n
 const shortDate = (date: string) => new Date(`${date}T00:00:00Z`).toLocaleDateString('en', { month: 'short', day: 'numeric', timeZone: 'UTC' })
 const fullDate = (date: string) => new Date(`${date}T00:00:00Z`).toLocaleDateString('en', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' })
 
-export function InteractiveAreaChart({ data, label, formatValue, color = 'hsl(var(--primary))', title, controls, showChange = false, periodLabel = 'in period', reference, hidden = false, showReadout = false, className, activeIndex, onInspect, renderTooltip, footer }: InteractiveAreaChartProps) {
+export function InteractiveAreaChart({ data, label, formatValue, color = 'hsl(var(--primary))', title, controls, showChange = false, periodLabel = 'in period', reference, hidden = false, showReadout = false, className, activeIndex, onInspect, renderTooltip, footer, calendarAxis = false }: InteractiveAreaChartProps) {
   const uid = useId().replaceAll(':', '')
   const reduce = useReducedMotion()
   const wrapRef = useRef<HTMLDivElement>(null)
@@ -75,7 +78,8 @@ export function InteractiveAreaChart({ data, label, formatValue, color = 'hsl(va
   const low = minimum - padding, high = maximum + padding
   const times = data.map(point => Date.parse(`${point.date}T00:00:00Z`))
   const start = times[0] ?? 0, span = (times.at(-1) ?? 0) - start
-  const x = (i: number) => pad.left + (span > 0 ? (times[i] - start) / span : 0.5) * innerWidth
+  const at = (time: number) => pad.left + (span > 0 ? (time - start) / span : 0.5) * innerWidth
+  const x = (i: number) => at(times[i])
   const y = (value: number) => pad.top + (1 - (value - low) / (high - low)) * (bottom - pad.top)
   const ticks = [high, (high + low) / 2, low]
   const tooltipWidth = Math.min(renderTooltip ? 280 : 164, width)
@@ -84,7 +88,10 @@ export function InteractiveAreaChart({ data, label, formatValue, color = 'hsl(va
   const change = finite(first) && first > 0 && finite(shown?.value) ? (shown.value - first) / first * 100 : null
   const seriesKey = `${data[0]?.date}:${data.at(-1)?.date}:${data.length}`
   const labelCount = width < 400 ? 3 : 5
-  const labels = [...new Set(Array.from({ length: labelCount }, (_, i) => Math.round(i / (labelCount - 1) * (data.length - 1))))]
+  const labels = !data.length ? [] : calendarAxis
+    ? calendarTicks(data[0].date, data[data.length - 1].date, innerWidth).map(tick => ({ key: tick.date, x: at(Date.parse(`${tick.date}T00:00:00Z`)), text: tick.label }))
+    : [...new Set(Array.from({ length: labelCount }, (_, i) => Math.round(i / (labelCount - 1) * (data.length - 1))))]
+      .map(i => ({ key: data[i].date, x: x(i), text: shortDate(data[i].date) }))
 
   const paths = (key: 'value' | 'reference', step = false) => {
     const segments: { line: string; area: string; single: number | null }[] = []
@@ -167,7 +174,9 @@ export function InteractiveAreaChart({ data, label, formatValue, color = 'hsl(va
             <line x1={pad.left} x2={width - pad.right} y1={y(value)} y2={y(value)} stroke="hsl(var(--border))" strokeOpacity={0.55} />
             <text x={pad.left - 10} y={y(value)} textAnchor="end" dominantBaseline="middle" className="fill-muted-foreground text-[11px] tabular-nums">{Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 }).format(value)}</text>
           </g>)}
-          {labels.map((i, j) => <text key={i} x={x(i)} y={height - 6} textAnchor={j === 0 ? 'start' : j === labels.length - 1 ? 'end' : 'middle'} className="fill-muted-foreground text-[11px]">{shortDate(data[i].date)}</text>)}
+          {labels.map((tick, j) => <text key={tick.key} x={tick.x} y={height - 6} data-axis-label="x"
+            textAnchor={calendarAxis ? tick.x - pad.left < 20 ? 'start' : width - pad.right - tick.x < 20 ? 'end' : 'middle' : j === 0 ? 'start' : j === labels.length - 1 ? 'end' : 'middle'}
+            className="fill-muted-foreground text-[11px]">{tick.text}</text>)}
           {reference && <g data-series="reference">{paths('reference', reference.step).map((path, i) => <g key={i}>
             <path d={path.line} fill="none" stroke={reference.color} strokeWidth={1.5} strokeDasharray={reference.dashed ? '6 3' : undefined} />
             {path.single !== null && <circle cx={x(path.single)} cy={y(data[path.single].reference!)} r={2} fill={reference.color} />}

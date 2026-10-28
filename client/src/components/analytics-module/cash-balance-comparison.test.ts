@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildCashBalanceMonthComparison, comparisonDelta } from './cash-balance-comparison'
+import { buildCashBalanceMonthComparison, buildCashBalanceYearComparison, comparisonDelta } from './cash-balance-comparison'
 import type { Account, Transaction } from './types'
 
 const accounts: Account[] = [{ id: 'cash', name: 'Cash', type: 'cash', currency: 'HUF', balance: 1200 }]
@@ -106,7 +106,7 @@ describe('monthly cash balance comparison', () => {
 
   it('aligns January to the preceding December across the year boundary', () => {
     const result = buildCashBalanceMonthComparison({ ...defaults, selectedMonth: '2026-01-01', transactions: [transaction('2025-12-01', 100)] })
-    expect(result.previousMonth).toBe('2025-12-01')
+    expect(result.previousStart).toBe('2025-12-01')
     expect(result.points[30]).toMatchObject({ selectedDate: '2026-01-31', previousDate: '2025-12-31' })
   })
 
@@ -116,5 +116,34 @@ describe('monthly cash balance comparison', () => {
     expect(comparisonDelta(100, 0)).toEqual({ amount: 100, percentage: null })
     expect(comparisonDelta(-50, -100)).toEqual({ amount: 50, percentage: null })
     expect(comparisonDelta(75, 100)).toEqual({ amount: -25, percentage: -25 })
+  })
+})
+
+describe('yearly cash balance comparison', () => {
+  const yearly = (overrides: Partial<Parameters<typeof buildCashBalanceYearComparison>[0]> = {}) => buildCashBalanceYearComparison({
+    accounts, masterCurrency: 'HUF', exchangeRates: {}, selectedYear: '2026-01-01', today: '2026-10-13',
+    transactions: [transaction('2025-01-01', 500), transaction('2025-06-10', -200), transaction('2026-03-01', 400)], ...overrides,
+  })
+
+  it('aligns days by month and day across years and stops at local today', () => {
+    const result = yearly()
+    expect(result).toMatchObject({ unit: 'year', selectedStart: '2026-01-01', previousStart: '2025-01-01', unavailableReason: null })
+    expect(result.points).toHaveLength(365)
+    expect(result.points[0]).toEqual({ day: 1, selectedDate: '2026-01-01', previousDate: '2025-01-01', selected: 800, previous: 1000 })
+    expect(result.points[59]).toMatchObject({ selectedDate: '2026-03-01', previousDate: '2025-03-01', selected: 1200, previous: 1000 })
+    expect(result.points.find(point => point.previousDate === '2025-06-10')).toMatchObject({ selectedDate: '2026-06-10', selected: 1200, previous: 800 })
+    expect(result.points.find(point => point.selectedDate === '2026-10-14')).toMatchObject({ selected: null, previous: 800 })
+  })
+
+  it('keeps a Feb 29 slot with no counterpart in the other year', () => {
+    const result = yearly({ selectedYear: '2025-01-01', transactions: [transaction('2024-01-01', 100)] })
+    expect(result.points).toHaveLength(366)
+    expect(result.points[59]).toMatchObject({ selectedDate: null, previousDate: '2024-02-29', selected: null, previous: 1200 })
+    expect(result.points[60]).toMatchObject({ selectedDate: '2025-03-01', previousDate: '2024-03-01' })
+  })
+
+  it('requires history from the first day of the previous year', () => {
+    expect(yearly({ transactions: [transaction('2025-01-02', 100)] }).unavailableReason).toBe('Not enough cash history to cover the full previous year.')
+    expect(yearly({ selectedYear: '2027-01-01' }).unavailableReason).toBe('Comparison is available for current and past years only.')
   })
 })

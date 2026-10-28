@@ -1,4 +1,4 @@
-import { addDays, endOfMonth, format, getDaysInMonth, parseISO, startOfMonth, subMonths } from 'date-fns'
+import { addDays, endOfMonth, endOfYear, format, getDaysInMonth, parseISO, startOfMonth, startOfYear, subMonths, subYears } from 'date-fns'
 import { convertCurrency } from '../../../../shared/currency'
 import type { Account, Transaction } from './types'
 
@@ -10,9 +10,12 @@ export type CashBalanceComparisonPoint = {
   previous: number | null
 }
 
+export type CashBalanceComparisonUnit = 'month' | 'year'
+
 export type CashBalanceComparison = {
-  selectedMonth: string
-  previousMonth: string
+  unit: CashBalanceComparisonUnit
+  selectedStart: string
+  previousStart: string
   points: CashBalanceComparisonPoint[]
   unavailableReason: string | null
 }
@@ -23,28 +26,53 @@ export function comparisonDelta(selected: number | null, previous: number | null
   return { amount, percentage: previous > 0 ? amount / previous * 100 : null }
 }
 
-// The caller supplies complete posted history and current account balances.
-// There is no durable opening-date history: never claim coverage before the
-// earliest posted cash record, even though reverse reconstruction is possible.
-export function buildCashBalanceMonthComparison({
-  accounts, transactions, selectedMonth, today, masterCurrency, exchangeRates,
-}: {
+type ComparisonInput = {
   accounts: Account[]
   transactions: Transaction[]
-  selectedMonth: string
   today: string
   masterCurrency: string
   exchangeRates: Record<string, number>
-}): CashBalanceComparison {
-  const selectedStart = startOfMonth(parseISO(selectedMonth))
-  const previousStart = subMonths(selectedStart, 1)
-  const previousMonth = format(previousStart, 'yyyy-MM-dd')
+}
+
+export const buildCashBalanceMonthComparison = ({ selectedMonth, ...input }: ComparisonInput & { selectedMonth: string }) =>
+  buildCashBalanceComparison({ ...input, unit: 'month', selectedDate: selectedMonth })
+
+export const buildCashBalanceYearComparison = ({ selectedYear, ...input }: ComparisonInput & { selectedYear: string }) =>
+  buildCashBalanceComparison({ ...input, unit: 'year', selectedDate: selectedYear })
+
+// Calendar slots shared by both periods: day N of the month, or the same
+// month/day of the year. A slot missing from one period (the 31st, Feb 29)
+// has a null date on that side.
+function comparisonSlots(unit: CashBalanceComparisonUnit, selectedStart: Date, previousStart: Date) {
+  const slots: { selectedDate: string | null; previousDate: string | null }[] = []
+  const months = unit === 'month' ? 1 : 12
+  for (let month = 0; month < months; month++) {
+    const selectedMonth = new Date(selectedStart.getFullYear(), selectedStart.getMonth() + month, 1)
+    const previousMonth = new Date(previousStart.getFullYear(), previousStart.getMonth() + month, 1)
+    const selectedDays = getDaysInMonth(selectedMonth), previousDays = getDaysInMonth(previousMonth)
+    for (let day = 1; day <= Math.max(selectedDays, previousDays); day++) slots.push({
+      selectedDate: day <= selectedDays ? format(addDays(selectedMonth, day - 1), 'yyyy-MM-dd') : null,
+      previousDate: day <= previousDays ? format(addDays(previousMonth, day - 1), 'yyyy-MM-dd') : null,
+    })
+  }
+  return slots
+}
+
+// The caller supplies complete posted history and current account balances.
+// There is no durable opening-date history: never claim coverage before the
+// earliest posted cash record, even though reverse reconstruction is possible.
+export function buildCashBalanceComparison({
+  accounts, transactions, unit, selectedDate, today, masterCurrency, exchangeRates,
+}: ComparisonInput & { unit: CashBalanceComparisonUnit; selectedDate: string }): CashBalanceComparison {
+  const selectedStart = unit === 'month' ? startOfMonth(parseISO(selectedDate)) : startOfYear(parseISO(selectedDate))
+  const previousStart = unit === 'month' ? subMonths(selectedStart, 1) : subYears(selectedStart, 1)
+  const previousKey = format(previousStart, 'yyyy-MM-dd')
   const result: CashBalanceComparison = {
-    selectedMonth: format(selectedStart, 'yyyy-MM-dd'), previousMonth,
+    unit, selectedStart: format(selectedStart, 'yyyy-MM-dd'), previousStart: previousKey,
     points: [], unavailableReason: null,
   }
-  if (result.selectedMonth > today) {
-    return { ...result, unavailableReason: 'Comparison is available for current and past months only.' }
+  if (result.selectedStart > today) {
+    return { ...result, unavailableReason: `Comparison is available for current and past ${unit}s only.` }
   }
 
   const cashAccounts = accounts.filter(account => account.type !== 'investment' && !account.exclude_from_cash_balance)
@@ -53,8 +81,8 @@ export function buildCashBalanceMonthComparison({
     && (transaction.status === undefined || transaction.status === 'posted') && transaction.date <= today)
   const firstDate = posted.reduce<string | null>((first, transaction) =>
     first === null || transaction.date < first ? transaction.date : first, null)
-  if (firstDate === null || firstDate > previousMonth) {
-    return { ...result, unavailableReason: 'Not enough cash history to cover the full previous month.' }
+  if (firstDate === null || firstDate > previousKey) {
+    return { ...result, unavailableReason: `Not enough cash history to cover the full previous ${unit}.` }
   }
 
   let balance = 0
@@ -71,29 +99,23 @@ export function buildCashBalanceMonthComparison({
     movements.set(transaction.date, (movements.get(transaction.date) ?? 0) + amount)
   }
 
-  const end = [format(endOfMonth(selectedStart), 'yyyy-MM-dd'), today].sort()[0]
+  const periodEnd = unit === 'month' ? endOfMonth(selectedStart) : endOfYear(selectedStart)
+  const end = [format(periodEnd, 'yyyy-MM-dd'), today].sort()[0]
   for (const [date, amount] of movements) {
     if (date > end) balance -= amount
   }
   const balances = new Map<string, number>()
-  // At most two months are expanded, regardless of the ledger's age.
-  for (let date = parseISO(end); format(date, 'yyyy-MM-dd') >= previousMonth; date = addDays(date, -1)) {
+  // At most two periods are expanded, regardless of the ledger's age.
+  for (let date = parseISO(end); format(date, 'yyyy-MM-dd') >= previousKey; date = addDays(date, -1)) {
     const key = format(date, 'yyyy-MM-dd')
     balances.set(key, balance)
     balance -= movements.get(key) ?? 0
   }
 
-  const selectedDays = getDaysInMonth(selectedStart)
-  const previousDays = getDaysInMonth(previousStart)
-  result.points = Array.from({ length: Math.max(selectedDays, previousDays) }, (_, index) => {
-    const day = index + 1
-    const selectedDate = day <= selectedDays ? format(addDays(selectedStart, index), 'yyyy-MM-dd') : null
-    const previousDate = day <= previousDays ? format(addDays(previousStart, index), 'yyyy-MM-dd') : null
-    return {
-      day, selectedDate, previousDate,
-      selected: selectedDate === null ? null : balances.get(selectedDate) ?? null,
-      previous: previousDate === null ? null : balances.get(previousDate) ?? null,
-    }
-  })
+  result.points = comparisonSlots(unit, selectedStart, previousStart).map(({ selectedDate, previousDate }, index) => ({
+    day: index + 1, selectedDate, previousDate,
+    selected: selectedDate === null ? null : balances.get(selectedDate) ?? null,
+    previous: previousDate === null ? null : balances.get(previousDate) ?? null,
+  }))
   return result
 }
