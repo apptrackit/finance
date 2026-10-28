@@ -1,18 +1,43 @@
 # Changelog
 
-This file covers every published [GitHub release](https://github.com/apptrackit/finance/releases) through **v4.0**, newest first. Release dates are GitHub publication dates in UTC. Entries summarize the release notes, linked pull requests, and changes between tags.
+This file covers every published [GitHub release](https://github.com/apptrackit/finance/releases) through **v4.1**, newest first. Release dates are GitHub publication dates in UTC. Entries summarize the release notes, linked pull requests, and changes between tags.
 
 Intermediate package/UI version bumps are grouped under the next published GitHub release, rather than presented as separately published releases. The former README's **v1.6.3** notes are retained under v1.7, the release that included them.
 
 ## Unreleased
 
-- Redesign Settings with General, Categories, Data export and Advanced areas, row-based preferences, expense/income category tabs, inline desktop category editing/deletion confirmation, and mobile editor sheets. Appearance, privacy and navigation apply immediately; main currency changes offer explicit save/cancel.
+## v4.1 — 2026-10-28
 
-- Group Dashboard Needs review items under date headings, newest first, while preserving confirmation eligibility and grouped transfers/splits.
+[GitHub release](https://github.com/apptrackit/finance/releases/tag/v4.1) · [Compare v4.0…v4.1](https://github.com/apptrackit/finance/compare/v4.0...v4.1)
 
-- Monochrome now uses a dedicated neutral light/dark palette for surfaces, controls and primary balance charts instead of a page-wide filter, retaining meaningful colors for income/expenses, gains/losses, statuses, forecasts and categories. Area charts follow the selected palette, with blue accents in Original and neutral accents in Monochrome. Red Filter also replaces its page filter with native red surfaces, controls and primary charts in light/dark modes, retaining the same meaningful financial/status and category colors.
+### Highlights
 
-- Refreshed cash-balance, account and portfolio history charts with EasyUI-style cards, smooth area curves, animated reveals and range pills. Dated value readouts and keyboard/touch inspection preserve native currencies, history gaps and privacy.
+- Redesigned Settings groups preferences, category management, data exports and advanced tools, with dedicated mobile views.
+- Interactive balance and portfolio charts add smooth curves, dated readouts and range controls; Monochrome and Red Filter now have native light/dark palettes that preserve meaningful financial colors.
+- Calendar-aligned chart labels, complete monthly/yearly balance ranges and previous-year cash comparisons make history easier to read.
+
+### Added
+
+- Cash Balance Trend can compare the selected year with the previous year, aligned by month and day. Comparisons require covered history, retain privacy masking and leave unmatched leap days unavailable. [#184](https://github.com/apptrackit/finance/pull/184)
+
+### Changed
+
+- Settings now has General, Categories, Data export and Advanced areas, with grouped preference rows, theme previews and expense/income category tabs. Desktop category editing and confirmations stay inline; mobile uses drill-in views and editor sheets. Appearance, privacy and navigation apply immediately, while main-currency changes offer explicit Save/Cancel; failed saves retain drafts. [#188](https://github.com/apptrackit/finance/pull/188)
+- Cash-balance, account and portfolio history use interactive area charts with smooth curves, animated reveals, range pills and pointer, touch and keyboard inspection. Dated readouts retain native/reporting currencies, source gaps and privacy; cash/account trend overlays start visible and can be hidden. [#178](https://github.com/apptrackit/finance/pull/178)
+- Monochrome and Red Filter use native neutral and red palettes for surfaces, controls and primary balance charts in light/dark modes. Income, expenses, gains/losses, warnings, forecasts and categories retain meaningful colors; existing saved theme preferences select the updated palettes automatically. [#178](https://github.com/apptrackit/finance/pull/178)
+- Date charts use calendar-aligned labels sized to the available width, with emphasized year boundaries in multi-year views. Cash-balance monthly/yearly ranges begin on the first day and carry covered balances through quiet days; completed periods extend to their final day. [#184](https://github.com/apptrackit/finance/pull/184), [#186](https://github.com/apptrackit/finance/pull/186)
+- Dashboard Needs review groups items under date headings, newest first, while preserving transfer/split groups, confirmation eligibility and balance previews. [#180](https://github.com/apptrackit/finance/pull/180)
+- Maintenance: main now requires the complete aggregate CI result before merging, including for administrators; tracked policy and contributor guidance document enforcement. Settings test storage cleanup is compatible with Node 26. [#192](https://github.com/apptrackit/finance/pull/192), [#190](https://github.com/apptrackit/finance/pull/190)
+- Bumped the root application version to **4.1**, used by the API version endpoint and sidebar. Independent MCP protocol/Worker versions are unchanged.
+
+### Fixed
+
+- Historical per-account trend charts reconstruct balances from the complete ledger before clipping to the selected period, correcting past-period values that previously omitted later movements. Monthly views begin with a covered carried balance; no pre-ledger balance is invented. [#186](https://github.com/apptrackit/finance/pull/186)
+- Chart cards and toggle controls keep stable positions when trend/net-invested overlays, comparisons or privacy masking change, avoiding buttons jumping away from the pointer. [#182](https://github.com/apptrackit/finance/pull/182), [#184](https://github.com/apptrackit/finance/pull/184)
+
+### Migration and upgrade notes
+
+- No new database migrations, authentication settings or MCP tools are introduced relative to v4.0. Existing deployments retain their configuration; refresh the frontend/PWA after deploying to load the updated interface and saved theme palettes. Release publication does not deploy the app.
 
 ## v4.0 — 2026-10-20
 

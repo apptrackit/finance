@@ -4,7 +4,7 @@ A self-hosted personal finance app for tracking accounts, transactions, investme
 
 [Changelog](CHANGELOG.md) · [GitHub releases](https://github.com/apptrackit/finance/releases) · [MCP guide](mcp/README.md) · [Contributor and agent guide](AGENTS.md)
 
-The latest published release is [v4.0](https://github.com/apptrackit/finance/releases/tag/v4.0). This README describes the current source tree; see the [v4.0 changelog](CHANGELOG.md#v40--2026-10-20) for release details.
+The latest published release is [v4.1](https://github.com/apptrackit/finance/releases/tag/v4.1). This README describes the current source tree; see the [v4.1 changelog](CHANGELOG.md#v41--2026-10-28) for release details.
 
 ## Contents
 
