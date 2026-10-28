@@ -6,6 +6,8 @@ import { ScheduledTasksCard } from './ScheduledTasksCard'
 import { CacheManagementCard } from './CacheManagementCard'
 import { MENU_STORAGE_KEY, STORAGE_KEY } from '../constants'
 
+// Preserve the setup storage stub: cleanup restores Node 26’s unavailable native global.
+const browserStorage = localStorage
 const showAlert = vi.fn()
 let mobile = false
 vi.mock('../../../context/AlertContext', () => ({ useAlert: () => ({ showAlert }) }))
@@ -14,6 +16,7 @@ const menus = { dashboard: true, accounts: true, analytics: true, investments: t
 beforeEach(() => {
   mobile = false
   vi.clearAllMocks()
+  vi.stubGlobal('localStorage', browserStorage)
   localStorage.clear()
   vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json({ visible_menus: menus, updated_at: 1 })))
 })
