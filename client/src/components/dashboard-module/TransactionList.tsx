@@ -6,10 +6,11 @@ import type { HoldingFields } from '../../../../shared/holding'
 import type { DashboardFilters, FilterChange } from '../../navigation/filters'
 import { useUnsavedChanges } from '../../navigation/UnsavedChanges'
 import { matchesTransaction } from '../../lib/global-search'
-import { useState, useEffect, useRef } from 'react'
+import { useCallback, useState, useEffect, useRef } from 'react'
 import { Button } from '../common/button'
 import { Input } from '../common/input'
 import { Label } from '../common/label'
+import { AccountFilterSelect } from '../common/AccountFilterSelect'
 import { Select } from '../common/select'
 import { Card, CardContent, CardHeader, CardTitle } from '../common/card'
 import { Modal } from '../common/modal'
@@ -72,6 +73,8 @@ type Account = HoldingFields & {
   archived_at?: number | null
   is_locked?: boolean
 }
+
+type TransactionFilters = Pick<DashboardFilters, 'account' | 'category' | 'sort'> & { search: string }
 
 type Category = {
   id: string
@@ -172,7 +175,16 @@ export function TransactionList({
   const [fetchedCategories, setCategories] = useState<Category[]>([])
   const categories = availableCategories ?? fetchedCategories
   const [upcomingOpen, setUpcomingOpen] = useState(false)
-  const [filtersOpen, setFiltersOpen] = useState(false)
+  const [filterDraft, setFilterDraft] = useState<TransactionFilters | null>(null)
+  const filtersOpen = filterDraft !== null
+  const closeFilters = useCallback(() => setFilterDraft(null), [])
+  useEffect(() => {
+    if (!filtersOpen) return
+    const desktop = window.matchMedia('(min-width: 640px)')
+    const handleChange = () => { if (desktop.matches) closeFilters() }
+    desktop.addEventListener('change', handleChange)
+    return () => desktop.removeEventListener('change', handleChange)
+  }, [filtersOpen, closeFilters])
   const [activeTxId, setActiveTxId] = useState<string | null>(null)
   const [pendingDetails, setPendingDetails] = useState<string | null>(null)
   const [legacyTradeId,setLegacyTradeId]=useState<string|null>(null)
@@ -205,12 +217,14 @@ export function TransactionList({
     manual_price: false,
   })
   const editedTransferPairRef = useRef<string | null>(null)
+  const [localAccountFilter, setLocalAccountFilter] = useState('all')
+  const accountFilter = filters?.account ?? localAccountFilter
+  const setAccountFilter = (account: string) => onFiltersChange ? onFiltersChange({ account }) : setLocalAccountFilter(account)
+  const matchesAccount = (tx: Transaction) => accountFilter === 'all' || tx.account_id === accountFilter
   const [localCategoryFilter, setCategoryFilterLocal] = useState<string>('all')
   const categoryFilter = filters?.category ?? localCategoryFilter
-  const setCategoryFilter = (value: string) => onFiltersChange ? onFiltersChange({ category: value }) : setCategoryFilterLocal(value)
   const [localSortOrder, setSortOrderLocal] = useState<'date' | 'amount-high' | 'amount-low'>('date')
   const sortOrder = filters?.sort ?? localSortOrder
-  const setSortOrder = (value: 'date' | 'amount-high' | 'amount-low') => onFiltersChange ? onFiltersChange({ sort: value }) : setSortOrderLocal(value)
   const [showAllTransactions, setShowAllTransactions] = useState(false)
   const [localTransactionView, setTransactionViewLocal] = useState<'list' | 'calendar'>('list')
   const transactionView = filters?.view ?? localTransactionView
@@ -256,7 +270,7 @@ export function TransactionList({
   // Reset showAllTransactions when filter, sort, search, or date range changes
   useEffect(() => {
     setShowAllTransactions(false)
-  }, [categoryFilter, sortOrder, searchQuery, dateRange])
+  }, [accountFilter, categoryFilter, sortOrder, searchQuery, dateRange])
 
   useEffect(() => {
     onCalendarViewChange?.(transactionView === 'calendar')
@@ -1254,7 +1268,7 @@ export function TransactionList({
       : categoryFilter === 'all-income' ? (tx.amount > 0 && !tx.linked_transaction_id)
       : categoryFilter === 'transfer' ? !!tx.linked_transaction_id
       : tx.category_id === categoryFilter
-    return catMatch && matchesSearch(tx)
+    return matchesAccount(tx) && catMatch && matchesSearch(tx)
   }
 
   const visibleUpcomingTransactions = upcomingTransactions.filter(tx => !resolvedPendingIds.has(tx.id))
@@ -1270,7 +1284,7 @@ export function TransactionList({
       return [{ ...group[0], id: `split:${tx.split_id}`, description: tx.split_description, amount: group.reduce((sum, line) => sum + line.amount, 0), splitGroup: group }]
     })
   }
-  const standardPendingCount = visibleUpcomingTransactions.filter(tx => !isMcpReviewTransaction(tx)).length
+  const standardPendingCount = visibleUpcomingTransactions.filter(tx => !isMcpReviewTransaction(tx) && matchesAccount(tx)).length
   const mcpReviewTransactions = groupPendingSplits(getMcpReviewItems(visibleUpcomingTransactions, applyFilters))
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
   const mcpReviewCount = mcpReviewTransactions.length
@@ -1284,7 +1298,8 @@ export function TransactionList({
 
   const readyTransactions = pendingFilteredTransactions.filter(tx => tx.date <= today)
   const futureTransactions = pendingFilteredTransactions.filter(tx => tx.date > today)
-  const totalFilteredCount = transactions.filter(applyFilters).length
+  const filteredPostedTransactions = transactions.filter(applyFilters)
+  const totalFilteredCount = filteredPostedTransactions.length
     + pendingFilteredTransactions.length
     + mcpReviewTransactions.length
 
@@ -1489,36 +1504,68 @@ export function TransactionList({
     if (composerOnly && isAdding) handleCancel()
   }, [navigationKey, composerOnly, isAdding, handleCancel])
 
+  const appliedFilters: TransactionFilters = { account: accountFilter, category: categoryFilter, sort: sortOrder, search: searchQuery }
+  const applyFilterChanges = ({ search, ...patch }: Partial<TransactionFilters>) => {
+    if (search !== undefined) setSearchQuery(search)
+    if (onFiltersChange) {
+      if (Object.keys(patch).length > 0) onFiltersChange(patch)
+    } else {
+      if (patch.account !== undefined) setLocalAccountFilter(patch.account)
+      if (patch.category !== undefined) setCategoryFilterLocal(patch.category)
+      if (patch.sort !== undefined) setSortOrderLocal(patch.sort)
+    }
+  }
+
+  const filterControls = (
+    { account, category: selectedCategory, sort, search }: TransactionFilters,
+    onChange: (patch: Partial<TransactionFilters>) => void,
+  ) => (<>
+    <div className="relative min-w-0 flex-[1_1_180px] xl:max-w-[220px]">
+      <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+      <input type="search" aria-label="Filter transactions" value={search} onChange={e => onChange({ search: e.target.value })} placeholder="Search transactions..." className="h-11 sm:h-10 w-full rounded-lg border border-border bg-background pl-8 pr-3 text-base sm:text-[13px] outline-none focus:ring-1 focus:ring-primary" />
+    </div>
+    <div className="grid grid-cols-4 items-center gap-1 sm:flex sm:gap-0.5" role="group" aria-label="Transaction type">
+      {([['all', 'All'], ['all-expenses', 'Expenses'], ['all-income', 'Income'], ['transfer', 'Transfers']] as const).map(([value, label]) => <button key={value} type="button" aria-pressed={selectedCategory === value} onClick={() => onChange({ category: value })} className={cn('min-h-11 sm:min-h-10 rounded-lg border px-1 text-xs sm:px-3 sm:text-[13px]', selectedCategory === value ? 'border-border bg-secondary font-medium' : 'border-transparent text-muted-foreground hover:bg-secondary')}>{label}</button>)}
+    </div>
+    <Select value={['all', 'all-expenses', 'all-income', 'transfer'].includes(selectedCategory) ? 'all' : selectedCategory} aria-label="Transaction category" onChange={e => onChange({ category: e.target.value })} className="h-11 w-full min-w-0 sm:h-10 sm:w-auto text-base sm:text-[13px] sm:max-w-44">
+      <option value="all">All categories</option>
+      {!['all', 'all-expenses', 'all-income', 'transfer'].includes(selectedCategory) && !categories.some(category => category.id === selectedCategory) && <option value={selectedCategory}>Selected category (unavailable)</option>}
+      {(['expense', 'income'] as const).map(type => <optgroup key={type} label={type === 'expense' ? 'Expenses' : 'Income'}>{categories.filter(c => c.type === type).map(cat => <option key={cat.id} value={cat.id}>{cat.icon} {cat.name}</option>)}</optgroup>)}
+    </Select>
+    <AccountFilterSelect accounts={accounts} value={account} onChange={value => onChange({ account: value })}
+      label="Transaction account" className="w-full sm:w-52" selectClassName="h-11 text-base sm:h-10 sm:text-sm" />
+    <Select value={sort} aria-label="Transaction sort order" onChange={e => onChange({ sort: e.target.value as TransactionFilters['sort'] })} className="h-11 w-full min-w-0 sm:h-10 sm:w-auto text-base sm:text-[13px] sm:max-w-36">
+      <option value="date">Newest</option><option value="amount-high">High to low</option><option value="amount-low">Low to high</option>
+    </Select>
+  </>)
+
   return (
     <Card className={composerOnly ? "contents" : undefined}>
       {!composerOnly && <CardHeader className="space-y-0 p-0 sm:p-0">
         <div className="flex flex-wrap items-center gap-2 border-b border-border px-4 py-3 sm:px-5">
-          <div className="min-w-0 flex-1"><CardTitle className="text-[15px]">Transactions</CardTitle><p className="mt-1 text-xs text-muted-foreground">{processTransactions(transactions).length} posted{standardPendingCount > 0 ? ` · ${standardPendingCount} upcoming` : ''}{mcpReviewCount > 0 ? ` · ${mcpReviewCount} MCP drafts` : ''}</p></div>
+          <div className="min-w-0 flex-1"><CardTitle className="text-[15px]">Transactions</CardTitle><p className="mt-1 text-xs text-muted-foreground">{processTransactions(transactions.filter(matchesAccount)).length} posted{standardPendingCount > 0 ? ` · ${standardPendingCount} upcoming` : ''}{mcpReviewCount > 0 ? ` · ${mcpReviewCount} MCP drafts` : ''}</p></div>
           <div className="hidden rounded-lg border border-border p-0.5 sm:inline-flex" role="group" aria-label="Transaction view">
             <button type="button" onClick={() => setTransactionView('list')} aria-pressed={transactionView === 'list'} className={cn('min-h-9 rounded-md px-2 text-xs sm:px-3', transactionView === 'list' ? 'bg-secondary font-medium' : 'text-muted-foreground')}>List</button>
             <button type="button" onClick={openCalendar} aria-pressed={transactionView === 'calendar'} className={cn('min-h-9 rounded-md px-2 text-xs sm:px-3', transactionView === 'calendar' ? 'bg-secondary font-medium' : 'text-muted-foreground')}>Calendar</button>
           </div>
           <Button onClick={() => isAdding ? handleCancel() : handleOpenForm()} size="sm" className="hidden h-10 px-3 sm:inline-flex"><Plus className="mr-1 h-4 w-4" />New</Button>
         </div>
-        <div className="flex items-center justify-between border-b border-border px-4 py-2 sm:hidden"><button type="button" aria-expanded={filtersOpen} onClick={() => setFiltersOpen(!filtersOpen)} className="flex min-h-10 items-center gap-2 text-[13px] text-muted-foreground"><SlidersHorizontal className="h-4 w-4" />Filters{categoryFilter !== 'all' || searchQuery ? ' · active' : ''}</button><button type="button" onClick={() => transactionView === 'calendar' ? setTransactionView('list') : openCalendar()} className="min-h-10 px-2 text-[13px] text-muted-foreground">{transactionView === 'calendar' ? 'List view' : 'Calendar view'}</button></div>
-        <div className={cn("flex-wrap items-center gap-2 border-b border-border px-4 py-3 sm:flex sm:px-5", filtersOpen ? "flex" : "hidden")}>
-          <div className="relative min-w-0 flex-[1_1_180px] xl:max-w-[220px]">
-            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <input type="search" aria-label="Filter transactions" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Search transactions..." className="h-10 w-full rounded-lg border border-border bg-background pl-8 pr-3 text-[13px] outline-none focus:ring-1 focus:ring-primary" />
-          </div>
-          <div className="flex items-center gap-0.5" role="group" aria-label="Transaction type">
-            {([['all', 'All'], ['all-expenses', 'Expenses'], ['all-income', 'Income'], ['transfer', 'Transfers']] as const).map(([value, label]) => <button key={value} type="button" aria-pressed={categoryFilter === value} onClick={() => setCategoryFilter(value)} className={cn('min-h-10 rounded-lg border px-2 text-[13px] sm:px-3', categoryFilter === value ? 'border-border bg-secondary font-medium' : 'border-transparent text-muted-foreground hover:bg-secondary')}>{label}</button>)}
-          </div>
-          <Select value={['all', 'all-expenses', 'all-income', 'transfer'].includes(categoryFilter) ? 'all' : categoryFilter} aria-label="Transaction category" onChange={e => setCategoryFilter(e.target.value)} className="h-10 w-auto min-w-0 flex-1 text-[13px] sm:max-w-44">
-            <option value="all">Category</option>
-            {!['all', 'all-expenses', 'all-income', 'transfer'].includes(categoryFilter) && !categories.some(category => category.id === categoryFilter) && <option value={categoryFilter}>Selected category (unavailable)</option>}
-            {(['expense', 'income'] as const).map(type => <optgroup key={type} label={type === 'expense' ? 'Expenses' : 'Income'}>{categories.filter(c => c.type === type).map(cat => <option key={cat.id} value={cat.id}>{cat.icon} {cat.name}</option>)}</optgroup>)}
-          </Select>
-          <Select value={sortOrder} aria-label="Transaction sort order" onChange={e => setSortOrder(e.target.value as typeof sortOrder)} className="h-10 w-auto min-w-0 flex-1 text-[13px] sm:max-w-36">
-            <option value="date">Newest</option><option value="amount-high">High to low</option><option value="amount-low">Low to high</option>
-          </Select>
+        <div className="flex items-center justify-between border-b border-border px-4 py-2 sm:hidden"><button type="button" aria-haspopup="dialog" aria-expanded={filtersOpen} onClick={() => setFilterDraft(appliedFilters)} className="flex min-h-11 items-center gap-2 text-[13px] text-muted-foreground"><SlidersHorizontal className="h-4 w-4" />Filters{accountFilter !== 'all' || categoryFilter !== 'all' || sortOrder !== 'date' || searchQuery ? ' · active' : ''}</button><button type="button" onClick={() => transactionView === 'calendar' ? setTransactionView('list') : openCalendar()} className="min-h-10 px-2 text-[13px] text-muted-foreground">{transactionView === 'calendar' ? 'List view' : 'Calendar view'}</button></div>
+        <div className="hidden flex-wrap items-center gap-2 border-b border-border px-5 py-3 sm:flex">
+          {filterControls(appliedFilters, applyFilterChanges)}
         </div>
       </CardHeader>}
+
+      {!composerOnly && filterDraft && (
+        <Modal isOpen onClose={closeFilters} title="Transaction filters"
+          className="mx-0 max-w-none rounded-t-2xl" headerClassName="[&_button]:flex [&_button]:size-11 [&_button]:items-center [&_button]:justify-center"
+          contentClassName="p-0">
+          <div className="grid gap-3 p-4">{filterControls(filterDraft, patch => setFilterDraft(current => current && { ...current, ...patch }))}</div>
+          <div className="sticky bottom-0 border-t border-border bg-card px-4 pt-3 pb-[max(1rem,env(safe-area-inset-bottom))]">
+            <Button type="button" onClick={() => { applyFilterChanges(filterDraft); closeFilters() }} className="h-11 w-full">Done</Button>
+          </div>
+        </Modal>
+      )}
 
       <Modal 
         isOpen={isAdding}
@@ -1739,7 +1786,13 @@ export function TransactionList({
       </Modal>
 
       {!composerOnly && <CardContent className="p-3 sm:p-5">
-        {transactionView === 'calendar' ? <TransactionCalendar transactions={transactions.filter(applyFilters)} accounts={accounts} currentMonth={currentMonth} privacyMode={privacyMode}
+        {transactionView === 'calendar' && accountFilter !== 'all' && !loading && filteredPostedTransactions.length === 0 &&
+          <div className="mb-3 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+            <p>No matching posted transactions for this account.</p>
+            <Button variant="outline" size="sm" onClick={() => setAccountFilter('all')}>Show all accounts</Button>
+          </div>}
+        {transactionView === 'calendar' ? <TransactionCalendar transactions={filteredPostedTransactions} linkedTransactions={accountFilter !== 'all' ? transactions : undefined}
+          accountFiltered={accountFilter !== 'all'} accounts={accounts} currentMonth={currentMonth} privacyMode={privacyMode}
           getCategoryName={getCategoryName} getCategoryIcon={getCategoryIcon} getAccountName={getAccountName} getAccountCurrency={getAccountCurrency} convertToMasterCurrency={convertToMasterCurrency} masterCurrency={masterCurrency} sortOrder={sortOrder} />
         : <div className="space-y-4">
           {reviewTransactions.length > 0 && <section aria-labelledby="review-heading" className="overflow-hidden rounded-xl border border-border">
@@ -1759,7 +1812,7 @@ export function TransactionList({
             {upcomingOpen && <div id="future-transactions">{futureTransactions.map(tx => renderPendingTransaction(tx, false))}</div>}
           </section>}
           {(() => {
-            const allProcessed = sortOrder === 'date' ? sortedDates.flatMap(date => processTransactions(groupedTransactions[date].filter(applyFilters))) : processTransactions(transactions.filter(applyFilters)).sort((a, b) => sortOrder === 'amount-high' ? Math.abs(b.amount) - Math.abs(a.amount) : Math.abs(a.amount) - Math.abs(b.amount))
+            const allProcessed = sortOrder === 'date' ? sortedDates.flatMap(date => processTransactions(groupedTransactions[date].filter(applyFilters))) : processTransactions(filteredPostedTransactions).sort((a, b) => sortOrder === 'amount-high' ? Math.abs(b.amount) - Math.abs(a.amount) : Math.abs(a.amount) - Math.abs(b.amount))
             const shown = showAllTransactions ? allProcessed : allProcessed.slice(0, DISPLAY_LIMIT)
             return <>
               {sortOrder === 'date' ? sortedDates.map(date => {
@@ -1779,8 +1832,9 @@ export function TransactionList({
           })()}
           {loading && transactions.length === 0 && upcomingTransactions.length === 0 && <div role="status" className="py-8 text-center text-sm text-muted-foreground">Loading transactions…</div>}
           {!loading && totalFilteredCount === 0 && !isAdding && <div className="py-12 text-center">
-            <Receipt className="mx-auto mb-3 h-8 w-8 text-muted-foreground" /><p className="text-sm text-muted-foreground">{transactions.length === 0 && upcomingTransactions.length === 0 ? 'No transactions yet' : 'No transactions found'}</p>
+            <Receipt className="mx-auto mb-3 h-8 w-8 text-muted-foreground" /><p className="text-sm text-muted-foreground">{accountFilter !== 'all' ? 'No matching transactions for this account' : transactions.length === 0 && upcomingTransactions.length === 0 ? 'No transactions yet' : 'No transactions found'}</p>
             <p className="mt-1 text-xs text-muted-foreground">{transactions.length === 0 && upcomingTransactions.length === 0 ? 'Record your first transaction to start tracking' : 'Try changing the filters or period.'}</p>
+            {accountFilter !== 'all' && <Button variant="outline" size="sm" className="mt-3" onClick={() => setAccountFilter('all')}>Show all accounts</Button>}
             {searchQuery && !isAllTimeRange(dateRange) && <Button variant="outline" size="sm" className="mt-3" onClick={() => onDateRangeChange(ALL_TIME_RANGE)}>Search in All Time</Button>}
           </div>}
         </div>}

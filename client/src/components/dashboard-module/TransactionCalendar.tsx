@@ -26,6 +26,8 @@ const dateKey = (date: Date) => format(date, 'yyyy-MM-dd')
 
 export function TransactionCalendar({
   transactions,
+  linkedTransactions = transactions,
+  accountFiltered = false,
   accounts,
   currentMonth,
   privacyMode,
@@ -38,6 +40,8 @@ export function TransactionCalendar({
   sortOrder,
 }: {
   transactions: Transaction[]
+  linkedTransactions?: Transaction[]
+  accountFiltered?: boolean
   accounts: Account[]
   currentMonth: Date
   privacyMode: 'visible' | 'hidden'
@@ -58,7 +62,7 @@ export function TransactionCalendar({
 
   const displayTransactions = useMemo(() => {
     const all = transactions
-    const byId = new Map(all.map(tx => [tx.id, tx]))
+    const byId = new Map(linkedTransactions.map(tx => [tx.id, tx]))
     const consumedIds = new Set<string>()
 
     return all.flatMap(tx => {
@@ -75,13 +79,13 @@ export function TransactionCalendar({
         return [tx]
       }
 
-      const primary = tx.amount < 0 ? tx : related.amount < 0 ? related : tx.amount <= related.amount ? tx : related
+      const primary = accountFiltered ? tx : tx.amount < 0 ? tx : related.amount < 0 ? related : tx.amount <= related.amount ? tx : related
       const secondary = primary.id === tx.id ? related : tx
       consumedIds.add(primary.id)
       consumedIds.add(secondary.id)
       return [{ ...primary, relatedTx: secondary }]
     })
-  }, [transactions])
+  }, [transactions, linkedTransactions, accountFiltered])
 
   const transactionsByDay = useMemo(() => displayTransactions.reduce<Record<string, CalendarTransaction[]>>((days, tx) => {
     const key = tx.date.slice(0, 10)
@@ -171,7 +175,7 @@ export function TransactionCalendar({
 
       <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_18rem]">
         <div className="overflow-hidden rounded-xl border border-border/60 bg-background/20">
-          <div className="border-b border-border/60 px-3 py-2.5">
+          {!accountFiltered && <div className="border-b border-border/60 px-3 py-2.5">
             <div className="mb-1 flex items-center gap-1.5 text-[10px] font-semibold tracking-wide text-muted-foreground"><TrendingUp className="h-3.5 w-3.5 text-success" />BALANCE TREND</div>
             <div className="h-20 cursor-pointer sm:h-24" aria-label="Animated balance trend chart. Click a day to select it.">
               {baseline === null ? <p className="text-xs text-muted-foreground">Balance trend unavailable: missing exchange rates.</p> : <ResponsiveContainer width="100%" height="100%">
@@ -220,7 +224,7 @@ export function TransactionCalendar({
                 </AreaChart>
               </ResponsiveContainer>}
             </div>
-          </div>
+          </div>}
 
           <div className="grid grid-cols-7 border-b border-border/60 bg-secondary/30">
             {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(day => <div key={day} className="py-2 text-center text-[9px] font-semibold uppercase tracking-wide text-muted-foreground sm:text-[10px]">{day}</div>)}
@@ -280,7 +284,7 @@ export function TransactionCalendar({
           <div className="max-h-[22rem] divide-y divide-border/60 overflow-y-auto">
             {selectedTransactions.length ? selectedTransactions.map(tx => {
               const transfer = !!tx.linked_transaction_id
-              const label = transfer ? `Transfer to ${tx.relatedTx ? getAccountName(tx.relatedTx.account_id) : 'account'}` : (tx.description || getCategoryName(tx.category_id))
+              const label = transfer ? `Transfer ${tx.amount < 0 || !accountFiltered ? 'to' : 'from'} ${tx.relatedTx ? getAccountName(tx.relatedTx.account_id) : 'account'}` : (tx.description || getCategoryName(tx.category_id))
               return <div key={tx.id} className="flex items-center gap-2.5 p-3">
                 <div className={`flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg text-sm ${transfer ? 'bg-primary/10 text-primary' : tx.amount >= 0 ? 'bg-success/10' : 'bg-secondary'}`}>{transfer ? <ArrowRightLeft className="h-4 w-4" /> : getCategoryIcon(tx.category_id)}</div>
                 <div className="min-w-0 flex-1"><div className="truncate text-xs font-medium">{label}</div><div className="truncate text-[10px] text-muted-foreground">{getAccountName(tx.account_id)} · {transfer ? 'Transfer' : getCategoryName(tx.category_id)}</div></div>

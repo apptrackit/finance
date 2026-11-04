@@ -120,6 +120,28 @@ function mockRates(rate = 0.2) {
 }
 
 describe('TransactionList redesigned transfers', () => {
+  it('filters the list and calendar by receiving account without losing the transfer pair', async () => {
+    const user = userEvent.setup()
+    renderTransfers({ transactions: [...postedTransfer,
+      { id: 'other-expense', account_id: 'other', amount: -50, date: '2020-01-01', description: 'Other expense' },
+    ] })
+    const filter = screen.getByRole('combobox', { name: 'Transaction account' })
+    expect(within(filter).getByRole('option', { name: 'Archived cash (HUF) · Archived' })).toBeInTheDocument()
+    await user.selectOptions(filter, 'destination')
+    expect(screen.queryByText('Other expense')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Edit transfer' })).toBeInTheDocument()
+    expect(screen.getByText('1 posted')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Calendar', exact: true }))
+    expect(screen.getByText('Transfer from Savings')).toBeInTheDocument()
+    expect(screen.queryByText('Other expense')).not.toBeInTheDocument()
+
+    await user.selectOptions(filter, 'archived')
+    await user.click(screen.getByRole('button', { name: 'Show all accounts' }))
+    expect(filter).toHaveValue('all')
+    expect(screen.getByText('Other expense')).toBeInTheDocument()
+  })
+
   it('previews posted edit deltas, preserves both native amounts when swapping, and reverts the full edit', async () => {
     mockRates()
     const user = userEvent.setup()
