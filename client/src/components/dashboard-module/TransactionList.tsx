@@ -1497,15 +1497,13 @@ export function TransactionList({
       {!composerOnly && <CardHeader className="space-y-0 p-0 sm:p-0">
         <div className="flex flex-wrap items-center gap-2 border-b border-border px-4 py-3 sm:px-5">
           <div className="min-w-0 flex-1"><CardTitle className="text-[15px]">Transactions</CardTitle><p className="mt-1 text-xs text-muted-foreground">{processTransactions(transactions.filter(matchesAccount)).length} posted{standardPendingCount > 0 ? ` · ${standardPendingCount} upcoming` : ''}{mcpReviewCount > 0 ? ` · ${mcpReviewCount} MCP drafts` : ''}</p></div>
-          <AccountFilterSelect accounts={accounts} value={accountFilter} onChange={setAccountFilter}
-            label="Transaction account" className="w-full sm:w-52" />
           <div className="hidden rounded-lg border border-border p-0.5 sm:inline-flex" role="group" aria-label="Transaction view">
             <button type="button" onClick={() => setTransactionView('list')} aria-pressed={transactionView === 'list'} className={cn('min-h-9 rounded-md px-2 text-xs sm:px-3', transactionView === 'list' ? 'bg-secondary font-medium' : 'text-muted-foreground')}>List</button>
             <button type="button" onClick={openCalendar} aria-pressed={transactionView === 'calendar'} className={cn('min-h-9 rounded-md px-2 text-xs sm:px-3', transactionView === 'calendar' ? 'bg-secondary font-medium' : 'text-muted-foreground')}>Calendar</button>
           </div>
           <Button onClick={() => isAdding ? handleCancel() : handleOpenForm()} size="sm" className="hidden h-10 px-3 sm:inline-flex"><Plus className="mr-1 h-4 w-4" />New</Button>
         </div>
-        <div className="flex items-center justify-between border-b border-border px-4 py-2 sm:hidden"><button type="button" aria-expanded={filtersOpen} onClick={() => setFiltersOpen(!filtersOpen)} className="flex min-h-10 items-center gap-2 text-[13px] text-muted-foreground"><SlidersHorizontal className="h-4 w-4" />Filters{categoryFilter !== 'all' || searchQuery ? ' · active' : ''}</button><button type="button" onClick={() => transactionView === 'calendar' ? setTransactionView('list') : openCalendar()} className="min-h-10 px-2 text-[13px] text-muted-foreground">{transactionView === 'calendar' ? 'List view' : 'Calendar view'}</button></div>
+        <div className="flex items-center justify-between border-b border-border px-4 py-2 sm:hidden"><button type="button" aria-expanded={filtersOpen} onClick={() => setFiltersOpen(!filtersOpen)} className="flex min-h-10 items-center gap-2 text-[13px] text-muted-foreground"><SlidersHorizontal className="h-4 w-4" />Filters{accountFilter !== 'all' || categoryFilter !== 'all' || searchQuery ? ' · active' : ''}</button><button type="button" onClick={() => transactionView === 'calendar' ? setTransactionView('list') : openCalendar()} className="min-h-10 px-2 text-[13px] text-muted-foreground">{transactionView === 'calendar' ? 'List view' : 'Calendar view'}</button></div>
         <div className={cn("flex-wrap items-center gap-2 border-b border-border px-4 py-3 sm:flex sm:px-5", filtersOpen ? "flex" : "hidden")}>
           <div className="relative min-w-0 flex-[1_1_180px] xl:max-w-[220px]">
             <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -1519,6 +1517,8 @@ export function TransactionList({
             {!['all', 'all-expenses', 'all-income', 'transfer'].includes(categoryFilter) && !categories.some(category => category.id === categoryFilter) && <option value={categoryFilter}>Selected category (unavailable)</option>}
             {(['expense', 'income'] as const).map(type => <optgroup key={type} label={type === 'expense' ? 'Expenses' : 'Income'}>{categories.filter(c => c.type === type).map(cat => <option key={cat.id} value={cat.id}>{cat.icon} {cat.name}</option>)}</optgroup>)}
           </Select>
+          <AccountFilterSelect accounts={accounts} value={accountFilter} onChange={setAccountFilter}
+            label="Transaction account" className="w-full sm:w-52" />
           <Select value={sortOrder} aria-label="Transaction sort order" onChange={e => setSortOrder(e.target.value as typeof sortOrder)} className="h-10 w-auto min-w-0 flex-1 text-[13px] sm:max-w-36">
             <option value="date">Newest</option><option value="amount-high">High to low</option><option value="amount-low">Low to high</option>
           </Select>
