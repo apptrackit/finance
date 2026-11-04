@@ -6,7 +6,7 @@ import type { HoldingFields } from '../../../../shared/holding'
 import type { DashboardFilters, FilterChange } from '../../navigation/filters'
 import { useUnsavedChanges } from '../../navigation/UnsavedChanges'
 import { matchesTransaction } from '../../lib/global-search'
-import { useState, useEffect, useRef } from 'react'
+import { useCallback, useState, useEffect, useRef } from 'react'
 import { Button } from '../common/button'
 import { Input } from '../common/input'
 import { Label } from '../common/label'
@@ -174,6 +174,14 @@ export function TransactionList({
   const categories = availableCategories ?? fetchedCategories
   const [upcomingOpen, setUpcomingOpen] = useState(false)
   const [filtersOpen, setFiltersOpen] = useState(false)
+  const closeFilters = useCallback(() => setFiltersOpen(false), [])
+  useEffect(() => {
+    if (!filtersOpen) return
+    const desktop = window.matchMedia('(min-width: 640px)')
+    const handleChange = () => { if (desktop.matches) closeFilters() }
+    desktop.addEventListener('change', handleChange)
+    return () => desktop.removeEventListener('change', handleChange)
+  }, [filtersOpen, closeFilters])
   const [activeTxId, setActiveTxId] = useState<string | null>(null)
   const [pendingDetails, setPendingDetails] = useState<string | null>(null)
   const [legacyTradeId,setLegacyTradeId]=useState<string|null>(null)
@@ -1492,6 +1500,26 @@ export function TransactionList({
     if (composerOnly && isAdding) handleCancel()
   }, [navigationKey, composerOnly, isAdding, handleCancel])
 
+  const filterControls = (<>
+    <div className="relative min-w-0 flex-[1_1_180px] xl:max-w-[220px]">
+      <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+      <input type="search" aria-label="Filter transactions" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Search transactions..." className="h-11 sm:h-10 w-full rounded-lg border border-border bg-background pl-8 pr-3 text-base sm:text-[13px] outline-none focus:ring-1 focus:ring-primary" />
+    </div>
+    <div className="grid grid-cols-4 items-center gap-1 sm:flex sm:gap-0.5" role="group" aria-label="Transaction type">
+      {([['all', 'All'], ['all-expenses', 'Expenses'], ['all-income', 'Income'], ['transfer', 'Transfers']] as const).map(([value, label]) => <button key={value} type="button" aria-pressed={categoryFilter === value} onClick={() => setCategoryFilter(value)} className={cn('min-h-11 sm:min-h-10 rounded-lg border px-1 text-xs sm:px-3 sm:text-[13px]', categoryFilter === value ? 'border-border bg-secondary font-medium' : 'border-transparent text-muted-foreground hover:bg-secondary')}>{label}</button>)}
+    </div>
+    <Select value={['all', 'all-expenses', 'all-income', 'transfer'].includes(categoryFilter) ? 'all' : categoryFilter} aria-label="Transaction category" onChange={e => setCategoryFilter(e.target.value)} className="h-11 w-full min-w-0 sm:h-10 sm:w-auto text-base sm:text-[13px] sm:max-w-44">
+      <option value="all">All categories</option>
+      {!['all', 'all-expenses', 'all-income', 'transfer'].includes(categoryFilter) && !categories.some(category => category.id === categoryFilter) && <option value={categoryFilter}>Selected category (unavailable)</option>}
+      {(['expense', 'income'] as const).map(type => <optgroup key={type} label={type === 'expense' ? 'Expenses' : 'Income'}>{categories.filter(c => c.type === type).map(cat => <option key={cat.id} value={cat.id}>{cat.icon} {cat.name}</option>)}</optgroup>)}
+    </Select>
+    <AccountFilterSelect accounts={accounts} value={accountFilter} onChange={setAccountFilter}
+      label="Transaction account" className="w-full sm:w-52" selectClassName="h-11 text-base sm:h-10 sm:text-sm" />
+    <Select value={sortOrder} aria-label="Transaction sort order" onChange={e => setSortOrder(e.target.value as typeof sortOrder)} className="h-11 w-full min-w-0 sm:h-10 sm:w-auto text-base sm:text-[13px] sm:max-w-36">
+      <option value="date">Newest</option><option value="amount-high">High to low</option><option value="amount-low">Low to high</option>
+    </Select>
+  </>)
+
   return (
     <Card className={composerOnly ? "contents" : undefined}>
       {!composerOnly && <CardHeader className="space-y-0 p-0 sm:p-0">
@@ -1503,27 +1531,22 @@ export function TransactionList({
           </div>
           <Button onClick={() => isAdding ? handleCancel() : handleOpenForm()} size="sm" className="hidden h-10 px-3 sm:inline-flex"><Plus className="mr-1 h-4 w-4" />New</Button>
         </div>
-        <div className="flex items-center justify-between border-b border-border px-4 py-2 sm:hidden"><button type="button" aria-expanded={filtersOpen} onClick={() => setFiltersOpen(!filtersOpen)} className="flex min-h-10 items-center gap-2 text-[13px] text-muted-foreground"><SlidersHorizontal className="h-4 w-4" />Filters{accountFilter !== 'all' || categoryFilter !== 'all' || searchQuery ? ' · active' : ''}</button><button type="button" onClick={() => transactionView === 'calendar' ? setTransactionView('list') : openCalendar()} className="min-h-10 px-2 text-[13px] text-muted-foreground">{transactionView === 'calendar' ? 'List view' : 'Calendar view'}</button></div>
-        <div className={cn("flex-wrap items-center gap-2 border-b border-border px-4 py-3 sm:flex sm:px-5", filtersOpen ? "flex" : "hidden")}>
-          <div className="relative min-w-0 flex-[1_1_180px] xl:max-w-[220px]">
-            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <input type="search" aria-label="Filter transactions" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Search transactions..." className="h-10 w-full rounded-lg border border-border bg-background pl-8 pr-3 text-[13px] outline-none focus:ring-1 focus:ring-primary" />
-          </div>
-          <div className="flex items-center gap-0.5" role="group" aria-label="Transaction type">
-            {([['all', 'All'], ['all-expenses', 'Expenses'], ['all-income', 'Income'], ['transfer', 'Transfers']] as const).map(([value, label]) => <button key={value} type="button" aria-pressed={categoryFilter === value} onClick={() => setCategoryFilter(value)} className={cn('min-h-10 rounded-lg border px-2 text-[13px] sm:px-3', categoryFilter === value ? 'border-border bg-secondary font-medium' : 'border-transparent text-muted-foreground hover:bg-secondary')}>{label}</button>)}
-          </div>
-          <Select value={['all', 'all-expenses', 'all-income', 'transfer'].includes(categoryFilter) ? 'all' : categoryFilter} aria-label="Transaction category" onChange={e => setCategoryFilter(e.target.value)} className="h-10 w-auto min-w-0 flex-1 text-[13px] sm:max-w-44">
-            <option value="all">Category</option>
-            {!['all', 'all-expenses', 'all-income', 'transfer'].includes(categoryFilter) && !categories.some(category => category.id === categoryFilter) && <option value={categoryFilter}>Selected category (unavailable)</option>}
-            {(['expense', 'income'] as const).map(type => <optgroup key={type} label={type === 'expense' ? 'Expenses' : 'Income'}>{categories.filter(c => c.type === type).map(cat => <option key={cat.id} value={cat.id}>{cat.icon} {cat.name}</option>)}</optgroup>)}
-          </Select>
-          <AccountFilterSelect accounts={accounts} value={accountFilter} onChange={setAccountFilter}
-            label="Transaction account" className="w-full sm:w-52" />
-          <Select value={sortOrder} aria-label="Transaction sort order" onChange={e => setSortOrder(e.target.value as typeof sortOrder)} className="h-10 w-auto min-w-0 flex-1 text-[13px] sm:max-w-36">
-            <option value="date">Newest</option><option value="amount-high">High to low</option><option value="amount-low">Low to high</option>
-          </Select>
+        <div className="flex items-center justify-between border-b border-border px-4 py-2 sm:hidden"><button type="button" aria-haspopup="dialog" aria-expanded={filtersOpen} onClick={() => setFiltersOpen(true)} className="flex min-h-11 items-center gap-2 text-[13px] text-muted-foreground"><SlidersHorizontal className="h-4 w-4" />Filters{accountFilter !== 'all' || categoryFilter !== 'all' || sortOrder !== 'date' || searchQuery ? ' · active' : ''}</button><button type="button" onClick={() => transactionView === 'calendar' ? setTransactionView('list') : openCalendar()} className="min-h-10 px-2 text-[13px] text-muted-foreground">{transactionView === 'calendar' ? 'List view' : 'Calendar view'}</button></div>
+        <div className="hidden flex-wrap items-center gap-2 border-b border-border px-5 py-3 sm:flex">
+          {filterControls}
         </div>
       </CardHeader>}
+
+      {!composerOnly && filtersOpen && (
+        <Modal isOpen onClose={closeFilters} title="Transaction filters"
+          className="mx-0 max-w-none rounded-t-2xl" headerClassName="[&_button]:flex [&_button]:size-11 [&_button]:items-center [&_button]:justify-center"
+          contentClassName="p-0">
+          <div className="grid gap-3 p-4">{filterControls}</div>
+          <div className="sticky bottom-0 border-t border-border bg-card px-4 pt-3 pb-[max(1rem,env(safe-area-inset-bottom))]">
+            <Button type="button" onClick={closeFilters} className="h-11 w-full">Done</Button>
+          </div>
+        </Modal>
+      )}
 
       <Modal 
         isOpen={isAdding}
