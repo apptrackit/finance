@@ -360,7 +360,7 @@ describe('dedicated account management', () => {
     fetchMock.mockImplementation(async input => String(input).includes('open.er-api')
       ? Response.json({ rates: { USD: 1, HUF: 360, EUR: 0.9 } }) : Response.json([]))
     render(<AccountList manage accounts={[
-      { id: 'huf', name: 'Local cash', type: 'cash', currency: 'HUF', balance: 30000 },
+      { id: 'huf', name: 'Local cash', type: 'cash', currency: 'HUF', balance: 30000.381 },
       { id: 'eur', name: 'Euro cash', type: 'cash', currency: 'EUR', balance: 100 },
       { id: 'manual-local', name: 'Local asset', type: 'investment', asset_type: 'manual', currency: 'HUF', balance: 30000 },
       { id: 'manual-usd', name: 'Dollar asset', type: 'investment', asset_type: 'manual', currency: 'USD', balance: 100 },
@@ -370,8 +370,8 @@ describe('dedicated account management', () => {
     const editOrder = (group: typeof cashGroup) => group.getAllByRole('button', { name: /^Edit / }).map(button => button.getAttribute('aria-label'))
     await waitFor(() => expect(editOrder(cashGroup)).toEqual(['Edit Euro cash', 'Edit Local cash']))
     expect(editOrder(investmentGroup)).toEqual(['Edit Dollar asset', 'Edit Local asset'])
-    expect(cashGroup.getByText('€100,00')).toBeInTheDocument()
-    expect(cashGroup.getByText(/30\s000 Ft/)).toBeInTheDocument()
+    expect(cashGroup.getByText('€100')).toBeInTheDocument()
+    expect(cashGroup.getByText('30 000,381 Ft')).toBeInTheDocument()
   })
 
   it('does not require an archived currency rate for active account totals', async () => {

@@ -113,6 +113,16 @@ export function formatAmount(
   return decimal === null ? `${sign}${groupedInteger}` : `${sign}${groupedInteger}.${decimal}`
 }
 
+/** Display a stored cash amount with a decimal comma and without rounding. */
+export function formatStoredCashAmount(value: number): string {
+  const formatted = formatAmount(value)
+  const decimalIndex = formatted.indexOf('.')
+  if (decimalIndex === -1) return formatted
+
+  const localized = formatted.replace('.', ',')
+  return formatted.length - decimalIndex === 2 ? localized + '0' : localized
+}
+
 /** Strictly parse an editable amount, returning null for incomplete/invalid drafts. */
 export function parseAmount(
   value: string,

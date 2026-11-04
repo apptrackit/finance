@@ -23,7 +23,7 @@ import { AddAccountForm } from './AddAccountForm'
 import type { AccountFormData } from './account-form'
 import { format } from 'date-fns'
 import { AdjustmentComposer, type AdjustmentSave } from './AdjustmentComposer'
-import { formatAmount, parseAmount } from '../../lib/amount'
+import { formatAmount, formatStoredCashAmount, parseAmount } from '../../lib/amount'
 
 type Account = HoldingFields & {
   id: string
@@ -585,11 +585,8 @@ export function AccountList({ accounts, onAccountAdded, loading, manage = false,
 
   const formatCurrency = (amount: number, currency: string) => {
     const symbol = currencySymbols[currency] || currency
-    const formatted = Math.abs(amount).toLocaleString('hu-HU', {
-      minimumFractionDigits: currency === 'HUF' ? 0 : 2,
-      maximumFractionDigits: currency === 'HUF' ? 0 : 2
-    })
- const sign = amount < 0 ? '−' : ''
+    const formatted = formatStoredCashAmount(Math.abs(amount))
+    const sign = amount < 0 ? '−' : ''
     return currency === 'HUF' ? `${sign}${formatted} ${symbol}` : `${sign}${symbol}${formatted}`
   }
 
@@ -1135,7 +1132,7 @@ export function AccountList({ accounts, onAccountAdded, loading, manage = false,
                         <span className="block truncate text-xs text-muted-foreground">{archived ? `Archived ${new Date(account.archived_at!).toLocaleDateString()}` : `${account.type === 'cash' ? 'Cash / bank' : account.asset_type === 'manual' ? 'Manual asset' : `${account.asset_type?.toUpperCase() || 'Investment'}${account.pricing_method === 'manual' ? ' · Manual price' : account.symbol ? ` · ${account.symbol}` : ''}`} · ${account.currency}`}</span>
                         {Boolean(account.exclude_from_net_worth || account.exclude_from_cash_balance) && <span className="block text-[11px] text-muted-foreground">{[account.exclude_from_net_worth && 'Excluded from net worth', account.exclude_from_cash_balance && 'Excluded from cash balance'].filter(Boolean).join(' · ')}</span>}
                       </span>
-                      <span className="max-w-full text-right text-sm font-semibold tabular-nums">{hidden ? '••••••' : market ? `${account.balance.toLocaleString('hu-HU', { maximumFractionDigits: 12 })} ${account.currency}` : formatCurrency(account.balance, account.currency)}
+                      <span className="max-w-full break-words text-right text-sm font-semibold tabular-nums">{hidden ? '••••••' : market ? `${formatAmount(account.balance).replace('.', ',')} ${account.currency}` : formatCurrency(account.balance, account.currency)}
                         {market && <span className="block text-xs font-normal text-muted-foreground">{hidden ? '••••••' : archived ? 'No position' : formatHufTotal(accountValues[account.id])}</span>}
                         {!archived && <span className="mt-2 flex items-center justify-end gap-2 text-[11px] font-normal text-muted-foreground">
                           <span aria-hidden="true" className="h-1 w-16 overflow-hidden rounded-full bg-secondary sm:w-24"><span className={`block h-full rounded-full ${account.type === 'investment' ? 'bg-violet-400' : 'bg-primary'}`} style={{ width: `${hidden ? 0 : share ?? 0}%` }} /></span>

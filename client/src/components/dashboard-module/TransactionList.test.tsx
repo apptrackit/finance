@@ -284,7 +284,7 @@ describe('dashboard transaction presentation', () => {
     expect(within(queue).getByText('Due bill')).toBeInTheDocument()
     expect(within(queue).getByText('Future draft')).toBeInTheDocument()
     expect(screen.getByRole('region', { name: 'Confirmation balance preview' })).toHaveTextContent('Savings: 900 HUF → 300 HUF')
-    expect(screen.getByRole('region', { name: 'Confirmation balance preview' })).toHaveTextContent('Travel: 110,00 EUR → 120,00 EUR')
+    expect(screen.getByRole('region', { name: 'Confirmation balance preview' })).toHaveTextContent('Travel: 110 EUR → 120 EUR')
     expect(within(queue).queryByRole('button', { name: 'Confirm MCP draft' })).not.toBeInTheDocument()
     await user.click(within(queue).getByRole('button', { name: 'Confirm transfer review draft' }))
     await waitFor(() => expect(within(queue).queryByText('Draft transfer')).not.toBeInTheDocument())
@@ -328,10 +328,14 @@ describe('dashboard transaction presentation', () => {
     renderTransfers({ transactions: [...postedTransfer,
       { id: 'expense', account_id: 'source', amount: -20000, date: '2020-01-01', description: 'Groceries' },
       { id: 'foreign', account_id: 'destination', amount: -4.2, date: '2020-01-01', description: 'Coffee' },
-    ], convertToMasterCurrency: (amount, id) => id === 'destination' ? amount * 400 : amount })
-    expect(screen.getByLabelText('Daily total')).toHaveTextContent('−21 680 HUF')
+      { id: 'interest', account_id: 'source', amount: 0.38, date: '2020-01-01', description: 'Interest' },
+    ], convertToMasterCurrency: (amount, id) => id === 'destination' ? amount * 400.1 : amount })
+    expect(screen.getByLabelText('Daily total')).toHaveTextContent('−21 680,04 HUF')
     expect(screen.getByText('−20 000 HUF')).toBeInTheDocument()
-    expect(screen.getByText('≈ 1 680 HUF')).toBeInTheDocument()
+    expect(screen.getByText('≈ 1 680,42 HUF')).toBeInTheDocument()
+    expect(screen.getByText('+0,38 HUF')).toBeInTheDocument()
+    expect(screen.getByText('→ 10 EUR')).toBeInTheDocument()
+    expect(screen.getByText('−4,20 EUR')).toBeInTheDocument()
     expect(screen.getByText('100 HUF')).not.toHaveClass('text-destructive')
     await user.click(screen.getByRole('button', { name: 'Transfers', exact: true }))
     expect(screen.queryByLabelText('Daily total')).not.toBeInTheDocument()
@@ -393,7 +397,7 @@ describe('confirmation balance preview', () => {
     await user.type(screen.getByRole('searchbox', { name: 'Filter transactions' }), 'Travel')
     const preview = screen.getByRole('region', { name: 'Confirmation balance preview' })
     expect(preview).toHaveTextContent('Savings: 900 HUF → 800 HUF')
-    expect(preview).toHaveTextContent('Travel: 110,00 EUR → 120,00 EUR')
+    expect(preview).toHaveTextContent('Travel: 110 EUR → 120 EUR')
     expect(preview).not.toHaveTextContent('Other cash')
   })
 

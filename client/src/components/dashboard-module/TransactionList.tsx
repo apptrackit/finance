@@ -21,7 +21,7 @@ import { useAlert } from '../../context/AlertContext'
 import { SplitLinesEditor } from './SplitLinesEditor'
 import { resolveSplit, startSplit, newSplitLine, toSplitPayloadLines, type SplitLineDraft } from '../../lib/transaction-split'
 import { AmountInput } from '../common/amount-input'
-import { formatAmount, formatCalculatedAmount, parseAmount } from '../../lib/amount'
+import { formatAmount, formatCalculatedAmount, formatStoredCashAmount, parseAmount } from '../../lib/amount'
 import type { PendingKind } from '../../lib/transaction-review'
 import { getMcpReviewItems, hasPossibleDuplicateFlag, isMcpReviewTransaction } from '../../lib/transaction-review'
 import { TransactionCalendar } from './TransactionCalendar'
@@ -1347,10 +1347,13 @@ export function TransactionList({
   const nativeAmount = (value: number, accountId: string, signed = true, unitLabel?: string) => {
     const account = accounts.find(a => a.id === accountId)
     if (privacyMode === 'hidden' || (account?.type === 'investment' && shouldHideInvestment())) return '••••••'
-    const digits = account?.type === 'investment' ? 12 : account?.currency === 'HUF' ? 0 : 2
-    return `${signed ? value > 0 ? '+' : value < 0 ? '−' : '' : ''}${formatCalculatedAmount(Math.abs(value), { minimumFractionDigits: digits === 2 ? 2 : 0, maximumFractionDigits: digits }).replace('.', ',')} ${unitLabel || getAccountCurrency(accountId)}`
+    const amount = Math.abs(value)
+    const formatted = account?.type === 'investment'
+      ? formatCalculatedAmount(amount, { maximumFractionDigits: 12 }).replace('.', ',')
+      : formatStoredCashAmount(amount)
+    return `${signed ? value > 0 ? '+' : value < 0 ? '−' : '' : ''}${formatted} ${unitLabel || getAccountCurrency(accountId)}`
   }
-  const convertedAmount = (value: number | null) => value === null ? 'Total unavailable' : privacyMode === 'hidden' ? '••••••' : `${value > 0 ? '+' : value < 0 ? '−' : ''}${formatCalculatedAmount(Math.abs(value), { maximumFractionDigits: masterCurrency === 'HUF' ? 0 : 2 }).replace('.', ',')} ${masterCurrency}`
+  const convertedAmount = (value: number | null) => value === null ? 'Total unavailable' : privacyMode === 'hidden' ? '••••••' : `${value > 0 ? '+' : value < 0 ? '−' : ''}${formatCalculatedAmount(Math.abs(value), { maximumFractionDigits: 2 }).replace('.', ',')} ${masterCurrency}`
   const convertCash = (tx: Transaction) => {
     const account = accounts.find(a => a.id === tx.account_id)
     if (!account || account.type === 'investment') return null
