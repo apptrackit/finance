@@ -10,7 +10,10 @@ export function AnalyticsPage() {
   const { finance, masterCurrency, outlook } = useOutletContext<FinancePageContext>()
   const { dataStatus } = finance
   const categoriesReady = dataStatus.categories.loaded && !dataStatus.categories.loading && !dataStatus.categories.error
-  const parseFilters = useCallback((params: URLSearchParams) => parseAnalyticsFilters(params, new Date(), categoriesReady ? finance.categories : undefined), [categoriesReady, finance.categories])
+  const accountsStatus = finance.dataStatus.accounts
+  const accountsReady = accountsStatus.loaded && !accountsStatus.loading && !accountsStatus.error
+  const parseFilters = useCallback((params: URLSearchParams) => parseAnalyticsFilters(params, new Date(), categoriesReady ? finance.categories : undefined,
+    accountsReady ? finance.accounts : undefined), [categoriesReady, finance.categories, accountsReady, finance.accounts])
   const [filters, updateFilters] = useUrlFilters(parseFilters, analyticsSearch)
   const projectionReady = dataStatus.upcoming.loaded && !dataStatus.upcoming.loading && !dataStatus.upcoming.error
   const comparisonReady = [dataStatus.accounts, dataStatus.history].every(status => status.loaded && !status.loading && !status.error)

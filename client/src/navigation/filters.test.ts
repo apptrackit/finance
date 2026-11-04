@@ -51,3 +51,16 @@ describe('view URL contract', () => {
     expect(parseDashboardFilters(params('view=calendar&range=allTime'), today)).toMatchObject({ range: 'allTime', view: 'list' })
   })
 })
+
+
+it('round trips a cash account on both pages and validates only with loaded accounts', () => {
+  const accounts = [{ id: 'archived-cash', type: 'cash', archived_at: 1 }, { id: 'holding', type: 'investment' }]
+  const query = params('account=archived-cash')
+  expect(dashboardSearch(parseDashboardFilters(query, today, undefined, accounts))).toBe(query.toString())
+  expect(analyticsSearch(parseAnalyticsFilters(query, today, undefined, accounts))).toBe(query.toString())
+  for (const parse of [parseDashboardFilters, parseAnalyticsFilters]) {
+    expect(parse(query, today).account).toBe('archived-cash')
+    expect(parse(params('account=holding'), today, undefined, accounts).account).toBe('all')
+    expect(parse(params('account=missing'), today, undefined, accounts).account).toBe('all')
+  }
+})

@@ -20,7 +20,10 @@ export function DashboardPage() {
   const searchRequest = location.state as { transactionSearch?: string } | null
   const { finance, masterCurrency } = useOutletContext<FinancePageContext>()
   const categoriesReady = finance.dataStatus.categories.loaded && !finance.dataStatus.categories.loading && !finance.dataStatus.categories.error
-  const parseFilters = useCallback((params: URLSearchParams) => parseDashboardFilters(params, new Date(), categoriesReady ? finance.categories : undefined), [categoriesReady, finance.categories])
+  const accountsStatus = finance.dataStatus.accounts
+  const accountsReady = accountsStatus.loaded && !accountsStatus.loading && !accountsStatus.error
+  const parseFilters = useCallback((params: URLSearchParams) => parseDashboardFilters(params, new Date(), categoriesReady ? finance.categories : undefined,
+    accountsReady ? finance.accounts : undefined), [categoriesReady, finance.categories, accountsReady, finance.accounts])
   const [filters, updateFilters] = useUrlFilters(parseFilters, dashboardSearch)
   const dateRange = useMemo(() => ({ startDate: filters.startDate, endDate: filters.endDate }), [filters.startDate, filters.endDate])
   const currentMonth = filters.range === 'allTime' ? new Date() : parseISO(filters.startDate)
