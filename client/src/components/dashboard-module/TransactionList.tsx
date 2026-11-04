@@ -74,6 +74,8 @@ type Account = HoldingFields & {
   is_locked?: boolean
 }
 
+type TransactionFilters = Pick<DashboardFilters, 'account' | 'category' | 'sort'> & { search: string }
+
 type Category = {
   id: string
   name: string
@@ -173,8 +175,9 @@ export function TransactionList({
   const [fetchedCategories, setCategories] = useState<Category[]>([])
   const categories = availableCategories ?? fetchedCategories
   const [upcomingOpen, setUpcomingOpen] = useState(false)
-  const [filtersOpen, setFiltersOpen] = useState(false)
-  const closeFilters = useCallback(() => setFiltersOpen(false), [])
+  const [filterDraft, setFilterDraft] = useState<TransactionFilters | null>(null)
+  const filtersOpen = filterDraft !== null
+  const closeFilters = useCallback(() => setFilterDraft(null), [])
   useEffect(() => {
     if (!filtersOpen) return
     const desktop = window.matchMedia('(min-width: 640px)')
@@ -220,10 +223,8 @@ export function TransactionList({
   const matchesAccount = (tx: Transaction) => accountFilter === 'all' || tx.account_id === accountFilter
   const [localCategoryFilter, setCategoryFilterLocal] = useState<string>('all')
   const categoryFilter = filters?.category ?? localCategoryFilter
-  const setCategoryFilter = (value: string) => onFiltersChange ? onFiltersChange({ category: value }) : setCategoryFilterLocal(value)
   const [localSortOrder, setSortOrderLocal] = useState<'date' | 'amount-high' | 'amount-low'>('date')
   const sortOrder = filters?.sort ?? localSortOrder
-  const setSortOrder = (value: 'date' | 'amount-high' | 'amount-low') => onFiltersChange ? onFiltersChange({ sort: value }) : setSortOrderLocal(value)
   const [showAllTransactions, setShowAllTransactions] = useState(false)
   const [localTransactionView, setTransactionViewLocal] = useState<'list' | 'calendar'>('list')
   const transactionView = filters?.view ?? localTransactionView
@@ -1500,22 +1501,37 @@ export function TransactionList({
     if (composerOnly && isAdding) handleCancel()
   }, [navigationKey, composerOnly, isAdding, handleCancel])
 
-  const filterControls = (<>
+  const appliedFilters: TransactionFilters = { account: accountFilter, category: categoryFilter, sort: sortOrder, search: searchQuery }
+  const applyFilterChanges = ({ search, ...patch }: Partial<TransactionFilters>) => {
+    if (search !== undefined) setSearchQuery(search)
+    if (onFiltersChange) {
+      if (Object.keys(patch).length > 0) onFiltersChange(patch)
+    } else {
+      if (patch.account !== undefined) setLocalAccountFilter(patch.account)
+      if (patch.category !== undefined) setCategoryFilterLocal(patch.category)
+      if (patch.sort !== undefined) setSortOrderLocal(patch.sort)
+    }
+  }
+
+  const filterControls = (
+    { account, category: selectedCategory, sort, search }: TransactionFilters,
+    onChange: (patch: Partial<TransactionFilters>) => void,
+  ) => (<>
     <div className="relative min-w-0 flex-[1_1_180px] xl:max-w-[220px]">
       <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-      <input type="search" aria-label="Filter transactions" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Search transactions..." className="h-11 sm:h-10 w-full rounded-lg border border-border bg-background pl-8 pr-3 text-base sm:text-[13px] outline-none focus:ring-1 focus:ring-primary" />
+      <input type="search" aria-label="Filter transactions" value={search} onChange={e => onChange({ search: e.target.value })} placeholder="Search transactions..." className="h-11 sm:h-10 w-full rounded-lg border border-border bg-background pl-8 pr-3 text-base sm:text-[13px] outline-none focus:ring-1 focus:ring-primary" />
     </div>
     <div className="grid grid-cols-4 items-center gap-1 sm:flex sm:gap-0.5" role="group" aria-label="Transaction type">
-      {([['all', 'All'], ['all-expenses', 'Expenses'], ['all-income', 'Income'], ['transfer', 'Transfers']] as const).map(([value, label]) => <button key={value} type="button" aria-pressed={categoryFilter === value} onClick={() => setCategoryFilter(value)} className={cn('min-h-11 sm:min-h-10 rounded-lg border px-1 text-xs sm:px-3 sm:text-[13px]', categoryFilter === value ? 'border-border bg-secondary font-medium' : 'border-transparent text-muted-foreground hover:bg-secondary')}>{label}</button>)}
+      {([['all', 'All'], ['all-expenses', 'Expenses'], ['all-income', 'Income'], ['transfer', 'Transfers']] as const).map(([value, label]) => <button key={value} type="button" aria-pressed={selectedCategory === value} onClick={() => onChange({ category: value })} className={cn('min-h-11 sm:min-h-10 rounded-lg border px-1 text-xs sm:px-3 sm:text-[13px]', selectedCategory === value ? 'border-border bg-secondary font-medium' : 'border-transparent text-muted-foreground hover:bg-secondary')}>{label}</button>)}
     </div>
-    <Select value={['all', 'all-expenses', 'all-income', 'transfer'].includes(categoryFilter) ? 'all' : categoryFilter} aria-label="Transaction category" onChange={e => setCategoryFilter(e.target.value)} className="h-11 w-full min-w-0 sm:h-10 sm:w-auto text-base sm:text-[13px] sm:max-w-44">
+    <Select value={['all', 'all-expenses', 'all-income', 'transfer'].includes(selectedCategory) ? 'all' : selectedCategory} aria-label="Transaction category" onChange={e => onChange({ category: e.target.value })} className="h-11 w-full min-w-0 sm:h-10 sm:w-auto text-base sm:text-[13px] sm:max-w-44">
       <option value="all">All categories</option>
-      {!['all', 'all-expenses', 'all-income', 'transfer'].includes(categoryFilter) && !categories.some(category => category.id === categoryFilter) && <option value={categoryFilter}>Selected category (unavailable)</option>}
+      {!['all', 'all-expenses', 'all-income', 'transfer'].includes(selectedCategory) && !categories.some(category => category.id === selectedCategory) && <option value={selectedCategory}>Selected category (unavailable)</option>}
       {(['expense', 'income'] as const).map(type => <optgroup key={type} label={type === 'expense' ? 'Expenses' : 'Income'}>{categories.filter(c => c.type === type).map(cat => <option key={cat.id} value={cat.id}>{cat.icon} {cat.name}</option>)}</optgroup>)}
     </Select>
-    <AccountFilterSelect accounts={accounts} value={accountFilter} onChange={setAccountFilter}
+    <AccountFilterSelect accounts={accounts} value={account} onChange={value => onChange({ account: value })}
       label="Transaction account" className="w-full sm:w-52" selectClassName="h-11 text-base sm:h-10 sm:text-sm" />
-    <Select value={sortOrder} aria-label="Transaction sort order" onChange={e => setSortOrder(e.target.value as typeof sortOrder)} className="h-11 w-full min-w-0 sm:h-10 sm:w-auto text-base sm:text-[13px] sm:max-w-36">
+    <Select value={sort} aria-label="Transaction sort order" onChange={e => onChange({ sort: e.target.value as TransactionFilters['sort'] })} className="h-11 w-full min-w-0 sm:h-10 sm:w-auto text-base sm:text-[13px] sm:max-w-36">
       <option value="date">Newest</option><option value="amount-high">High to low</option><option value="amount-low">Low to high</option>
     </Select>
   </>)
@@ -1531,19 +1547,19 @@ export function TransactionList({
           </div>
           <Button onClick={() => isAdding ? handleCancel() : handleOpenForm()} size="sm" className="hidden h-10 px-3 sm:inline-flex"><Plus className="mr-1 h-4 w-4" />New</Button>
         </div>
-        <div className="flex items-center justify-between border-b border-border px-4 py-2 sm:hidden"><button type="button" aria-haspopup="dialog" aria-expanded={filtersOpen} onClick={() => setFiltersOpen(true)} className="flex min-h-11 items-center gap-2 text-[13px] text-muted-foreground"><SlidersHorizontal className="h-4 w-4" />Filters{accountFilter !== 'all' || categoryFilter !== 'all' || sortOrder !== 'date' || searchQuery ? ' · active' : ''}</button><button type="button" onClick={() => transactionView === 'calendar' ? setTransactionView('list') : openCalendar()} className="min-h-10 px-2 text-[13px] text-muted-foreground">{transactionView === 'calendar' ? 'List view' : 'Calendar view'}</button></div>
+        <div className="flex items-center justify-between border-b border-border px-4 py-2 sm:hidden"><button type="button" aria-haspopup="dialog" aria-expanded={filtersOpen} onClick={() => setFilterDraft(appliedFilters)} className="flex min-h-11 items-center gap-2 text-[13px] text-muted-foreground"><SlidersHorizontal className="h-4 w-4" />Filters{accountFilter !== 'all' || categoryFilter !== 'all' || sortOrder !== 'date' || searchQuery ? ' · active' : ''}</button><button type="button" onClick={() => transactionView === 'calendar' ? setTransactionView('list') : openCalendar()} className="min-h-10 px-2 text-[13px] text-muted-foreground">{transactionView === 'calendar' ? 'List view' : 'Calendar view'}</button></div>
         <div className="hidden flex-wrap items-center gap-2 border-b border-border px-5 py-3 sm:flex">
-          {filterControls}
+          {filterControls(appliedFilters, applyFilterChanges)}
         </div>
       </CardHeader>}
 
-      {!composerOnly && filtersOpen && (
+      {!composerOnly && filterDraft && (
         <Modal isOpen onClose={closeFilters} title="Transaction filters"
           className="mx-0 max-w-none rounded-t-2xl" headerClassName="[&_button]:flex [&_button]:size-11 [&_button]:items-center [&_button]:justify-center"
           contentClassName="p-0">
-          <div className="grid gap-3 p-4">{filterControls}</div>
+          <div className="grid gap-3 p-4">{filterControls(filterDraft, patch => setFilterDraft(current => current && { ...current, ...patch }))}</div>
           <div className="sticky bottom-0 border-t border-border bg-card px-4 pt-3 pb-[max(1rem,env(safe-area-inset-bottom))]">
-            <Button type="button" onClick={closeFilters} className="h-11 w-full">Done</Button>
+            <Button type="button" onClick={() => { applyFilterChanges(filterDraft); closeFilters() }} className="h-11 w-full">Done</Button>
           </div>
         </Modal>
       )}
