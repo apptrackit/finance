@@ -6,6 +6,7 @@ import { FinanceDataBoundary } from '../common/FinanceDataStatus'
 import type { useFinancialOutlookData } from '../../hooks/useFinancialOutlookData'
 import { useState, useMemo, useEffect, useCallback } from 'react'
 import { Card, CardContent } from '../common/card'
+import { AccountFilterSelect } from '../common/AccountFilterSelect'
 import { Button } from '../common/button'
 import { Calendar, ChevronLeft, ChevronRight, SlidersHorizontal } from 'lucide-react'
 import { loadWidgetVisibility, saveWidgetVisibility, type WidgetId } from './widgetConfig'
@@ -52,10 +53,10 @@ type AnalyticsProps = {
 }
 
 export function Analytics({
-  transactions,
-  upcomingTransactions = [],
+  transactions: allTransactions,
+  upcomingTransactions: allUpcomingTransactions = [],
   categories,
-  accounts,
+  accounts: allAccounts,
   masterCurrency = 'HUF',
   exchangeRates = {},
   loading = false,
@@ -68,13 +69,20 @@ export function Analytics({
 }: AnalyticsProps) {
   const [localFilters, setLocalFilters] = useState<AnalyticsFilters>(() => ({
     period: 'month', date: format(startOfMonth(new Date()), 'yyyy-MM-dd'), pinned: false,
-    mode: 'actual', expenseCategory: 'all', incomeCategory: 'all', resolution: 'default',
+    account: 'all', mode: 'actual', expenseCategory: 'all', incomeCategory: 'all', resolution: 'default',
   }))
   const viewFilters = filters ?? localFilters
   const changeFilters = useCallback((patch: Partial<AnalyticsFilters>, replace = false) => {
     if (onFiltersChange) onFiltersChange(patch, replace)
     else setLocalFilters(previous => ({ ...previous, ...patch }))
   }, [onFiltersChange])
+  const accountFilter = viewFilters.account
+  const accounts = useMemo(() => accountFilter === 'all' ? allAccounts
+    : allAccounts.filter(account => account.id === accountFilter), [allAccounts, accountFilter])
+  const transactions = useMemo(() => accountFilter === 'all' ? allTransactions
+    : allTransactions.filter(tx => tx.account_id === accountFilter), [allTransactions, accountFilter])
+  const upcomingTransactions = useMemo(() => accountFilter === 'all' ? allUpcomingTransactions
+    : allUpcomingTransactions.filter(tx => tx.account_id === accountFilter), [allUpcomingTransactions, accountFilter])
   const period = viewFilters.period
   const projectionMode = viewFilters.mode
   const selectedExpenseCategory = viewFilters.expenseCategory
@@ -217,11 +225,11 @@ export function Analytics({
   )
 
   const convertToHuf = useCallback((amount: number, accountId: string): number | null => {
-    const account = accounts.find(item => item.id === accountId)
+    const account = allAccounts.find(item => item.id === accountId)
     if (!account) return null
     if (account.currency === 'HUF') return amount
     return convertCurrency(amount, account.currency, 'HUF', exchangeRates, masterCurrency).value
-  }, [accounts, exchangeRates, masterCurrency])
+  }, [allAccounts, exchangeRates, masterCurrency])
 
   // Filter transactions by period (exclude investment accounts only)
   const filteredTransactions = useMemo(() => {
@@ -909,6 +917,8 @@ export function Analytics({
       */}
       <div className="sticky top-[76px] lg:top-0 z-40 w-full border-b border-border/70 bg-canvas py-2.5">
         <div className="flex flex-wrap items-center gap-2">
+          <AccountFilterSelect accounts={allAccounts} value={accountFilter} onChange={account => changeFilters({ account })}
+            label="Analytics account" className="w-full min-[430px]:w-52" />
           <div className="flex gap-1 p-1 rounded-xl bg-background/80 border border-border/70 shadow-inner w-full min-[430px]:w-auto">
             {(Object.keys(periodLabels) as TimePeriod[]).map((p) => (
               <button
@@ -995,7 +1005,9 @@ export function Analytics({
                   <Calendar className="h-6 w-6 text-muted-foreground" />
                 </div>
                 <p className="text-sm text-muted-foreground">No transactions for {period === 'allTime' ? 'all time' : periodDisplayLabel.toLowerCase()}</p>
-                <p className="text-xs text-muted-foreground/70 mt-1">Add some transactions to see analytics</p>
+                {accountFilter === 'all' ? <p className="text-xs text-muted-foreground/70 mt-1">Add some transactions to see analytics</p>
+                  : <><p className="mt-1 text-xs text-muted-foreground">This account has no activity in the selected period.</p>
+                    <Button variant="outline" size="sm" className="mt-3" onClick={() => changeFilters({ account: 'all' })}>Show all accounts</Button></>}
               </div>
             </CardContent>
           </Card>
@@ -1093,6 +1105,7 @@ export function Analytics({
 
       {show('ai-financial-forecast') && (
         <FinanceDataBoundary label="AI Financial Forecast" datasets={outlook ? [{ label: 'Financial forecasts', status: outlook.status }] : []}>
+        {accountFilter !== 'all' && <p className="mb-2 text-sm text-muted-foreground">The saved forecast covers all accounts.</p>}
         <FinancialOutlook
           snapshot={selectedOutlook}
           history={outlookHistory}
@@ -1101,8 +1114,8 @@ export function Analytics({
           onSelect={setSelectedOutlookId}
           onLoadMore={loadMoreOutlooks}
           hasMore={Boolean(outlookNextCursor)}
-          transactions={transactions}
-          accounts={accounts}
+          transactions={allTransactions}
+          accounts={allAccounts}
           convertToHuf={convertToHuf}
         />
         </FinanceDataBoundary>

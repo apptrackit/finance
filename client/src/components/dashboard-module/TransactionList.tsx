@@ -10,6 +10,7 @@ import { useState, useEffect, useRef } from 'react'
 import { Button } from '../common/button'
 import { Input } from '../common/input'
 import { Label } from '../common/label'
+import { AccountFilterSelect } from '../common/AccountFilterSelect'
 import { Select } from '../common/select'
 import { Card, CardContent, CardHeader, CardTitle } from '../common/card'
 import { Modal } from '../common/modal'
@@ -205,6 +206,10 @@ export function TransactionList({
     manual_price: false,
   })
   const editedTransferPairRef = useRef<string | null>(null)
+  const [localAccountFilter, setLocalAccountFilter] = useState('all')
+  const accountFilter = filters?.account ?? localAccountFilter
+  const setAccountFilter = (account: string) => onFiltersChange ? onFiltersChange({ account }) : setLocalAccountFilter(account)
+  const matchesAccount = (tx: Transaction) => accountFilter === 'all' || tx.account_id === accountFilter
   const [localCategoryFilter, setCategoryFilterLocal] = useState<string>('all')
   const categoryFilter = filters?.category ?? localCategoryFilter
   const setCategoryFilter = (value: string) => onFiltersChange ? onFiltersChange({ category: value }) : setCategoryFilterLocal(value)
@@ -256,7 +261,7 @@ export function TransactionList({
   // Reset showAllTransactions when filter, sort, search, or date range changes
   useEffect(() => {
     setShowAllTransactions(false)
-  }, [categoryFilter, sortOrder, searchQuery, dateRange])
+  }, [accountFilter, categoryFilter, sortOrder, searchQuery, dateRange])
 
   useEffect(() => {
     onCalendarViewChange?.(transactionView === 'calendar')
@@ -1254,7 +1259,7 @@ export function TransactionList({
       : categoryFilter === 'all-income' ? (tx.amount > 0 && !tx.linked_transaction_id)
       : categoryFilter === 'transfer' ? !!tx.linked_transaction_id
       : tx.category_id === categoryFilter
-    return catMatch && matchesSearch(tx)
+    return matchesAccount(tx) && catMatch && matchesSearch(tx)
   }
 
   const visibleUpcomingTransactions = upcomingTransactions.filter(tx => !resolvedPendingIds.has(tx.id))
@@ -1270,7 +1275,7 @@ export function TransactionList({
       return [{ ...group[0], id: `split:${tx.split_id}`, description: tx.split_description, amount: group.reduce((sum, line) => sum + line.amount, 0), splitGroup: group }]
     })
   }
-  const standardPendingCount = visibleUpcomingTransactions.filter(tx => !isMcpReviewTransaction(tx)).length
+  const standardPendingCount = visibleUpcomingTransactions.filter(tx => !isMcpReviewTransaction(tx) && matchesAccount(tx)).length
   const mcpReviewTransactions = groupPendingSplits(getMcpReviewItems(visibleUpcomingTransactions, applyFilters))
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
   const mcpReviewCount = mcpReviewTransactions.length
@@ -1284,7 +1289,8 @@ export function TransactionList({
 
   const readyTransactions = pendingFilteredTransactions.filter(tx => tx.date <= today)
   const futureTransactions = pendingFilteredTransactions.filter(tx => tx.date > today)
-  const totalFilteredCount = transactions.filter(applyFilters).length
+  const filteredPostedTransactions = transactions.filter(applyFilters)
+  const totalFilteredCount = filteredPostedTransactions.length
     + pendingFilteredTransactions.length
     + mcpReviewTransactions.length
 
@@ -1490,7 +1496,9 @@ export function TransactionList({
     <Card className={composerOnly ? "contents" : undefined}>
       {!composerOnly && <CardHeader className="space-y-0 p-0 sm:p-0">
         <div className="flex flex-wrap items-center gap-2 border-b border-border px-4 py-3 sm:px-5">
-          <div className="min-w-0 flex-1"><CardTitle className="text-[15px]">Transactions</CardTitle><p className="mt-1 text-xs text-muted-foreground">{processTransactions(transactions).length} posted{standardPendingCount > 0 ? ` · ${standardPendingCount} upcoming` : ''}{mcpReviewCount > 0 ? ` · ${mcpReviewCount} MCP drafts` : ''}</p></div>
+          <div className="min-w-0 flex-1"><CardTitle className="text-[15px]">Transactions</CardTitle><p className="mt-1 text-xs text-muted-foreground">{processTransactions(transactions.filter(matchesAccount)).length} posted{standardPendingCount > 0 ? ` · ${standardPendingCount} upcoming` : ''}{mcpReviewCount > 0 ? ` · ${mcpReviewCount} MCP drafts` : ''}</p></div>
+          <AccountFilterSelect accounts={accounts} value={accountFilter} onChange={setAccountFilter}
+            label="Transaction account" className="w-full sm:w-52" />
           <div className="hidden rounded-lg border border-border p-0.5 sm:inline-flex" role="group" aria-label="Transaction view">
             <button type="button" onClick={() => setTransactionView('list')} aria-pressed={transactionView === 'list'} className={cn('min-h-9 rounded-md px-2 text-xs sm:px-3', transactionView === 'list' ? 'bg-secondary font-medium' : 'text-muted-foreground')}>List</button>
             <button type="button" onClick={openCalendar} aria-pressed={transactionView === 'calendar'} className={cn('min-h-9 rounded-md px-2 text-xs sm:px-3', transactionView === 'calendar' ? 'bg-secondary font-medium' : 'text-muted-foreground')}>Calendar</button>
@@ -1736,7 +1744,13 @@ export function TransactionList({
       </Modal>
 
       {!composerOnly && <CardContent className="p-3 sm:p-5">
-        {transactionView === 'calendar' ? <TransactionCalendar transactions={transactions.filter(applyFilters)} accounts={accounts} currentMonth={currentMonth} privacyMode={privacyMode}
+        {transactionView === 'calendar' && accountFilter !== 'all' && !loading && filteredPostedTransactions.length === 0 &&
+          <div className="mb-3 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+            <p>No matching posted transactions for this account.</p>
+            <Button variant="outline" size="sm" onClick={() => setAccountFilter('all')}>Show all accounts</Button>
+          </div>}
+        {transactionView === 'calendar' ? <TransactionCalendar transactions={filteredPostedTransactions} linkedTransactions={accountFilter !== 'all' ? transactions : undefined}
+          accountFiltered={accountFilter !== 'all'} accounts={accounts} currentMonth={currentMonth} privacyMode={privacyMode}
           getCategoryName={getCategoryName} getCategoryIcon={getCategoryIcon} getAccountName={getAccountName} getAccountCurrency={getAccountCurrency} convertToMasterCurrency={convertToMasterCurrency} masterCurrency={masterCurrency} sortOrder={sortOrder} />
         : <div className="space-y-4">
           {reviewTransactions.length > 0 && <section aria-labelledby="review-heading" className="overflow-hidden rounded-xl border border-border">
@@ -1756,7 +1770,7 @@ export function TransactionList({
             {upcomingOpen && <div id="future-transactions">{futureTransactions.map(tx => renderPendingTransaction(tx, false))}</div>}
           </section>}
           {(() => {
-            const allProcessed = sortOrder === 'date' ? sortedDates.flatMap(date => processTransactions(groupedTransactions[date].filter(applyFilters))) : processTransactions(transactions.filter(applyFilters)).sort((a, b) => sortOrder === 'amount-high' ? Math.abs(b.amount) - Math.abs(a.amount) : Math.abs(a.amount) - Math.abs(b.amount))
+            const allProcessed = sortOrder === 'date' ? sortedDates.flatMap(date => processTransactions(groupedTransactions[date].filter(applyFilters))) : processTransactions(filteredPostedTransactions).sort((a, b) => sortOrder === 'amount-high' ? Math.abs(b.amount) - Math.abs(a.amount) : Math.abs(a.amount) - Math.abs(b.amount))
             const shown = showAllTransactions ? allProcessed : allProcessed.slice(0, DISPLAY_LIMIT)
             return <>
               {sortOrder === 'date' ? sortedDates.map(date => {
@@ -1776,8 +1790,9 @@ export function TransactionList({
           })()}
           {loading && transactions.length === 0 && upcomingTransactions.length === 0 && <div role="status" className="py-8 text-center text-sm text-muted-foreground">Loading transactions…</div>}
           {!loading && totalFilteredCount === 0 && !isAdding && <div className="py-12 text-center">
-            <Receipt className="mx-auto mb-3 h-8 w-8 text-muted-foreground" /><p className="text-sm text-muted-foreground">{transactions.length === 0 && upcomingTransactions.length === 0 ? 'No transactions yet' : 'No transactions found'}</p>
+            <Receipt className="mx-auto mb-3 h-8 w-8 text-muted-foreground" /><p className="text-sm text-muted-foreground">{accountFilter !== 'all' ? 'No matching transactions for this account' : transactions.length === 0 && upcomingTransactions.length === 0 ? 'No transactions yet' : 'No transactions found'}</p>
             <p className="mt-1 text-xs text-muted-foreground">{transactions.length === 0 && upcomingTransactions.length === 0 ? 'Record your first transaction to start tracking' : 'Try changing the filters or period.'}</p>
+            {accountFilter !== 'all' && <Button variant="outline" size="sm" className="mt-3" onClick={() => setAccountFilter('all')}>Show all accounts</Button>}
             {searchQuery && !isAllTimeRange(dateRange) && <Button variant="outline" size="sm" className="mt-3" onClick={() => onDateRangeChange(ALL_TIME_RANGE)}>Search in All Time</Button>}
           </div>}
         </div>}

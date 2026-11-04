@@ -2,8 +2,11 @@ import { endOfMonth, format, isValid, parseISO, startOfMonth } from 'date-fns'
 import type { IncomeExpensesTrendResolution } from '../components/analytics-module/IncomeExpensesTrendChart'
 import type { TimePeriod } from '../components/analytics-module/types'
 
+type CashAccountOption = { id: string; type: string }
+
 type Category = { id: string; type: 'income' | 'expense' }
 export type DashboardFilters = {
+  account: string
   range: 'current' | 'custom' | 'allTime'
   startDate: string
   endDate: string
@@ -12,6 +15,7 @@ export type DashboardFilters = {
   view: 'list' | 'calendar'
 }
 export type AnalyticsFilters = {
+  account: string
   period: TimePeriod
   date: string
   pinned: boolean
@@ -33,11 +37,18 @@ function category(value: string | null, categories?: Category[], type?: Category
   return !categories || categories.some(item => item.id === value && (!type || item.type === type)) ? value : 'all'
 }
 
-export function parseDashboardFilters(params: URLSearchParams, today = new Date(), categories?: Category[]): DashboardFilters {
+function accountFilter(params: URLSearchParams, accounts?: CashAccountOption[]): string {
+  const value = params.get('account')
+  if (!value || value === 'all' || value.length > 128) return 'all'
+  return !accounts || accounts.some(item => item.id === value && item.type === 'cash') ? value : 'all'
+}
+
+export function parseDashboardFilters(params: URLSearchParams, today = new Date(), categories?: Category[], accounts?: CashAccountOption[]): DashboardFilters {
   const from = params.get('from'), to = params.get('to')
   const allTime = params.get('range') === 'allTime' || (from === '1900-01-01' && to === '2100-12-31')
   const custom = !allTime && calendarDate(from) && calendarDate(to) && from <= to
   const filters: DashboardFilters = {
+    account: accountFilter(params, accounts),
     range: allTime ? 'allTime' : custom ? 'custom' : 'current',
     startDate: allTime ? '1900-01-01' : custom ? from : format(startOfMonth(today), 'yyyy-MM-dd'),
     endDate: allTime ? '2100-12-31' : custom ? to : format(endOfMonth(today), 'yyyy-MM-dd'),
@@ -65,10 +76,11 @@ export function dashboardSearch(filters: DashboardFilters): string {
   if (filters.category !== 'all') params.set('category', filters.category)
   if (filters.sort !== 'date') params.set('sort', filters.sort)
   if (filters.view !== 'list') params.set('view', filters.view)
+  if (filters.account !== 'all') params.set('account', filters.account)
   return params.toString()
 }
 
-export function parseAnalyticsFilters(params: URLSearchParams, today = new Date(), categories?: Category[]): AnalyticsFilters {
+export function parseAnalyticsFilters(params: URLSearchParams, today = new Date(), categories?: Category[], accounts?: CashAccountOption[]): AnalyticsFilters {
   const period = params.get('period') === 'year' || params.get('period') === 'allTime' ? params.get('period') as TimePeriod : 'month'
   const month = params.get('month'), year = params.get('year')
   const monthDate = month && /^\d{4}-\d{2}$/.test(month) ? `${month}-01` : null
@@ -76,6 +88,7 @@ export function parseAnalyticsFilters(params: URLSearchParams, today = new Date(
   const explicitDate = period === 'month' ? monthDate : period === 'year' ? yearDate : null
   const pinned = calendarDate(explicitDate)
   return {
+    account: accountFilter(params, accounts),
     period, date: pinned ? explicitDate : format(startOfMonth(today), 'yyyy-MM-dd'), pinned,
     mode: params.get('mode') === 'projected' ? 'projected' : 'actual',
     expenseCategory: category(params.get('expenseCategory'), categories, 'expense'),
@@ -94,5 +107,6 @@ export function analyticsSearch(filters: AnalyticsFilters): string {
   if (filters.expenseCategory !== 'all') params.set('expenseCategory', filters.expenseCategory)
   if (filters.incomeCategory !== 'all') params.set('incomeCategory', filters.incomeCategory)
   if (filters.resolution !== 'default') params.set('resolution', filters.resolution)
+  if (filters.account !== 'all') params.set('account', filters.account)
   return params.toString()
 }

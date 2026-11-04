@@ -67,11 +67,35 @@ describe('Analytics Projected mode', () => {
     vi.useRealTimers()
   })
 
+  it('scopes actual and projected totals and ignores unrelated missing exchange rates', () => {
+    render(<Analytics
+      accounts={[
+        { ...accounts[0], type: 'cash' },
+        { id: 'foreign', name: 'Foreign account', type: 'cash', balance: 300, currency: 'EUR' },
+      ]}
+      transactions={[posted, { ...posted, id: 'foreign-posted', account_id: 'foreign', amount: 300 }]}
+      upcomingTransactions={[
+        upcoming('cash-upcoming', '2026-09-20'),
+        upcoming('foreign-upcoming', '2026-09-21', 50, { account_id: 'foreign' }),
+        upcoming('review', '2026-09-20', 20, { pending_kind: 'mcp_review' }),
+      ]}
+      categories={[]}
+    />)
+    const select = screen.getByRole('combobox', { name: 'Analytics account' })
+    fireEvent.change(select, { target: { value: 'cash' } })
+    expect(income()).toContain('+100')
+    fireEvent.click(screen.getByRole('button', { name: 'Projected (1)' }))
+    expect(income()).toContain('+110')
+    fireEvent.change(select, { target: { value: 'all' } })
+    expect(screen.getByRole('button', { name: 'Projected (2)' })).toBeInTheDocument()
+    expect(screen.getByText(/unavailable until exchange rates recover/)).toBeInTheDocument()
+  })
+
   it('applies the chart range pill to the page filters and returns projected data to Actual in one update', () => {
     localStorage.setItem('analytics-widget-visibility', JSON.stringify({ 'cash-balance-trend': true }))
     const onFiltersChange = vi.fn()
     render(<Analytics transactions={[posted]} upcomingTransactions={[upcoming('future', '2026-09-20')]} accounts={accounts} categories={[]}
-      filters={{ period: 'month', date: '2026-09-01', pinned: false, mode: 'projected', expenseCategory: 'all', incomeCategory: 'all', resolution: 'quarter' }} onFiltersChange={onFiltersChange} />)
+      filters={{ account: 'all', period: 'month', date: '2026-09-01', pinned: false, mode: 'projected', expenseCategory: 'all', incomeCategory: 'all', resolution: 'quarter' }} onFiltersChange={onFiltersChange} />)
     fireEvent.click(within(screen.getByRole('group', { name: 'Cash balance range' })).getByRole('button', { name: '1Y' }))
     expect(onFiltersChange).toHaveBeenCalledExactlyOnceWith({ period: 'year', mode: 'actual', resolution: 'default' }, false)
   })
@@ -210,7 +234,7 @@ describe('Analytics Projected mode', () => {
       { id: 'september', account_id: 'cash', date: '2026-09-05', amount: -100, status: 'posted' },
     ]
     const cash: Account = { id: 'cash', name: 'Cash', type: 'checking', balance: 1000, currency: 'HUF' }
-    const filters = (date: string) => ({ period: 'month' as const, date, pinned: false, mode: 'actual' as const, expenseCategory: 'all', incomeCategory: 'all', resolution: 'default' as const })
+    const filters = (date: string) => ({ account: 'all', period: 'month' as const, date, pinned: false, mode: 'actual' as const, expenseCategory: 'all', incomeCategory: 'all', resolution: 'default' as const })
     const points = () => JSON.parse(screen.getByTestId('account-trend-cash').getAttribute('data-points')!)
     const { rerender } = render(<Analytics accounts={[cash]} transactions={ledger} categories={[]} filters={filters('2026-09-01')} onFiltersChange={vi.fn()} />)
     expect(points()).toHaveLength(15)
