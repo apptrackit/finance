@@ -350,10 +350,10 @@ describe('dedicated account management', () => {
         is_locked: 1, exclude_from_net_worth: 1, exclude_from_cash_balance: 0 },
     ])) as ComponentProps<typeof AccountList>['accounts']
     render(<AccountList manage accounts={legacyAccounts} onAccountAdded={refresh} />)
-    expect(screen.getByRole('button', { name: 'Edit Legacy cash' })).toHaveTextContent(/^Legacy cashCash \/ bank · HUF350 FtShare unavailable$/)
+    expect(screen.getByRole('button', { name: 'Edit Legacy cash' })).toHaveTextContent(/^Legacy cashCash \/ bank · HUF350 HUFShare unavailable$/)
     const locked = screen.getByRole('button', { name: 'View Locked cash' })
     expect(locked).toBeEnabled()
-    expect(locked).toHaveTextContent(/^Locked cashCash \/ bank · HUFExcluded from net worth350 FtShare unavailable$/)
+    expect(locked).toHaveTextContent(/^Locked cashCash \/ bank · HUFExcluded from net worth350 HUFShare unavailable$/)
   })
 
   it('orders management groups by converted value while displaying native balances', async () => {
@@ -370,8 +370,8 @@ describe('dedicated account management', () => {
     const editOrder = (group: typeof cashGroup) => group.getAllByRole('button', { name: /^Edit / }).map(button => button.getAttribute('aria-label'))
     await waitFor(() => expect(editOrder(cashGroup)).toEqual(['Edit Euro cash', 'Edit Local cash']))
     expect(editOrder(investmentGroup)).toEqual(['Edit Dollar asset', 'Edit Local asset'])
-    expect(cashGroup.getByText('€100')).toBeInTheDocument()
-    expect(cashGroup.getByText('30 000,381 Ft')).toBeInTheDocument()
+    expect(cashGroup.getByText('100 EUR')).toBeInTheDocument()
+    expect(cashGroup.getByText('30 000,381 HUF')).toBeInTheDocument()
   })
 
   it('does not require an archived currency rate for active account totals', async () => {
@@ -386,7 +386,7 @@ describe('dedicated account management', () => {
   it('masks native values and never makes an archived account editable', () => {
     privacy.hidden = true
     open()
-    expect(screen.queryByText('0 Ft')).not.toBeInTheDocument()
+    expect(screen.queryByText('0 HUF')).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Old account, archived' }))
     expect(screen.getByRole('dialog', { name: 'Edit account' })).toBeInTheDocument()
     expect(screen.getByLabelText('Name')).toBeDisabled()

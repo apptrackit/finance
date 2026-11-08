@@ -50,15 +50,15 @@ describe('yearly recurring schedules', () => {
   })
 
   it.each([
-    { month: 6, selected: '6', next: '07.31', expenses: '0', calendarCount: 0 },
-    { month: 0, selected: '0', next: '2027.01.31', expenses: '0', calendarCount: 0 },
-    { month: null, selected: '2', next: '03.31', expenses: '-25', calendarCount: 1 },
-    { month: undefined, selected: '2', next: '03.31', expenses: '-25', calendarCount: 1 },
+    { month: 6, selected: '6', next: 'Jul 31', expenses: '0', calendarCount: 0 },
+    { month: 0, selected: '0', next: 'Jan 31, 2027', expenses: '0', calendarCount: 0 },
+    { month: null, selected: '2', next: 'Mar 31', expenses: '−25', calendarCount: 1 },
+    { month: undefined, selected: '2', next: 'Mar 31', expenses: '−25', calendarCount: 1 },
   ])('uses month $month for next date, upcoming impact, calendar and edit defaults', async ({ month, selected, next, expenses, calendarCount }) => {
     vi.stubGlobal('fetch', vi.fn(async () => Response.json([{ ...yearly, month }])))
     render(<RecurringTransactions accounts={accounts} categories={categories} />)
     await screen.findByText('Annual bill')
-    expect(screen.getByText(new RegExp(next.replaceAll('.', '\\.')))).toBeInTheDocument()
+    expect(screen.getByText(new RegExp(next))).toBeInTheDocument()
     const expenseCard = screen.getByText('Next 30 Days Expenses').closest('.rounded-xl') as HTMLElement
     expect(within(expenseCard).getByText(expenses)).toBeInTheDocument()
     expect(screen.queryAllByTitle('Annual bill - Test cash - 25')).toHaveLength(calendarCount)
@@ -84,7 +84,7 @@ describe('yearly recurring schedules', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Update Schedule' }))
     await waitFor(() => expect(screen.queryByText('Edit Recurring Schedule')).not.toBeInTheDocument())
     expect(stored.month).toBe(0)
-    expect(screen.getByText(/2027\.01\.31/)).toBeInTheDocument()
+    expect(screen.getByText(/Jan 31, 2027/)).toBeInTheDocument()
     await openEdit()
     expect(screen.getByLabelText('Month')).toHaveValue('0')
   })
@@ -108,7 +108,7 @@ describe('yearly recurring schedules', () => {
     vi.stubGlobal('fetch', vi.fn(async () => Response.json([{ ...yearly, month: 2 }])))
     render(<RecurringTransactions accounts={accounts} categories={categories} />)
     await screen.findByText('Annual bill')
-    expect(screen.getByText(/03\.31/)).toBeInTheDocument()
+    expect(screen.getByText(/Mar 31/)).toBeInTheDocument()
     expect(screen.getByTitle('Annual bill - Test cash - ••••')).toBeInTheDocument()
     expect(screen.queryByTitle('Annual bill - Test cash - 25')).not.toBeInTheDocument()
   })

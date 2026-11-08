@@ -4,7 +4,7 @@ import type {PortfolioHistoryPoint} from '../../../../shared/investment-history-
 import {PortfolioHistoryTooltip} from './PortfolioHistoryTooltip'
 const point=(value:number|null,invested:number|null):PortfolioHistoryPoint=>({date:'2026-10-03',value,net_invested:invested,contribution:0,withdrawal:0,provisional:false,event:false,coverage:'complete',price_as_of_oldest:'2026-10-02',price_as_of_latest:'2026-10-02',fx_as_of_oldest:'2026-10-02',fx_as_of_latest:'2026-10-02'})
 afterEach(cleanup)
-it.each([[1200,1000,'+200 EUR','+20%'],[800,1000,'-200 EUR','-20%'],[1000,1000,'0 EUR','0%']])('shows selected-day total gain and its ratio (%s)',(value,invested,gain,percent)=>{
+it.each([[1200,1000,'+200 EUR','+20%'],[800,1000,'−200 EUR','−20%'],[1000,1000,'0 EUR','0%']])('shows selected-day total gain and its ratio (%s)',(value,invested,gain,percent)=>{
  render(<PortfolioHistoryTooltip point={point(value,invested)} currency="EUR"/>)
  expect(screen.getByText(gain)).toBeVisible();expect(screen.getByText(percent)).toBeVisible()
  expect(document.querySelector('time')).toHaveAttribute('dateTime','2026-10-03')

@@ -106,7 +106,7 @@ describe('Cash Balance Trend comparison', () => {
     render(<NetWorthTrendChart data={data} masterCurrency="HUF" comparison={result} />)
     toggle()
     expect(screen.getByText('Mar 28 vs Feb 28 · latest shared day')).toBeInTheDocument()
-    expect(screen.getAllByText('-100 HUF').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('−100 HUF').length).toBeGreaterThan(0)
     expect(screen.getByText('The previous month has no matching calendar day.')).toBeInTheDocument()
     expect(screen.getByTestId('tooltip')).not.toHaveTextContent('%')
   })

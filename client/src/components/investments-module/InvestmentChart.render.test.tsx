@@ -160,7 +160,7 @@ it('plots a continuous split-only series and adjusts trade dots without rewritin
  await waitFor(()=>expect(plot.querySelectorAll('.recharts-scatter-symbol')).toHaveLength(2))
  fireEvent.change(screen.getByRole('combobox',{name:'Read instrument history by date'}),{target:{value:'2021-07-19'}})
  expect(screen.getByText('60,00 EUR')).toBeVisible()
- expect(screen.getByRole('list',{name:'Executions on 2021-07-19'})).toHaveTextContent('2400 EUR')
+ expect(screen.getByRole('list',{name:'Executions on 2021-07-19'})).toHaveTextContent(/2\s400 EUR/)
  expect(JSON.stringify({history,trades})).toBe(original)
 })
 

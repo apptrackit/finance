@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { formatCompactNumber, formatDate, formatDateTime, formatMoney, formatNumber, formatPercent, formatSignedNumber, formatTime, MINUS } from './format'
 
-const plain = (value: string) => value.replace(/[  ]/g, ' ')
+const plain = (value: string) => value.replace(/[\u00a0\u202f]/g, ' ')
 
 describe('shared display formatting', () => {
   it('groups every value, including four digits, with a decimal comma and a true minus', () => {

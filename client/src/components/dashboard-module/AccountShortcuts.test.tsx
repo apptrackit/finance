@@ -27,7 +27,7 @@ describe('compact sidebar account groups', () => {
     const investmentGroup = within(screen.getByRole('region', { name: 'Investment account shortcuts' }))
     expect(cashGroup.getAllByRole('link')).toHaveLength(7)
     expect(investmentGroup.getAllByRole('link')).toHaveLength(4)
-    expect(cashGroup.getAllByRole('link')[0]).toHaveTextContent('Cash 11.23M HUF')
+    expect(cashGroup.getAllByRole('link')[0]).toHaveTextContent('Cash 11,23M HUF')
     expect(screen.queryByRole('button', { name: /Show all|Show top 3/ })).not.toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Accounts', exact: true })).toHaveAttribute('href', '/accounts')
     expect(screen.queryByRole('link', { name: /Manage accounts/ })).not.toBeInTheDocument()
@@ -48,7 +48,7 @@ describe('compact sidebar account groups', () => {
 
   it('shows compact cash and investment money, with exact balances and quantities on hover', () => {
     open()
-    const cashLink = screen.getByRole('link', { name: 'Cash 1, 1.23M HUF' })
+    const cashLink = screen.getByRole('link', { name: 'Cash 1, 1,23M HUF' })
     expect(cashLink).toHaveAttribute('title', expect.stringMatching(/1\s234\s567,89 HUF/))
     const investmentLink = screen.getByRole('link', { name: 'Asset 1, 160K HUF' })
     expect(investmentLink).toHaveAttribute('title', expect.stringContaining('Value: 160'))
@@ -59,7 +59,7 @@ describe('compact sidebar account groups', () => {
   it('masks money and every tooltip quantity in privacy mode', () => {
     privacy.hidden = true
     const { container } = open()
-    expect(container).not.toHaveTextContent('1.23M')
+    expect(container).not.toHaveTextContent('1,23M')
     expect(container).not.toHaveTextContent('160K')
     const links = within(screen.getByRole('region', { name: 'Cash account shortcuts' })).getAllByRole('link')
     expect(links[0]).toHaveAttribute('title', 'Cash 1')

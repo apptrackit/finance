@@ -105,7 +105,7 @@ it('searches older history and carries the query into the all-time transaction w
   const { router } = open('/dashboard')
   fireEvent.click(screen.getAllByRole('button', { name: 'Search everything' })[0])
   fireEvent.change(screen.getByRole('combobox', { name: 'Search everything' }), { target: { value: 'Netflix' } })
-  expect(await screen.findByRole('option', { name: /Netflix.*2020-01-05/ })).toBeInTheDocument()
+  expect(await screen.findByRole('option', { name: /Netflix.*Jan 5, 2020/ })).toBeInTheDocument()
   fireEvent.click(screen.getByRole('option', { name: 'View all matching transactions (1)' }))
   await waitFor(() => expect(href(router)).toBe('/dashboard?range=allTime'))
   expect(await screen.findByPlaceholderText('Search transactions...')).toHaveValue('Netflix')
