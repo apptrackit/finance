@@ -24,6 +24,7 @@ import type { AccountFormData } from './account-form'
 import { format } from 'date-fns'
 import { AdjustmentComposer, type AdjustmentSave } from './AdjustmentComposer'
 import { formatAmount, formatStoredCashAmount, parseAmount } from '../../lib/amount'
+import { MINUS, formatDate, formatMoney, formatNumber } from '../../lib/format'
 
 type Account = HoldingFields & {
   id: string
@@ -46,15 +47,6 @@ type Category = {
   name: string
   icon?: string
   type: 'income' | 'expense'
-}
-
-const currencySymbols: Record<string, string> = {
-  HUF: 'Ft',
-  USD: '$',
-  EUR: '€',
-  GBP: '£',
-  CHF: 'CHF',
-  MXN: 'MX$',
 }
 
 type MarketQuote = ClientQuote
@@ -201,7 +193,7 @@ export function AccountList({ accounts, onAccountAdded, loading, manage = false,
   const formatHufTotal = (usdValue: number | null) => {
     if (usdValue === null) return 'Unavailable'
     const result = convertCurrency(usdValue, 'USD', 'HUF', exchangeRates, 'USD')
-    return result.value === null ? 'Unavailable' : `${Math.round(result.value).toLocaleString('hu-HU')} HUF`
+    return result.value === null ? 'Unavailable' : `${formatNumber(Math.round(result.value))} HUF`
   }
   if (accounts.length) convertCurrency(1, 'USD', 'HUF', exchangeRates, 'USD').missingCurrencies.forEach(item => missingCurrencies.add(item))
 
@@ -584,10 +576,9 @@ export function AccountList({ accounts, onAccountAdded, loading, manage = false,
   }
 
   const formatCurrency = (amount: number, currency: string) => {
-    const symbol = currencySymbols[currency] || currency
     const formatted = formatStoredCashAmount(Math.abs(amount))
-    const sign = amount < 0 ? '−' : ''
-    return currency === 'HUF' ? `${sign}${formatted} ${symbol}` : `${sign}${symbol}${formatted}`
+    const sign = amount < 0 ? MINUS : ''
+    return `${sign}${formatted} ${currency}`
   }
 
   // Recording the difference: a single line keeps the account update as it was; several lines are saved as one
@@ -925,12 +916,12 @@ export function AccountList({ accounts, onAccountAdded, loading, manage = false,
                               {privacyMode === 'hidden' || shouldHideInvestment() ? (
                                 '••••••'
                               ) : (
-                                `${account.balance.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 12 })} ${account.currency}`
+                                `${formatNumber(account.balance, { minimumFractionDigits: 0, maximumFractionDigits: 12 })} ${account.currency}`
                               )}
                             </p>
                             {quote?.regularMarketPrice && (
                               <p className="text-xs sm:text-xs text-muted-foreground">
-                                @ {currencySymbols[(quote.currency || account.quote_currency || '').toUpperCase()] || (quote.currency || account.quote_currency || '')} {quote.regularMarketPrice.toFixed(2)}
+                                @ {formatMoney(quote.regularMarketPrice, (quote.currency || account.quote_currency || '').toUpperCase(), { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                               </p>
                             )}
                           </div>
@@ -1129,7 +1120,7 @@ export function AccountList({ accounts, onAccountAdded, loading, manage = false,
                       <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] ${account.type === 'investment' ? 'bg-violet-500/10 text-violet-400' : 'bg-primary/10 text-primary'}`}>{account.type === 'cash' ? <Wallet className="h-[18px] w-[18px]" /> : <span className="text-xs font-bold">{(account.symbol || account.name).slice(0,3).toUpperCase()}</span>}</span>
                       <span className="min-w-0 flex-1">
                         <span className="flex items-center gap-2 text-[15px] font-medium"><span className="truncate">{account.name}</span>{locked && <Lock aria-label="Locked account" className="h-3.5 w-3.5 shrink-0 text-destructive" />}</span>
-                        <span className="block truncate text-xs text-muted-foreground">{archived ? `Archived ${new Date(account.archived_at!).toLocaleDateString()}` : `${account.type === 'cash' ? 'Cash / bank' : account.asset_type === 'manual' ? 'Manual asset' : `${account.asset_type?.toUpperCase() || 'Investment'}${account.pricing_method === 'manual' ? ' · Manual price' : account.symbol ? ` · ${account.symbol}` : ''}`} · ${account.currency}`}</span>
+                        <span className="block truncate text-xs text-muted-foreground">{archived ? `Archived ${formatDate(account.archived_at!)}` : `${account.type === 'cash' ? 'Cash / bank' : account.asset_type === 'manual' ? 'Manual asset' : `${account.asset_type?.toUpperCase() || 'Investment'}${account.pricing_method === 'manual' ? ' · Manual price' : account.symbol ? ` · ${account.symbol}` : ''}`} · ${account.currency}`}</span>
                         {Boolean(account.exclude_from_net_worth || account.exclude_from_cash_balance) && <span className="block text-xs text-muted-foreground">{[account.exclude_from_net_worth && 'Excluded from net worth', account.exclude_from_cash_balance && 'Excluded from cash balance'].filter(Boolean).join(' · ')}</span>}
                       </span>
                       <span className="max-w-full break-words text-right text-sm font-semibold tabular-nums">{hidden ? '••••••' : market ? `${formatAmount(account.balance).replace('.', ',')} ${account.currency}` : formatCurrency(account.balance, account.currency)}

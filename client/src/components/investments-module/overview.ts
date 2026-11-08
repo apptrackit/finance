@@ -1,5 +1,6 @@
 import type {Position,MarketQuote} from './types'
 import {sumAvailable} from '../../../../shared/currency'
+import { formatNumber } from '../../lib/format'
 export type HoldingFilter='all'|'etf'|'stock'|'crypto'|'manual'|'other'
 export type OverviewView={filter:HoldingFilter;sort:'name'|'day'|'value'|'return';direction:'asc'|'desc';allocation:'holding'|'type'|'currency'}
 export const initialOverview:OverviewView={filter:'all',sort:'value',direction:'desc',allocation:'holding'}
@@ -7,11 +8,11 @@ export const categories=[['all','All'],['etf','ETF'],['stock','Stock'],['crypto'
 export const category=(p:Position):HoldingFilter=>p.account.asset_type??'other'
 export const categoryLabel=(p:Position)=>categories.find(([key])=>key===category(p))![1]
 export const mask='••••••'
-export const amount=(n:number|null|undefined,currency:string,hidden=false)=>hidden?mask:n==null?'Unavailable':`${n.toLocaleString('hu-HU',{maximumFractionDigits:currency==='HUF'?0:2})} ${currency}`
-export const unitPrice=(n:number|null|undefined,currency:string,hidden=false)=>hidden?mask:n==null?'Unavailable':`${n>0&&n<1e-12?'< ':''}${(n>0&&n<1e-12?1e-12:n).toLocaleString('hu-HU',{maximumFractionDigits:12})} ${currency}`
-export const costPrice=(n:number|null|undefined,currency:string,hidden=false)=>hidden?mask:n==null?'Unavailable':Math.abs(n)<1?unitPrice(n,currency):`${n.toLocaleString('hu-HU',{maximumFractionDigits:4})} ${currency}`
+export const amount=(n:number|null|undefined,currency:string,hidden=false)=>hidden?mask:n==null?'Unavailable':`${formatNumber(n, {maximumFractionDigits:currency==='HUF'?0:2})} ${currency}`
+export const unitPrice=(n:number|null|undefined,currency:string,hidden=false)=>hidden?mask:n==null?'Unavailable':`${n>0&&n<1e-12?'< ':''}${formatNumber((n>0&&n<1e-12?1e-12:n), {maximumFractionDigits:12})} ${currency}`
+export const costPrice=(n:number|null|undefined,currency:string,hidden=false)=>hidden?mask:n==null?'Unavailable':Math.abs(n)<1?unitPrice(n,currency):`${formatNumber(n, {maximumFractionDigits:4})} ${currency}`
 export const signedAmount=(n:number|null|undefined,currency:string,hidden=false)=>hidden?mask:n==null?'Unavailable':`${n>0?'+':''}${amount(n,currency)}`
-export const percentage=(n:number|null|undefined,hidden=false)=>hidden?mask:n==null?'Unavailable':`${n>0?'+':''}${n.toLocaleString('hu-HU',{maximumFractionDigits:2})}%`
+export const percentage=(n:number|null|undefined,hidden=false)=>hidden?mask:n==null?'Unavailable':`${n>0?'+':''}${formatNumber(n, {maximumFractionDigits:2})}%`
 export const tone=(n:number|null|undefined,hidden=false)=>hidden||n==null||n===0?'text-muted-foreground':n>0?'text-success':'text-destructive'
 export const quoteFor=(p:Position,quotes:Record<string,MarketQuote>)=>quotes[p.account.symbol?.trim().toUpperCase()??'']
 export const dailyMove=(p:Position,quotes:Record<string,MarketQuote>)=>{

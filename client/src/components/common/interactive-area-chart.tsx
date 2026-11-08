@@ -3,6 +3,7 @@ import type { PointerEvent, ReactNode } from 'react'
 import { motion, useReducedMotion } from 'framer-motion'
 import { cn } from '../../lib/utils'
 import { calendarTicks } from './calendar-ticks'
+import { formatCompactNumber, formatDate } from '../../lib/format'
 
 // Adapted from EasyUI's Interactive Area Chart (MIT; see licenses/easyui.txt).
 // Retains the reference's smooth SVG curve, reveal and scrubbing treatment.
@@ -32,7 +33,7 @@ type InteractiveAreaChartProps = {
 
 const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max)
 const finite = (value: number | null | undefined): value is number => value != null && Number.isFinite(value)
-const fullDate = (date: string) => new Date(`${date}T00:00:00Z`).toLocaleDateString('en', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' })
+const fullDate = (date: string) => formatDate(date)
 
 export function InteractiveAreaChart({ data, label, formatValue, color = 'hsl(var(--primary))', title, controls, showChange = false, periodLabel = 'in period', reference, hidden = false, showReadout = false, className, activeIndex, onInspect, renderTooltip, footer }: InteractiveAreaChartProps) {
   const uid = useId().replaceAll(':', '')
@@ -167,7 +168,7 @@ export function InteractiveAreaChart({ data, label, formatValue, color = 'hsl(va
         <g aria-hidden="true">
           {ticks.map((value, i) => <g key={i}>
             <line x1={pad.left} x2={width - pad.right} y1={y(value)} y2={y(value)} stroke="hsl(var(--border))" strokeOpacity={0.55} />
-            <text x={pad.left - 10} y={y(value)} textAnchor="end" dominantBaseline="middle" className="fill-muted-foreground text-xs tabular-nums">{Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 }).format(value)}</text>
+            <text x={pad.left - 10} y={y(value)} textAnchor="end" dominantBaseline="middle" className="fill-muted-foreground text-xs tabular-nums">{formatCompactNumber(value, 1)}</text>
           </g>)}
           {labels.map(tick => <g key={tick.key}>
             {tick.major && <line x1={tick.x} x2={tick.x} y1={pad.top} y2={bottom} stroke="hsl(var(--border))" strokeDasharray="2 4" />}

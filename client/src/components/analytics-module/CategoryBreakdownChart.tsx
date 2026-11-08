@@ -4,6 +4,7 @@ import { PieChart as PieChartIcon } from 'lucide-react'
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts'
 import { usePrivacy } from '../../context/PrivacyContext'
 import { COLORS } from './constants'
+import { formatNumber } from '../../lib/format'
 
 type CategoryData = {
   name: string
@@ -48,7 +49,7 @@ export const CategoryBreakdownChart = memo(function CategoryBreakdownChart({ dat
                     ))}
                   </Pie>
                   <Tooltip 
-                    formatter={(value: number) => privacyMode === 'hidden' ? '••••••' : `${value.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})} ${masterCurrency}`}
+                    formatter={(value: number) => privacyMode === 'hidden' ? '••••••' : `${formatNumber(value, {minimumFractionDigits: 0, maximumFractionDigits: 0})} ${masterCurrency}`}
                     contentStyle={{
                       backgroundColor: 'hsl(var(--card))',
                       border: '1px solid hsl(var(--border))',
@@ -77,7 +78,7 @@ export const CategoryBreakdownChart = memo(function CategoryBreakdownChart({ dat
                   <span className="text-xs sm:text-sm flex-1 truncate">{cat.name}</span>
                   <div className="flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
                     <span className={`text-xs sm:text-sm font-medium ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
-                      {privacyMode === 'hidden' ? '••••••' : cat.value.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})}
+                      {privacyMode === 'hidden' ? '••••••' : formatNumber(cat.value, {minimumFractionDigits: 0, maximumFractionDigits: 0})}
                     </span>
                     <span className={`text-xs sm:text-xs text-muted-foreground ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
                       ({privacyMode === 'hidden' ? '••' : cat.percentage.toFixed(1)}%)

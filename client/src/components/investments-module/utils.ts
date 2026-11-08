@@ -3,42 +3,27 @@ import type { HoldingMetrics, MetricTrade } from '../../../../shared/investment-
 import { usesMarketPricing } from '../../../../shared/holding'
 import { convertCurrency } from '../../../../shared/currency'
 import type { Account, Transaction, Position } from './types'
+import { formatNumber } from '../../lib/format'
 
 export const formatValue = (value: number | null, account?: Account, currency?: string) => {
   const valueCurrency = currency || (account?.asset_type === 'manual' ? account.currency : 'USD')
   if (value === null) return 'Unavailable'
-  const currencySymbols: Record<string, string> = {
-    HUF: 'Ft',
-    EUR: '€',
-    USD: '$',
-    GBP: '£',
-    CHF: 'CHF'
-  }
-  const symbol = currencySymbols[valueCurrency] || valueCurrency
   const decimals = valueCurrency === 'HUF' ? 0 : 2
-  const formatted = value.toLocaleString('hu-HU', {
+  const formatted = formatNumber(value, {
     minimumFractionDigits: decimals,
     maximumFractionDigits: decimals
   })
-  return valueCurrency === 'HUF' ? `${formatted} ${symbol}` : `${symbol}${formatted}`
+  return `${formatted} ${valueCurrency}`
 }
 
 export const formatDisplayCurrency = (value: number | null, displayCurrency: 'HUF' | 'USD') => {
   if (value === null) return 'Unavailable'
-  const currencySymbols: Record<string, string> = {
-    HUF: 'Ft',
-    EUR: '€',
-    USD: '$',
-    GBP: '£',
-    CHF: 'CHF'
-  }
-  const symbol = currencySymbols[displayCurrency] || displayCurrency
   const decimals = displayCurrency === 'HUF' ? 0 : 2
-  const formatted = value.toLocaleString('hu-HU', {
+  const formatted = formatNumber(value, {
     minimumFractionDigits: decimals,
     maximumFractionDigits: decimals
   })
-  return displayCurrency === 'HUF' ? `${formatted} ${symbol}` : `${symbol}${formatted}`
+  return `${formatted} ${displayCurrency}`
 }
 
 export const convertToDisplayCurrency = (usdValue: number | null, displayCurrency: 'HUF' | 'USD', exchangeRates: Record<string, number>): number | null => {

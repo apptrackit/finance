@@ -4,6 +4,7 @@ import { API_BASE_URL, apiFetch, ApiRequestError } from '../../config'
 import type { TradeInput } from '../../../../shared/investment-trade'
 import type { InvestmentMetricsSnapshot } from '../../../../shared/investment-metrics'
 import { amount, costPrice } from './overview'
+import { formatNumber } from '../../lib/format'
 export const tradePreviewKey = (
   input: Omit<TradeInput, 'idempotency_key'> | null,
   tradeId?: string,
@@ -155,7 +156,7 @@ export function TradeMetricsPreview({
             Position:{' '}
             {hidden
               ? '••••••'
-              : (metric.quantity?.toLocaleString(undefined, { maximumFractionDigits: 12 }) ??
+              : ((metric.quantity == null ? undefined : formatNumber(metric.quantity, { maximumFractionDigits: 12 })) ??
                 'Unavailable')}{' '}
             units
           </p>

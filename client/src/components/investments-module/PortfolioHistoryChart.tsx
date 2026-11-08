@@ -4,12 +4,13 @@ import {useState} from 'react'
 import {AreaChartRanges} from '../common/area-chart-ranges'
 import {InteractiveAreaChart} from '../common/interactive-area-chart'
 import type {usePortfolioHistory} from '../../hooks/usePortfolioHistory'
+import { formatDate, formatDateTime, formatNumber } from '../../lib/format'
 const ranges=[['1m','1M'],['3m','3M'],['6m','6M'],['1y','1Y'],['ytd','YTD'],['all','All']] as const
 export function PortfolioHistoryChart({history,hidden,currency,currentValue}:{history:ReturnType<typeof usePortfolioHistory>;hidden:boolean;currency:string;currentValue?:number|null}) {
  const {data,range,setRange,loading,error,refresh}=history
  const summary=data?.summary
  const money=(n:number|null|undefined)=>amount(n,currency,hidden)
- const percent=(n:number|null|undefined)=>hidden?'••••••':n==null?'Unavailable':`${n.toLocaleString(undefined,{maximumFractionDigits:2})}%`
+ const percent=(n:number|null|undefined)=>hidden?'••••••':n==null?'Unavailable':`${formatNumber(n, {maximumFractionDigits:2})}%`
  const [showInvested,setShowInvested]=useState(false)
  const [selection,setSelection]=useState<{key:string;index:number}|null>(null)
  const key=`${range}:${currency}:${data?.as_of}`
@@ -36,7 +37,7 @@ export function PortfolioHistoryChart({history,hidden,currency,currentValue}:{hi
      footer={<button type="button" aria-pressed={showInvested} onClick={()=>setShowInvested(previous=>!previous)} className="easyui-chart-control">Net invested</button>}/>}
   </div>
   {data&&<>
-   <p className="text-xs leading-relaxed text-muted-foreground">{data.from} – {data.to} · {data.timezone} · read {new Date(data.as_of).toLocaleString()}{data.points.at(-1)?.provisional?' · today is provisional':''}</p>
+   <p className="text-xs leading-relaxed text-muted-foreground">{formatDate(data.from)} – {formatDate(data.to)} · {data.timezone} · read {formatDateTime(data.as_of, 'short', { seconds: true })}{data.points.at(-1)?.provisional?' · today is provisional':''}</p>
   </>}
  </section>
 }

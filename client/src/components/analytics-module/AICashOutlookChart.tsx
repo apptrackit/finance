@@ -4,6 +4,7 @@ import { useCalendarAxis } from '../common/calendar-axis'
 import { addDays, format, isLastDayOfMonth, startOfDay, subMonths } from 'date-fns'
 import { usePrivacy } from '../../context/PrivacyContext'
 import type { Account, FinancialOutlookHistoricalCashPoint, FinancialOutlookSnapshot, Transaction } from './types'
+import { formatNumber } from '../../lib/format'
 
 type AICashOutlookChartProps = {
   snapshot: FinancialOutlookSnapshot | null
@@ -53,7 +54,7 @@ function dailyPath(points: CashPathPoint[]) {
 
 function amount(value: number, hidden: boolean) {
   if (hidden) return '••••••'
-  return `${value.toLocaleString('hu-HU', { maximumFractionDigits: 0 })} HUF`
+  return `${formatNumber(value, { maximumFractionDigits: 0 })} HUF`
 }
 
 function dateFromHistory(date: string) {

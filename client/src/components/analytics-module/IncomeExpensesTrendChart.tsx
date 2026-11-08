@@ -2,6 +2,7 @@ import { memo, useMemo } from 'react'
 import { Bar, CartesianGrid, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { Card, CardContent, CardHeader, CardTitle } from '../common/card'
 import { usePrivacy } from '../../context/PrivacyContext'
+import { formatNumber } from '../../lib/format'
 
 export type IncomeExpensesTrendPoint = {
   key: string
@@ -64,7 +65,7 @@ export const IncomeExpensesTrendChart = memo(function IncomeExpensesTrendChart({
     return [Math.min(0, min - padding), Math.max(0, max + padding)] as [number, number]
   }, [data])
 
-  const formatCurrency = (value: number) => `${value.toLocaleString('hu-HU', {
+  const formatCurrency = (value: number) => `${formatNumber(value, {
     minimumFractionDigits: 0,
     maximumFractionDigits: 0,
   })} ${masterCurrency}`

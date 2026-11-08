@@ -5,6 +5,7 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import { usePrivacy } from '../../context/PrivacyContext'
 import { CustomSelect } from './CustomSelect'
 import type { ChartDataPoint, Category } from './types'
+import { formatNumber } from '../../lib/format'
 
 type IncomeChartProps = {
   data: ChartDataPoint[]
@@ -29,7 +30,7 @@ export const IncomeChart = memo(function IncomeChart({ data, selectedCategory, o
             <div className="flex flex-col">
               <CardTitle className="text-sm sm:text-base">Income</CardTitle>
               <p className={`text-xs text-success font-semibold ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
-                {privacyMode === 'hidden' ? '••••••' : `Total: ${totalSum.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})} ${masterCurrency}`}
+                {privacyMode === 'hidden' ? '••••••' : `Total: ${formatNumber(totalSum, {minimumFractionDigits: 0, maximumFractionDigits: 0})} ${masterCurrency}`}
               </p>
             </div>
           </div>
@@ -90,11 +91,11 @@ export const IncomeChart = memo(function IncomeChart({ data, selectedCategory, o
                         <div className="bg-card border border-border rounded-lg p-2 shadow-lg">
                           <p className="text-xs text-muted-foreground mb-1">{label}</p>
                           <p className={`text-sm font-bold text-success ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
-                            {privacyMode === 'hidden' ? '••••••' : `${currentValue.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})} ${masterCurrency}`}
+                            {privacyMode === 'hidden' ? '••••••' : `${formatNumber(currentValue, {minimumFractionDigits: 0, maximumFractionDigits: 0})} ${masterCurrency}`}
                           </p>
                           {change !== null && changePercent !== null && (
                             <p className={`text-xs ${change >= 0 ? 'text-success' : 'text-destructive'} ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
-                              {privacyMode === 'hidden' ? '••••' : `${change >= 0 ? '+' : ''}${change.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})} (${changePercent >= 0 ? '+' : ''}${changePercent.toFixed(1)}%)`}
+                              {privacyMode === 'hidden' ? '••••' : `${change >= 0 ? '+' : ''}${formatNumber(change, {minimumFractionDigits: 0, maximumFractionDigits: 0})} (${changePercent >= 0 ? '+' : ''}${changePercent.toFixed(1)}%)`}
                             </p>
                           )}
                         </div>

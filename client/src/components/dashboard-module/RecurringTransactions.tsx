@@ -12,6 +12,7 @@ import { useAlert } from '../../context/AlertContext'
 import { usePrivacy } from '../../context/PrivacyContext'
 import { AmountInput } from '../common/amount-input'
 import { formatAmount, parseAmount } from '../../lib/amount'
+import { MINUS, formatDate, formatNumber } from '../../lib/format'
 
 // Helper function to convert Date to local YYYY-MM-DD string (no timezone conversion)
 function toLocalDateString(date: Date): string {
@@ -411,12 +412,7 @@ export function RecurringTransactions({
   const formatNextDate = (schedule: RecurringSchedule): string => {
     const next = getNextOccurrence(schedule)
     if (!next) return 'No upcoming'
-    const thisYear = new Date().getFullYear()
-    const mm = String(next.getMonth() + 1).padStart(2, '0')
-    const dd = String(next.getDate()).padStart(2, '0')
-    return next.getFullYear() === thisYear
-      ? `${mm}.${dd}`
-      : `${next.getFullYear()}.${mm}.${dd}`
+    return formatDate(next, next.getFullYear() === new Date().getFullYear() ? 'short' : 'medium')
   }
 
   const expenseCategories = categories.filter(c => c.type === 'expense')
@@ -631,7 +627,7 @@ export function RecurringTransactions({
         // Add month label for first day of each new month
         let monthLabel: string | undefined
         if (date.getMonth() !== lastMonth) {
-          monthLabel = date.toLocaleDateString('en-US', { month: 'short' })
+          monthLabel = formatDate(date, 'monthShort')
           lastMonth = date.getMonth()
         }
         
@@ -720,7 +716,7 @@ export function RecurringTransactions({
         currentDate.setDate(currentDate.getDate() + 1)
       }
       
-      const monthName = `${startDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })} - ${endDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}`
+      const monthName = `${formatDate(startDate, 'monthYear')} – ${formatDate(endDate, 'monthYear')}`
       return { days, monthName }
     } else {
       // Monthly view
@@ -835,7 +831,7 @@ export function RecurringTransactions({
         days.push({ date, dayNumber: day, transactions })
       }
       
-      return { days, monthName: firstDay.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) }
+      return { days, monthName: formatDate(firstDay, 'monthYear') }
     }
   }
 
@@ -874,7 +870,7 @@ export function RecurringTransactions({
           ) : (
             <div className="text-2xl font-bold text-destructive">
               <span className={privacyMode === 'hidden' ? 'select-none' : ''}>
-                {privacyMode === 'hidden' ? '••••••' : (totalExpenses > 0 ? '-' : '') + totalExpenses.toLocaleString('hu-HU', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                {privacyMode === 'hidden' ? '••••••' : (totalExpenses > 0 ? MINUS : '') + formatNumber(totalExpenses, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
               </span>
             </div>
           )}
@@ -891,7 +887,7 @@ export function RecurringTransactions({
           ) : (
             <div className="text-2xl font-bold text-success">
               <span className={privacyMode === 'hidden' ? 'select-none' : ''}>
-                {privacyMode === 'hidden' ? '••••••' : (totalIncome > 0 ? '+' : '') + totalIncome.toLocaleString('hu-HU', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                {privacyMode === 'hidden' ? '••••••' : (totalIncome > 0 ? '+' : '') + formatNumber(totalIncome, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
               </span>
             </div>
           )}
@@ -1399,13 +1395,13 @@ export function RecurringTransactions({
                   <div className="text-right shrink-0">
                     <div className={`font-semibold text-sm ${schedule.amount < 0 ? 'text-destructive' : 'text-success'} ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
                       {privacyMode === 'hidden'
-                        ? `${schedule.amount < 0 ? '-' : '+'}••••`
-                        : `${schedule.amount < 0 ? '-' : '+'}${Math.abs(schedule.amount).toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})}`
+                        ? `${schedule.amount < 0 ? MINUS : '+'}••••`
+                        : `${schedule.amount < 0 ? MINUS : '+'}${formatNumber(Math.abs(schedule.amount), {minimumFractionDigits: 0, maximumFractionDigits: 0})}`
                       } {account?.currency}
                     </div>
                     {schedule.amount_to && toAccount && (
                       <div className={`text-xs text-muted-foreground ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
-                        → {privacyMode === 'hidden' ? '••••' : schedule.amount_to.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})} {toAccount.currency}
+                        → {privacyMode === 'hidden' ? '••••' : formatNumber(schedule.amount_to, {minimumFractionDigits: 0, maximumFractionDigits: 0})} {toAccount.currency}
                       </div>
                     )}
                   </div>
@@ -1550,7 +1546,7 @@ export function RecurringTransactions({
                               }`}
                               title={`${tx.description} - ${account?.name || ''} - ${
                                 privacyMode === 'hidden' ? '••••' : 
-                                Math.abs(tx.amount).toLocaleString('hu-HU', { minimumFractionDigits: 0, maximumFractionDigits: 0 })
+                                formatNumber(Math.abs(tx.amount), { minimumFractionDigits: 0, maximumFractionDigits: 0 })
                               }`}
                             >
                               <span className={`${privacyMode === 'hidden' ? 'select-none' : ''} truncate`}>
@@ -1559,7 +1555,7 @@ export function RecurringTransactions({
                                 ) : (
                                   <>
                                     <span className="hidden md:inline">{category?.icon || ''} </span>
-                                    <span className="hidden md:inline">{privacyMode === 'hidden' ? '••' : Math.abs(tx.amount).toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})}</span>
+                                    <span className="hidden md:inline">{privacyMode === 'hidden' ? '••' : formatNumber(Math.abs(tx.amount), {minimumFractionDigits: 0, maximumFractionDigits: 0})}</span>
                                     <span className="md:hidden text-xs">{category?.icon || '📝'}</span>
                                   </>
                                 )}

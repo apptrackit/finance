@@ -13,6 +13,7 @@ import type { HoldingChartCache } from './InvestmentChart'
 import type { Account, MarketQuote, Transaction } from './types'
 import { calculatePosition } from './utils'
 import { amount, costPrice, unitPrice, signedAmount, percentage, tone } from './overview'
+import { formatNumber } from '../../lib/format'
 type Props = {
   account: Account | null
   allTransactions: Transaction[]
@@ -97,14 +98,14 @@ export function InvestmentDetailModal({
       {sub && <p className="mt-1 text-xs text-muted-foreground">{sub}</p>}
     </div>
   )
-  const unitMoney=(value:number|null|undefined,currency:string)=>hidden?'••••••':value==null?'Unavailable':Math.abs(value)>=1?`${value.toLocaleString('hu-HU',{minimumFractionDigits:2,maximumFractionDigits:2})} ${currency}`:unitPrice(value,currency)
+  const unitMoney=(value:number|null|undefined,currency:string)=>hidden?'••••••':value==null?'Unavailable':Math.abs(value)>=1?`${formatNumber(value, {minimumFractionDigits:2,maximumFractionDigits:2})} ${currency}`:unitPrice(value,currency)
   const positionGrid=<section aria-label="Your position" className="space-y-3">
     <h3 className="text-sm font-semibold">Your position</h3>
     <dl className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-border bg-border @min-[480px]:grid-cols-3">
       <div className="min-w-0 bg-card px-3 py-3 sm:px-4">
         <dt className="text-xs text-muted-foreground">{total?'Ownership':account.currency==='SHARE'?'Shares':`Quantity · ${account.currency}`}</dt>
-        <dd className="mt-1.5 break-words text-[15px] font-semibold tabular-nums" title={hidden?undefined:total?undefined:p.actualQuantity.toLocaleString('hu-HU',{maximumFractionDigits:12})}>
-          {hidden?'••••••':total?(account.manual_ownership??'Unknown'):p.actualQuantity.toLocaleString('hu-HU',{maximumFractionDigits:account.asset_type==='crypto'||(p.actualQuantity!==0&&Math.abs(p.actualQuantity)<0.0001)?12:4})}
+        <dd className="mt-1.5 break-words text-[15px] font-semibold tabular-nums" title={hidden?undefined:total?undefined:formatNumber(p.actualQuantity, {maximumFractionDigits:12})}>
+          {hidden?'••••••':total?(account.manual_ownership??'Unknown'):formatNumber(p.actualQuantity, {maximumFractionDigits:account.asset_type==='crypto'||(p.actualQuantity!==0&&Math.abs(p.actualQuantity)<0.0001)?12:4})}
         </dd>
       </div>
       {stat(total?'Remaining cost':'Average cost',total?costPrice(p.metrics.native.remaining_basis,p.metrics.native_currency,hidden):unitMoney(p.metrics.native.average_cost,p.metrics.native_currency))}
@@ -135,7 +136,7 @@ export function InvestmentDetailModal({
         <section aria-label="Holding summary" className="space-y-1.5">
           <p className="text-xs font-medium text-muted-foreground">Position value</p>
           <p className="break-words text-[34px] font-bold leading-tight tracking-tight tabular-nums">
-            <span>{hidden?'••••••':p.currentValue==null?'Unavailable':p.currentValue.toLocaleString('hu-HU',{maximumFractionDigits:reportingCurrency==='HUF'?0:2})}</span><span className="ml-2 text-[15px] font-semibold tracking-normal text-muted-foreground">{reportingCurrency}</span>
+            <span>{hidden?'••••••':p.currentValue==null?'Unavailable':formatNumber(p.currentValue, {maximumFractionDigits:reportingCurrency==='HUF'?0:2})}</span><span className="ml-2 text-[15px] font-semibold tracking-normal text-muted-foreground">{reportingCurrency}</span>
           </p>
           <p className="flex flex-wrap items-baseline gap-x-2 text-[13px] tabular-nums"><span className={`font-semibold ${tone(p.gainLoss,hidden)}`}>{signedAmount(p.gainLoss,reportingCurrency,hidden)}</span>{gainPercent!=null&&<span className={`font-semibold ${tone(p.gainLoss,hidden)}`} title="Gain on net invested">{percentage(gainPercent,hidden)}</span>}<span className="text-muted-foreground">total gain</span></p>
         </section>
@@ -224,7 +225,7 @@ export function InvestmentDetailModal({
                       <p className="break-words text-xs tabular-nums">
                         {hidden
                           ? '••••••'
-                          : `${Math.abs(t.quantity ?? 0).toLocaleString(undefined, { maximumFractionDigits: 12 })} ${total ? 'ITEM' : account.currency} @ ${unitPrice(t.price, t.execution_currency ?? 'unverified currency')}`}
+                          : `${formatNumber(Math.abs(t.quantity ?? 0), { maximumFractionDigits: 12 })} ${total ? 'ITEM' : account.currency} @ ${unitPrice(t.price, t.execution_currency ?? 'unverified currency')}`}
                       </p>
                       <p className="mt-1 text-xs text-muted-foreground">{t.date}</p>
                     </div>

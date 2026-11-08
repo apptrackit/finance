@@ -4,6 +4,7 @@ import { ResponsiveContainer, Sankey } from 'recharts'
 import type { LinkProps as RechartsSankeyLinkProps, NodeProps as RechartsSankeyNodeProps } from 'recharts/types/chart/Sankey'
 import { Card, CardContent, CardHeader, CardTitle } from '../common/card'
 import { usePrivacy } from '../../context/PrivacyContext'
+import { formatCompactNumber, formatNumber } from '../../lib/format'
 
 type CategoryData = {
   name: string
@@ -156,7 +157,7 @@ export const MoneyMapChart = memo(function MoneyMapChart({
 
   const formatAmount = (value: number, full = false) => {
     if (privacyMode === 'hidden') return '••••••'
-    return `${value.toLocaleString('hu-HU', { notation: full ? 'standard' : 'compact', maximumFractionDigits: full ? 2 : 1 })} ${masterCurrency}`
+    return `${full ? formatNumber(value, { maximumFractionDigits: 2 }) : formatCompactNumber(value, 1)} ${masterCurrency}`
   }
 
   const renderNode = (rawProps: RechartsSankeyNodeProps) => {

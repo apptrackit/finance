@@ -6,13 +6,14 @@ import { accountBalanceShares, sortAccountsByValue } from '../../lib/account-ord
 import type { AccountSortValues, ValuedAccount } from '../../lib/account-order'
 import { readSidebarAccountPreferences, saveSidebarAccountPreferences } from './sidebar-accounts.storage'
 import type { SidebarAccountGroup, SidebarAccountPreferences } from './sidebar-accounts.storage'
+import { formatCompactNumber, formatNumber } from '../../lib/format'
 
 type ShortcutAccount = ValuedAccount & { archived_at?: number | null }
 
 const compactNumber = (amount: number) =>
-  new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 2 }).format(amount)
+  formatCompactNumber(amount, 2)
 const fullAmount = (amount: number, currency: string, quantity = false) =>
-  `${amount.toLocaleString('hu-HU', { maximumFractionDigits: quantity ? 12 : 2 })} ${currency}`
+  `${formatNumber(amount, { maximumFractionDigits: quantity ? 12 : 2 })} ${currency}`
 
 export function AccountShortcuts({ accounts, values, reportingCurrency, status, valuationLoading }: {
   accounts: ShortcutAccount[]

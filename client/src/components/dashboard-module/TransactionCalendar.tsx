@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { addDays, endOfMonth, endOfWeek, format, isSameDay, isSameMonth, startOfMonth, startOfWeek } from 'date-fns'
 import { ArrowRightLeft, CalendarDays, TrendingUp } from 'lucide-react'
 import { Area, AreaChart, ReferenceLine, ResponsiveContainer, Tooltip, XAxis } from 'recharts'
+import { formatCompactNumber, formatNumber } from '../../lib/format'
 
 type Transaction = {
   id: string
@@ -140,12 +141,12 @@ export function TransactionCalendar({
     const options = compact && Math.abs(value) >= 1000
       ? { notation: 'compact' as const, maximumFractionDigits: 1 }
       : { minimumFractionDigits: 0, maximumFractionDigits: 0 }
-    return `${Math.abs(value).toLocaleString('hu-HU', options)} ${getAccountCurrency(accountId)}`
+    return `${formatNumber(Math.abs(value), options)} ${getAccountCurrency(accountId)}`
   }
   const masterAmount = (value: number | null) => {
     if (privacyMode === 'hidden') return '••••••'
     if (value === null) return 'Unavailable'
-    return `${Math.abs(value).toLocaleString('hu-HU', { notation: 'compact', maximumFractionDigits: 1 })} ${masterCurrency}`
+    return `${formatCompactNumber(Math.abs(value), 1)} ${masterCurrency}`
   }
 
   return (
@@ -203,7 +204,7 @@ export function TransactionCalendar({
                         <div className="rounded-lg border border-border bg-card px-2 py-1.5 shadow-lg">
                           <p className="text-xs text-muted-foreground">{format(point.day, 'EEEE, MMM d')}</p>
                           <p className={`text-xs font-bold text-success ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
-                            {privacyMode === 'hidden' ? '••••••' : `${point.balance?.toLocaleString('hu-HU', { maximumFractionDigits: 0 })} ${masterCurrency}`}
+                            {privacyMode === 'hidden' ? '••••••' : `${(point.balance == null ? undefined : formatNumber(point.balance, { maximumFractionDigits: 0 }))} ${masterCurrency}`}
                           </p>
                         </div>
                       )
@@ -358,5 +359,5 @@ function LegendDot({ className, label }: { className: string; label: string }) {
 }
 
 function SummaryPill({ label, value, tone, hidden }: { label: string; value: number; tone: string; hidden: boolean }) {
-  return <span className={`rounded-full px-1.5 py-0.5 font-medium ${tone}`}>{label} {hidden ? '••••••' : value.toLocaleString('hu-HU', { notation: 'compact', maximumFractionDigits: 1 })}</span>
+  return <span className={`rounded-full px-1.5 py-0.5 font-medium ${tone}`}>{label} {hidden ? '••••••' : formatCompactNumber(value, 1)}</span>
 }

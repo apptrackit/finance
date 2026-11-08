@@ -4,6 +4,7 @@ import { Card, CardContent } from '../common/card'
 import { usePrivacy } from '../../context/PrivacyContext'
 import type { Account, FinancialOutlookRange, FinancialOutlookSnapshot, Transaction } from './types'
 import { AICashOutlookChart } from './AICashOutlookChart'
+import { formatDate, formatDateTime, formatNumber } from '../../lib/format'
 
 type FinancialOutlookProps = {
   snapshot: FinancialOutlookSnapshot | null
@@ -27,7 +28,7 @@ const STATUS_COPY = {
 } as const
 
 function amount(value: number, hidden: boolean) {
-  return hidden ? '••••••' : value.toLocaleString('hu-HU', { maximumFractionDigits: 0 })
+  return hidden ? '••••••' : formatNumber(value, { maximumFractionDigits: 0 })
 }
 
 function CashProjection({ days, range, baseline, hidden, expired, generationDay, domain }: {
@@ -103,7 +104,7 @@ export function FinancialOutlook({ snapshot, history, selectedId, loading = fals
             <label className="flex items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-xs">
               <span className="text-muted-foreground">Generated</span>
               <select aria-label="Select forecast report" value={selectedId || snapshot.id} onChange={event => onSelect(event.target.value)} disabled={loading} className="min-w-0 bg-background font-medium text-foreground">
-                {reports.map(item => <option key={item.id} value={item.id}>{new Date(item.created_at).toLocaleString(undefined, { dateStyle: 'medium', ...(reports.filter(report => report.created_at.slice(0, 10) === item.created_at.slice(0, 10)).length > 1 ? { timeStyle: 'short' as const } : {}) })}</option>)}
+                {reports.map(item => <option key={item.id} value={item.id}>{(reports.filter(report => report.created_at.slice(0, 10) === item.created_at.slice(0, 10)).length > 1 ? formatDateTime(item.created_at) : formatDate(item.created_at))}</option>)}
               </select>
             </label>
             {hasMore && <button type="button" disabled={loading} onClick={onLoadMore} className="text-xs font-medium text-primary hover:underline disabled:opacity-50">{loading ? 'Loading…' : 'Load older forecasts'}</button>}

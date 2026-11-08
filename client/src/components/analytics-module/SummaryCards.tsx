@@ -1,6 +1,7 @@
 import { Card, CardContent } from '../common/card'
 import { TrendingUp, TrendingDown, ArrowUpRight, ArrowDownRight } from 'lucide-react'
 import { usePrivacy } from '../../context/PrivacyContext'
+import { MINUS, formatNumber } from '../../lib/format'
 
 type SummaryCardsProps = {
   totalIncome: number
@@ -20,7 +21,7 @@ export function SummaryCards({ totalIncome, totalExpenses, netFlow, masterCurren
             <div className="min-w-0 flex-1">
               <p className="text-xs sm:text-sm text-muted-foreground">Income</p>
               <p className={`text-lg sm:text-2xl font-bold text-success truncate ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
-                {privacyMode === 'hidden' ? '••••••' : `+${totalIncome.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})}`} <span className="text-sm sm:text-base">{masterCurrency}</span>
+                {privacyMode === 'hidden' ? '••••••' : `+${formatNumber(totalIncome, {minimumFractionDigits: 0, maximumFractionDigits: 0})}`} <span className="text-sm sm:text-base">{masterCurrency}</span>
               </p>
             </div>
             <div className="h-8 w-8 sm:h-10 sm:w-10 rounded-xl bg-success/10 flex items-center justify-center flex-shrink-0 ml-2">
@@ -36,7 +37,7 @@ export function SummaryCards({ totalIncome, totalExpenses, netFlow, masterCurren
             <div className="min-w-0 flex-1">
               <p className="text-xs sm:text-sm text-muted-foreground">Expenses</p>
               <p className={`text-lg sm:text-2xl font-bold text-destructive truncate ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
-                {privacyMode === 'hidden' ? '••••••' : `-${totalExpenses.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})}`} <span className="text-sm sm:text-base">{masterCurrency}</span>
+                {privacyMode === 'hidden' ? '••••••' : `${MINUS}${formatNumber(totalExpenses, {minimumFractionDigits: 0, maximumFractionDigits: 0})}`} <span className="text-sm sm:text-base">{masterCurrency}</span>
               </p>
             </div>
             <div className="h-8 w-8 sm:h-10 sm:w-10 rounded-xl bg-destructive/10 flex items-center justify-center flex-shrink-0 ml-2">
@@ -52,7 +53,7 @@ export function SummaryCards({ totalIncome, totalExpenses, netFlow, masterCurren
             <div className="min-w-0 flex-1">
               <p className="text-xs sm:text-sm text-muted-foreground">Net Flow</p>
               <p className={`text-lg sm:text-2xl font-bold truncate ${netFlow >= 0 ? 'text-primary' : 'text-destructive'} ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
-                {privacyMode === 'hidden' ? '••••••' : `${netFlow >= 0 ? '+' : ''}${netFlow.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})}`} <span className="text-sm sm:text-base">{masterCurrency}</span>
+                {privacyMode === 'hidden' ? '••••••' : `${netFlow >= 0 ? '+' : ''}${formatNumber(netFlow, {minimumFractionDigits: 0, maximumFractionDigits: 0})}`} <span className="text-sm sm:text-base">{masterCurrency}</span>
               </p>
             </div>
             <div className={`h-8 w-8 sm:h-10 sm:w-10 rounded-xl ${netFlow >= 0 ? 'bg-primary/10' : 'bg-destructive/10'} flex items-center justify-center flex-shrink-0 ml-2`}>

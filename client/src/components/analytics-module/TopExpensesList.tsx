@@ -3,6 +3,7 @@ import { TrendingDown } from 'lucide-react'
 import { format } from 'date-fns'
 import { usePrivacy } from '../../context/PrivacyContext'
 import type { Transaction, Category } from './types'
+import { MINUS, formatNumber } from '../../lib/format'
 
 type TopExpensesListProps = {
   transactions: Transaction[]
@@ -53,7 +54,7 @@ export function TopExpensesList({ transactions, categories, masterCurrency, conv
                   </p>
                 </div>
                 <div className={`text-xs sm:text-sm font-bold text-destructive flex-shrink-0 ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
-                  {privacyMode === 'hidden' ? '-••••••' : `-${convertedAmount.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})} ${masterCurrency}`}
+                  {privacyMode === 'hidden' ? `${MINUS}••••••` : `${MINUS}${formatNumber(convertedAmount, {minimumFractionDigits: 0, maximumFractionDigits: 0})} ${masterCurrency}`}
                 </div>
               </div>
             )
