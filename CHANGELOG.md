@@ -1,10 +1,36 @@
 # Changelog
 
-This file covers every published [GitHub release](https://github.com/apptrackit/finance/releases) through **v4.1**, newest first. Release dates are GitHub publication dates in UTC. Entries summarize the release notes, linked pull requests, and changes between tags.
+This file covers every published [GitHub release](https://github.com/apptrackit/finance/releases) through **v4.2**, newest first. Release dates are GitHub publication dates in UTC. Entries summarize the release notes, linked pull requests, and changes between tags.
 
 Intermediate package/UI version bumps are grouped under the next published GitHub release, rather than presented as separately published releases. The former README's **v1.6.3** notes are retained under v1.7, the release that included them.
 
 ## Unreleased
+
+## v4.2 — 2026-11-08
+
+[GitHub release](https://github.com/apptrackit/finance/releases/tag/v4.2) · [Compare v4.1…v4.2](https://github.com/apptrackit/finance/compare/v4.1...v4.2)
+
+### Highlights
+
+- Filter Dashboard transactions and Analytics by cash account, with shareable account selections and a mobile transaction-filter sheet.
+- Transaction amounts and account balances retain their saved decimal precision, including fractional HUF and investment quantities.
+
+### Added
+
+- Dashboard transactions and Analytics have an **All accounts** selector for reviewing a single cash account. Dashboard lists, calendars, upcoming items and review drafts respect the selection; Analytics scopes actual/projected activity, balance history and required exchange rates to that account. Each page keeps its selection in the URL, and linked transfers remain visible from either account. [#196](https://github.com/apptrackit/finance/pull/196)
+
+### Changed
+
+- Dashboard groups the account selector with its transaction filters. On phones, **Filters** opens a bottom sheet: **Done** applies the selections together, while closing discards unapplied changes; empty account views offer **Show all accounts**. Dashboard summaries and saved AI forecasts retain their overall scope, and account-filtered calendars hide the aggregate balance estimate. [#196](https://github.com/apptrackit/finance/pull/196)
+- Bumped the root application version to **4.2**, used by the API version endpoint and sidebar. Independent MCP protocol/Worker versions are unchanged.
+
+### Fixed
+
+- Native transaction amounts and account balances display their saved decimal precision instead of rounding away fractional cash, including HUF; Accounts also preserves saved holding quantities. Whole cash amounts omit zero-only decimals, while calculated transaction equivalents and totals use up to two decimal places. Stored financial values are unchanged. [#198](https://github.com/apptrackit/finance/pull/198)
+
+### Migration and upgrade notes
+
+- No new database migrations, authentication settings or MCP tools are introduced relative to v4.1. Existing deployments retain their configuration; refresh the frontend/PWA after deploying to load the updated filters and amount formatting. Release publication does not deploy the app.
 
 ## v4.1 — 2026-10-28
 
