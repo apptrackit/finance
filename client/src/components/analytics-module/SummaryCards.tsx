@@ -1,7 +1,6 @@
 import { Card, CardContent } from '../common/card'
-import { TrendingUp, TrendingDown, ArrowUpRight, ArrowDownRight } from 'lucide-react'
 import { usePrivacy } from '../../context/PrivacyContext'
-import { MINUS, formatNumber } from '../../lib/format'
+import { MINUS, formatNumber, formatSignedNumber } from '../../lib/format'
 
 type SummaryCardsProps = {
   totalIncome: number
@@ -10,62 +9,30 @@ type SummaryCardsProps = {
   masterCurrency: string
 }
 
+const WHOLE = { minimumFractionDigits: 0, maximumFractionDigits: 0 }
+
+/** Neutral surfaces; color is spent only on the figure so status reads at a glance. */
 export function SummaryCards({ totalIncome, totalExpenses, netFlow, masterCurrency }: SummaryCardsProps) {
   const { privacyMode } = usePrivacy()
+  const hidden = privacyMode === 'hidden'
+  const cards = [
+    { label: 'Income', value: formatSignedNumber(totalIncome, WHOLE), tone: totalIncome > 0 ? 'text-success' : 'text-foreground' },
+    { label: 'Expenses', value: `${totalExpenses > 0 ? MINUS : ''}${formatNumber(totalExpenses, WHOLE)}`, tone: totalExpenses > 0 ? 'text-destructive' : 'text-foreground' },
+    { label: 'Net Flow', value: formatSignedNumber(netFlow, WHOLE), tone: netFlow > 0 ? 'text-success' : netFlow < 0 ? 'text-destructive' : 'text-foreground' },
+  ]
 
   return (
-    <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-3">
-      <Card className="bg-gradient-to-br from-success/10 to-transparent border-success/20">
-        <CardContent className="p-4 sm:pt-6">
-          <div className="flex items-center justify-between">
-            <div className="min-w-0 flex-1">
-              <p className="text-xs sm:text-sm text-muted-foreground">Income</p>
-              <p className={`text-lg sm:text-2xl font-bold text-success truncate ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
-                {privacyMode === 'hidden' ? '••••••' : `+${formatNumber(totalIncome, {minimumFractionDigits: 0, maximumFractionDigits: 0})}`} <span className="text-sm sm:text-base">{masterCurrency}</span>
-              </p>
-            </div>
-            <div className="h-8 w-8 sm:h-10 sm:w-10 rounded-xl bg-success/10 flex items-center justify-center flex-shrink-0 ml-2">
-              <TrendingUp className="h-4 w-4 sm:h-5 sm:w-5 text-success" />
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card className="bg-gradient-to-br from-destructive/10 to-transparent border-destructive/20">
-        <CardContent className="p-4 sm:pt-6">
-          <div className="flex items-center justify-between">
-            <div className="min-w-0 flex-1">
-              <p className="text-xs sm:text-sm text-muted-foreground">Expenses</p>
-              <p className={`text-lg sm:text-2xl font-bold text-destructive truncate ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
-                {privacyMode === 'hidden' ? '••••••' : `${MINUS}${formatNumber(totalExpenses, {minimumFractionDigits: 0, maximumFractionDigits: 0})}`} <span className="text-sm sm:text-base">{masterCurrency}</span>
-              </p>
-            </div>
-            <div className="h-8 w-8 sm:h-10 sm:w-10 rounded-xl bg-destructive/10 flex items-center justify-center flex-shrink-0 ml-2">
-              <TrendingDown className="h-4 w-4 sm:h-5 sm:w-5 text-destructive" />
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card className={`bg-gradient-to-br ${netFlow >= 0 ? 'from-primary/10 border-primary/20' : 'from-destructive/10 border-destructive/20'} to-transparent`}>
-        <CardContent className="p-4 sm:pt-6">
-          <div className="flex items-center justify-between">
-            <div className="min-w-0 flex-1">
-              <p className="text-xs sm:text-sm text-muted-foreground">Net Flow</p>
-              <p className={`text-lg sm:text-2xl font-bold truncate ${netFlow >= 0 ? 'text-primary' : 'text-destructive'} ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
-                {privacyMode === 'hidden' ? '••••••' : `${netFlow >= 0 ? '+' : ''}${formatNumber(netFlow, {minimumFractionDigits: 0, maximumFractionDigits: 0})}`} <span className="text-sm sm:text-base">{masterCurrency}</span>
-              </p>
-            </div>
-            <div className={`h-8 w-8 sm:h-10 sm:w-10 rounded-xl ${netFlow >= 0 ? 'bg-primary/10' : 'bg-destructive/10'} flex items-center justify-center flex-shrink-0 ml-2`}>
-              {netFlow >= 0 ? (
-                <ArrowUpRight className="h-4 w-4 sm:h-5 sm:w-5 text-primary" />
-              ) : (
-                <ArrowDownRight className="h-4 w-4 sm:h-5 sm:w-5 text-destructive" />
-              )}
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+    <div className="grid grid-cols-3 gap-2 sm:gap-4">
+      {cards.map(card => (
+        <Card key={card.label}>
+          <CardContent className="p-3 sm:p-5">
+            <p className="text-xs text-muted-foreground sm:text-sm">{card.label}</p>
+            <p className={`mt-1 truncate text-[15px] font-semibold tracking-tight tabular-nums sm:text-2xl ${card.tone} ${hidden ? 'select-none' : ''}`}>
+              {hidden ? '••••••' : card.value} <span className="text-xs font-medium text-muted-foreground sm:text-sm">{masterCurrency}</span>
+            </p>
+          </CardContent>
+        </Card>
+      ))}
     </div>
   )
 }

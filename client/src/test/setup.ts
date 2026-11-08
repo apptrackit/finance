@@ -13,3 +13,7 @@ vi.stubGlobal('localStorage', {
   removeItem(key: string) { stored.delete(key) },
   setItem(key: string, value: string) { stored.set(key, String(value)) },
 } satisfies Storage)
+
+// Run framer-motion transitions instantly so dialogs open and close within a test tick.
+import { MotionGlobalConfig } from 'framer-motion'
+MotionGlobalConfig.skipAnimations = true
