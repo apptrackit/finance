@@ -18,7 +18,7 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
           "disabled:pointer-events-none disabled:opacity-50",
           "active:scale-[0.98]",
           {
-            'default': "bg-primary text-primary-foreground hover:bg-primary/90 shadow-lg shadow-primary/25",
+            'default': "bg-primary-fill text-primary-foreground hover:bg-primary-fill/90 shadow-lg shadow-primary/25",
             'secondary': "bg-secondary text-secondary-foreground hover:bg-secondary/80",
             'outline': "border border-border bg-transparent hover:bg-accent hover:text-accent-foreground",
             'ghost': "hover:bg-accent hover:text-accent-foreground",

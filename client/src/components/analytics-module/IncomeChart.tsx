@@ -57,13 +57,13 @@ export const IncomeChart = memo(function IncomeChart({ data, selectedCategory, o
                 <XAxis 
                   dataKey="label" 
                   stroke="hsl(var(--muted-foreground))" 
-                  fontSize={10}
+                  fontSize={11}
                   tickLine={false}
                   axisLine={false}
                 />
                 <YAxis 
                   stroke="hsl(var(--muted-foreground))" 
-                  fontSize={10}
+                  fontSize={11}
                   tickLine={false}
                   axisLine={false}
                   tickFormatter={(value) => {

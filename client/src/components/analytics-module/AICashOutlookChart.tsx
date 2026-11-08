@@ -192,7 +192,7 @@ export function AICashOutlookChart({ snapshot, transactions, accounts, convertTo
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h3 className="w-full text-sm font-semibold sm:w-auto">Cash history &amp; forecast</h3>
         <div className="flex flex-1 flex-wrap items-center gap-3 text-xs text-muted-foreground sm:ml-2">
-          <span className="flex items-center gap-1.5"><span aria-hidden="true" className="h-0.5 w-3.5 bg-primary" />Actual</span>
+          <span className="flex items-center gap-1.5"><span aria-hidden="true" className="h-0.5 w-3.5 bg-primary-fill" />Actual</span>
           <span className="flex items-center gap-1.5"><span aria-hidden="true" className="w-3.5 border-t-2 border-dashed border-forecast" />AI forecast</span>
           <span className="flex items-center gap-1.5"><span aria-hidden="true" className="h-2.5 w-3.5 rounded-sm bg-forecast/20" />Possible range</span>
         </div>
@@ -219,8 +219,8 @@ export function AICashOutlookChart({ snapshot, transactions, accounts, convertTo
               </linearGradient>
             </defs>
             <CartesianGrid vertical={false} stroke="hsl(var(--border))" />
-            <XAxis dataKey="timestamp" type="number" scale="time" domain={['dataMin', 'dataMax']} {...axisProps} stroke="hsl(var(--muted-foreground))" fontSize={10} tickLine={false} axisLine={false} />
-            <YAxis stroke="hsl(var(--muted-foreground))" fontSize={10} tickLine={false} axisLine={false} domain={yDomain} width={50} tickFormatter={value => hidden ? '••••' : Math.abs(value) >= 1_000_000 ? `${(value / 1_000_000).toFixed(1)}M` : `${Math.round(value / 1_000)}K`} />
+            <XAxis dataKey="timestamp" type="number" scale="time" domain={['dataMin', 'dataMax']} {...axisProps} stroke="hsl(var(--muted-foreground))" fontSize={11} tickLine={false} axisLine={false} />
+            <YAxis stroke="hsl(var(--muted-foreground))" fontSize={11} tickLine={false} axisLine={false} domain={yDomain} width={50} tickFormatter={value => hidden ? '••••' : Math.abs(value) >= 1_000_000 ? `${(value / 1_000_000).toFixed(1)}M` : `${Math.round(value / 1_000)}K`} />
             <Tooltip content={({ active, payload }) => {
               const point = payload?.[0]?.payload as ChartPoint | undefined
               if (!active || !point) return null

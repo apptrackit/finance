@@ -64,10 +64,10 @@ export function AccountShortcuts({ accounts, values, reportingCurrency, status, 
         const id = `${contentId}-${type}`
         return <section key={type} aria-label={type === 'cash' ? 'Cash account shortcuts' : 'Investment account shortcuts'} className="mb-2">
           <h2><button type="button" aria-label={`${type === 'cash' ? 'Cash accounts' : 'Investments'} (${group.length})`} aria-expanded={!collapsed} aria-controls={id} title={shareBasis} onClick={() => updateGroup(type, { collapsed: !collapsed })}
-            className="flex w-full items-center gap-1.5 rounded-lg px-2.5 py-1 text-left text-[10px] font-semibold uppercase tracking-wider text-muted-foreground hover:bg-secondary hover:text-foreground">
+            className="flex w-full items-center gap-1.5 rounded-lg px-2.5 py-1 text-left text-[11px] font-semibold uppercase tracking-wider text-muted-foreground hover:bg-secondary hover:text-foreground">
             <ChevronDown aria-hidden="true" className={`h-3 w-3 shrink-0 transition-transform ${collapsed ? '-rotate-90' : ''}`} />
             <span className="flex-1">{type === 'cash' ? 'Cash accounts' : 'Investments'}</span>
-            <span className="rounded bg-secondary px-1.5 py-0.5 text-[10px] tabular-nums">{group.length}</span>
+            <span className="rounded bg-secondary px-1.5 py-0.5 text-xs tabular-nums">{group.length}</span>
           </button></h2>
           <div id={id} hidden={collapsed}>
             {group.map(account => {
@@ -82,27 +82,27 @@ export function AccountShortcuts({ accounts, values, reportingCurrency, status, 
               return <NavLink key={account.id} to="/accounts" state={{ editAccountId: account.id }} aria-label={`${account.name}, ${balanceLabel}`} aria-describedby={shareId} title={hidden ? account.name : `${description(account)}\n${shareDescription}`}
                 className="block rounded-lg px-2.5 py-2 hover:bg-secondary">
                 <span className="flex items-center gap-2">
-                  <span className={`h-1.5 w-1.5 shrink-0 rounded-sm ${type === 'investment' ? 'bg-violet-400' : 'bg-primary'}`} />
+                  <span className={`h-1.5 w-1.5 shrink-0 rounded-sm ${type === 'investment' ? 'bg-violet-400' : 'bg-primary-fill'}`} />
                   <span className="min-w-0 flex-1 truncate text-[13px]">{account.name}</span>
-                  <span className="shrink-0 whitespace-nowrap text-right text-[11px] leading-4 tabular-nums">
-                    <span className={balance.currency ? 'font-medium text-foreground' : 'text-[11px] text-muted-foreground'}>{balance.amount}</span>
-                    {balance.currency && <>{' '}<span className="text-[10px] font-normal text-foreground">{balance.currency}</span></>}
+                  <span className="shrink-0 whitespace-nowrap text-right text-xs leading-4 tabular-nums">
+                    <span className={balance.currency ? 'font-medium text-foreground' : 'text-xs text-muted-foreground'}>{balance.amount}</span>
+                    {balance.currency && <>{' '}<span className="text-xs font-normal text-foreground">{balance.currency}</span></>}
                   </span>
                 </span>
                 <span aria-hidden="true" className="mt-0.5 flex items-center gap-2 pl-3.5">
                   <span className="h-[3px] min-w-0 flex-1 overflow-hidden rounded-full bg-secondary">
-                    {!hidden && share !== null && <span className={`block h-full rounded-full ${type === 'investment' ? 'bg-violet-400' : 'bg-primary'}`} style={{ width: `${share}%` }} />}
+                    {!hidden && share !== null && <span className={`block h-full rounded-full ${type === 'investment' ? 'bg-violet-400' : 'bg-primary-fill'}`} style={{ width: `${share}%` }} />}
                   </span>
-                  <span className="w-12 shrink-0 text-right text-[9px] font-normal leading-3 tabular-nums text-muted-foreground">{shareLabel}</span>
+                  <span className="w-12 shrink-0 text-right text-xs font-normal leading-3 tabular-nums text-muted-foreground">{shareLabel}</span>
                 </span>
                 <span id={shareId} className="sr-only">{shareDescription}</span>
               </NavLink>
             })}
-            {privacyMode !== 'hidden' && sharesUnavailable && <p className="px-2.5 pb-1 text-[10px] text-muted-foreground">{valuationLoading ? 'Loading shares…' : 'Shares unavailable · missing values.'}</p>}
+            {privacyMode !== 'hidden' && sharesUnavailable && <p className="px-2.5 pb-1 text-xs text-muted-foreground">{valuationLoading ? 'Loading shares…' : 'Shares unavailable · missing values.'}</p>}
           </div>
         </section>
       })}
-      {activeAccounts.some(account => values[account.id] == null) && !valuationLoading && <p className="px-2.5 pt-2 text-[10px] text-muted-foreground">Unavailable values sort last.</p>}
+      {activeAccounts.some(account => values[account.id] == null) && !valuationLoading && <p className="px-2.5 pt-2 text-xs text-muted-foreground">Unavailable values sort last.</p>}
       {status.loaded && activeAccounts.length === 0 && <p className="px-2.5 py-2 text-xs text-muted-foreground">No active accounts yet</p>}
     </div>
   </section>

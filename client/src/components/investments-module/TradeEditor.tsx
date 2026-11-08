@@ -293,7 +293,7 @@ export function TradeEditor({
                 type="button"
                 aria-pressed={draft.type === t}
                 onClick={() => settlementPatch({ type: t })}
-                className={`min-h-10 rounded-lg text-sm font-semibold ${draft.type === t ? 'bg-primary text-primary-foreground' : 'text-muted-foreground'}`}
+                className={`min-h-10 rounded-lg text-sm font-semibold ${draft.type === t ? 'bg-primary-fill text-primary-foreground' : 'text-muted-foreground'}`}
               >
                 {t === 'buy' ? 'Buy' : 'Sell'}
               </button>
@@ -505,7 +505,7 @@ export function TradeEditor({
 
             </>
           )}
-          <p className="text-[11px] text-muted-foreground">
+          <p className="text-xs text-muted-foreground">
             Fees are already included in actual cash and create no extra expense. Prices and units support 12
             decimal places; settlement cash supports two.
           </p>

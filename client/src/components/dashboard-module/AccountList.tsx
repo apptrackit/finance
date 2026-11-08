@@ -701,10 +701,10 @@ export function AccountList({ accounts, onAccountAdded, loading, manage = false,
         {activeAccounts.filter(a => a.type === 'cash').length > 0 && (
           <div className="space-y-2 sm:space-y-3 mb-4 sm:mb-6">
             <div className="flex items-center justify-between px-1">
-              <h4 className="text-[10px] sm:text-xs font-semibold text-muted-foreground uppercase tracking-wider">Cash Accounts</h4>
+              <h4 className="text-[11px] sm:text-xs font-semibold text-muted-foreground uppercase tracking-wider">Cash Accounts</h4>
               <div className="flex items-center gap-1.5">
-                {privacyMode === 'hidden' ? <span className="text-[9px] font-medium text-muted-foreground sm:text-[10px]">••••••</span> : formatHufTotal(totalCashUSD) && <span className="whitespace-nowrap text-[9px] font-medium tabular-nums text-muted-foreground sm:text-[10px]">{formatHufTotal(totalCashUSD)}</span>}
-                <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[9px] font-semibold normal-case tracking-normal text-primary sm:text-[10px]">{privacyMode === 'hidden' ? '••••' : cashAllocation === null ? 'Allocation unavailable' : `${cashAllocation.toFixed(0)}% total`}</span>
+                {privacyMode === 'hidden' ? <span className="text-xs font-medium text-muted-foreground sm:text-xs">••••••</span> : formatHufTotal(totalCashUSD) && <span className="whitespace-nowrap text-xs font-medium tabular-nums text-muted-foreground sm:text-xs">{formatHufTotal(totalCashUSD)}</span>}
+                <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-xs font-semibold normal-case tracking-normal text-primary sm:text-xs">{privacyMode === 'hidden' ? '••••' : cashAllocation === null ? 'Allocation unavailable' : `${cashAllocation.toFixed(0)}% total`}</span>
               </div>
             </div>
             <div className="space-y-1.5 sm:space-y-2">
@@ -748,7 +748,7 @@ export function AccountList({ accounts, onAccountAdded, loading, manage = false,
                           <div className="flex items-center gap-1.5 sm:gap-2 mb-0.5 sm:mb-1">
                             <p className="font-semibold text-sm sm:text-base truncate">{account.name}</p>
                             {!isExcluded && (
-                              <span className="inline-flex items-center justify-center h-4 sm:h-5 px-1.5 sm:px-2 rounded-full bg-primary/20 text-primary text-[10px] sm:text-xs font-medium">
+                              <span className="inline-flex items-center justify-center h-4 sm:h-5 px-1.5 sm:px-2 rounded-full bg-primary/20 text-primary text-xs sm:text-xs font-medium">
                                 {privacyMode === 'hidden' ? '••••' : percentage === null ? 'Unavailable' : `${percentage.toFixed(1)}%`}
                               </span>
                             )}
@@ -862,10 +862,10 @@ export function AccountList({ accounts, onAccountAdded, loading, manage = false,
         {activeAccounts.filter(a => a.type === 'investment').length > 0 && (
           <div className="space-y-2 sm:space-y-3">
             <div className="flex items-center justify-between px-1">
-              <h4 className="text-[10px] sm:text-xs font-semibold text-muted-foreground uppercase tracking-wider">Investment Accounts</h4>
+              <h4 className="text-[11px] sm:text-xs font-semibold text-muted-foreground uppercase tracking-wider">Investment Accounts</h4>
               <div className="flex items-center gap-1.5">
-                {privacyMode === 'hidden' ? <span className="text-[9px] font-medium text-muted-foreground sm:text-[10px]">••••••</span> : formatHufTotal(totalInvestmentUSD) && <span className="whitespace-nowrap text-[9px] font-medium tabular-nums text-muted-foreground sm:text-[10px]">{formatHufTotal(totalInvestmentUSD)}</span>}
-                <span className="rounded-full bg-violet-500/10 px-1.5 py-0.5 text-[9px] font-semibold normal-case tracking-normal text-violet-400 sm:text-[10px]">{privacyMode === 'hidden' ? '••••' : investmentAllocation === null ? 'Allocation unavailable' : `${investmentAllocation.toFixed(0)}% total`}</span>
+                {privacyMode === 'hidden' ? <span className="text-xs font-medium text-muted-foreground sm:text-xs">••••••</span> : formatHufTotal(totalInvestmentUSD) && <span className="whitespace-nowrap text-xs font-medium tabular-nums text-muted-foreground sm:text-xs">{formatHufTotal(totalInvestmentUSD)}</span>}
+                <span className="rounded-full bg-violet-500/10 px-1.5 py-0.5 text-xs font-semibold normal-case tracking-normal text-violet-400 sm:text-xs">{privacyMode === 'hidden' ? '••••' : investmentAllocation === null ? 'Allocation unavailable' : `${investmentAllocation.toFixed(0)}% total`}</span>
               </div>
             </div>
             <div className="space-y-1.5 sm:space-y-2">
@@ -907,11 +907,11 @@ export function AccountList({ accounts, onAccountAdded, loading, manage = false,
                             <p className="font-semibold text-sm sm:text-base truncate">
                               {account.symbol || account.name}
                             </p>
-                            <span className="inline-flex items-center justify-center h-4 sm:h-5 px-1.5 sm:px-2 rounded-full bg-blue-500/20 text-blue-600 dark:text-blue-400 text-[10px] sm:text-xs font-medium">
+                            <span className="inline-flex items-center justify-center h-4 sm:h-5 px-1.5 sm:px-2 rounded-full bg-blue-500/20 text-blue-600 dark:text-blue-400 text-xs sm:text-xs font-medium">
                               {privacyMode === 'hidden' ? '••••' : percentage === null ? 'Unavailable' : `${percentage.toFixed(1)}%`}
                             </span>
                             {usesMarketPricing(account) && priceChange !== null && (
-                              <span className={`inline-flex items-center justify-center h-4 sm:h-5 px-1.5 sm:px-2 rounded-full text-[10px] sm:text-xs font-medium ${
+                              <span className={`inline-flex items-center justify-center h-4 sm:h-5 px-1.5 sm:px-2 rounded-full text-xs sm:text-xs font-medium ${
                                 priceChange >= 0 
                                   ? 'bg-green-500/20 text-green-600 dark:text-green-400' 
                                   : 'bg-red-500/20 text-red-600 dark:text-red-400'
@@ -929,7 +929,7 @@ export function AccountList({ accounts, onAccountAdded, loading, manage = false,
                               )}
                             </p>
                             {quote?.regularMarketPrice && (
-                              <p className="text-[10px] sm:text-xs text-muted-foreground">
+                              <p className="text-xs sm:text-xs text-muted-foreground">
                                 @ {currencySymbols[(quote.currency || account.quote_currency || '').toUpperCase()] || (quote.currency || account.quote_currency || '')} {quote.regularMarketPrice.toFixed(2)}
                               </p>
                             )}
@@ -1111,7 +1111,7 @@ export function AccountList({ accounts, onAccountAdded, loading, manage = false,
             const hasNegativeBalance = rows.some(account => (orderingValues[account.id] ?? 0) < 0)
             return <section key={group} className="rounded-[14px] border border-border bg-card" aria-label={group === 'cash' ? 'Cash accounts' : group === 'investment' ? 'Investment accounts' : 'Archived accounts'}>
               <div className="flex items-center justify-between px-5 py-4"><h2 className="text-[15px] font-medium">{group === 'cash' ? 'Cash & bank accounts' : group === 'investment' ? 'Investments' : 'Archived'}</h2><span className="text-xs text-muted-foreground">{rows.length}</span></div>
-              {group !== 'archived' && rows.length > 0 && <p className="px-5 pb-3 text-[11px] text-muted-foreground">{hasNegativeBalance && privacyMode !== 'hidden' ? 'Shares use positive balances; negative balances are shown separately.' : `Share of all active ${group === 'cash' ? 'cash balances' : 'investment values'}, including accounts excluded from totals.`}</p>}
+              {group !== 'archived' && rows.length > 0 && <p className="px-5 pb-3 text-xs text-muted-foreground">{hasNegativeBalance && privacyMode !== 'hidden' ? 'Shares use positive balances; negative balances are shown separately.' : `Share of all active ${group === 'cash' ? 'cash balances' : 'investment values'}, including accounts excluded from totals.`}</p>}
               {rows.length === 0 && <p className="border-t border-border px-5 py-6 text-sm text-muted-foreground">{group === 'archived' ? 'No archived accounts. Archive keeps your history without deleting it.' : 'No accounts yet. Add an account to get started.'}</p>}
               {rows.map(account => {
                 const archived = account.archived_at != null
@@ -1130,12 +1130,12 @@ export function AccountList({ accounts, onAccountAdded, loading, manage = false,
                       <span className="min-w-0 flex-1">
                         <span className="flex items-center gap-2 text-[15px] font-medium"><span className="truncate">{account.name}</span>{locked && <Lock aria-label="Locked account" className="h-3.5 w-3.5 shrink-0 text-destructive" />}</span>
                         <span className="block truncate text-xs text-muted-foreground">{archived ? `Archived ${new Date(account.archived_at!).toLocaleDateString()}` : `${account.type === 'cash' ? 'Cash / bank' : account.asset_type === 'manual' ? 'Manual asset' : `${account.asset_type?.toUpperCase() || 'Investment'}${account.pricing_method === 'manual' ? ' · Manual price' : account.symbol ? ` · ${account.symbol}` : ''}`} · ${account.currency}`}</span>
-                        {Boolean(account.exclude_from_net_worth || account.exclude_from_cash_balance) && <span className="block text-[11px] text-muted-foreground">{[account.exclude_from_net_worth && 'Excluded from net worth', account.exclude_from_cash_balance && 'Excluded from cash balance'].filter(Boolean).join(' · ')}</span>}
+                        {Boolean(account.exclude_from_net_worth || account.exclude_from_cash_balance) && <span className="block text-xs text-muted-foreground">{[account.exclude_from_net_worth && 'Excluded from net worth', account.exclude_from_cash_balance && 'Excluded from cash balance'].filter(Boolean).join(' · ')}</span>}
                       </span>
                       <span className="max-w-full break-words text-right text-sm font-semibold tabular-nums">{hidden ? '••••••' : market ? `${formatAmount(account.balance).replace('.', ',')} ${account.currency}` : formatCurrency(account.balance, account.currency)}
                         {market && <span className="block text-xs font-normal text-muted-foreground">{hidden ? '••••••' : archived ? 'No position' : formatHufTotal(accountValues[account.id])}</span>}
-                        {!archived && <span className="mt-2 flex items-center justify-end gap-2 text-[11px] font-normal text-muted-foreground">
-                          <span aria-hidden="true" className="h-1 w-16 overflow-hidden rounded-full bg-secondary sm:w-24"><span className={`block h-full rounded-full ${account.type === 'investment' ? 'bg-violet-400' : 'bg-primary'}`} style={{ width: `${hidden ? 0 : share ?? 0}%` }} /></span>
+                        {!archived && <span className="mt-2 flex items-center justify-end gap-2 text-xs font-normal text-muted-foreground">
+                          <span aria-hidden="true" className="h-1 w-16 overflow-hidden rounded-full bg-secondary sm:w-24"><span className={`block h-full rounded-full ${account.type === 'investment' ? 'bg-violet-400' : 'bg-primary-fill'}`} style={{ width: `${hidden ? 0 : share ?? 0}%` }} /></span>
                           <span>{hidden ? 'Share hidden' : share === null ? 'Share unavailable' : negative ? 'Negative balance' : `${share.toFixed(1)}%`}</span>
                         </span>}
                       </span>

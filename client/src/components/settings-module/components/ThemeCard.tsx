@@ -2,23 +2,23 @@ import { SettingsSection } from './SettingsSection'
 import { useTheme, THEMES, type ThemeId } from '../../../context/ThemeContext'
 
 export function ThemeCard() {
-  const { theme, setTheme, colorMode, setColorMode } = useTheme()
+  const { theme, setTheme, colorMode, colorModePreference, setColorMode } = useTheme()
 
   return (
     <SettingsSection title="Appearance">
       <div className="settings-row">
         <div>
           <p className="text-sm font-medium">Display mode</p>
-          <p className="text-xs text-muted-foreground">Applies to every theme</p>
+          <p className="text-xs text-muted-foreground">System matches your device's appearance</p>
         </div>
         <div className="settings-segments" role="group" aria-label="Display mode">
-          {(['dark', 'light'] as const).map((mode) => (
+          {(['system', 'light', 'dark'] as const).map((mode) => (
             <button
               key={mode}
               type="button"
-              aria-pressed={colorMode === mode}
+              aria-pressed={colorModePreference === mode}
               onClick={() => setColorMode(mode)}
-              className={`rounded-md px-3 py-1.5 text-sm capitalize ${colorMode === mode ? 'bg-primary text-primary-foreground' : 'text-muted-foreground'}`}
+              className={`rounded-md px-3 py-1.5 text-sm capitalize ${colorModePreference === mode ? 'bg-primary-fill text-primary-foreground' : 'text-muted-foreground'}`}
             >
               {mode}
             </button>

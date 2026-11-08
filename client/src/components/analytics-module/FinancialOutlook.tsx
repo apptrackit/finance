@@ -52,7 +52,7 @@ function CashProjection({ days, range, baseline, hidden, expired, generationDay,
           <div className="absolute -top-0.5 h-2.5 w-0.5 -translate-x-1/2 rounded-full bg-forecast" style={{ left: `${position(range.expected)}%` }} />
         </>}
       </div>
-      <p className="flex justify-between gap-2 text-[11px] tabular-nums text-muted-foreground"><span><span className="sr-only">Low: </span>{amount(range.low, hidden)}</span><span><span className="sr-only">High: </span>{amount(range.high, hidden)}</span></p>
+      <p className="flex justify-between gap-2 text-xs tabular-nums text-muted-foreground"><span><span className="sr-only">Low: </span>{amount(range.low, hidden)}</span><span><span className="sr-only">High: </span>{amount(range.high, hidden)}</span></p>
     </div>
   )
 }

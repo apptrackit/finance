@@ -930,7 +930,7 @@ export function Analytics({
                 aria-pressed={period === p}
                 className={`flex-1 min-[430px]:flex-none px-2.5 sm:px-3 py-1.5 text-xs font-medium rounded-lg transition-all whitespace-nowrap ${
                   period === p
-                    ? 'bg-primary text-primary-foreground shadow-md'
+                    ? 'bg-primary-fill text-primary-foreground shadow-md'
                     : 'text-muted-foreground hover:text-foreground hover:bg-secondary/70'
                 }`}
               >
@@ -971,7 +971,7 @@ export function Analytics({
                 aria-pressed={!isProjected}
                 className={`flex-1 min-[430px]:flex-none px-2.5 sm:px-3 py-1.5 text-xs font-medium rounded-lg transition-all whitespace-nowrap ${
                   !isProjected
-                    ? 'bg-primary text-primary-foreground shadow-md'
+                    ? 'bg-primary-fill text-primary-foreground shadow-md'
                     : 'text-muted-foreground hover:text-foreground hover:bg-secondary/70'
                 }`}
               >
@@ -983,7 +983,7 @@ export function Analytics({
                 aria-pressed={isProjected}
                 className={`flex-1 min-[430px]:flex-none px-2.5 sm:px-3 py-1.5 text-xs font-medium rounded-lg transition-all whitespace-nowrap ${
                   isProjected
-                    ? 'bg-primary text-primary-foreground shadow-md'
+                    ? 'bg-primary-fill text-primary-foreground shadow-md'
                     : 'text-muted-foreground hover:text-foreground hover:bg-secondary/70'
                 }`}
               >

@@ -48,7 +48,7 @@ export function ApiSession({ children }: { children: ReactNode }) {
         <p className="mt-2 text-sm text-muted-foreground">Your session may have expired, or the API is unavailable. Sign in with Cloudflare, then retry.</p>
         {ready && <p className="mt-2 text-sm text-muted-foreground">Sign in in another tab to keep your unsaved changes here.</p>}
         <div className="mt-4 flex flex-wrap items-center gap-3">
-          {API_AUTH_MODE === 'private' && <a href={getApiLoginUrl()} target={ready ? '_blank' : undefined} rel="noopener noreferrer" className="inline-flex min-h-10 items-center rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground">Sign in</a>}
+          {API_AUTH_MODE === 'private' && <a href={getApiLoginUrl()} target={ready ? '_blank' : undefined} rel="noopener noreferrer" className="inline-flex min-h-10 items-center rounded-lg bg-primary-fill px-4 py-2 text-sm font-medium text-primary-foreground">Sign in</a>}
           <Button variant="outline" onClick={retry} disabled={checking}>{checking ? 'Checking…' : 'Retry connection'}</Button>
         </div>
       </div>

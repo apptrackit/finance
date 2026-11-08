@@ -84,9 +84,9 @@ export const IncomeExpensesTrendChart = memo(function IncomeExpensesTrendChart({
                     key={option.value}
                     type="button"
                     onClick={() => onResolutionChange?.(option.value)}
-                    className={`rounded-md px-2 py-1 text-[11px] font-medium transition-colors sm:px-2.5 ${
+                    className={`rounded-md px-2 py-1 text-xs font-medium transition-colors sm:px-2.5 ${
                       resolution === option.value
-                        ? 'bg-primary text-primary-foreground shadow-sm'
+                        ? 'bg-primary-fill text-primary-foreground shadow-sm'
                         : 'text-muted-foreground hover:bg-secondary hover:text-foreground'
                     }`}
                   >
@@ -112,7 +112,7 @@ export const IncomeExpensesTrendChart = memo(function IncomeExpensesTrendChart({
                 <XAxis
                   dataKey="label"
                   stroke="hsl(var(--muted-foreground))"
-                  fontSize={10}
+                  fontSize={11}
                   tickLine={false}
                   axisLine={false}
                   interval="preserveStartEnd"
@@ -120,7 +120,7 @@ export const IncomeExpensesTrendChart = memo(function IncomeExpensesTrendChart({
                 />
                 <YAxis
                   stroke="hsl(var(--muted-foreground))"
-                  fontSize={10}
+                  fontSize={11}
                   tickLine={false}
                   axisLine={false}
                   domain={yDomain}

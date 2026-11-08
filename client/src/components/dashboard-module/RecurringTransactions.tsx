@@ -1477,7 +1477,7 @@ export function RecurringTransactions({
           <div className="grid grid-cols-7 gap-0.5 md:gap-1">
             {/* Day headers */}
             {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(day => (
-              <div key={day} className="text-center text-[10px] md:text-xs font-semibold text-muted-foreground py-1 md:py-2">
+              <div key={day} className="text-center text-xs md:text-xs font-semibold text-muted-foreground py-1 md:py-2">
                 {day}
               </div>
             ))}
@@ -1500,14 +1500,14 @@ export function RecurringTransactions({
                   {day.dayNumber && (
                     <>
                       <div className="flex items-center justify-between mb-0.5 md:mb-1">
-                        <div className={`text-[11px] md:text-xs font-medium ${
+                        <div className={`text-xs md:text-xs font-medium ${
                           isPast ? 'text-muted-foreground/50' :
                           isToday ? 'text-primary font-bold' : 'text-muted-foreground'
                         }`}>
                           {day.dayNumber}
                         </div>
                         {day.monthLabel && (
-                          <div className="text-[9px] md:text-[10px] font-semibold text-muted-foreground/70 uppercase">
+                          <div className="text-[11px] md:text-[11px] font-semibold text-muted-foreground/70 uppercase">
                             {day.monthLabel}
                           </div>
                         )}
@@ -1528,7 +1528,7 @@ export function RecurringTransactions({
                             return (
                               <div
                                 key={txIdx}
-                                className="text-[9px] md:text-[10px] px-0.5 md:px-1 py-0.5 rounded text-center bg-muted text-muted-foreground font-semibold"
+                                className="text-xs md:text-xs px-0.5 md:px-1 py-0.5 rounded text-center bg-muted text-muted-foreground font-semibold"
                                 title={`${day.transactions.length - 2} more transactions`}
                               >
                                 +{day.transactions.length - 2}
@@ -1543,7 +1543,7 @@ export function RecurringTransactions({
                           return (
                             <div
                               key={txIdx}
-                              className={`text-[9px] md:text-[10px] px-0.5 md:px-1 py-0.5 rounded truncate flex items-center justify-center ${
+                              className={`text-xs md:text-xs px-0.5 md:px-1 py-0.5 rounded truncate flex items-center justify-center ${
                                 tx.amount < 0 
                                   ? 'bg-destructive/10 text-destructive' 
                                   : 'bg-success/10 text-success'

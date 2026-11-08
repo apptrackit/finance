@@ -101,7 +101,7 @@ export function SplitLinesEditor({ lines, resolution, currency, categories, disa
                   placeholder="0"
                   className={cn('h-9 pr-11 text-right text-sm font-semibold tabular-nums', isRest && 'pl-12')}
                 />
-                {isRest && <span className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 rounded bg-secondary px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground">Rest</span>}
+                {isRest && <span className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 rounded bg-secondary px-1.5 py-0.5 text-xs font-medium text-muted-foreground">Rest</span>}
                 <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">{currency}</span>
               </div>
             </div>

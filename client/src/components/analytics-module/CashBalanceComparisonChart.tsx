@@ -97,8 +97,8 @@ export function CashBalanceComparisonChart({ comparison, currency, title, contro
               <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0} />
             </linearGradient></defs>
             <CartesianGrid vertical={false} stroke="hsl(var(--border))" strokeDasharray="3 3" opacity={0.5} />
-            <XAxis dataKey="day" type="number" domain={[1, comparison.points.length]} ticks={ticks} tickFormatter={tickLabel} stroke="hsl(var(--muted-foreground))" fontSize={10} tickLine={false} axisLine={false} />
-            <YAxis domain={[min - padding, max + padding]} width={56} stroke="hsl(var(--muted-foreground))" fontSize={10} tickLine={false} axisLine={false}
+            <XAxis dataKey="day" type="number" domain={[1, comparison.points.length]} ticks={ticks} tickFormatter={tickLabel} stroke="hsl(var(--muted-foreground))" fontSize={11} tickLine={false} axisLine={false} />
+            <YAxis domain={[min - padding, max + padding]} width={56} stroke="hsl(var(--muted-foreground))" fontSize={11} tickLine={false} axisLine={false}
               tickFormatter={value => hidden ? '••••' : new Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 }).format(value)} />
             <Tooltip content={({ active, payload }) => {
               const activePoint = payload?.[0]?.payload as CashBalanceComparisonPoint | undefined
@@ -112,7 +112,7 @@ export function CashBalanceComparisonChart({ comparison, currency, title, contro
       </div>
       <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap gap-x-5 gap-y-1 px-2 text-xs text-muted-foreground sm:px-0" aria-label="Cash balance comparison legend">
-          <span className="inline-flex items-center gap-1.5"><span aria-hidden="true" className="h-0.5 w-4 bg-primary" />{selectedLabel}</span>
+          <span className="inline-flex items-center gap-1.5"><span aria-hidden="true" className="h-0.5 w-4 bg-primary-fill" />{selectedLabel}</span>
           <span className="inline-flex items-center gap-1.5"><span aria-hidden="true" className="w-4 border-t border-muted-foreground" />{previousLabel}</span>
         </div>
         {footer && <div className="ml-auto flex flex-wrap items-center justify-end gap-2">{footer}</div>}

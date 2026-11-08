@@ -43,7 +43,7 @@ export function useCalendarAxis(start: number | undefined, end: number | undefin
   const renderTick = ({ x, y, payload }: TickProps) => {
     const tick = ticks.get(Number(payload?.value))
     if (!tick) return <g />
-    return <text x={Number(x)} y={Number(y)} dy={12} textAnchor={tick.anchor} fontSize={10} data-axis-label="x" data-major={tick.major ? '' : undefined}
+    return <text x={Number(x)} y={Number(y)} dy={12} textAnchor={tick.anchor} fontSize={11} data-axis-label="x" data-major={tick.major ? '' : undefined}
       className={cn(tick.major ? 'fill-foreground font-semibold' : 'fill-muted-foreground')}>{tick.label}</text>
   }
 

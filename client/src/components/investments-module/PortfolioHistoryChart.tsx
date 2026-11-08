@@ -36,7 +36,7 @@ export function PortfolioHistoryChart({history,hidden,currency,currentValue}:{hi
      footer={<button type="button" aria-pressed={showInvested} onClick={()=>setShowInvested(previous=>!previous)} className="easyui-chart-control">Net invested</button>}/>}
   </div>
   {data&&<>
-   <p className="text-[10px] leading-relaxed text-muted-foreground">{data.from} – {data.to} · {data.timezone} · read {new Date(data.as_of).toLocaleString()}{data.points.at(-1)?.provisional?' · today is provisional':''}</p>
+   <p className="text-xs leading-relaxed text-muted-foreground">{data.from} – {data.to} · {data.timezone} · read {new Date(data.as_of).toLocaleString()}{data.points.at(-1)?.provisional?' · today is provisional':''}</p>
   </>}
  </section>
 }

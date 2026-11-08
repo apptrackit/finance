@@ -151,7 +151,7 @@ export function TransactionCalendar({
   return (
     <section className="animate-fade-in space-y-3" aria-label="Transaction calendar">
       <div className="flex flex-col gap-2 rounded-xl border border-border/60 bg-background/30 px-2.5 py-2 sm:flex-row sm:items-center sm:justify-between sm:px-3">
-        <div className="flex items-center gap-1.5 text-[10px] sm:text-xs text-muted-foreground">
+        <div className="flex items-center gap-1.5 text-xs sm:text-xs text-muted-foreground">
           <span className="font-semibold tracking-wide text-foreground">LEGEND</span>
           <LegendDot className="bg-success" label="Income" />
           <LegendDot className="bg-destructive" label="Expenses" />
@@ -163,7 +163,7 @@ export function TransactionCalendar({
               <button
                 key={mode}
                 onClick={() => setDensity(mode)}
-                className={`rounded-md px-2.5 py-1 text-[10px] font-medium capitalize transition-colors sm:text-xs ${density === mode ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
+                className={`rounded-md px-2.5 py-1 text-xs font-medium capitalize transition-colors sm:text-xs ${density === mode ? 'bg-primary-fill text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
                 aria-pressed={density === mode}
               >
                 {mode}
@@ -176,7 +176,7 @@ export function TransactionCalendar({
       <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_18rem]">
         <div className="overflow-hidden rounded-xl border border-border/60 bg-background/20">
           {!accountFiltered && <div className="border-b border-border/60 px-3 py-2.5">
-            <div className="mb-1 flex items-center gap-1.5 text-[10px] font-semibold tracking-wide text-muted-foreground"><TrendingUp className="h-3.5 w-3.5 text-success" />BALANCE TREND</div>
+            <div className="mb-1 flex items-center gap-1.5 text-xs font-semibold tracking-wide text-muted-foreground"><TrendingUp className="h-3.5 w-3.5 text-success" />BALANCE TREND</div>
             <div className="h-20 cursor-pointer sm:h-24" aria-label="Animated balance trend chart. Click a day to select it.">
               {baseline === null ? <p className="text-xs text-muted-foreground">Balance trend unavailable: missing exchange rates.</p> : <ResponsiveContainer width="100%" height="100%">
                 <AreaChart
@@ -201,7 +201,7 @@ export function TransactionCalendar({
                       if (!active || !point) return null
                       return (
                         <div className="rounded-lg border border-border bg-card px-2 py-1.5 shadow-lg">
-                          <p className="text-[10px] text-muted-foreground">{format(point.day, 'EEEE, MMM d')}</p>
+                          <p className="text-xs text-muted-foreground">{format(point.day, 'EEEE, MMM d')}</p>
                           <p className={`text-xs font-bold text-success ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
                             {privacyMode === 'hidden' ? '••••••' : `${point.balance?.toLocaleString('hu-HU', { maximumFractionDigits: 0 })} ${masterCurrency}`}
                           </p>
@@ -227,7 +227,7 @@ export function TransactionCalendar({
           </div>}
 
           <div className="grid grid-cols-7 border-b border-border/60 bg-secondary/30">
-            {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(day => <div key={day} className="py-2 text-center text-[9px] font-semibold uppercase tracking-wide text-muted-foreground sm:text-[10px]">{day}</div>)}
+            {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(day => <div key={day} className="py-2 text-center text-[11px] font-semibold uppercase tracking-wide text-muted-foreground sm:text-[11px]">{day}</div>)}
           </div>
           <div className="grid grid-cols-7">
             {calendarDays.map(day => {
@@ -249,16 +249,16 @@ export function TransactionCalendar({
                   aria-label={`${format(day, 'EEEE MMMM d')}, ${dayTransactions.length} transactions${isCurrentMonth ? '' : ', outside selected month'}`}
                 >
                   <div className="mb-1 flex items-center justify-between">
-                    <span className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-semibold sm:h-6 sm:w-6 sm:text-xs ${isToday ? 'bg-primary text-primary-foreground' : ''}`}>{format(day, 'd')}</span>
+                    <span className={`flex h-5 w-5 items-center justify-center rounded-full text-xs font-semibold sm:h-6 sm:w-6 sm:text-xs ${isToday ? 'bg-primary-fill text-primary-foreground' : ''}`}>{format(day, 'd')}</span>
                     <DayMarkers transactions={dayTransactions} />
                   </div>
                   {density === 'detailed' && dayTransactions.length > 0 ? (
                     <div className="space-y-1">
                       {sortedDayTransactions.slice(0, 3).map(tx => <CalendarTransactionRow key={tx.id} transaction={tx} nativeAmount={nativeAmount} getCategoryIcon={getCategoryIcon} />)}
-                      {sortedDayTransactions.length > 3 && <div className="pl-1 text-[9px] font-medium text-muted-foreground">+{sortedDayTransactions.length - 3} more</div>}
+                      {sortedDayTransactions.length > 3 && <div className="pl-1 text-xs font-medium text-muted-foreground">+{sortedDayTransactions.length - 3} more</div>}
                     </div>
                   ) : density === 'compact' && dayTransactions.length > 0 ? (
-                    <div className={`truncate text-[9px] font-semibold sm:text-[10px] ${(dayTotals.net ?? 0) > 0 ? 'text-success' : (dayTotals.net ?? 0) < 0 ? 'text-destructive' : 'text-muted-foreground'}`}>
+                    <div className={`truncate text-xs font-semibold sm:text-xs ${(dayTotals.net ?? 0) > 0 ? 'text-success' : (dayTotals.net ?? 0) < 0 ? 'text-destructive' : 'text-muted-foreground'}`}>
                       {dayTotals.net === null ? 'Unavailable' : dayTotals.net === 0 ? masterAmount(0) : `${(dayTotals.net ?? 0) > 0 ? '+' : '−'}${masterAmount(dayTotals.net)}`}
                     </div>
                   ) : null}
@@ -270,11 +270,11 @@ export function TransactionCalendar({
 
         <aside className="rounded-xl border border-border/60 bg-background/30 xl:min-h-[28rem]" aria-live="polite">
           <div className="border-b border-border/60 p-3">
-            <div className="mb-1 flex items-center gap-1.5 text-[10px] font-semibold tracking-wide text-muted-foreground"><CalendarDays className="h-3.5 w-3.5" />SELECTED DAY</div>
+            <div className="mb-1 flex items-center gap-1.5 text-xs font-semibold tracking-wide text-muted-foreground"><CalendarDays className="h-3.5 w-3.5" />SELECTED DAY</div>
             <div className="flex items-start justify-between gap-2">
               <h3 className="text-sm font-semibold">{format(selectedDate, 'EEEE, MMM d')}</h3>
             </div>
-            <div className="mt-2 flex flex-wrap gap-1.5 text-[9px] sm:text-[10px]">
+            <div className="mt-2 flex flex-wrap gap-1.5 text-xs sm:text-xs">
               {selectedTotals.net === null && <span>Day totals unavailable: missing exchange rates.</span>}
               {(selectedTotals.income ?? 0) > 0 && <SummaryPill label="Income" value={selectedTotals.income!} hidden={privacyMode === 'hidden'} tone="text-success bg-success/10" />}
               {(selectedTotals.expense ?? 0) > 0 && <SummaryPill label="Expenses" value={selectedTotals.expense!} hidden={privacyMode === 'hidden'} tone="text-destructive bg-destructive/10" />}
@@ -287,7 +287,7 @@ export function TransactionCalendar({
               const label = transfer ? `Transfer ${tx.amount < 0 || !accountFiltered ? 'to' : 'from'} ${tx.relatedTx ? getAccountName(tx.relatedTx.account_id) : 'account'}` : (tx.description || getCategoryName(tx.category_id))
               return <div key={tx.id} className="flex items-center gap-2.5 p-3">
                 <div className={`flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg text-sm ${transfer ? 'bg-primary/10 text-primary' : tx.amount >= 0 ? 'bg-success/10' : 'bg-secondary'}`}>{transfer ? <ArrowRightLeft className="h-4 w-4" /> : getCategoryIcon(tx.category_id)}</div>
-                <div className="min-w-0 flex-1"><div className="truncate text-xs font-medium">{label}</div><div className="truncate text-[10px] text-muted-foreground">{getAccountName(tx.account_id)} · {transfer ? 'Transfer' : getCategoryName(tx.category_id)}</div></div>
+                <div className="min-w-0 flex-1"><div className="truncate text-xs font-medium">{label}</div><div className="truncate text-xs text-muted-foreground">{getAccountName(tx.account_id)} · {transfer ? 'Transfer' : getCategoryName(tx.category_id)}</div></div>
                 <div className={`text-right text-xs font-bold ${transfer ? 'text-primary' : tx.amount >= 0 ? 'text-success' : 'text-destructive'}`}>{transfer ? '' : tx.amount >= 0 ? '+' : '−'}{nativeAmount(tx.amount, tx.account_id, true)}</div>
               </div>
             }) : <div className="px-3 py-10 text-center text-xs text-muted-foreground">No transactions on this day.</div>}
@@ -346,7 +346,7 @@ function CalendarTransactionRow({
   const sign = isTransfer ? '' : isIncome ? '+' : '−'
 
   return (
-    <div className={`flex min-w-0 items-center gap-1 rounded px-1 py-0.5 text-[9px] font-semibold sm:text-[10px] ${tone}`}>
+    <div className={`flex min-w-0 items-center gap-1 rounded px-1 py-0.5 text-xs font-semibold sm:text-xs ${tone}`}>
       <span className="flex h-3.5 w-3.5 flex-shrink-0 items-center justify-center rounded-sm bg-background/40 text-[8px]">{isTransfer ? <ArrowRightLeft className="h-2.5 w-2.5" /> : getCategoryIcon(transaction.category_id)}</span>
       <span className="truncate">{sign}{nativeAmount(transaction.amount, transaction.account_id, true)}</span>
     </div>

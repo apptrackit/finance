@@ -186,7 +186,7 @@ export function InvestmentChart({
           </div>
         </div>
         <div role="group" aria-label="Instrument chart range" className="flex max-w-full overflow-x-auto rounded-lg border border-border bg-background p-0.5">
-          {RANGES.map(([value,label])=><button type="button" key={value} aria-pressed={range===value} onClick={()=>setRange(value)} className={`min-h-8 rounded-md px-2 text-[11px] font-semibold ${range===value?'bg-secondary':'text-muted-foreground'}`}>{label}</button>)}
+          {RANGES.map(([value,label])=><button type="button" key={value} aria-pressed={range===value} onClick={()=>setRange(value)} className={`min-h-8 rounded-md px-2 text-xs font-semibold ${range===value?'bg-secondary':'text-muted-foreground'}`}>{label}</button>)}
         </div>
       </div>
       {error && (
@@ -251,7 +251,7 @@ export function InvestmentChart({
                 hide
                 width={0}
                 domain={['auto', 'auto']}
-                tick={{ fontSize: 10 }}
+                tick={{ fontSize: 11 }}
                 tickFormatter={(n) => Number(n).toLocaleString(undefined, { maximumFractionDigits: Math.abs(Number(n))>=1?2:12 })}
               />
               <Tooltip
@@ -348,7 +348,7 @@ export function InvestmentChart({
         </ul>
       )}
       {children}
-      {history&&<div className="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-[11px] leading-relaxed text-muted-foreground">
+      {history&&<div className="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-xs leading-relaxed text-muted-foreground">
         <p className="min-w-0 flex-1">Prices from Yahoo Finance: daily close, split-adjusted, excluding dividends. {history.status==='stale'||error?'Saved history; refresh unavailable. ':''}Updated <time dateTime={updatedAt??undefined} title={updatedAt??undefined}>{holdingSourceTime(updatedAt)?.short??'time unavailable'}</time>{last?.provisional?' · provisional':''}.</p>
         <button type="button" disabled={loading} className="min-h-8 text-primary hover:underline" onClick={()=>setRetry(n=>n+1)}>Refresh history</button>
       </div>}

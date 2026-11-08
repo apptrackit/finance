@@ -167,13 +167,13 @@ export function InteractiveAreaChart({ data, label, formatValue, color = 'hsl(va
         <g aria-hidden="true">
           {ticks.map((value, i) => <g key={i}>
             <line x1={pad.left} x2={width - pad.right} y1={y(value)} y2={y(value)} stroke="hsl(var(--border))" strokeOpacity={0.55} />
-            <text x={pad.left - 10} y={y(value)} textAnchor="end" dominantBaseline="middle" className="fill-muted-foreground text-[11px] tabular-nums">{Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 }).format(value)}</text>
+            <text x={pad.left - 10} y={y(value)} textAnchor="end" dominantBaseline="middle" className="fill-muted-foreground text-xs tabular-nums">{Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 }).format(value)}</text>
           </g>)}
           {labels.map(tick => <g key={tick.key}>
             {tick.major && <line x1={tick.x} x2={tick.x} y1={pad.top} y2={bottom} stroke="hsl(var(--border))" strokeDasharray="2 4" />}
             <text x={tick.x} y={height - 6} data-axis-label="x" data-major={tick.major ? '' : undefined}
               textAnchor={tick.x - pad.left < 20 ? 'start' : width - pad.right - tick.x < 20 ? 'end' : 'middle'}
-              className={cn('text-[11px]', tick.major ? 'fill-foreground font-semibold' : 'fill-muted-foreground')}>{tick.text}</text>
+              className={cn('text-xs', tick.major ? 'fill-foreground font-semibold' : 'fill-muted-foreground')}>{tick.text}</text>
           </g>)}
           {reference && <g data-series="reference">{paths('reference', reference.step).map((path, i) => <g key={i}>
             <path d={path.line} fill="none" stroke={reference.color} strokeWidth={1.5} strokeDasharray={reference.dashed ? '6 3' : undefined} />
@@ -192,7 +192,7 @@ export function InteractiveAreaChart({ data, label, formatValue, color = 'hsl(va
       </svg>
       {inspected !== null && <motion.div className="pointer-events-none absolute top-0 z-10 max-w-full [&>div]:max-w-full" initial={{ opacity: 0, x: tooltipLeft }} animate={{ opacity: 1, x: tooltipLeft }} transition={reduce ? { duration: 0 } : { type: 'spring', stiffness: 520, damping: 42, mass: 0.6, opacity: { duration: 0.15 } }} style={{ width: tooltipWidth, left: 0 }}>
         {renderTooltip ? renderTooltip(inspected) : <div className="rounded-lg border border-border bg-card px-2.5 py-1.5 shadow-sm">
-          <p className="text-[11px] text-muted-foreground">{fullDate(shown.date)}</p>
+          <p className="text-xs text-muted-foreground">{fullDate(shown.date)}</p>
           <p className="text-sm font-medium tabular-nums" style={{ color }}>{formatValue(shown.value)}</p>
         </div>}
       </motion.div>}

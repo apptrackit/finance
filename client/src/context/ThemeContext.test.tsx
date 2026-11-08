@@ -1,10 +1,14 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { ThemeProvider, useTheme } from './ThemeContext'
 
 function Controls() {
   const { colorMode, setColorMode, theme, setTheme } = useTheme()
   return <><p>{colorMode} {theme}</p><button onClick={() => setColorMode(colorMode === 'dark' ? 'light' : 'dark')}>Change mode</button><button onClick={() => setTheme('mono')}>Monochrome</button><button onClick={() => setTheme('redfilter')}>Red Filter</button><button onClick={() => setTheme('emerald')}>Original</button></>
+}
+function SystemControl() {
+  const { setColorMode } = useTheme()
+  return <button onClick={() => setColorMode('system')}>Use system</button>
 }
 beforeEach(() => localStorage.clear())
 afterEach(cleanup)
@@ -57,10 +61,35 @@ describe('independent display mode and color theme', () => {
     expect(document.documentElement).toHaveClass('theme-redfilter')
     expect(document.documentElement.style.getPropertyValue('--app-color-filter')).toBe('none')
   })
-  it('defaults to dark for unknown saved modes', () => {
+  it('follows the system appearance when nothing valid is saved, including live changes', () => {
     localStorage.setItem('finance_color_mode', 'invalid')
-    render(<ThemeProvider><Controls /></ThemeProvider>)
-    expect(document.documentElement).toHaveAttribute('data-color-mode', 'dark')
-    expect(document.documentElement).toHaveClass('dark')
+    const listeners: Array<() => void> = []
+    const query = { matches: false, addEventListener: (_: string, fn: () => void) => listeners.push(fn), removeEventListener: () => {} }
+    const original = window.matchMedia
+    window.matchMedia = (() => query) as unknown as typeof window.matchMedia
+    try {
+      render(<ThemeProvider><Controls /></ThemeProvider>)
+      expect(document.documentElement).toHaveAttribute('data-color-mode', 'light')
+      query.matches = true
+      act(() => listeners.forEach(fn => fn()))
+      expect(document.documentElement).toHaveAttribute('data-color-mode', 'dark')
+      expect(document.documentElement).toHaveClass('dark')
+    } finally {
+      window.matchMedia = original
+    }
+  })
+  it('falls back to dark without matchMedia and clears the saved override for system', () => {
+    const original = window.matchMedia
+    // @ts-expect-error simulate an environment without matchMedia
+    delete window.matchMedia
+    try {
+      localStorage.setItem('finance_color_mode', 'light')
+      render(<ThemeProvider><SystemControl /></ThemeProvider>)
+      fireEvent.click(screen.getByRole('button', { name: 'Use system' }))
+      expect(localStorage.getItem('finance_color_mode')).toBeNull()
+      expect(document.documentElement).toHaveAttribute('data-color-mode', 'dark')
+    } finally {
+      window.matchMedia = original
+    }
   })
 })

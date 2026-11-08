@@ -75,7 +75,7 @@ export function DateRangePicker({ startDate, endDate, onApply, onCancel, monthOn
             </div>
             <div>
               <p className="text-sm font-semibold">Choose timeframe</p>
-              <p className="text-[11px] text-muted-foreground">{mode === 'all' ? 'Every transaction' : mode === 'custom' ? 'A custom date range' : format(selectedMonth, 'MMMM yyyy')}</p>
+              <p className="text-xs text-muted-foreground">{mode === 'all' ? 'Every transaction' : mode === 'custom' ? 'A custom date range' : format(selectedMonth, 'MMMM yyyy')}</p>
             </div>
           </div>
           <button onClick={onCancel} className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground" aria-label="Close timeframe picker">
@@ -90,7 +90,7 @@ export function DateRangePicker({ startDate, endDate, onApply, onCancel, monthOn
               role="tab"
               aria-selected={mode === 'month'}
               onClick={() => setMode('month')}
-              className={`flex min-w-0 items-center justify-center whitespace-nowrap rounded-lg px-1 py-2 text-xs font-medium transition-colors ${mode === 'month' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
+              className={`flex min-w-0 items-center justify-center whitespace-nowrap rounded-lg px-1 py-2 text-xs font-medium transition-colors ${mode === 'month' ? 'bg-primary-fill text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
             >
               Month
             </button>
@@ -100,7 +100,7 @@ export function DateRangePicker({ startDate, endDate, onApply, onCancel, monthOn
               aria-selected={mode === 'custom'}
               disabled={monthOnly}
               onClick={() => setMode('custom')}
-              className={`flex min-w-0 items-center justify-center whitespace-nowrap rounded-lg px-1 py-2 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${mode === 'custom' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
+              className={`flex min-w-0 items-center justify-center whitespace-nowrap rounded-lg px-1 py-2 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${mode === 'custom' ? 'bg-primary-fill text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
             >
               Custom
             </button>
@@ -110,7 +110,7 @@ export function DateRangePicker({ startDate, endDate, onApply, onCancel, monthOn
               aria-selected={mode === 'all'}
               disabled={monthOnly}
               onClick={() => onApply(ALL_TIME, 'all')}
-              className={`flex min-w-0 items-center justify-center whitespace-nowrap rounded-lg px-1 py-2 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${mode === 'all' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
+              className={`flex min-w-0 items-center justify-center whitespace-nowrap rounded-lg px-1 py-2 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${mode === 'all' ? 'bg-primary-fill text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
             >
               All time
             </button>
@@ -150,7 +150,7 @@ export function DateRangePicker({ startDate, endDate, onApply, onCancel, monthOn
                         backgroundColor: 'hsl(var(--primary) / 0.08)',
                         boxShadow: 'inset 0 0 0 1px hsl(var(--primary) / 0.72)',
                       } : undefined}
-                      className={`h-full w-full min-w-0 rounded-xl border px-1 text-sm font-normal leading-none transition-colors ${selected ? 'border-primary bg-primary text-primary-foreground shadow-sm' : isCurrentMonth ? 'text-foreground hover:bg-secondary' : 'border-transparent text-foreground hover:bg-secondary'}`}
+                      className={`h-full w-full min-w-0 rounded-xl border px-1 text-sm font-normal leading-none transition-colors ${selected ? 'border-primary bg-primary-fill text-primary-foreground shadow-sm' : isCurrentMonth ? 'text-foreground hover:bg-secondary' : 'border-transparent text-foreground hover:bg-secondary'}`}
                     >
                       {month}
                     </button>

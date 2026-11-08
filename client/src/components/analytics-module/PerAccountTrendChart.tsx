@@ -24,6 +24,6 @@ export const PerAccountTrendChart = memo(function PerAccountTrendChart({ account
       hidden={privacyMode === 'hidden'} showReadout showChange className="h-[200px] sm:h-[240px]"
       footer={privacyMode !== 'hidden' && <button type="button" aria-pressed={showTrend} onClick={() => setShowTrend(previous => !previous)} className="easyui-chart-control">Trend</button>}
     /> : <><h3 className="text-[13px] text-muted-foreground">{account.name}</h3><div className="flex h-48 items-center justify-center text-sm text-muted-foreground">No transaction data in this period</div></>}
-    <p className="mt-3 text-[11px] text-muted-foreground">Current balance: {privacyMode === 'hidden' ? '••••••' : account.balance.toLocaleString('hu-HU', { maximumFractionDigits: 0 })} {account.currency}</p>
+    <p className="mt-3 text-xs text-muted-foreground">Current balance: {privacyMode === 'hidden' ? '••••••' : account.balance.toLocaleString('hu-HU', { maximumFractionDigits: 0 })} {account.currency}</p>
   </section>
 })

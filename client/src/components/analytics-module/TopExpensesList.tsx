@@ -48,7 +48,7 @@ export function TopExpensesList({ transactions, categories, masterCurrency, conv
                   <p className="text-xs sm:text-sm font-medium truncate">
                     {tx.description || category?.name || 'Expense'}
                   </p>
-                  <p className="text-[10px] sm:text-xs text-muted-foreground">
+                  <p className="text-xs sm:text-xs text-muted-foreground">
                     {format(new Date(tx.date), 'MMM d, yyyy')}
                   </p>
                 </div>

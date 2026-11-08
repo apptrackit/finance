@@ -1353,7 +1353,7 @@ export function TransactionList({
     if (!recentLabel) return null
 
     return (
-      <span className="flex-shrink-0 select-none text-[10px] font-medium lowercase leading-none text-primary/90 animate-pulse-slow">
+      <span className="flex-shrink-0 select-none text-xs font-medium lowercase leading-none text-primary/90 animate-pulse-slow">
         {recentLabel}
       </span>
     )
@@ -1714,7 +1714,7 @@ export function TransactionList({
                       className="w-full min-w-0"
                     />
                     {isUpcomingForm && (
-                      <p className="text-[11px] text-primary">This will be saved as an upcoming transaction.</p>
+                      <p className="text-xs text-primary">This will be saved as an upcoming transaction.</p>
                     )}
                   </div>
                   <div className="space-y-2 min-w-0">
@@ -1822,7 +1822,7 @@ export function TransactionList({
                 return <section key={date} aria-label={format(parseISO(date), 'EEEE, MMM d, yyyy')}>
                   <div className="mb-1 flex flex-wrap items-baseline gap-x-4 gap-y-1 border-b border-border/60 px-1 pb-2 text-xs text-muted-foreground">
                     <h3>{format(parseISO(date), 'EEE, MMM d, yyyy')}</h3>
-                    {dailyCashFlow.length > 0 && <span className="whitespace-nowrap text-[11px] tabular-nums" aria-label="Daily total" title="Income less spending; transfers and investment trades excluded">{convertedAmount(sumCash(dailyCashFlow))}</span>}
+                    {dailyCashFlow.length > 0 && <span className="whitespace-nowrap text-xs tabular-nums" aria-label="Daily total" title="Income less spending; transfers and investment trades excluded">{convertedAmount(sumCash(dailyCashFlow))}</span>}
                   </div>
                   {items.map(renderPostedTransaction)}
                 </section>
