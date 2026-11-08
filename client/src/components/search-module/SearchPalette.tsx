@@ -9,6 +9,7 @@ import { API_BASE_URL, apiFetch } from '../../config'
 import { matchesText, matchesTransaction, transactionCurrency } from '../../lib/global-search'
 import { Modal } from '../common/modal'
 import { Button } from '../common/button'
+import { formatDate, formatNumber } from '../../lib/format'
 
 type Schedule = { id: string; description?: string; account_id: string; to_account_id?: string; category_id?: string; amount: number; frequency: string; is_active: boolean }
 type Result = { id: string; group: string; title: string; detail?: string; value?: string; icon: React.ReactNode; run: () => void; disabled?: boolean }
@@ -50,7 +51,7 @@ export function SearchPalette({ isOpen, onClose, finance, canCompose, hasUnfinis
   const matches = isOpen && query.trim() ? [...new Map([...history, ...pending].map(tx => [tx.id, tx])).values()]
     .filter(tx => matchesTransaction(query, tx, accounts, categories)).sort((a, b) => b.date.localeCompare(a.date)) : []
   const amount = (tx: Pick<Transaction, 'amount' | 'account_id'>) => privacyMode === 'hidden' ? '••••••' :
-    `${tx.amount.toLocaleString('hu-HU', { maximumFractionDigits: 8 })} ${transactionCurrency(accounts.find(account => account.id === tx.account_id))}`
+    `${formatNumber(tx.amount, { maximumFractionDigits: 8 })} ${transactionCurrency(accounts.find(account => account.id === tx.account_id))}`
   const viewAll = () => go('/dashboard?range=allTime', { transactionSearch: query.trim() })
   const results: Result[] = [
     { id: 'new-transaction', group: 'Quick actions', title: 'New transaction', detail: hasUnfinishedChanges ? 'Finish your current edit first' : 'N', icon: <Plus />, disabled: !canCompose || hasUnfinishedChanges, run: () => { onClose(); onNewTransaction() } },
@@ -68,7 +69,7 @@ export function SearchPalette({ isOpen, onClose, finance, canCompose, hasUnfinis
       run: () => go(`/dashboard?range=allTime&category=${encodeURIComponent(category.id)}`, { transactionSearch: '' }),
     })))
     results.push(...matches.slice(0, 6).map(tx => ({ id: `tx-${tx.id}`, group: 'Transactions', title: tx.description || 'Transaction',
-      detail: `${tx.date} · ${accounts.find(account => account.id === tx.account_id)?.name || 'Unknown account'} · ${categories.find(category => category.id === tx.category_id)?.name || 'Uncategorized'}${tx.status === 'pending' ? ' · Pending' : ''}`, value: amount(tx),
+      detail: `${formatDate(tx.date)} · ${accounts.find(account => account.id === tx.account_id)?.name || 'Unknown account'} · ${categories.find(category => category.id === tx.category_id)?.name || 'Uncategorized'}${tx.status === 'pending' ? ' · Pending' : ''}`, value: amount(tx),
       icon: <FileText />, run: () => setSelected(tx),
     })))
     if (historyReady && matches.length) results.push({ id: 'all-transactions', group: 'Transactions', title: `View all matching transactions (${matches.length})`, icon: <ArrowRight />, run: viewAll })
@@ -98,7 +99,7 @@ export function SearchPalette({ isOpen, onClose, finance, canCompose, hasUnfinis
       <h3 className="text-lg font-semibold break-words">{selected.description || 'Transaction'}</h3>
       <p className="text-2xl font-semibold tabular-nums">{amount(selected)}</p>
       <dl className="grid grid-cols-[auto_1fr] gap-x-5 gap-y-3 text-sm">
-        <dt className="text-muted-foreground">Date</dt><dd>{selected.date}</dd>
+        <dt className="text-muted-foreground">Date</dt><dd>{formatDate(selected.date)}</dd>
         <dt className="text-muted-foreground">Account</dt><dd>{accounts.find(account => account.id === selected.account_id)?.name || 'Unknown account'}</dd>
         <dt className="text-muted-foreground">Category</dt><dd>{categories.find(category => category.id === selected.category_id)?.name || 'Uncategorized'}</dd>
         <dt className="text-muted-foreground">Status</dt><dd>{selected.status === 'pending' ? selected.pending_kind === 'mcp_review' ? 'Pending review draft' : 'Pending' : 'Posted'}</dd>
@@ -114,7 +115,7 @@ export function SearchPalette({ isOpen, onClose, finance, canCompose, hasUnfinis
             if (event.key === 'ArrowDown' || event.key === 'ArrowUp') { event.preventDefault(); setActive(previous => selectable.length ? (previous + (event.key === 'ArrowDown' ? 1 : -1) + selectable.length) % selectable.length : 0) }
             if (event.key === 'Enter' && selectedResult) { event.preventDefault(); selectedResult.run() }
           }} />
-        <kbd className="hidden rounded border border-border px-1.5 text-[10px] text-muted-foreground sm:block">ESC</kbd>
+        <kbd className="hidden rounded border border-border px-1.5 text-xs text-muted-foreground sm:block">ESC</kbd>
       </div>
       <div className="my-3 text-xs text-muted-foreground" aria-live="polite">
         {loading ? 'Loading search data…' : 'Search all dates · amounts use their original currency'}
@@ -124,7 +125,7 @@ export function SearchPalette({ isOpen, onClose, finance, canCompose, hasUnfinis
       </div>
       <div id={listId} role="listbox" aria-label="Search results" className="max-h-[48dvh] overflow-y-auto space-y-1">
         {results.map((result, index) => <div key={result.id}>
-          {(index === 0 || results[index - 1].group !== result.group) && <p className="px-2 pb-2 pt-3 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">{result.group}</p>}
+          {(index === 0 || results[index - 1].group !== result.group) && <p className="px-2 pb-2 pt-3 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">{result.group}</p>}
           <button type="button" role="option" aria-label={`${result.title}${result.detail ? ` — ${result.detail}` : ''}${result.value ? ` — ${result.value}` : ''}`} aria-selected={selectedResult?.id === result.id} id={`${listId}-${result.id}`} disabled={result.disabled}
             tabIndex={-1} onMouseDown={event => event.preventDefault()} onClick={result.run} onMouseMove={() => setActive(Math.max(0, selectable.findIndex(item => item.id === result.id)))}
             className={`flex w-full cursor-pointer items-center gap-3 rounded-xl p-3 text-left disabled:cursor-not-allowed disabled:opacity-40 ${selectedResult?.id === result.id ? 'bg-primary/10' : 'hover:bg-secondary'}`}>
@@ -134,7 +135,7 @@ export function SearchPalette({ isOpen, onClose, finance, canCompose, hasUnfinis
         </div>)}
         {results.length === 0 && <p className="p-6 text-center text-sm text-muted-foreground">{loading ? 'Searching…' : failed.length ? 'Retry unavailable data to complete your search.' : 'No matches. Try a description, account, category, amount or date.'}</p>}
       </div>
-      <p className="mt-3 border-t border-border pt-3 text-[11px] text-muted-foreground">↑ ↓ Navigate · Enter Open · Esc Close</p>
+      <p className="mt-3 border-t border-border pt-3 text-xs text-muted-foreground">↑ ↓ Navigate · Enter Open · Esc Close</p>
     </>}
   </Modal>
 }

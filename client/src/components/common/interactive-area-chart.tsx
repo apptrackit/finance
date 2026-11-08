@@ -3,6 +3,7 @@ import type { PointerEvent, ReactNode } from 'react'
 import { motion, useReducedMotion } from 'framer-motion'
 import { cn } from '../../lib/utils'
 import { calendarTicks } from './calendar-ticks'
+import { formatCompactNumber, formatDate, formatNumber } from '../../lib/format'
 
 // Adapted from EasyUI's Interactive Area Chart (MIT; see licenses/easyui.txt).
 // Retains the reference's smooth SVG curve, reveal and scrubbing treatment.
@@ -32,7 +33,7 @@ type InteractiveAreaChartProps = {
 
 const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max)
 const finite = (value: number | null | undefined): value is number => value != null && Number.isFinite(value)
-const fullDate = (date: string) => new Date(`${date}T00:00:00Z`).toLocaleDateString('en', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' })
+const fullDate = (date: string) => formatDate(date)
 
 export function InteractiveAreaChart({ data, label, formatValue, color = 'hsl(var(--primary))', title, controls, showChange = false, periodLabel = 'in period', reference, hidden = false, showReadout = false, className, activeIndex, onInspect, renderTooltip, footer }: InteractiveAreaChartProps) {
   const uid = useId().replaceAll(':', '')
@@ -138,7 +139,7 @@ export function InteractiveAreaChart({ data, label, formatValue, color = 'hsl(va
         {title && <h3 className="text-[13px] font-normal text-muted-foreground">{title}</h3>}
         <p className="mt-0.5 text-2xl font-semibold tracking-tight tabular-nums sm:text-3xl">{formatValue(shown.value)}</p>
         <p className="mt-1 text-xs tabular-nums sm:text-[13px]">
-          {showChange && change !== null && <span className={change >= 0 ? 'easyui-chart-positive' : 'easyui-chart-negative'}>{change > 0 ? '+' : ''}{change.toFixed(1)}% </span>}
+          {showChange && change !== null && <span className={change >= 0 ? 'easyui-chart-positive' : 'easyui-chart-negative'}>{change > 0 ? '+' : ''}{formatNumber(change, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}% </span>}
           <span className="text-muted-foreground">{inspected !== null ? fullDate(shown.date) : showChange ? `${periodLabel} · balance change` : `${fullDate(shown.date)} · latest in period`}</span>
         </p>
       </div>
@@ -167,13 +168,13 @@ export function InteractiveAreaChart({ data, label, formatValue, color = 'hsl(va
         <g aria-hidden="true">
           {ticks.map((value, i) => <g key={i}>
             <line x1={pad.left} x2={width - pad.right} y1={y(value)} y2={y(value)} stroke="hsl(var(--border))" strokeOpacity={0.55} />
-            <text x={pad.left - 10} y={y(value)} textAnchor="end" dominantBaseline="middle" className="fill-muted-foreground text-[11px] tabular-nums">{Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 }).format(value)}</text>
+            <text x={pad.left - 10} y={y(value)} textAnchor="end" dominantBaseline="middle" className="fill-muted-foreground text-xs tabular-nums">{formatCompactNumber(value, 1)}</text>
           </g>)}
           {labels.map(tick => <g key={tick.key}>
             {tick.major && <line x1={tick.x} x2={tick.x} y1={pad.top} y2={bottom} stroke="hsl(var(--border))" strokeDasharray="2 4" />}
             <text x={tick.x} y={height - 6} data-axis-label="x" data-major={tick.major ? '' : undefined}
               textAnchor={tick.x - pad.left < 20 ? 'start' : width - pad.right - tick.x < 20 ? 'end' : 'middle'}
-              className={cn('text-[11px]', tick.major ? 'fill-foreground font-semibold' : 'fill-muted-foreground')}>{tick.text}</text>
+              className={cn('text-xs', tick.major ? 'fill-foreground font-semibold' : 'fill-muted-foreground')}>{tick.text}</text>
           </g>)}
           {reference && <g data-series="reference">{paths('reference', reference.step).map((path, i) => <g key={i}>
             <path d={path.line} fill="none" stroke={reference.color} strokeWidth={1.5} strokeDasharray={reference.dashed ? '6 3' : undefined} />
@@ -192,7 +193,7 @@ export function InteractiveAreaChart({ data, label, formatValue, color = 'hsl(va
       </svg>
       {inspected !== null && <motion.div className="pointer-events-none absolute top-0 z-10 max-w-full [&>div]:max-w-full" initial={{ opacity: 0, x: tooltipLeft }} animate={{ opacity: 1, x: tooltipLeft }} transition={reduce ? { duration: 0 } : { type: 'spring', stiffness: 520, damping: 42, mass: 0.6, opacity: { duration: 0.15 } }} style={{ width: tooltipWidth, left: 0 }}>
         {renderTooltip ? renderTooltip(inspected) : <div className="rounded-lg border border-border bg-card px-2.5 py-1.5 shadow-sm">
-          <p className="text-[11px] text-muted-foreground">{fullDate(shown.date)}</p>
+          <p className="text-xs text-muted-foreground">{fullDate(shown.date)}</p>
           <p className="text-sm font-medium tabular-nums" style={{ color }}>{formatValue(shown.value)}</p>
         </div>}
       </motion.div>}

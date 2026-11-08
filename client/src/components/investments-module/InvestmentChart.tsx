@@ -17,6 +17,7 @@ import type { PriceHistory } from '../../../../shared/market-data'
 import { API_BASE_URL, apiFetch } from '../../config'
 import { unitPrice } from './overview'
 import { Select } from '../common/select'
+import { formatNumber } from '../../lib/format'
 type Trade = {
   id: string
   date: string
@@ -157,12 +158,12 @@ export function InvestmentChart({
   const change = first && last ? last.close - first.close : null,
     rawPercent = change !== null && first ? (change / first.close) * 100 : null
   const percent = rawPercent !== null && Number.isFinite(rawPercent) ? rawPercent : null
-  const money = (n: number | null | undefined) => n==null?'Unavailable':Math.abs(n)>=1||Math.abs(last?.close??0)>=1?`${n.toLocaleString('hu-HU',{minimumFractionDigits:2,maximumFractionDigits:2})} ${history?.currency??''}`:unitPrice(n,history?.currency??'')
+  const money = (n: number | null | undefined) => n==null?'Unavailable':Math.abs(n)>=1||Math.abs(last?.close??0)>=1?`${formatNumber(n, {minimumFractionDigits:2,maximumFractionDigits:2})} ${history?.currency??''}`:unitPrice(n,history?.currency??'')
   const date = selected?.key === key ? selected.date : last?.date
   const dayTrades = trades.filter((t) => t.date === date),
     close = points.find((p) => p.date === date)?.close
   const tradeText = (t: Trade) =>
-    `${(t.quantity ?? t.amount) > 0 ? 'Buy' : 'Sell'} · ${Math.abs(t.quantity ?? 0).toLocaleString(undefined, { maximumFractionDigits: 12 })} units · ${unitPrice(t.price, t.execution_currency ?? 'unverified currency')} · ${t.date}`
+    `${(t.quantity ?? t.amount) > 0 ? 'Buy' : 'Sell'} · ${formatNumber(Math.abs(t.quantity ?? 0), { maximumFractionDigits: 12 })} units · ${unitPrice(t.price, t.execution_currency ?? 'unverified currency')} · ${t.date}`
   const updatedAt=quote?.as_of&&last?.period_start===quote.as_of?quote.as_of:history?.retrieved_at
   const currentCost = averageCost != null && costCurrency === history?.currency ? averageCost : null
   const domain = [
@@ -181,12 +182,12 @@ export function InvestmentChart({
           <div className="mt-0.5 grid min-h-4 text-xs leading-4">
             <p aria-hidden={selected?.key!==key} className={`col-start-1 row-start-1 text-muted-foreground ${selected?.key===key?'':'invisible'}`}>{holdingSourceTime(date)?.short??date}</p>
             <p aria-hidden={selected?.key===key} className={`col-start-1 row-start-1 font-medium tabular-nums ${selected?.key===key?'invisible ':''}${change===0?'text-muted-foreground':change!=null&&change>0?'text-success':'text-destructive'}`}>
-              {change!=null&&percent!=null&&<>{change>0?'+':''}{money(change)} ({percent>0?'+':''}{percent.toLocaleString('hu-HU',{minimumFractionDigits:2,maximumFractionDigits:2})}%) · {{'1d':'past day','5d':'past 5 days','1mo':'past month','6mo':'past 6 months','1y':'past year','5y':'past 5 years','max':'past 10 years'}[range]}</>}
+              {change!=null&&percent!=null&&<>{change>0?'+':''}{money(change)} ({percent>0?'+':''}{formatNumber(percent, {minimumFractionDigits:2,maximumFractionDigits:2})}%) · {{'1d':'past day','5d':'past 5 days','1mo':'past month','6mo':'past 6 months','1y':'past year','5y':'past 5 years','max':'past 10 years'}[range]}</>}
             </p>
           </div>
         </div>
         <div role="group" aria-label="Instrument chart range" className="flex max-w-full overflow-x-auto rounded-lg border border-border bg-background p-0.5">
-          {RANGES.map(([value,label])=><button type="button" key={value} aria-pressed={range===value} onClick={()=>setRange(value)} className={`min-h-8 rounded-md px-2 text-[11px] font-semibold ${range===value?'bg-secondary':'text-muted-foreground'}`}>{label}</button>)}
+          {RANGES.map(([value,label])=><button type="button" key={value} aria-pressed={range===value} onClick={()=>setRange(value)} className={`min-h-8 rounded-md px-2 text-xs font-semibold ${range===value?'bg-secondary':'text-muted-foreground'}`}>{label}</button>)}
         </div>
       </div>
       {error && (
@@ -251,8 +252,8 @@ export function InvestmentChart({
                 hide
                 width={0}
                 domain={['auto', 'auto']}
-                tick={{ fontSize: 10 }}
-                tickFormatter={(n) => Number(n).toLocaleString(undefined, { maximumFractionDigits: Math.abs(Number(n))>=1?2:12 })}
+                tick={{ fontSize: 11 }}
+                tickFormatter={(n) => formatNumber(Number(n), { maximumFractionDigits: Math.abs(Number(n))>=1?2:12 })}
               />
               <Tooltip
                 filterNull={false}
@@ -348,7 +349,7 @@ export function InvestmentChart({
         </ul>
       )}
       {children}
-      {history&&<div className="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-[11px] leading-relaxed text-muted-foreground">
+      {history&&<div className="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-xs leading-relaxed text-muted-foreground">
         <p className="min-w-0 flex-1">Prices from Yahoo Finance: daily close, split-adjusted, excluding dividends. {history.status==='stale'||error?'Saved history; refresh unavailable. ':''}Updated <time dateTime={updatedAt??undefined} title={updatedAt??undefined}>{holdingSourceTime(updatedAt)?.short??'time unavailable'}</time>{last?.provisional?' · provisional':''}.</p>
         <button type="button" disabled={loading} className="min-h-8 text-primary hover:underline" onClick={()=>setRetry(n=>n+1)}>Refresh history</button>
       </div>}

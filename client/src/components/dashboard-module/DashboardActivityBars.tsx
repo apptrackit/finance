@@ -38,7 +38,7 @@ export function DashboardActivityBars({ periodLabel, daysLeft, income, expenses,
       <div className="flex flex-wrap items-baseline gap-x-1.5 gap-y-1 tabular-nums">
         <span>{hidden ? '••%' : ratio === null ? 'Ratio unavailable' : `${Math.round(ratio)}% of income spent`}</span>
         <span aria-hidden="true">·</span>
-        <span><span className="font-medium">{amount(leftover)} {currency}</span> left over</span>
+        <span><span className="font-medium">{signed(leftover)} {currency}</span> left over</span>
       </div>
     </div>
     <div className="dashboard-cash-flow-grid tabular-nums">

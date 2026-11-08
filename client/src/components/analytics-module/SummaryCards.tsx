@@ -1,6 +1,7 @@
 import { Card, CardContent } from '../common/card'
-import { TrendingUp, TrendingDown, ArrowUpRight, ArrowDownRight } from 'lucide-react'
 import { usePrivacy } from '../../context/PrivacyContext'
+import { useMediaQuery } from '../../hooks/useMediaQuery'
+import { MINUS, formatNumber, formatSignedNumber } from '../../lib/format'
 
 type SummaryCardsProps = {
   totalIncome: number
@@ -9,62 +10,47 @@ type SummaryCardsProps = {
   masterCurrency: string
 }
 
+const WHOLE = { minimumFractionDigits: 0, maximumFractionDigits: 0 }
+
+/** Neutral surfaces; color is spent only on the figure so status reads at a glance. */
 export function SummaryCards({ totalIncome, totalExpenses, netFlow, masterCurrency }: SummaryCardsProps) {
   const { privacyMode } = usePrivacy()
+  const hidden = privacyMode === 'hidden'
+  const compact = useMediaQuery('(max-width: 639px)')
+  const cards = [
+    { label: 'Income', value: formatSignedNumber(totalIncome, WHOLE), tone: totalIncome > 0 ? 'text-success' : 'text-foreground' },
+    { label: 'Expenses', value: `${totalExpenses > 0 ? MINUS : ''}${formatNumber(totalExpenses, WHOLE)}`, tone: totalExpenses > 0 ? 'text-destructive' : 'text-foreground' },
+    { label: 'Net Flow', value: formatSignedNumber(netFlow, WHOLE), tone: netFlow > 0 ? 'text-success' : netFlow < 0 ? 'text-destructive' : 'text-foreground' },
+  ]
 
   return (
-    <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-3">
-      <Card className="bg-gradient-to-br from-success/10 to-transparent border-success/20">
-        <CardContent className="p-4 sm:pt-6">
-          <div className="flex items-center justify-between">
-            <div className="min-w-0 flex-1">
-              <p className="text-xs sm:text-sm text-muted-foreground">Income</p>
-              <p className={`text-lg sm:text-2xl font-bold text-success truncate ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
-                {privacyMode === 'hidden' ? '••••••' : `+${totalIncome.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})}`} <span className="text-sm sm:text-base">{masterCurrency}</span>
+    compact ? (
+      /* Phone: one grouped card with a row per figure, so long amounts never truncate. */
+      <Card>
+        <CardContent className="divide-y divide-border p-0">
+          {cards.map(card => (
+            <div key={card.label} className="flex items-baseline justify-between gap-3 px-4 py-3">
+              <p className="text-sm text-muted-foreground">{card.label}</p>
+              <p className={`text-[17px] font-semibold tracking-tight tabular-nums ${card.tone} ${hidden ? 'select-none' : ''}`}>
+                {hidden ? '••••••' : card.value} <span className="text-xs font-medium text-muted-foreground">{masterCurrency}</span>
               </p>
             </div>
-            <div className="h-8 w-8 sm:h-10 sm:w-10 rounded-xl bg-success/10 flex items-center justify-center flex-shrink-0 ml-2">
-              <TrendingUp className="h-4 w-4 sm:h-5 sm:w-5 text-success" />
-            </div>
-          </div>
+          ))}
         </CardContent>
       </Card>
-
-      <Card className="bg-gradient-to-br from-destructive/10 to-transparent border-destructive/20">
-        <CardContent className="p-4 sm:pt-6">
-          <div className="flex items-center justify-between">
-            <div className="min-w-0 flex-1">
-              <p className="text-xs sm:text-sm text-muted-foreground">Expenses</p>
-              <p className={`text-lg sm:text-2xl font-bold text-destructive truncate ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
-                {privacyMode === 'hidden' ? '••••••' : `-${totalExpenses.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})}`} <span className="text-sm sm:text-base">{masterCurrency}</span>
+    ) : (
+      <div className="grid grid-cols-3 gap-4">
+        {cards.map(card => (
+          <Card key={card.label}>
+            <CardContent className="p-5">
+              <p className="text-sm text-muted-foreground">{card.label}</p>
+              <p className={`mt-1 truncate text-2xl font-semibold tracking-tight tabular-nums ${card.tone} ${hidden ? 'select-none' : ''}`}>
+                {hidden ? '••••••' : card.value} <span className="text-sm font-medium text-muted-foreground">{masterCurrency}</span>
               </p>
-            </div>
-            <div className="h-8 w-8 sm:h-10 sm:w-10 rounded-xl bg-destructive/10 flex items-center justify-center flex-shrink-0 ml-2">
-              <TrendingDown className="h-4 w-4 sm:h-5 sm:w-5 text-destructive" />
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card className={`bg-gradient-to-br ${netFlow >= 0 ? 'from-primary/10 border-primary/20' : 'from-destructive/10 border-destructive/20'} to-transparent`}>
-        <CardContent className="p-4 sm:pt-6">
-          <div className="flex items-center justify-between">
-            <div className="min-w-0 flex-1">
-              <p className="text-xs sm:text-sm text-muted-foreground">Net Flow</p>
-              <p className={`text-lg sm:text-2xl font-bold truncate ${netFlow >= 0 ? 'text-primary' : 'text-destructive'} ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
-                {privacyMode === 'hidden' ? '••••••' : `${netFlow >= 0 ? '+' : ''}${netFlow.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})}`} <span className="text-sm sm:text-base">{masterCurrency}</span>
-              </p>
-            </div>
-            <div className={`h-8 w-8 sm:h-10 sm:w-10 rounded-xl ${netFlow >= 0 ? 'bg-primary/10' : 'bg-destructive/10'} flex items-center justify-center flex-shrink-0 ml-2`}>
-              {netFlow >= 0 ? (
-                <ArrowUpRight className="h-4 w-4 sm:h-5 sm:w-5 text-primary" />
-              ) : (
-                <ArrowDownRight className="h-4 w-4 sm:h-5 sm:w-5 text-destructive" />
-              )}
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-    </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+    )
   )
 }

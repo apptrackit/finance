@@ -18,6 +18,7 @@ import {TradeEditor} from './TradeEditor'
 import type {TradeEdit} from './trade-editor'
 import type {Transaction} from './types'
 import {InvestmentDetailModal} from './InvestmentDetailModal'
+import { formatDateTime } from '../../lib/format'
 export function Investments() {
  const {investments,finance}=useOutletContext<FinancePageContext>()
  const {data,status,refresh,currencyDisplay,setCurrencyDisplay,overviewView,updateOverview}=investments
@@ -52,10 +53,10 @@ export function Investments() {
   <div className="@container space-y-4">
    <header className="flex flex-wrap items-center justify-end gap-2 sm:gap-3 lg:justify-start">
     <h1 className="mr-auto hidden text-2xl font-semibold tracking-tight lg:block">Investments</h1>
-    <p className="order-last w-full text-right text-[10px] text-muted-foreground lg:order-none lg:w-auto">{status.stale?'Saved snapshot':'As of'} {data?.asOf?new Date(data.asOf).toLocaleString(undefined,{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}):'unavailable'}</p>
+    <p className="order-last w-full text-right text-xs text-muted-foreground lg:order-none lg:w-auto">{status.stale?'Saved snapshot':'As of'} {data?.asOf?formatDateTime(data.asOf, 'short'):'unavailable'}</p>
     <Button type="button" variant="outline" size="icon" disabled={status.loading} onClick={()=>{void refresh()}} aria-label="Refresh prices" className="h-10 w-10"><RefreshCw className={`h-4 w-4 ${refreshing?'animate-spin motion-reduce:animate-none':''}`}/></Button>
     <div role="group" aria-label="Investment reporting currency" className="flex rounded-lg border border-border p-0.5">{investmentReportingCurrencies.map(c=><button key={c} type="button" aria-pressed={currencyDisplay===c} onClick={()=>setCurrencyDisplay(c)} className={`min-h-9 rounded-md px-3 text-xs font-semibold ${c===currencyDisplay?'bg-secondary text-foreground':'text-muted-foreground'}`}>{c}</button>)}</div>
-    {canTrade?<Button type="button" onClick={()=>setEditor({})} className="h-10"><Plus className="h-4 w-4"/>Record trade</Button>:<Link to="/accounts" state={{addAccount:true,investment:accounts.length===0}} className="inline-flex min-h-10 items-center rounded-lg bg-primary px-3 text-xs font-semibold text-primary-foreground">{accounts.length===0?'Add first holding':'Set up trade accounts'}</Link>}
+    {canTrade?<Button type="button" onClick={()=>setEditor({})} className="h-10"><Plus className="h-4 w-4"/>Record trade</Button>:<Link to="/accounts" state={{addAccount:true,investment:accounts.length===0}} className="inline-flex min-h-10 items-center rounded-lg bg-primary-fill px-3 text-xs font-semibold text-primary-foreground">{accounts.length===0?'Add first holding':'Set up trade accounts'}</Link>}
    </header>
    <InvestmentAttention positions={positions} quotes={quotes} refreshing={status.loading} onRefresh={()=>{void refresh()}} onOpen={a=>setSelected(a.id)}/>
    <PortfolioSummary metrics={metrics} hidden={hidden} currency={currencyDisplay}/>

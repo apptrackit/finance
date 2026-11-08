@@ -32,7 +32,7 @@ function Toggle({ checked, onChange }: { checked: boolean; onChange: () => void 
       aria-checked={checked}
       onClick={e => { e.stopPropagation(); onChange() }}
       className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 ${
-        checked ? 'bg-primary' : 'bg-muted-foreground/30'
+        checked ? 'bg-primary-fill' : 'bg-muted-foreground/30'
       }`}
     >
       <span
@@ -147,7 +147,7 @@ export function WidgetConfigPanel({
                         {widget.label}
                       </span>
                       {(missingRates || !hasData) && (
-                        <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-md bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 leading-none">
+                        <span className="text-xs font-medium px-1.5 py-0.5 rounded-md bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 leading-none">
                           {missingRates ? 'Missing rates' : 'No data'}
                         </span>
                       )}
@@ -160,7 +160,7 @@ export function WidgetConfigPanel({
                       {widget.description}
                     </p>
                     {widget.note && (
-                      <p className={`text-[11px] mt-1 italic transition-colors ${
+                      <p className={`text-xs mt-1 italic transition-colors ${
                         isVisible ? 'text-muted-foreground/70' : 'text-muted-foreground/30'
                       }`}>
                         {widget.note}
@@ -188,7 +188,7 @@ export function WidgetConfigPanel({
           </p>
           <button
             onClick={onClose}
-            className="w-full h-9 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
+            className="w-full h-9 rounded-lg bg-primary-fill text-primary-foreground text-sm font-medium hover:bg-primary-fill/90 transition-colors"
           >
             Done
           </button>

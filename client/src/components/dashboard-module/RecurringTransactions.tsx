@@ -12,6 +12,8 @@ import { useAlert } from '../../context/AlertContext'
 import { usePrivacy } from '../../context/PrivacyContext'
 import { AmountInput } from '../common/amount-input'
 import { formatAmount, parseAmount } from '../../lib/amount'
+import { MINUS, formatDate, formatNumber } from '../../lib/format'
+import { CategoryIcon } from '../common/CategoryIcon'
 
 // Helper function to convert Date to local YYYY-MM-DD string (no timezone conversion)
 function toLocalDateString(date: Date): string {
@@ -411,12 +413,7 @@ export function RecurringTransactions({
   const formatNextDate = (schedule: RecurringSchedule): string => {
     const next = getNextOccurrence(schedule)
     if (!next) return 'No upcoming'
-    const thisYear = new Date().getFullYear()
-    const mm = String(next.getMonth() + 1).padStart(2, '0')
-    const dd = String(next.getDate()).padStart(2, '0')
-    return next.getFullYear() === thisYear
-      ? `${mm}.${dd}`
-      : `${next.getFullYear()}.${mm}.${dd}`
+    return formatDate(next, next.getFullYear() === new Date().getFullYear() ? 'short' : 'medium')
   }
 
   const expenseCategories = categories.filter(c => c.type === 'expense')
@@ -631,7 +628,7 @@ export function RecurringTransactions({
         // Add month label for first day of each new month
         let monthLabel: string | undefined
         if (date.getMonth() !== lastMonth) {
-          monthLabel = date.toLocaleDateString('en-US', { month: 'short' })
+          monthLabel = formatDate(date, 'monthShort')
           lastMonth = date.getMonth()
         }
         
@@ -720,7 +717,7 @@ export function RecurringTransactions({
         currentDate.setDate(currentDate.getDate() + 1)
       }
       
-      const monthName = `${startDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })} - ${endDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}`
+      const monthName = `${formatDate(startDate, 'monthYear')} – ${formatDate(endDate, 'monthYear')}`
       return { days, monthName }
     } else {
       // Monthly view
@@ -835,7 +832,7 @@ export function RecurringTransactions({
         days.push({ date, dayNumber: day, transactions })
       }
       
-      return { days, monthName: firstDay.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) }
+      return { days, monthName: formatDate(firstDay, 'monthYear') }
     }
   }
 
@@ -874,7 +871,7 @@ export function RecurringTransactions({
           ) : (
             <div className="text-2xl font-bold text-destructive">
               <span className={privacyMode === 'hidden' ? 'select-none' : ''}>
-                {privacyMode === 'hidden' ? '••••••' : (totalExpenses > 0 ? '-' : '') + totalExpenses.toLocaleString('hu-HU', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                {privacyMode === 'hidden' ? '••••••' : (totalExpenses > 0 ? MINUS : '') + formatNumber(totalExpenses, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
               </span>
             </div>
           )}
@@ -891,7 +888,7 @@ export function RecurringTransactions({
           ) : (
             <div className="text-2xl font-bold text-success">
               <span className={privacyMode === 'hidden' ? 'select-none' : ''}>
-                {privacyMode === 'hidden' ? '••••••' : (totalIncome > 0 ? '+' : '') + totalIncome.toLocaleString('hu-HU', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                {privacyMode === 'hidden' ? '••••••' : (totalIncome > 0 ? '+' : '') + formatNumber(totalIncome, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
               </span>
             </div>
           )}
@@ -1151,7 +1148,7 @@ export function RecurringTransactions({
                       <option value="">Select category</option>
                       {(formData.transaction_type === 'expense' ? expenseCategories : incomeCategories).map(cat => (
                         <option key={cat.id} value={cat.id}>
-                          {cat.icon} {cat.name}
+                          {cat.name}
                         </option>
                       ))}
                     </Select>
@@ -1378,10 +1375,7 @@ export function RecurringTransactions({
                 {/* Main row */}
                 <div className="flex items-center gap-3 p-3 md:p-4">
                   {/* Icon */}
-                  {category?.icon
-                    ? <span className="text-xl shrink-0">{category.icon}</span>
-                    : <span className="text-xl shrink-0">🔄</span>
-                  }
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] bg-secondary text-foreground/80"><CategoryIcon icon={category?.icon ?? '🔄'} /></span>
 
                   {/* Info — grows */}
                   <div className="flex-1 min-w-0">
@@ -1399,13 +1393,13 @@ export function RecurringTransactions({
                   <div className="text-right shrink-0">
                     <div className={`font-semibold text-sm ${schedule.amount < 0 ? 'text-destructive' : 'text-success'} ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
                       {privacyMode === 'hidden'
-                        ? `${schedule.amount < 0 ? '-' : '+'}••••`
-                        : `${schedule.amount < 0 ? '-' : '+'}${Math.abs(schedule.amount).toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})}`
+                        ? `${schedule.amount < 0 ? MINUS : '+'}••••`
+                        : `${schedule.amount < 0 ? MINUS : '+'}${formatNumber(Math.abs(schedule.amount), {minimumFractionDigits: 0, maximumFractionDigits: 0})}`
                       } {account?.currency}
                     </div>
                     {schedule.amount_to && toAccount && (
                       <div className={`text-xs text-muted-foreground ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
-                        → {privacyMode === 'hidden' ? '••••' : schedule.amount_to.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})} {toAccount.currency}
+                        → {privacyMode === 'hidden' ? '••••' : formatNumber(schedule.amount_to, {minimumFractionDigits: 0, maximumFractionDigits: 0})} {toAccount.currency}
                       </div>
                     )}
                   </div>
@@ -1477,7 +1471,7 @@ export function RecurringTransactions({
           <div className="grid grid-cols-7 gap-0.5 md:gap-1">
             {/* Day headers */}
             {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(day => (
-              <div key={day} className="text-center text-[10px] md:text-xs font-semibold text-muted-foreground py-1 md:py-2">
+              <div key={day} className="text-center text-xs md:text-xs font-semibold text-muted-foreground py-1 md:py-2">
                 {day}
               </div>
             ))}
@@ -1500,14 +1494,14 @@ export function RecurringTransactions({
                   {day.dayNumber && (
                     <>
                       <div className="flex items-center justify-between mb-0.5 md:mb-1">
-                        <div className={`text-[11px] md:text-xs font-medium ${
+                        <div className={`text-xs md:text-xs font-medium ${
                           isPast ? 'text-muted-foreground/50' :
                           isToday ? 'text-primary font-bold' : 'text-muted-foreground'
                         }`}>
                           {day.dayNumber}
                         </div>
                         {day.monthLabel && (
-                          <div className="text-[9px] md:text-[10px] font-semibold text-muted-foreground/70 uppercase">
+                          <div className="text-[11px] md:text-[11px] font-semibold text-muted-foreground/70 uppercase">
                             {day.monthLabel}
                           </div>
                         )}
@@ -1528,7 +1522,7 @@ export function RecurringTransactions({
                             return (
                               <div
                                 key={txIdx}
-                                className="text-[9px] md:text-[10px] px-0.5 md:px-1 py-0.5 rounded text-center bg-muted text-muted-foreground font-semibold"
+                                className="text-xs md:text-xs px-0.5 md:px-1 py-0.5 rounded text-center bg-muted text-muted-foreground font-semibold"
                                 title={`${day.transactions.length - 2} more transactions`}
                               >
                                 +{day.transactions.length - 2}
@@ -1543,24 +1537,24 @@ export function RecurringTransactions({
                           return (
                             <div
                               key={txIdx}
-                              className={`text-[9px] md:text-[10px] px-0.5 md:px-1 py-0.5 rounded truncate flex items-center justify-center ${
+                              className={`text-xs md:text-xs px-0.5 md:px-1 py-0.5 rounded truncate flex items-center justify-center ${
                                 tx.amount < 0 
                                   ? 'bg-destructive/10 text-destructive' 
                                   : 'bg-success/10 text-success'
                               }`}
                               title={`${tx.description} - ${account?.name || ''} - ${
                                 privacyMode === 'hidden' ? '••••' : 
-                                Math.abs(tx.amount).toLocaleString('hu-HU', { minimumFractionDigits: 0, maximumFractionDigits: 0 })
+                                formatNumber(Math.abs(tx.amount), { minimumFractionDigits: 0, maximumFractionDigits: 0 })
                               }`}
                             >
                               <span className={`${privacyMode === 'hidden' ? 'select-none' : ''} truncate`}>
                                 {showAsIcon ? (
-                                  <span className="text-xs md:text-sm">{category?.icon || '📝'}</span>
+                                  <CategoryIcon icon={category?.icon ?? '📝'} className="h-3.5 w-3.5" />
                                 ) : (
                                   <>
-                                    <span className="hidden md:inline">{category?.icon || ''} </span>
-                                    <span className="hidden md:inline">{privacyMode === 'hidden' ? '••' : Math.abs(tx.amount).toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})}</span>
-                                    <span className="md:hidden text-xs">{category?.icon || '📝'}</span>
+                                    {category?.icon && <CategoryIcon icon={category.icon} className="mr-1 hidden h-3.5 w-3.5 md:inline" />}
+                                    <span className="hidden md:inline">{privacyMode === 'hidden' ? '••' : formatNumber(Math.abs(tx.amount), {minimumFractionDigits: 0, maximumFractionDigits: 0})}</span>
+                                    <CategoryIcon icon={category?.icon ?? '📝'} className="h-3.5 w-3.5 md:hidden" />
                                   </>
                                 )}
                               </span>

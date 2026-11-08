@@ -14,7 +14,7 @@ afterEach(cleanup)
 
 it.each([[-100,-10],[100,10],[0,0]])('shows gain % on net invested without substituting the daily-linked estimate (%s)',(gain,percent)=>{
  render(<PortfolioSummary metrics={metrics(gain,1000)} hidden={false} currency="HUF"/>)
- expect(total().getByText(`${percent>0?'+':''}${percent}% · Gain on net invested`)).toBeVisible()
+ expect(total().getByText(`${percent>0?'+':''}${String(percent).replace('-','−')}% · Gain on net invested`)).toBeVisible()
  expect(total().queryByText('Estimated return unavailable')).not.toBeInTheDocument()
  expect(screen.getByText('+1% estimated')).toBeVisible()
 })
@@ -28,7 +28,7 @@ it('recomputes from the selected currency amounts and masks percentage and money
  const {rerender}=render(<PortfolioSummary metrics={metrics(20,100)} hidden={false} currency="EUR"/>)
  expect(total().getByText('+20% · Gain on net invested')).toBeVisible()
  rerender(<PortfolioSummary metrics={metrics(-10,200)} hidden={false} currency="USD"/>)
- expect(total().getByText('-5% · Gain on net invested')).toBeVisible()
+ expect(total().getByText('−5% · Gain on net invested')).toBeVisible()
  rerender(<PortfolioSummary metrics={metrics(-10,200)} hidden currency="USD"/>)
  expect(total().queryByText(/-5%|-10 USD/)).not.toBeInTheDocument()
  expect(total().getByTitle(/Total gain divided by net invested/)).toHaveTextContent('••••')

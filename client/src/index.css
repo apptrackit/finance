@@ -31,6 +31,7 @@
 
   --color-primary: hsl(var(--primary));
   --color-primary-foreground: hsl(var(--primary-foreground));
+  --color-primary-fill: hsl(var(--primary-fill));
 
   --color-secondary: hsl(var(--secondary));
   --color-secondary-foreground: hsl(var(--secondary-foreground));
@@ -106,7 +107,8 @@
   --accent: 215.625 94.118% 6.667%;
   --accent-foreground: 210 40% 98%;
   
-  --destructive: 0 72% 51%;
+  /* Lighter red keeps small negative figures at 5.1:1 on cards. */
+  --destructive: 0 80% 60%;
   --destructive-foreground: 210 40% 98%;
   
   --success: 142 76% 46%;
@@ -120,6 +122,11 @@
   
   --radius: 0.75rem;
 }
+
+/* Filled controls carry white labels. Every theme fills with its primary,
+   except Original dark, whose lighter text primary gives white only 3.6:1. */
+:root { --primary-fill: var(--primary); }
+:root:not(.theme-mono):not(.theme-redfilter):not([data-color-mode='light']) { --primary-fill: 215.111 63.38% 48%; }
 
 @layer base {
   * {
@@ -285,6 +292,23 @@
 .finance-nav-item[aria-current='page'] svg { color:hsl(var(--primary)); }
 .finance-icon-button { display:flex; align-items:center; justify-content:center; width:40px; height:40px; border:1px solid hsl(var(--border)); border-radius:12px; background:hsl(var(--card)); color:hsl(var(--muted-foreground)); }
 .finance-icon-button:hover { color:hsl(var(--foreground)); background:hsl(var(--secondary)); }
+/* Header glyph buttons: borderless with a 44px hit area, filled only while hovered or pressed. */
+.finance-header-button { display:flex; flex-shrink:0; align-items:center; justify-content:center; width:44px; height:44px; border-radius:999px; color:hsl(var(--muted-foreground)); transition:background-color .15s, color .15s, transform .1s ease-out; }
+.finance-header-button:hover { color:hsl(var(--foreground)); background:hsl(var(--secondary)); }
+.finance-header-button:active { transform:scale(.94); background:hsl(var(--secondary)); }
+.finance-header-button:disabled { opacity:.45; pointer-events:none; }
+.finance-header-button-primary { color:hsl(var(--primary-foreground)); }
+.finance-header-button-primary:hover { background:transparent; color:hsl(var(--primary-foreground)); }
+.finance-header-button-primary > span { display:flex; align-items:center; justify-content:center; width:34px; height:34px; border-radius:999px; background:hsl(var(--primary-fill)); }
+@media (min-width:1024px) { .finance-header-button { width:36px; height:36px; } }
+/* Floating chrome: translucent so content reads through, solid when transparency is reduced. */
+.finance-material { background:hsl(var(--canvas) / .72); -webkit-backdrop-filter:blur(20px) saturate(180%); backdrop-filter:blur(20px) saturate(180%); box-shadow:0 1px 0 hsl(var(--border) / .6); }
+.finance-tab-bar.finance-material { box-shadow:0 -1px 0 hsl(var(--border) / .6); }
+@media (prefers-reduced-transparency: reduce) { .finance-material { background:hsl(var(--canvas)); -webkit-backdrop-filter:none; backdrop-filter:none; } }
+@media (prefers-contrast: more) { .finance-material { background:hsl(var(--canvas)); box-shadow:0 1px 0 hsl(var(--foreground) / .4); } }
+.finance-tab { display:flex; min-width:0; flex:1 1 0; flex-direction:column; align-items:center; gap:2px; border-radius:10px; padding:6px 4px; font-size:11px; font-weight:500; letter-spacing:.01em; transition:transform .1s ease-out; }
+.finance-tab svg { width:24px; height:24px; }
+.finance-tab:active { transform:scale(.94); }
 button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
 :focus-visible { outline:2px solid hsl(var(--primary)); outline-offset:3px; }
 .finance-search-input:focus-visible { outline:none; }
@@ -314,7 +338,7 @@ button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
 .easyui-chart-ranges button { position:relative; isolation:isolate; flex-shrink:0; padding:5px 12px; border-radius:999px; font-size:12px; font-weight:500; color:hsl(var(--muted-foreground)); }
 .easyui-chart-ranges button[aria-pressed='true'] { color:hsl(var(--foreground)); }
 .easyui-chart-pill { position:absolute; inset:0; z-index:-1; border-radius:999px; background:hsl(var(--secondary)); box-shadow:0 1px 3px #00000012; }
-.easyui-chart-control { padding:4px 8px; border-radius:999px; font-size:11px; color:hsl(var(--muted-foreground)); transition:background .15s,color .15s; }
+.easyui-chart-control { padding:4px 8px; border-radius:999px; font-size:12px; color:hsl(var(--muted-foreground)); transition:background .15s,color .15s; }
 .easyui-chart-control:hover, .easyui-chart-control[aria-pressed='true'] { color:hsl(var(--foreground)); background:hsl(var(--secondary)); }
 .easyui-chart-control:disabled { cursor:default; opacity:.45; }
 .easyui-chart-positive { color:hsl(var(--success)); }

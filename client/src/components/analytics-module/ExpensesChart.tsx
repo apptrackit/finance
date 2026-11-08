@@ -5,6 +5,7 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import { usePrivacy } from '../../context/PrivacyContext'
 import { CustomSelect } from './CustomSelect'
 import type { ChartDataPoint, Category } from './types'
+import { formatCompactNumber, formatNumber } from '../../lib/format'
 
 type ExpensesChartProps = {
   data: ChartDataPoint[]
@@ -29,7 +30,7 @@ export const ExpensesChart = memo(function ExpensesChart({ data, selectedCategor
             <div className="flex flex-col">
               <CardTitle className="text-sm sm:text-base">Expenses</CardTitle>
               <p className={`text-xs text-destructive font-semibold ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
-                {privacyMode === 'hidden' ? '••••••' : `Total: ${totalSum.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})} ${masterCurrency}`}
+                {privacyMode === 'hidden' ? '••••••' : `Total: ${formatNumber(totalSum, {minimumFractionDigits: 0, maximumFractionDigits: 0})} ${masterCurrency}`}
               </p>
             </div>
           </div>
@@ -57,20 +58,18 @@ export const ExpensesChart = memo(function ExpensesChart({ data, selectedCategor
                 <XAxis 
                   dataKey="label" 
                   stroke="hsl(var(--muted-foreground))" 
-                  fontSize={10}
+                  fontSize={11}
                   tickLine={false}
                   axisLine={false}
                 />
                 <YAxis 
                   stroke="hsl(var(--muted-foreground))" 
-                  fontSize={10}
+                  fontSize={11}
                   tickLine={false}
                   axisLine={false}
                   tickFormatter={(value) => {
                     if (privacyMode === 'hidden') return '••••'
-                    if (value >= 1000000) return `${(value / 1000000).toFixed(1)}M`
-                    if (value >= 1000) return `${(value / 1000).toFixed(0)}K`
-                    return value.toFixed(0)
+                    return formatCompactNumber(value, value >= 1000000 ? 1 : 0)
                   }}
                   width={50}
                 />
@@ -90,11 +89,11 @@ export const ExpensesChart = memo(function ExpensesChart({ data, selectedCategor
                         <div className="bg-card border border-border rounded-lg p-2 shadow-lg">
                           <p className="text-xs text-muted-foreground mb-1">{label}</p>
                           <p className={`text-sm font-bold text-destructive ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
-                            {privacyMode === 'hidden' ? '••••••' : `${currentValue.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})} ${masterCurrency}`}
+                            {privacyMode === 'hidden' ? '••••••' : `${formatNumber(currentValue, {minimumFractionDigits: 0, maximumFractionDigits: 0})} ${masterCurrency}`}
                           </p>
                           {change !== null && changePercent !== null && (
                             <p className={`text-xs ${change >= 0 ? 'text-destructive' : 'text-success'} ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
-                              {privacyMode === 'hidden' ? '••••' : `${change >= 0 ? '+' : ''}${change.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})} (${changePercent >= 0 ? '+' : ''}${changePercent.toFixed(1)}%)`}
+                              {privacyMode === 'hidden' ? '••••' : `${change >= 0 ? '+' : ''}${formatNumber(change, {minimumFractionDigits: 0, maximumFractionDigits: 0})} (${changePercent >= 0 ? '+' : ''}${formatNumber(changePercent, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%)`}
                             </p>
                           )}
                         </div>

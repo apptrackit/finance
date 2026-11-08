@@ -13,6 +13,7 @@ import type { HoldingChartCache } from './InvestmentChart'
 import type { Account, MarketQuote, Transaction } from './types'
 import { calculatePosition } from './utils'
 import { amount, costPrice, unitPrice, signedAmount, percentage, tone } from './overview'
+import { formatNumber } from '../../lib/format'
 type Props = {
   account: Account | null
   allTransactions: Transaction[]
@@ -92,30 +93,30 @@ export function InvestmentDetailModal({
   const protectedAccount = account.is_locked || account.archived_at != null
   const stat = (label: string, value: string, sub?: string) => (
     <div key={label} className="min-w-0 bg-card px-3 py-3 sm:px-4">
-      <dt className="text-[11px] text-muted-foreground">{label}</dt>
+      <dt className="text-xs text-muted-foreground">{label}</dt>
       <dd className="mt-1.5 break-words text-[15px] font-semibold tabular-nums">{value}</dd>
-      {sub && <p className="mt-1 text-[10px] text-muted-foreground">{sub}</p>}
+      {sub && <p className="mt-1 text-xs text-muted-foreground">{sub}</p>}
     </div>
   )
-  const unitMoney=(value:number|null|undefined,currency:string)=>hidden?'••••••':value==null?'Unavailable':Math.abs(value)>=1?`${value.toLocaleString('hu-HU',{minimumFractionDigits:2,maximumFractionDigits:2})} ${currency}`:unitPrice(value,currency)
+  const unitMoney=(value:number|null|undefined,currency:string)=>hidden?'••••••':value==null?'Unavailable':Math.abs(value)>=1?`${formatNumber(value, {minimumFractionDigits:2,maximumFractionDigits:2})} ${currency}`:unitPrice(value,currency)
   const positionGrid=<section aria-label="Your position" className="space-y-3">
     <h3 className="text-sm font-semibold">Your position</h3>
     <dl className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-border bg-border @min-[480px]:grid-cols-3">
       <div className="min-w-0 bg-card px-3 py-3 sm:px-4">
-        <dt className="text-[11px] text-muted-foreground">{total?'Ownership':account.currency==='SHARE'?'Shares':`Quantity · ${account.currency}`}</dt>
-        <dd className="mt-1.5 break-words text-[15px] font-semibold tabular-nums" title={hidden?undefined:total?undefined:p.actualQuantity.toLocaleString('hu-HU',{maximumFractionDigits:12})}>
-          {hidden?'••••••':total?(account.manual_ownership??'Unknown'):p.actualQuantity.toLocaleString('hu-HU',{maximumFractionDigits:account.asset_type==='crypto'||(p.actualQuantity!==0&&Math.abs(p.actualQuantity)<0.0001)?12:4})}
+        <dt className="text-xs text-muted-foreground">{total?'Ownership':account.currency==='SHARE'?'Shares':`Quantity · ${account.currency}`}</dt>
+        <dd className="mt-1.5 break-words text-[15px] font-semibold tabular-nums" title={hidden?undefined:total?undefined:formatNumber(p.actualQuantity, {maximumFractionDigits:12})}>
+          {hidden?'••••••':total?(account.manual_ownership??'Unknown'):formatNumber(p.actualQuantity, {maximumFractionDigits:account.asset_type==='crypto'||(p.actualQuantity!==0&&Math.abs(p.actualQuantity)<0.0001)?12:4})}
         </dd>
       </div>
       {stat(total?'Remaining cost':'Average cost',total?costPrice(p.metrics.native.remaining_basis,p.metrics.native_currency,hidden):unitMoney(p.metrics.native.average_cost,p.metrics.native_currency))}
       <div className="min-w-0 bg-card px-3 py-3 sm:px-4">
-        <dt className="text-[11px] text-muted-foreground">{total?'Last valued':'Current price'}</dt>
+        <dt className="text-xs text-muted-foreground">{total?'Last valued':'Current price'}</dt>
         <dd className="mt-1.5 break-words text-[15px] font-semibold tabular-nums">{total?(sourceTime?.short??'Unknown'):unitMoney(market?(q?.price??q?.regularMarketPrice):(account.manual_price??null),market?q?.currency||p.quoteCurrency:p.quoteCurrency)}</dd>
-        {!total&&sourceTime&&<p className="mt-1 text-[10px] text-muted-foreground"><time dateTime={sourceDate??undefined} title={sourceTime.full}>{sourceTime.short}</time></p>}
+        {!total&&sourceTime&&<p className="mt-1 text-xs text-muted-foreground"><time dateTime={sourceDate??undefined} title={sourceTime.full}>{sourceTime.short}</time></p>}
       </div>
       {stat('Cost basis',amount(p.metrics.remaining_basis,reportingCurrency,hidden),'Paid for units you hold')}
-      <div className="min-w-0 bg-card px-3 py-3 sm:px-4"><dt className="text-[11px] text-muted-foreground">Unrealized gain</dt><dd className={`mt-1.5 break-words text-[15px] font-semibold tabular-nums ${tone(p.metrics.unrealized_gain,hidden)}`}>{signedAmount(p.metrics.unrealized_gain,reportingCurrency,hidden)}</dd><p className="mt-1 text-[10px] text-muted-foreground">On current holdings</p></div>
-      <div className="min-w-0 bg-card px-3 py-3 sm:px-4"><dt className="text-[11px] text-muted-foreground">Realized gain</dt><dd className={`mt-1.5 break-words text-[15px] font-semibold tabular-nums ${tone(p.metrics.realized_gain,hidden)}`}>{signedAmount(p.metrics.realized_gain,reportingCurrency,hidden)}</dd><p className="mt-1 text-[10px] text-muted-foreground">{p.metrics.realized_gain===0?'No realized profit or loss':'From sold units'}</p></div>
+      <div className="min-w-0 bg-card px-3 py-3 sm:px-4"><dt className="text-xs text-muted-foreground">Unrealized gain</dt><dd className={`mt-1.5 break-words text-[15px] font-semibold tabular-nums ${tone(p.metrics.unrealized_gain,hidden)}`}>{signedAmount(p.metrics.unrealized_gain,reportingCurrency,hidden)}</dd><p className="mt-1 text-xs text-muted-foreground">On current holdings</p></div>
+      <div className="min-w-0 bg-card px-3 py-3 sm:px-4"><dt className="text-xs text-muted-foreground">Realized gain</dt><dd className={`mt-1.5 break-words text-[15px] font-semibold tabular-nums ${tone(p.metrics.realized_gain,hidden)}`}>{signedAmount(p.metrics.realized_gain,reportingCurrency,hidden)}</dd><p className="mt-1 text-xs text-muted-foreground">{p.metrics.realized_gain===0?'No realized profit or loss':'From sold units'}</p></div>
     </dl>
   </section>
   return (
@@ -123,7 +124,7 @@ export function InvestmentDetailModal({
       isOpen
       onClose={close}
       title={account.name}
-      subtitle={<span className="flex flex-wrap items-center gap-x-2 gap-y-1"><span className="font-semibold">{account.symbol}</span><span className="rounded border border-border px-1.5 py-0.5 text-[10px]">{account.asset_type?.toUpperCase()??'Holding'}</span>{(q?.exchangeName||q?.exchange||p.quoteCurrency)&&<span>{[q?.exchangeName||q?.exchange,p.quoteCurrency].filter(Boolean).join(' · ')}</span>}</span>}
+      subtitle={<span className="flex flex-wrap items-center gap-x-2 gap-y-1"><span className="font-semibold">{account.symbol}</span><span className="rounded border border-border px-1.5 py-0.5 text-xs">{account.asset_type?.toUpperCase()??'Holding'}</span>{(q?.exchangeName||q?.exchange||p.quoteCurrency)&&<span>{[q?.exchangeName||q?.exchange,p.quoteCurrency].filter(Boolean).join(' · ')}</span>}</span>}
       headerLeading={<span aria-hidden="true" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/15 text-xs font-bold text-primary">{(account.symbol||account.name).slice(0,2).toUpperCase()}</span>}
       headerClassName="px-4 py-4 sm:px-6 [&_h2]:text-base [&_h2]:font-semibold [&_h2]:text-foreground"
       subtitleClassName="text-xs font-normal tracking-normal whitespace-normal"
@@ -135,7 +136,7 @@ export function InvestmentDetailModal({
         <section aria-label="Holding summary" className="space-y-1.5">
           <p className="text-xs font-medium text-muted-foreground">Position value</p>
           <p className="break-words text-[34px] font-bold leading-tight tracking-tight tabular-nums">
-            <span>{hidden?'••••••':p.currentValue==null?'Unavailable':p.currentValue.toLocaleString('hu-HU',{maximumFractionDigits:reportingCurrency==='HUF'?0:2})}</span><span className="ml-2 text-[15px] font-semibold tracking-normal text-muted-foreground">{reportingCurrency}</span>
+            <span>{hidden?'••••••':p.currentValue==null?'Unavailable':formatNumber(p.currentValue, {maximumFractionDigits:reportingCurrency==='HUF'?0:2})}</span><span className="ml-2 text-[15px] font-semibold tracking-normal text-muted-foreground">{reportingCurrency}</span>
           </p>
           <p className="flex flex-wrap items-baseline gap-x-2 text-[13px] tabular-nums"><span className={`font-semibold ${tone(p.gainLoss,hidden)}`}>{signedAmount(p.gainLoss,reportingCurrency,hidden)}</span>{gainPercent!=null&&<span className={`font-semibold ${tone(p.gainLoss,hidden)}`} title="Gain on net invested">{percentage(gainPercent,hidden)}</span>}<span className="text-muted-foreground">total gain</span></p>
         </section>
@@ -217,22 +218,22 @@ export function InvestmentDetailModal({
               return (
                 <li key={t.id} className="space-y-1 py-3">
                   <div className="flex min-w-0 items-start gap-2">
-                    <span className="rounded border border-border bg-secondary px-1.5 py-1 text-[10px] font-semibold">
+                    <span className="rounded border border-border bg-secondary px-1.5 py-1 text-xs font-semibold">
                       {label}
                     </span>
                     <div className="min-w-0 flex-1">
                       <p className="break-words text-xs tabular-nums">
                         {hidden
                           ? '••••••'
-                          : `${Math.abs(t.quantity ?? 0).toLocaleString(undefined, { maximumFractionDigits: 12 })} ${total ? 'ITEM' : account.currency} @ ${unitPrice(t.price, t.execution_currency ?? 'unverified currency')}`}
+                          : `${formatNumber(Math.abs(t.quantity ?? 0), { maximumFractionDigits: 12 })} ${total ? 'ITEM' : account.currency} @ ${unitPrice(t.price, t.execution_currency ?? 'unverified currency')}`}
                       </p>
-                      <p className="mt-1 text-[10px] text-muted-foreground">{t.date}</p>
+                      <p className="mt-1 text-xs text-muted-foreground">{t.date}</p>
                     </div>
                     <p className="break-words text-right text-xs font-semibold tabular-nums">
                       {amount(t.cash_amount, t.cash_currency ?? 'unverified currency', hidden)}
                     </p>
                   </div>
-                  <div className="flex items-center justify-between gap-3 text-[10px] text-muted-foreground">
+                  <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
                     <p>
                       Included fee:{' '}
                       {hidden

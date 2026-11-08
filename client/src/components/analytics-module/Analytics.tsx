@@ -8,7 +8,9 @@ import { useState, useMemo, useEffect, useCallback } from 'react'
 import { Card, CardContent } from '../common/card'
 import { AccountFilterSelect } from '../common/AccountFilterSelect'
 import { Button } from '../common/button'
-import { Calendar, ChevronLeft, ChevronRight, SlidersHorizontal } from 'lucide-react'
+import { Modal } from '../common/modal'
+import { useMediaQuery } from '../../hooks/useMediaQuery'
+import { Calendar, ChevronDown, ChevronLeft, ChevronRight, SlidersHorizontal } from 'lucide-react'
 import { loadWidgetVisibility, saveWidgetVisibility, type WidgetId } from './widgetConfig'
 import { WidgetConfigPanel } from './WidgetConfigPanel'
 import { format, parseISO, subMonths, addMonths, startOfMonth, endOfMonth, isWithinInterval, subYears, addYears, startOfYear, endOfYear, startOfWeek, endOfWeek, addWeeks, startOfQuarter, endOfQuarter, addQuarters } from 'date-fns'
@@ -94,6 +96,8 @@ export function Analytics({
   const setSelectedIncomeCategory = (incomeCategory: string) => changeFilters({ incomeCategory })
   const setIncomeExpensesTrendResolution = (resolution: IncomeExpensesTrendResolution) => changeFilters({ resolution })
   const [isConfigOpen, setIsConfigOpen] = useState(false)
+  const [filtersOpen, setFiltersOpen] = useState(false)
+  const compactFilters = useMediaQuery('(max-width: 639px)')
   const [widgetVisibility, setWidgetVisibility] = useState<Record<WidgetId, boolean>>(loadWidgetVisibility)
 
   const toggleWidget = (id: WidgetId) => {
@@ -878,6 +882,87 @@ export function Analytics({
 
   if (loading) return <FinancePageLoader view="analytics" accounts={accounts} />
 
+  const filterControls = (
+    <>
+        <AccountFilterSelect accounts={allAccounts} value={accountFilter} onChange={account => changeFilters({ account })}
+          label="Analytics account" className="w-full min-[430px]:w-52" />
+        <div className="flex gap-1 p-1 rounded-xl bg-background/80 border border-border/70 shadow-inner w-full min-[430px]:w-auto">
+          {(Object.keys(periodLabels) as TimePeriod[]).map((p) => (
+            <button
+              key={p}
+              type="button"
+              onClick={() => {
+                changeFilters({ period: p, mode: 'actual', resolution: 'default' })
+              }}
+              aria-pressed={period === p}
+              className={`flex-1 min-[430px]:flex-none px-2.5 sm:px-3 py-1.5 text-xs font-medium rounded-lg transition-all whitespace-nowrap ${
+                period === p
+                  ? 'bg-primary-fill text-primary-foreground shadow-md'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-secondary/70'
+              }`}
+            >
+              {periodLabels[p]}
+            </button>
+          ))}
+        </div>
+        {period !== 'allTime' && (
+          <div className="flex items-center justify-between min-[430px]:justify-start gap-1 rounded-xl border border-border/70 bg-background/70 px-1 py-1 shadow-sm w-full min-[430px]:w-auto">
+            <Button
+              onClick={navigateBack}
+              size="sm"
+              variant="ghost"
+              className="h-7 w-7 sm:h-8 sm:w-8 p-0 rounded-lg hover:bg-secondary"
+              aria-label={`Show previous ${period === 'month' ? 'month' : 'year'}`}
+            >
+              <ChevronLeft className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+            </Button>
+            <span className="min-w-[130px] px-2 text-center text-xs sm:text-sm font-semibold select-none">
+              {periodDisplayLabel}
+            </span>
+            <Button
+              onClick={navigateForward}
+              size="sm"
+              variant="ghost"
+              className="h-7 w-7 sm:h-8 sm:w-8 p-0 rounded-lg hover:bg-secondary"
+              aria-label={`Show next ${period === 'month' ? 'month' : 'year'}`}
+            >
+              <ChevronRight className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+            </Button>
+          </div>
+        )}
+        {hasProjection && (
+          <div className="flex gap-1 p-1 rounded-xl bg-background/80 border border-border/70 shadow-inner w-full min-[430px]:w-auto">
+            <button
+              type="button"
+              onClick={() => setProjectionMode('actual')}
+              aria-pressed={!isProjected}
+              className={`flex-1 min-[430px]:flex-none px-2.5 sm:px-3 py-1.5 text-xs font-medium rounded-lg transition-all whitespace-nowrap ${
+                !isProjected
+                  ? 'bg-primary-fill text-primary-foreground shadow-md'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-secondary/70'
+              }`}
+            >
+              Actual
+            </button>
+            <button
+              type="button"
+              onClick={() => setProjectionMode('projected')}
+              aria-pressed={isProjected}
+              className={`flex-1 min-[430px]:flex-none px-2.5 sm:px-3 py-1.5 text-xs font-medium rounded-lg transition-all whitespace-nowrap ${
+                isProjected
+                  ? 'bg-primary-fill text-primary-foreground shadow-md'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-secondary/70'
+              }`}
+            >
+              Projected ({projectableUpcomingTransactions.length})
+            </button>
+          </div>
+        )}
+    </>
+  )
+  const selectedAccountName = accountFilter === 'all' ? 'All accounts' : allAccounts.find(account => account.id === accountFilter)?.name ?? 'Account'
+  const filterSummary = [selectedAccountName, periodDisplayLabel, hasProjection ? (isProjected ? 'Projected' : 'Actual') : null].filter(Boolean).join(' · ')
+
   const cashTrendChart = show('cash-balance-trend') && accounts.some(account => account.type !== 'investment' && !account.exclude_from_cash_balance) ? (
     <NetWorthTrendChart data={displayedCashBalanceData} masterCurrency={masterCurrency}
       title="Cash Balance Trend" periodLabel={periodDisplayLabel}
@@ -915,84 +1000,26 @@ export function Analytics({
         the top of the page. This must be a page-level sibling so it can remain
         sticky for the full analytics feed. The offsets match the app header.
       */}
-      <div className="sticky top-[76px] lg:top-0 z-40 w-full border-b border-border/70 bg-canvas py-2.5">
-        <div className="flex flex-wrap items-center gap-2">
-          <AccountFilterSelect accounts={allAccounts} value={accountFilter} onChange={account => changeFilters({ account })}
-            label="Analytics account" className="w-full min-[430px]:w-52" />
-          <div className="flex gap-1 p-1 rounded-xl bg-background/80 border border-border/70 shadow-inner w-full min-[430px]:w-auto">
-            {(Object.keys(periodLabels) as TimePeriod[]).map((p) => (
-              <button
-                key={p}
-                type="button"
-                onClick={() => {
-                  changeFilters({ period: p, mode: 'actual', resolution: 'default' })
-                }}
-                aria-pressed={period === p}
-                className={`flex-1 min-[430px]:flex-none px-2.5 sm:px-3 py-1.5 text-xs font-medium rounded-lg transition-all whitespace-nowrap ${
-                  period === p
-                    ? 'bg-primary text-primary-foreground shadow-md'
-                    : 'text-muted-foreground hover:text-foreground hover:bg-secondary/70'
-                }`}
-              >
-                {periodLabels[p]}
-              </button>
-            ))}
+      <div className="finance-material sticky top-[64px] lg:top-0 z-40 -mx-4 w-auto px-4 py-2.5 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
+        {compactFilters ? (
+          <button type="button" onClick={() => setFiltersOpen(true)} aria-haspopup="dialog" aria-label={`Filters: ${filterSummary}`}
+            className="flex h-11 w-full items-center gap-2.5 rounded-xl border border-border bg-card px-3 text-left text-sm font-medium active:bg-secondary">
+            <SlidersHorizontal className="h-4 w-4 shrink-0 text-muted-foreground" />
+            <span className="min-w-0 flex-1 truncate">{filterSummary}</span>
+            <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
+          </button>
+        ) : (
+          <div className="flex flex-wrap items-center gap-2">
+            {filterControls}
           </div>
-          {period !== 'allTime' && (
-            <div className="flex items-center justify-between min-[430px]:justify-start gap-1 rounded-xl border border-border/70 bg-background/70 px-1 py-1 shadow-sm w-full min-[430px]:w-auto">
-              <Button
-                onClick={navigateBack}
-                size="sm"
-                variant="ghost"
-                className="h-7 w-7 sm:h-8 sm:w-8 p-0 rounded-lg hover:bg-secondary"
-                aria-label={`Show previous ${period === 'month' ? 'month' : 'year'}`}
-              >
-                <ChevronLeft className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-              </Button>
-              <span className="min-w-[130px] px-2 text-center text-xs sm:text-sm font-semibold select-none">
-                {periodDisplayLabel}
-              </span>
-              <Button
-                onClick={navigateForward}
-                size="sm"
-                variant="ghost"
-                className="h-7 w-7 sm:h-8 sm:w-8 p-0 rounded-lg hover:bg-secondary"
-                aria-label={`Show next ${period === 'month' ? 'month' : 'year'}`}
-              >
-                <ChevronRight className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-              </Button>
-            </div>
-          )}
-          {hasProjection && (
-            <div className="flex gap-1 p-1 rounded-xl bg-background/80 border border-border/70 shadow-inner w-full min-[430px]:w-auto">
-              <button
-                type="button"
-                onClick={() => setProjectionMode('actual')}
-                aria-pressed={!isProjected}
-                className={`flex-1 min-[430px]:flex-none px-2.5 sm:px-3 py-1.5 text-xs font-medium rounded-lg transition-all whitespace-nowrap ${
-                  !isProjected
-                    ? 'bg-primary text-primary-foreground shadow-md'
-                    : 'text-muted-foreground hover:text-foreground hover:bg-secondary/70'
-                }`}
-              >
-                Actual
-              </button>
-              <button
-                type="button"
-                onClick={() => setProjectionMode('projected')}
-                aria-pressed={isProjected}
-                className={`flex-1 min-[430px]:flex-none px-2.5 sm:px-3 py-1.5 text-xs font-medium rounded-lg transition-all whitespace-nowrap ${
-                  isProjected
-                    ? 'bg-primary text-primary-foreground shadow-md'
-                    : 'text-muted-foreground hover:text-foreground hover:bg-secondary/70'
-                }`}
-              >
-                Projected ({projectableUpcomingTransactions.length})
-              </button>
-            </div>
-          )}
-        </div>
+        )}
       </div>
+      <Modal isOpen={compactFilters && filtersOpen} onClose={() => setFiltersOpen(false)} title="Filters">
+        <div className="flex flex-col gap-3">
+          {filterControls}
+          <Button type="button" onClick={() => setFiltersOpen(false)} className="mt-2 h-11 w-full">Done</Button>
+        </div>
+      </Modal>
 
       <MissingExchangeRates currencies={requiredConversions.missingCurrencies} targetCurrency={masterCurrency} onRetry={onRetryRates} />
       {!hasData ? (

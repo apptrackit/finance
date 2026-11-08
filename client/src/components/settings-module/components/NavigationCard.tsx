@@ -82,7 +82,7 @@ export function NavigationCard() {
               onClick={() => handleToggleMenu(item.key as MenuKey)}
               disabled={isLoading || isSaving}
               className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 ${
-                menuVisibility[item.key as MenuKey] ? 'bg-primary' : 'bg-muted'
+                menuVisibility[item.key as MenuKey] ? 'bg-primary-fill' : 'bg-muted'
               } disabled:cursor-not-allowed disabled:opacity-60`}
               role="switch"
               aria-checked={menuVisibility[item.key as MenuKey]}

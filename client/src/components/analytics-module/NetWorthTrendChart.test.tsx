@@ -51,7 +51,7 @@ describe('Cash Balance Trend comparison', () => {
     expect(screen.getByText('October 2026')).toBeInTheDocument()
     expect(screen.getByText('September 2026')).toBeInTheDocument()
     expect(screen.getByText('Oct 13 vs Sep 13 · latest shared day')).toBeInTheDocument()
-    expect(within(screen.getByTestId('tooltip')).getByText('+200 HUF (+20.0%)')).toBeInTheDocument()
+    expect(within(screen.getByTestId('tooltip')).getByText('+200 HUF (+20,0%)')).toBeInTheDocument()
     expect(screen.queryByRole('slider')).not.toBeInTheDocument()
     expect(screen.queryByText(/Inspect day/)).not.toBeInTheDocument()
     toggle()
@@ -82,7 +82,7 @@ describe('Cash Balance Trend comparison', () => {
     expect(screen.getByTestId('tooltip')).not.toHaveTextContent('%')
     expect(screen.getAllByText('••••••').length).toBeGreaterThan(3)
     expect(screen.queryByText(/1[\s\u00a0]?200 HUF/)).not.toBeInTheDocument()
-    expect(screen.queryByText(/20.0%/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/20,0%/)).not.toBeInTheDocument()
   })
 
   it('explains unavailable history and projected mode, and hides controls outside Month', () => {
@@ -106,7 +106,7 @@ describe('Cash Balance Trend comparison', () => {
     render(<NetWorthTrendChart data={data} masterCurrency="HUF" comparison={result} />)
     toggle()
     expect(screen.getByText('Mar 28 vs Feb 28 · latest shared day')).toBeInTheDocument()
-    expect(screen.getAllByText('-100 HUF').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('−100 HUF').length).toBeGreaterThan(0)
     expect(screen.getByText('The previous month has no matching calendar day.')).toBeInTheDocument()
     expect(screen.getByTestId('tooltip')).not.toHaveTextContent('%')
   })
@@ -128,7 +128,7 @@ describe('Cash Balance Trend comparison', () => {
     expect(order()).toEqual(['Trend', 'Compare previous month'])
     expect(screen.getByText('Trend', { selector: 'button' })).toHaveClass('invisible')
     expect(screen.getByText('+200 HUF')).toBeInTheDocument()
-    expect(screen.getByText('+20.0%', { selector: '.easyui-chart-positive', exact: false })).toBeInTheDocument()
+    expect(screen.getByText('+20,0%', { selector: '.easyui-chart-positive', exact: false })).toBeInTheDocument()
   })
 
   it('compares a year with the previous year on month ticks', () => {
@@ -145,6 +145,6 @@ describe('Cash Balance Trend comparison', () => {
     expect(screen.getByText('2025')).toBeInTheDocument()
     expect(screen.getByTestId('axis-day')).toHaveTextContent('Jan,Mar,May,Jul,Sep,Nov')
     expect(screen.getByText('Oct 13 vs Oct 13 · latest shared day')).toBeInTheDocument()
-    expect(within(screen.getByTestId('tooltip')).getByText('+200 HUF (+20.0%)')).toBeInTheDocument()
+    expect(within(screen.getByTestId('tooltip')).getByText('+200 HUF (+20,0%)')).toBeInTheDocument()
   })
 })

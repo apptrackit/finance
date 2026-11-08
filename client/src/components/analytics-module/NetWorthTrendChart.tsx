@@ -6,6 +6,7 @@ import { cn } from '../../lib/utils'
 import type { TrendDataPoint } from './types'
 import { CashBalanceComparisonChart } from './CashBalanceComparisonChart'
 import type { CashBalanceComparison } from './cash-balance-comparison'
+import { formatNumber } from '../../lib/format'
 
 type NetWorthTrendChartProps = {
   data: TrendDataPoint[]
@@ -56,7 +57,7 @@ export const NetWorthTrendChart = memo(function NetWorthTrendChart({ data, maste
     : data.length > 1 ? <InteractiveAreaChart
       data={data.map(point => ({ date: point.date, value: point.balance, reference: point.smoothed }))}
       label="Cash balance" title={title} controls={controls} periodLabel={periodLabel}
-      formatValue={value => value === null ? 'Unavailable' : `${value.toLocaleString('hu-HU', { maximumFractionDigits: 0 })} ${masterCurrency}`}
+      formatValue={value => value === null ? 'Unavailable' : `${formatNumber(value, { maximumFractionDigits: 0 })} ${masterCurrency}`}
       reference={showTrend ? { label: 'Trend', color: 'hsl(var(--muted-foreground))', dashed: true } : undefined}
       showReadout showChange
       className={chartHeight}

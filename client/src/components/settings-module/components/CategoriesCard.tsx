@@ -10,6 +10,7 @@ import { EMOJI_OPTIONS } from '../constants'
 import type { Category } from '../types'
 import { useSettingsMobile } from '../useSettingsMobile'
 import { EmojiPicker } from './EmojiPicker'
+import { CategoryIcon, categoryIconLabel, distinctIconOptions } from '../../common/CategoryIcon'
 
 type CategoryType = Category['type']
 type Draft = { id?: string; name: string; icon: string; type: CategoryType }
@@ -173,9 +174,8 @@ export function CategoriesCard({
             disabled={busy}
             aria-expanded={picker === pickerId}
             onClick={() => setPicker(picker === pickerId ? null : pickerId)}
-            className="text-xl"
           >
-            {draft.icon}
+            <CategoryIcon icon={draft.icon} className="h-5 w-5" />
           </Button>
           {!inSheet && picker === pickerId && (
             <EmojiPicker onChange={(icon) => update({ ...draft, icon })} onClose={() => setPicker(null)} />
@@ -206,17 +206,17 @@ export function CategoriesCard({
         )}
         {inSheet && (
           <div className="grid grid-cols-8 gap-1 max-h-44 w-full overflow-y-auto rounded-xl border border-border p-2">
-            {EMOJI_OPTIONS.map((icon, index) => (
+            {distinctIconOptions(EMOJI_OPTIONS).map((icon, index) => (
               <button
                 key={index}
                 type="button"
-                aria-label={`Use ${icon}`}
+                aria-label={`Use ${categoryIconLabel(icon)} icon`}
                 aria-pressed={draft.icon === icon}
                 disabled={busy}
                 onClick={() => update({ ...draft, icon })}
-                className={`h-10 rounded-lg text-xl hover:bg-accent ${draft.icon === icon ? 'bg-accent' : ''}`}
+                className={`flex h-10 items-center justify-center rounded-lg hover:bg-accent ${draft.icon === icon ? 'bg-accent text-primary' : ''}`}
               >
-                {icon}
+                <CategoryIcon icon={icon} className="h-5 w-5" />
               </button>
             ))}
           </div>
@@ -315,7 +315,7 @@ export function CategoriesCard({
                   deleteConfirmation
                 ) : (
                   <>
-                    <span className="settings-category-icon">{category.icon || '📌'}</span>
+                    <span className="settings-category-icon"><CategoryIcon icon={category.icon || '📌'} /></span>
                     <span className="settings-category-name">{category.name}</span>
                     {!mobile && (
                       <div className="settings-category-actions">

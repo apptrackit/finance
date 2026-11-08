@@ -120,7 +120,7 @@ it('does not invent percentage changes for an unknown, zero or negative opening 
     expect(container).not.toHaveTextContent('%')
   }
   rerender(<InteractiveAreaChart {...props} data={[{ ...points[0], value: 100 }, points[3]]} showChange />)
-  expect(container).toHaveTextContent('+100.0%')
+  expect(container).toHaveTextContent('+100,0%')
   rerender(<InteractiveAreaChart {...props} hidden showChange title="Cash balance" controls={<button>1M</button>} />)
   expect(screen.getByRole('heading', { name: 'Cash balance' })).toBeVisible()
   expect(screen.getByRole('button', { name: '1M' })).toBeVisible()

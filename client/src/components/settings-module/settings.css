@@ -76,7 +76,7 @@
 }
 .settings-segments button[aria-pressed='true'],
 .settings-segments button[aria-checked='true'] {
-  background: hsl(var(--primary));
+  background: hsl(var(--primary-fill));
   color: hsl(var(--primary-foreground));
 }
 .settings-segments button:disabled {

@@ -15,14 +15,14 @@ describe('account allocations with missing FX', () => {
       { id: 'eur', name: 'EUR account', type: 'cash', currency: 'EUR', balance: 100 },
     ]} onAccountAdded={vi.fn()} />)
     expect(await screen.findByRole('alert')).toHaveTextContent('EUR')
-    expect(screen.getByText('€100')).toBeInTheDocument()
-    expect(screen.getByText('100 000,381 Ft')).toBeInTheDocument()
+    expect(screen.getByText('100 EUR')).toBeInTheDocument()
+    expect(screen.getByText('100 000,381 HUF')).toBeInTheDocument()
     expect(screen.getByText('Allocation unavailable')).toBeInTheDocument()
     expect(container).not.toHaveTextContent('NaN')
     rates = { USD: 1, HUF: 360, EUR: 0.9 }
     fireEvent.click(screen.getByRole('button', { name: 'Retry rates' }))
     await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument())
     expect(screen.queryByText('Allocation unavailable')).not.toBeInTheDocument()
-    expect(screen.getByText('€100')).toBeInTheDocument()
+    expect(screen.getByText('100 EUR')).toBeInTheDocument()
   })
 })

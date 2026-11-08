@@ -28,6 +28,7 @@ import { getMcpReviewItems, hasPossibleDuplicateFlag, isMcpReviewTransaction } f
 import { TransactionCalendar } from './TransactionCalendar'
 import { TransferForm, type TransferAccount, type TransferFormData } from './TransferForm'
 import { cn } from '../../lib/utils'
+import { CategoryIcon } from '../common/CategoryIcon'
 
 type Transaction = TradeFacts & {
   id: string
@@ -1124,11 +1125,7 @@ export function TransactionList({
     return cat ? cat.name : 'Unknown'
   }
 
-  const getCategoryIcon = (id?: string | null) => {
-    if (!id) return '📄'
-    const cat = categories.find(c => c.id === id)
-    return cat?.icon || '📄'
-  }
+  const getCategoryIcon = (id?: string | null) => <CategoryIcon icon={id ? categories.find(c => c.id === id)?.icon ?? '📄' : '📄'} />
 
   const getAccountName = (id: string) => {
     const acc = accounts.find(a => a.id === id)
@@ -1353,7 +1350,7 @@ export function TransactionList({
     if (!recentLabel) return null
 
     return (
-      <span className="flex-shrink-0 select-none text-[10px] font-medium lowercase leading-none text-primary/90 animate-pulse-slow">
+      <span className="flex-shrink-0 select-none text-xs font-medium lowercase leading-none text-primary/90 animate-pulse-slow">
         {recentLabel}
       </span>
     )
@@ -1530,7 +1527,7 @@ export function TransactionList({
     <Select value={['all', 'all-expenses', 'all-income', 'transfer'].includes(selectedCategory) ? 'all' : selectedCategory} aria-label="Transaction category" onChange={e => onChange({ category: e.target.value })} className="h-11 w-full min-w-0 sm:h-10 sm:w-auto text-base sm:text-[13px] sm:max-w-44">
       <option value="all">All categories</option>
       {!['all', 'all-expenses', 'all-income', 'transfer'].includes(selectedCategory) && !categories.some(category => category.id === selectedCategory) && <option value={selectedCategory}>Selected category (unavailable)</option>}
-      {(['expense', 'income'] as const).map(type => <optgroup key={type} label={type === 'expense' ? 'Expenses' : 'Income'}>{categories.filter(c => c.type === type).map(cat => <option key={cat.id} value={cat.id}>{cat.icon} {cat.name}</option>)}</optgroup>)}
+      {(['expense', 'income'] as const).map(type => <optgroup key={type} label={type === 'expense' ? 'Expenses' : 'Income'}>{categories.filter(c => c.type === type).map(cat => <option key={cat.id} value={cat.id}>{cat.name}</option>)}</optgroup>)}
     </Select>
     <AccountFilterSelect accounts={accounts} value={account} onChange={value => onChange({ account: value })}
       label="Transaction account" className="w-full sm:w-52" selectClassName="h-11 text-base sm:h-10 sm:text-sm" />
@@ -1699,7 +1696,7 @@ export function TransactionList({
                       {categories
                         .filter(c => c.type === formData.type)
                         .map(c => (
-                        <option key={c.id} value={c.id}>{c.icon} {c.name}</option>
+                        <option key={c.id} value={c.id}>{c.name}</option>
                       ))}
                     </Select>
                   </div>}
@@ -1714,7 +1711,7 @@ export function TransactionList({
                       className="w-full min-w-0"
                     />
                     {isUpcomingForm && (
-                      <p className="text-[11px] text-primary">This will be saved as an upcoming transaction.</p>
+                      <p className="text-xs text-primary">This will be saved as an upcoming transaction.</p>
                     )}
                   </div>
                   <div className="space-y-2 min-w-0">
@@ -1822,7 +1819,7 @@ export function TransactionList({
                 return <section key={date} aria-label={format(parseISO(date), 'EEEE, MMM d, yyyy')}>
                   <div className="mb-1 flex flex-wrap items-baseline gap-x-4 gap-y-1 border-b border-border/60 px-1 pb-2 text-xs text-muted-foreground">
                     <h3>{format(parseISO(date), 'EEE, MMM d, yyyy')}</h3>
-                    {dailyCashFlow.length > 0 && <span className="whitespace-nowrap text-[11px] tabular-nums" aria-label="Daily total" title="Income less spending; transfers and investment trades excluded">{convertedAmount(sumCash(dailyCashFlow))}</span>}
+                    {dailyCashFlow.length > 0 && <span className="whitespace-nowrap text-xs tabular-nums" aria-label="Daily total" title="Income less spending; transfers and investment trades excluded">{convertedAmount(sumCash(dailyCashFlow))}</span>}
                   </div>
                   {items.map(renderPostedTransaction)}
                 </section>

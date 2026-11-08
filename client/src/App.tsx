@@ -1,9 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router'
-import { Wallet, BarChart3, LayoutDashboard, CreditCard, Settings as SettingsIcon, LineChart, Eye, EyeOff, RefreshCw, Plus, Sun, Moon, MoreHorizontal, Search } from 'lucide-react'
+import { Wallet, BarChart3, LayoutDashboard, CreditCard, Settings as SettingsIcon, LineChart, Eye, EyeOff, RefreshCw, Plus, MoreHorizontal, Search } from 'lucide-react'
 import { getMasterCurrency, getStoredMenuVisibility, loadNavigationSettings } from './components/settings-module/settings.storage'
 import { MENU_VISIBILITY_EVENT, type MenuKey } from './components/settings-module/constants'
-import { useTheme } from './context/ThemeContext'
 import { TransactionList } from './components/dashboard-module/TransactionList'
 import { Modal } from './components/common/modal'
 import { usePrivacy } from './context/PrivacyContext'
@@ -33,7 +32,6 @@ function App() {
   const [visibleMenus, setVisibleMenus] = useState<Record<MenuKey, boolean>>(getStoredMenuVisibility)
   const [navigationReady, setNavigationReady] = useState(false)
   const { privacyMode, togglePrivacyMode } = usePrivacy()
-  const { colorMode, setColorMode } = useTheme()
   const [moreOpen, setMoreOpen] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
   const hasUnfinishedChanges = useHasUnsavedChanges()
@@ -135,11 +133,7 @@ function App() {
     document.addEventListener('keydown', keyDown)
     return () => document.removeEventListener('keydown', keyDown)
   }, [canCompose, searchOpen, hasUnfinishedChanges])
-  const themeControl = <button type="button" onClick={() => setColorMode(colorMode === 'dark' ? 'light' : 'dark')}
-    className="finance-nav-item w-full" aria-label={colorMode === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}>
-    {colorMode === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}<span>{colorMode === 'dark' ? 'Light mode' : 'Dark mode'}</span>
-  </button>
-  const privacyControl = <button type="button" onClick={togglePrivacyMode} className="finance-icon-button"
+  const privacyControl = <button type="button" onClick={togglePrivacyMode} className="finance-header-button"
     aria-label={privacyMode === 'hidden' ? 'Show values' : 'Hide values'} title={privacyMode === 'hidden' ? 'Show values' : 'Hide values'} aria-pressed={privacyMode === 'hidden'}>
     {privacyMode === 'hidden' ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
   </button>
@@ -148,13 +142,13 @@ function App() {
     <aside className="finance-sidebar fixed inset-y-0 left-0 z-40 hidden flex-col border-r border-border bg-card px-3.5 py-5 lg:flex overflow-hidden">
       <div className="mb-5 flex shrink-0 items-center gap-2">
         <NavLink to="/dashboard" className="flex min-w-0 flex-1 items-center gap-2.5 px-1.5" aria-label="Finance home">
-          <span className="flex h-8 w-8 items-center justify-center rounded-[9px] bg-primary text-primary-foreground"><Wallet className="h-[17px] w-[17px]" /></span>
-          <span><span className="block text-[15px] font-semibold">Finance</span><span className="block text-[11px] text-muted-foreground">Self-hosted</span></span>
+          <span className="flex h-8 w-8 items-center justify-center rounded-[9px] bg-primary-fill text-primary-foreground"><Wallet className="h-[17px] w-[17px]" /></span>
+          <span><span className="block text-[15px] font-semibold">Finance</span><span className="block text-xs text-muted-foreground">Self-hosted</span></span>
         </NavLink>
         {privacyControl}
       </div>
       <button type="button" onClick={() => setSearchOpen(true)} aria-label="Search everything" aria-keyshortcuts="Meta+K Control+K" className="mb-5 flex h-10 shrink-0 cursor-pointer items-center gap-2 rounded-[10px] border border-border bg-background px-3 text-xs text-muted-foreground hover:bg-secondary hover:text-foreground">
-        <Search className="h-4 w-4 shrink-0" /><span className="flex-1 text-left">Search everything…</span><kbd aria-hidden="true" className="rounded border border-border px-1 text-[10px]">{searchShortcut}</kbd>
+        <Search className="h-4 w-4 shrink-0" /><span className="flex-1 text-left">Search everything…</span><kbd aria-hidden="true" className="rounded border border-border px-1 text-xs tracking-wide">{searchShortcut}</kbd>
       </button>
       <nav aria-label="Main navigation" className="shrink-0 space-y-0.5">
         {availableNav.filter(item => item.key !== 'accounts').map(item => <NavLink key={item.key} to={`/${item.key}`} end className="finance-nav-item">{item.icon}<span>{item.label}</span></NavLink>)}
@@ -163,19 +157,15 @@ function App() {
         status={dataStatus.accounts} valuationLoading={dataStatus.exchangeRates.loading || dataStatus.investment.loading} />}
       <div className="mt-auto shrink-0 space-y-0.5 border-t border-border pt-3">
         <NavLink to="/settings" end className="finance-nav-item"><SettingsIcon className="h-4 w-4" />Settings</NavLink>
-        {themeControl}
-        <p className="pt-1.5 text-center text-[11px] text-muted-foreground">v{APP_VERSION}</p>
+        <p className="pt-1.5 text-center text-xs text-muted-foreground">v{APP_VERSION}</p>
       </div>
     </aside>
     <div className="finance-main pb-24 lg:pb-0">
-      <header className="finance-mobile-header sticky top-0 z-40 flex items-center gap-2 border-b border-border bg-canvas/95 px-4 py-3 backdrop-blur-lg">
+      <header className="finance-mobile-header finance-material sticky top-0 z-40 flex items-center gap-1 px-4 py-2.5">
         <div className="min-w-0 flex-1"><p className="text-xs text-muted-foreground">Finance</p><h1 className="text-[22px] font-semibold tracking-tight">{title}</h1></div>
         {privacyControl}
-        <button type="button" className="finance-icon-button" aria-label="Search everything" onClick={() => setSearchOpen(true)}><Search className="h-4 w-4" /></button>
-        {view !== 'dashboard' && <button type="button" className="finance-icon-button" aria-label={colorMode === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'} onClick={() => setColorMode(colorMode === 'dark' ? 'light' : 'dark')}>
-          {colorMode === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-        </button>}
-        {view !== 'dashboard' && <NavLink to="/settings" aria-label="Settings" className="finance-icon-button"><SettingsIcon className="h-4 w-4" /></NavLink>}
+        <button type="button" className="finance-header-button" aria-label="Search everything" onClick={() => setSearchOpen(true)}><Search className="h-5 w-5" /></button>
+        <button type="button" onClick={newTransaction} disabled={!canCompose} aria-label="New transaction" title="New transaction" className="finance-header-button finance-header-button-primary"><span><Plus className="h-5 w-5" /></span></button>
       </header>
       <main id="main-content" className="mx-auto w-full max-w-[1280px] px-4 py-4 sm:px-6 lg:px-8 lg:py-6">
         {view !== 'dashboard' && view !== 'investments' && view !== 'settings' && <div className="mb-5 hidden items-center justify-between lg:flex"><h1 className="text-2xl font-semibold tracking-tight">{title}</h1></div>}
@@ -187,19 +177,16 @@ function App() {
         </div>
       </main>
     </div>
-    <nav aria-label="Mobile navigation" className="fixed inset-x-0 bottom-0 z-50 border-t border-border bg-card/95 px-2 pt-2 backdrop-blur-xl lg:hidden" style={{ paddingBottom: 'max(8px, env(safe-area-inset-bottom))' }}>
+    <nav aria-label="Mobile navigation" className="finance-material finance-tab-bar fixed inset-x-0 bottom-0 z-50 px-2 pt-1.5 lg:hidden" style={{ paddingBottom: 'max(8px, env(safe-area-inset-bottom))' }}>
       <div className="flex items-center justify-around gap-1">
-        {primaryMobileNav.slice(0, 2).map(item => <NavLink key={item.key} to={`/${item.key}`} end className={`flex min-w-0 flex-1 flex-col items-center gap-1 rounded-lg px-1 py-2 text-[10px] font-medium ${view === item.key ? 'text-primary' : 'text-muted-foreground'}`}>{item.icon}<span>{item.label}</span></NavLink>)}
-        <button type="button" onClick={newTransaction} disabled={!canCompose} aria-label="New transaction" className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[14px] bg-primary text-primary-foreground shadow-lg shadow-primary/20 disabled:opacity-50"><Plus className="h-5 w-5" /></button>
-        {primaryMobileNav.slice(2).map(item => <NavLink key={item.key} to={`/${item.key}`} end className={`flex min-w-0 flex-1 flex-col items-center gap-1 rounded-lg px-1 py-2 text-[10px] font-medium ${view === item.key ? 'text-primary' : 'text-muted-foreground'}`}>{item.icon}<span>{item.label}</span></NavLink>)}
-        <button type="button" onClick={() => setMoreOpen(true)} aria-expanded={moreOpen} className={`flex min-w-0 flex-1 flex-col items-center gap-1 rounded-lg px-1 py-2 text-[10px] font-medium ${view === 'settings' || moreNav.some(item => item.key === view) ? 'text-primary' : 'text-muted-foreground'}`}><MoreHorizontal className="h-4 w-4" /><span>More</span></button>
+        {primaryMobileNav.map(item => <NavLink key={item.key} to={`/${item.key}`} end className={`finance-tab ${view === item.key ? 'text-primary' : 'text-muted-foreground'}`}>{item.icon}<span>{item.label}</span></NavLink>)}
+        <button type="button" onClick={() => setMoreOpen(true)} aria-expanded={moreOpen} className={`finance-tab ${view === 'settings' || moreNav.some(item => item.key === view) ? 'text-primary' : 'text-muted-foreground'}`}><MoreHorizontal /><span>More</span></button>
       </div>
     </nav>
     <Modal isOpen={moreOpen} onClose={() => setMoreOpen(false)} title="More">
       <nav aria-label="More navigation" className="space-y-1">
         {moreNav.map(item => <NavLink key={item.key} to={`/${item.key}`} end onClick={() => setMoreOpen(false)} className="finance-nav-item">{item.icon}<span>{item.label}</span></NavLink>)}
         <NavLink to="/settings" onClick={() => setMoreOpen(false)} className="finance-nav-item"><SettingsIcon className="h-4 w-4" />Settings</NavLink>
-        {view === 'dashboard' && themeControl}
       </nav>
     </Modal>
     <SearchPalette isOpen={searchOpen} onClose={() => setSearchOpen(false)} finance={finance} canCompose={canCompose} hasUnfinishedChanges={hasUnfinishedChanges} onNewTransaction={newTransaction}

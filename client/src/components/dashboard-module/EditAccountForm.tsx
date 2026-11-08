@@ -102,7 +102,7 @@ export function EditAccountForm(props: Props) {
         <div className="space-y-2">
           <div className="space-y-1"><Label htmlFor="edit-name" className="text-[13px]">Name</Label><Input id="edit-name" value={value.name} onChange={event => update('name', event.target.value)} required className={accountControlClass} /></div>
           <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1"><Label htmlFor="edit-type" className="text-[13px]">Type</Label><Select disabled={holding} id="edit-type" value={value.type} onChange={event => update('type', event.target.value as AccountFormData['type'])} className={accountControlClass}><option value="cash">💵 Cash / Bank</option><option value="investment">📈 Investment</option></Select></div>
+            <div className="space-y-1"><Label htmlFor="edit-type" className="text-[13px]">Type</Label><Select disabled={holding} id="edit-type" value={value.type} onChange={event => update('type', event.target.value as AccountFormData['type'])} className={accountControlClass}><option value="cash">Cash / Bank</option><option value="investment">Investment</option></Select></div>
             {(!quantity || value.asset_type === 'manual') && <div className="space-y-1"><Label htmlFor="edit-currency" className="text-[13px]">Currency</Label><Select disabled={holding && props.metadataLocked} id="edit-currency" value={value.currency} onChange={event => update('currency', event.target.value)} className={accountControlClass}>
               {[...new Set([...accountCurrencies, value.currency])].map(currency => <option key={currency} value={currency}>{currency}</option>)}
             </Select></div>}

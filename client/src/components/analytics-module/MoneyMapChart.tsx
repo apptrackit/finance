@@ -4,6 +4,7 @@ import { ResponsiveContainer, Sankey } from 'recharts'
 import type { LinkProps as RechartsSankeyLinkProps, NodeProps as RechartsSankeyNodeProps } from 'recharts/types/chart/Sankey'
 import { Card, CardContent, CardHeader, CardTitle } from '../common/card'
 import { usePrivacy } from '../../context/PrivacyContext'
+import { formatCompactNumber, formatNumber } from '../../lib/format'
 
 type CategoryData = {
   name: string
@@ -101,7 +102,7 @@ export const MoneyMapChart = memo(function MoneyMapChart({
 
     const incomeNodeIndexes = income.map(item => {
       const index = nodes.length
-      nodes.push({ name: `income-${item.name}`, label: `${item.icon} ${item.name}`, amount: item.value, kind: 'income' })
+      nodes.push({ name: `income-${item.name}`, label: item.name, amount: item.value, kind: 'income' })
       return index
     })
 
@@ -127,7 +128,7 @@ export const MoneyMapChart = memo(function MoneyMapChart({
 
     expenses.forEach(item => {
       const target = nodes.length
-      nodes.push({ name: `expense-${item.name}`, label: `${item.icon} ${item.name}`, amount: item.value, kind: 'expense' })
+      nodes.push({ name: `expense-${item.name}`, label: item.name, amount: item.value, kind: 'expense' })
       links.push({ source: cashFlowIndex, target, value: item.value })
     })
 
@@ -156,7 +157,7 @@ export const MoneyMapChart = memo(function MoneyMapChart({
 
   const formatAmount = (value: number, full = false) => {
     if (privacyMode === 'hidden') return '••••••'
-    return `${value.toLocaleString('hu-HU', { notation: full ? 'standard' : 'compact', maximumFractionDigits: full ? 2 : 1 })} ${masterCurrency}`
+    return `${full ? formatNumber(value, { maximumFractionDigits: 2 }) : formatCompactNumber(value, 1)} ${masterCurrency}`
   }
 
   const renderNode = (rawProps: RechartsSankeyNodeProps) => {
@@ -208,15 +209,15 @@ export const MoneyMapChart = memo(function MoneyMapChart({
             height={28}
           >
             <div className={isCashFlow ? 'text-center' : isTarget ? 'text-right' : 'text-left'}>
-              <p className="truncate text-[11px] leading-3 font-semibold text-foreground">{payload.label}</p>
-              <p className="truncate text-[10px] leading-3 text-muted-foreground">{formatAmount(payload.amount)}</p>
+              <p className="truncate text-xs leading-3 font-semibold text-foreground">{payload.label}</p>
+              <p className="truncate text-xs leading-3 text-muted-foreground">{formatAmount(payload.amount)}</p>
             </div>
           </foreignObject>
         )}
         {canShowLabel && !compact && (
           <text x={labelX} y={labelY} textAnchor={anchor} fill="hsl(var(--foreground))" fontSize={11} fontWeight={600}>
             <tspan x={labelX}>{payload.label}</tspan>
-            <tspan x={labelX} dy={12} fill="hsl(var(--muted-foreground))" fontSize={10} fontWeight={500}>{formatAmount(payload.amount)}</tspan>
+            <tspan x={labelX} dy={12} fill="hsl(var(--muted-foreground))" fontSize={11} fontWeight={500}>{formatAmount(payload.amount)}</tspan>
           </text>
         )}
       </g>
@@ -264,9 +265,9 @@ export const MoneyMapChart = memo(function MoneyMapChart({
       <CardHeader className="gap-3 pb-2 px-4 sm:px-6 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-2">
           <GitFork className="h-4 w-4 text-primary" />
-          <div><CardTitle className="text-sm sm:text-base">Money Map</CardTitle><p className="text-[10px] text-muted-foreground sm:text-xs">How income moves through spending and savings</p></div>
+          <div><CardTitle className="text-sm sm:text-base">Money Map</CardTitle><p className="text-xs text-muted-foreground sm:text-xs">How income moves through spending and savings</p></div>
         </div>
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-muted-foreground sm:text-xs">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground sm:text-xs">
           <Legend color="bg-success" label="Income" />
           <Legend color="bg-destructive" label="Expenses" />
           <Legend color="bg-success" label="Surplus" />
@@ -306,7 +307,7 @@ export const MoneyMapChart = memo(function MoneyMapChart({
             />
           </ResponsiveContainer>
         </div>
-        <p className="px-2 text-center text-[10px] text-muted-foreground">Tap or hover any category or flow to inspect its value.</p>
+        <p className="px-2 text-center text-xs text-muted-foreground">Tap or hover any category or flow to inspect its value.</p>
       </CardContent>
     </Card>
   )

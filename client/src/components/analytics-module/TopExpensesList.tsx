@@ -3,6 +3,8 @@ import { TrendingDown } from 'lucide-react'
 import { format } from 'date-fns'
 import { usePrivacy } from '../../context/PrivacyContext'
 import type { Transaction, Category } from './types'
+import { MINUS, formatNumber } from '../../lib/format'
+import { CategoryIcon } from '../common/CategoryIcon'
 
 type TopExpensesListProps = {
   transactions: Transaction[]
@@ -41,19 +43,19 @@ export function TopExpensesList({ transactions, categories, masterCurrency, conv
                 key={tx.id} 
                 className="flex items-center gap-2 sm:gap-3 p-2.5 sm:p-3 rounded-xl bg-secondary/30 hover:bg-secondary/50 transition-colors"
               >
-                <div className="h-7 w-7 sm:h-8 sm:w-8 rounded-lg bg-secondary flex items-center justify-center text-sm flex-shrink-0">
-                  {category?.icon || '📦'}
+                <div className="h-7 w-7 sm:h-8 sm:w-8 rounded-lg bg-secondary flex items-center justify-center text-foreground/80 flex-shrink-0">
+                  <CategoryIcon icon={category?.icon ?? '📦'} />
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-xs sm:text-sm font-medium truncate">
                     {tx.description || category?.name || 'Expense'}
                   </p>
-                  <p className="text-[10px] sm:text-xs text-muted-foreground">
+                  <p className="text-xs sm:text-xs text-muted-foreground">
                     {format(new Date(tx.date), 'MMM d, yyyy')}
                   </p>
                 </div>
                 <div className={`text-xs sm:text-sm font-bold text-destructive flex-shrink-0 ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
-                  {privacyMode === 'hidden' ? '-••••••' : `-${convertedAmount.toLocaleString('hu-HU', {minimumFractionDigits: 0, maximumFractionDigits: 0})} ${masterCurrency}`}
+                  {privacyMode === 'hidden' ? `${MINUS}••••••` : `${MINUS}${formatNumber(convertedAmount, {minimumFractionDigits: 0, maximumFractionDigits: 0})} ${masterCurrency}`}
                 </div>
               </div>
             )

@@ -6,11 +6,12 @@ import { usePrivacy } from '../../context/PrivacyContext'
 import { cn } from '../../lib/utils'
 import { comparisonDelta } from './cash-balance-comparison'
 import type { CashBalanceComparison, CashBalanceComparisonPoint, CashBalanceComparisonUnit } from './cash-balance-comparison'
+import { formatCompactNumber, formatNumber } from '../../lib/format'
 
 function ComparisonReadout({ point, currency, unit }: { point: CashBalanceComparisonPoint; currency: string; unit: CashBalanceComparisonUnit }) {
   const { privacyMode } = usePrivacy()
   const hidden = privacyMode === 'hidden'
-  const amount = (value: number, signed = false) => hidden ? '••••••' : `${signed && value > 0 ? '+' : ''}${value.toLocaleString('hu-HU', { maximumFractionDigits: 0 })} ${currency}`
+  const amount = (value: number, signed = false) => hidden ? '••••••' : `${signed && value > 0 ? '+' : ''}${formatNumber(value, { maximumFractionDigits: 0 })} ${currency}`
   const delta = comparisonDelta(point.selected, point.previous)
   return (
     <div className="space-y-1.5 text-xs">
@@ -28,7 +29,7 @@ function ComparisonReadout({ point, currency, unit }: { point: CashBalanceCompar
       )}
       {delta && <p className="border-t border-border/60 pt-1.5">
         <span className="text-muted-foreground">Difference: </span>
-        <span className="font-semibold">{amount(delta.amount, true)}{!hidden && delta.percentage !== null ? ` (${delta.percentage > 0 ? '+' : ''}${delta.percentage.toFixed(1)}%)` : ''}</span>
+        <span className="font-semibold">{amount(delta.amount, true)}{!hidden && delta.percentage !== null ? ` (${delta.percentage > 0 ? '+' : ''}${formatNumber(delta.percentage, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%)` : ''}</span>
       </p>}
       {point.selected === null && point.previous !== null && <p className="text-muted-foreground">Only the previous {unit} has an actual balance on this day.</p>}
       {point.previous === null && point.selected !== null && <p className="text-muted-foreground">The previous {unit} has no matching calendar day.</p>}
@@ -77,11 +78,11 @@ export function CashBalanceComparisonChart({ comparison, currency, title, contro
         <div className="min-w-0" aria-live="polite" aria-atomic="true">
           <h3 className="text-[13px] font-normal text-muted-foreground">{title}</h3>
           <p className="mt-0.5 text-2xl font-semibold tracking-tight tabular-nums sm:text-3xl">
-            {!delta ? '–' : hidden ? '••••••' : `${delta.amount > 0 ? '+' : ''}${delta.amount.toLocaleString('hu-HU', { maximumFractionDigits: 0 })} ${currency}`}
+            {!delta ? '–' : hidden ? '••••••' : `${delta.amount > 0 ? '+' : ''}${formatNumber(delta.amount, { maximumFractionDigits: 0 })} ${currency}`}
           </p>
           {/* One line, like the balance readout, so the card height never changes. */}
           <p className="mt-1 truncate text-xs tabular-nums sm:text-[13px]">
-            {delta && !hidden && delta.percentage !== null && <span className={delta.percentage >= 0 ? 'easyui-chart-positive' : 'easyui-chart-negative'}>{delta.percentage > 0 ? '+' : ''}{delta.percentage.toFixed(1)}% </span>}
+            {delta && !hidden && delta.percentage !== null && <span className={delta.percentage >= 0 ? 'easyui-chart-positive' : 'easyui-chart-negative'}>{delta.percentage > 0 ? '+' : ''}{formatNumber(delta.percentage, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}% </span>}
             <span className="text-muted-foreground">{delta && latestCommon
               ? `${format(parseISO(latestCommon.selectedDate!), 'MMM d')} vs ${format(parseISO(latestCommon.previousDate!), 'MMM d')} · latest shared day`
               : 'No shared day to compare yet'}</span>
@@ -97,9 +98,9 @@ export function CashBalanceComparisonChart({ comparison, currency, title, contro
               <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0} />
             </linearGradient></defs>
             <CartesianGrid vertical={false} stroke="hsl(var(--border))" strokeDasharray="3 3" opacity={0.5} />
-            <XAxis dataKey="day" type="number" domain={[1, comparison.points.length]} ticks={ticks} tickFormatter={tickLabel} stroke="hsl(var(--muted-foreground))" fontSize={10} tickLine={false} axisLine={false} />
-            <YAxis domain={[min - padding, max + padding]} width={56} stroke="hsl(var(--muted-foreground))" fontSize={10} tickLine={false} axisLine={false}
-              tickFormatter={value => hidden ? '••••' : new Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 }).format(value)} />
+            <XAxis dataKey="day" type="number" domain={[1, comparison.points.length]} ticks={ticks} tickFormatter={tickLabel} stroke="hsl(var(--muted-foreground))" fontSize={11} tickLine={false} axisLine={false} />
+            <YAxis domain={[min - padding, max + padding]} width={56} stroke="hsl(var(--muted-foreground))" fontSize={11} tickLine={false} axisLine={false}
+              tickFormatter={value => hidden ? '••••' : formatCompactNumber(value, 1)} />
             <Tooltip content={({ active, payload }) => {
               const activePoint = payload?.[0]?.payload as CashBalanceComparisonPoint | undefined
               return active && activePoint ? <div className="min-w-48 rounded-lg border border-border bg-card p-3 shadow-lg"><ComparisonReadout point={activePoint} currency={currency} unit={comparison.unit} /></div> : null
@@ -112,7 +113,7 @@ export function CashBalanceComparisonChart({ comparison, currency, title, contro
       </div>
       <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap gap-x-5 gap-y-1 px-2 text-xs text-muted-foreground sm:px-0" aria-label="Cash balance comparison legend">
-          <span className="inline-flex items-center gap-1.5"><span aria-hidden="true" className="h-0.5 w-4 bg-primary" />{selectedLabel}</span>
+          <span className="inline-flex items-center gap-1.5"><span aria-hidden="true" className="h-0.5 w-4 bg-primary-fill" />{selectedLabel}</span>
           <span className="inline-flex items-center gap-1.5"><span aria-hidden="true" className="w-4 border-t border-muted-foreground" />{previousLabel}</span>
         </div>
         {footer && <div className="ml-auto flex flex-wrap items-center justify-end gap-2">{footer}</div>}

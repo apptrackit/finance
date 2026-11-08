@@ -1,5 +1,6 @@
 import type {PortfolioHistoryPoint} from '../../../../shared/investment-history-contract'
 import {amount,percentage,signedAmount,tone} from './overview'
+import { formatDate } from '../../lib/format'
 
 export function PortfolioHistoryTooltip({point,currency,hidden=false}:{point:PortfolioHistoryPoint;currency:string;hidden?:boolean}) {
  const {value,net_invested:invested}=point
@@ -7,7 +8,7 @@ export function PortfolioHistoryTooltip({point,currency,hidden=false}:{point:Por
  const gain=difference!=null&&Number.isFinite(difference)?difference:null
  const ratio=gain!=null&&invested!=null&&invested>0?gain/invested*100:null
  const gainPercent=ratio!=null&&Number.isFinite(ratio)?ratio:null
- const date=new Date(`${point.date}T00:00:00Z`).toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric',timeZone:'UTC'})
+ const date=formatDate(point.date)
  return <div className="w-max max-w-[calc(100vw-3rem)] rounded-xl border border-border bg-card p-4 shadow-lg">
   <p className="text-xs text-muted-foreground"><time dateTime={point.date}>{date}</time>{point.provisional?' · provisional':''}</p>
   <p className="mt-3 text-xs text-muted-foreground">Total gain</p>
