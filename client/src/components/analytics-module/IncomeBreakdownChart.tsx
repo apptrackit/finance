@@ -5,6 +5,7 @@ import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts'
 import { usePrivacy } from '../../context/PrivacyContext'
 import { COLORS } from './constants'
 import { formatNumber } from '../../lib/format'
+import { CategoryIcon } from '../common/CategoryIcon'
 
 type CategoryData = {
   name: string
@@ -74,7 +75,7 @@ export const IncomeBreakdownChart = memo(function IncomeBreakdownChart({ data, m
                     className="h-2.5 w-2.5 sm:h-3 sm:w-3 rounded-full flex-shrink-0" 
                     style={{ backgroundColor: COLORS[index % COLORS.length] }}
                   />
-                  <span className="text-xs sm:text-sm flex-shrink-0">{cat.icon}</span>
+                  <CategoryIcon icon={cat.icon} className="h-3.5 w-3.5 flex-shrink-0 text-muted-foreground sm:h-4 sm:w-4" />
                   <span className="text-xs sm:text-sm flex-1 truncate">{cat.name}</span>
                   <div className="flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
                     <span className={`text-xs sm:text-sm font-medium ${privacyMode === 'hidden' ? 'select-none' : ''}`}>

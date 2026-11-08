@@ -4,6 +4,7 @@ import { format } from 'date-fns'
 import { usePrivacy } from '../../context/PrivacyContext'
 import type { Transaction, Category } from './types'
 import { MINUS, formatNumber } from '../../lib/format'
+import { CategoryIcon } from '../common/CategoryIcon'
 
 type TopExpensesListProps = {
   transactions: Transaction[]
@@ -42,8 +43,8 @@ export function TopExpensesList({ transactions, categories, masterCurrency, conv
                 key={tx.id} 
                 className="flex items-center gap-2 sm:gap-3 p-2.5 sm:p-3 rounded-xl bg-secondary/30 hover:bg-secondary/50 transition-colors"
               >
-                <div className="h-7 w-7 sm:h-8 sm:w-8 rounded-lg bg-secondary flex items-center justify-center text-sm flex-shrink-0">
-                  {category?.icon || '📦'}
+                <div className="h-7 w-7 sm:h-8 sm:w-8 rounded-lg bg-secondary flex items-center justify-center text-foreground/80 flex-shrink-0">
+                  <CategoryIcon icon={category?.icon ?? '📦'} />
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-xs sm:text-sm font-medium truncate">

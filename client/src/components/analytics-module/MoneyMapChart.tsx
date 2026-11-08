@@ -102,7 +102,7 @@ export const MoneyMapChart = memo(function MoneyMapChart({
 
     const incomeNodeIndexes = income.map(item => {
       const index = nodes.length
-      nodes.push({ name: `income-${item.name}`, label: `${item.icon} ${item.name}`, amount: item.value, kind: 'income' })
+      nodes.push({ name: `income-${item.name}`, label: item.name, amount: item.value, kind: 'income' })
       return index
     })
 
@@ -128,7 +128,7 @@ export const MoneyMapChart = memo(function MoneyMapChart({
 
     expenses.forEach(item => {
       const target = nodes.length
-      nodes.push({ name: `expense-${item.name}`, label: `${item.icon} ${item.name}`, amount: item.value, kind: 'expense' })
+      nodes.push({ name: `expense-${item.name}`, label: item.name, amount: item.value, kind: 'expense' })
       links.push({ source: cashFlowIndex, target, value: item.value })
     })
 

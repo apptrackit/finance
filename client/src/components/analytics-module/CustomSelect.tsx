@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { ChevronDown, Check } from 'lucide-react'
+import { CategoryIcon } from '../common/CategoryIcon'
 
 type CustomSelectProps = {
   value: string
@@ -41,13 +42,13 @@ export function CustomSelect({
         onClick={() => setIsOpen(!isOpen)}
         className={`flex items-center gap-2 text-xs bg-secondary/50 border border-border rounded-lg px-3 py-1.5 text-foreground cursor-pointer transition-colors focus:outline-none focus:ring-2 ${variantStyles[variant]}`}
       >
-        {selectedOption?.icon && <span>{selectedOption.icon}</span>}
+        {selectedOption?.icon && <CategoryIcon icon={selectedOption.icon} className="h-3.5 w-3.5 text-muted-foreground" />}
         <span>{selectedOption?.label}</span>
         <ChevronDown className={`h-3 w-3 text-muted-foreground transition-transform ${isOpen ? 'rotate-180' : ''}`} />
       </button>
       
       {isOpen && (
-        <div className="absolute right-0 left-auto top-full mt-1 z-50 min-w-[140px] max-w-[calc(100vw-2rem)] bg-card border border-border rounded-lg shadow-xl py-1 animate-in fade-in-0 zoom-in-95">
+        <div className="absolute right-0 left-auto top-full mt-1 z-50 min-w-[140px] max-w-[calc(100vw-2rem)] bg-card border border-border rounded-lg shadow-xl py-1">
           {options.map((option) => (
             <button
               key={option.value}
@@ -59,7 +60,7 @@ export function CustomSelect({
                 value === option.value ? 'text-foreground bg-secondary/30' : 'text-muted-foreground'
               }`}
             >
-              {option.icon && <span>{option.icon}</span>}
+              {option.icon && <CategoryIcon icon={option.icon} className="h-3.5 w-3.5" />}
               <span className="flex-1">{option.label}</span>
               {value === option.value && <Check className="h-3 w-3" />}
             </button>

@@ -13,6 +13,7 @@ import { usePrivacy } from '../../context/PrivacyContext'
 import { AmountInput } from '../common/amount-input'
 import { formatAmount, parseAmount } from '../../lib/amount'
 import { MINUS, formatDate, formatNumber } from '../../lib/format'
+import { CategoryIcon } from '../common/CategoryIcon'
 
 // Helper function to convert Date to local YYYY-MM-DD string (no timezone conversion)
 function toLocalDateString(date: Date): string {
@@ -1147,7 +1148,7 @@ export function RecurringTransactions({
                       <option value="">Select category</option>
                       {(formData.transaction_type === 'expense' ? expenseCategories : incomeCategories).map(cat => (
                         <option key={cat.id} value={cat.id}>
-                          {cat.icon} {cat.name}
+                          {cat.name}
                         </option>
                       ))}
                     </Select>
@@ -1374,10 +1375,7 @@ export function RecurringTransactions({
                 {/* Main row */}
                 <div className="flex items-center gap-3 p-3 md:p-4">
                   {/* Icon */}
-                  {category?.icon
-                    ? <span className="text-xl shrink-0">{category.icon}</span>
-                    : <span className="text-xl shrink-0">🔄</span>
-                  }
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] bg-secondary text-foreground/80"><CategoryIcon icon={category?.icon ?? '🔄'} /></span>
 
                   {/* Info — grows */}
                   <div className="flex-1 min-w-0">
@@ -1551,12 +1549,12 @@ export function RecurringTransactions({
                             >
                               <span className={`${privacyMode === 'hidden' ? 'select-none' : ''} truncate`}>
                                 {showAsIcon ? (
-                                  <span className="text-xs md:text-sm">{category?.icon || '📝'}</span>
+                                  <CategoryIcon icon={category?.icon ?? '📝'} className="h-3.5 w-3.5" />
                                 ) : (
                                   <>
-                                    <span className="hidden md:inline">{category?.icon || ''} </span>
+                                    {category?.icon && <CategoryIcon icon={category.icon} className="mr-1 hidden h-3.5 w-3.5 md:inline" />}
                                     <span className="hidden md:inline">{privacyMode === 'hidden' ? '••' : formatNumber(Math.abs(tx.amount), {minimumFractionDigits: 0, maximumFractionDigits: 0})}</span>
-                                    <span className="md:hidden text-xs">{category?.icon || '📝'}</span>
+                                    <CategoryIcon icon={category?.icon ?? '📝'} className="h-3.5 w-3.5 md:hidden" />
                                   </>
                                 )}
                               </span>

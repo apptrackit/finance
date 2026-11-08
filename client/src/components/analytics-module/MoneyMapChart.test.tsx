@@ -31,7 +31,7 @@ afterEach(() => { vi.stubGlobal('ResizeObserver', originalResizeObserver) })
 
 function flowExtent() {
   const left = screen.getByRole('button', { name: /^Deficit:/ }).querySelector('rect')!
-  const right = screen.getByRole('button', { name: /^• Groceries:/ }).querySelector('rect')!
+  const right = screen.getByRole('button', { name: /^Groceries:/ }).querySelector('rect')!
   return Number(right.getAttribute('x')) + Number(right.getAttribute('width')) - Number(left.getAttribute('x'))
 }
 
@@ -39,7 +39,7 @@ describe('Money Map responsive Sankey', () => {
   it.each([270, 325, 340, 380])('uses over 90%% of a narrow chart width (%i px) for the same Sankey flows', chartWidth => {
     width = chartWidth
     render(<MoneyMapChart {...expenseOnly} />, { wrapper: PrivacyProvider })
-    expect(screen.getByRole('button', { name: /^Cash Flow → • Groceries:/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^Cash Flow → Groceries:/ })).toBeInTheDocument()
     expect(flowExtent() / chartWidth).toBeGreaterThan(0.9)
   })
 
@@ -47,17 +47,17 @@ describe('Money Map responsive Sankey', () => {
     render(<MoneyMapChart {...expenseOnly} />, { wrapper: PrivacyProvider })
     act(() => resize(960))
     expect(screen.getByRole('button', { name: /^Deficit:/ }).querySelector('rect')).toHaveAttribute('x', '110')
-    expect(screen.getByRole('button', { name: /^• Groceries:/ }).querySelector('text')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^Groceries:/ }).querySelector('text')).toBeInTheDocument()
     act(() => resize(325))
     expect(flowExtent() / 325).toBeGreaterThan(0.9)
   })
 
   it('keeps tapped details open after mouse leave and allows closing them', () => {
     render(<MoneyMapChart {...expenseOnly} />, { wrapper: PrivacyProvider })
-    const groceries = screen.getByRole('button', { name: /^• Groceries:/ })
+    const groceries = screen.getByRole('button', { name: /^Groceries:/ })
     fireEvent.click(groceries)
     fireEvent.mouseLeave(groceries)
-    expect(screen.getByRole('status')).toHaveTextContent(/• Groceries14\s300,25 HUF/)
+    expect(screen.getByRole('status')).toHaveTextContent(/Groceries14\s300,25 HUF/)
     fireEvent.click(screen.getByRole('button', { name: 'Close cash flow details' }))
     expect(screen.queryByRole('status')).not.toBeInTheDocument()
   })
@@ -65,7 +65,7 @@ describe('Money Map responsive Sankey', () => {
   it('shows full long names and flow amounts through keyboard inspection', () => {
     const longName = 'Household maintenance and unexpected appliance replacement'
     render(<MoneyMapChart {...expenseOnly} expenseData={[category(longName, 26800.25)]} />, { wrapper: PrivacyProvider })
-    const flow = screen.getByRole('button', { name: new RegExp(`^Cash Flow → • ${longName}:`) })
+    const flow = screen.getByRole('button', { name: new RegExp(`^Cash Flow → ${longName}:`) })
     fireEvent.keyDown(flow, { key: 'Enter' })
     expect(screen.getByRole('status')).toHaveTextContent(longName)
     expect(screen.getByRole('status')).toHaveTextContent(/26\s800,25 HUF/)
@@ -79,20 +79,20 @@ describe('Money Map responsive Sankey', () => {
       return <button onClick={togglePrivacyMode}>Hide amounts</button>
     }
     render(<><MoneyMapChart {...expenseOnly} /><PrivacyToggle /></>, { wrapper: PrivacyProvider })
-    fireEvent.click(screen.getByRole('button', { name: /^• Groceries:/ }))
+    fireEvent.click(screen.getByRole('button', { name: /^Groceries:/ }))
     fireEvent.click(screen.getByRole('button', { name: 'Hide amounts' }))
     expect(screen.getByRole('status')).toHaveTextContent('••••••')
-    expect(screen.getByRole('button', { name: '• Groceries: ••••••' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Groceries: ••••••' })).toBeInTheDocument()
     expect(screen.queryByText(/HUF/)).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /HUF/ })).not.toBeInTheDocument()
   })
 
   it('does not keep selected amounts from a previous period after data changes', () => {
     const { rerender } = render(<MoneyMapChart {...expenseOnly} />, { wrapper: PrivacyProvider })
-    fireEvent.click(screen.getByRole('button', { name: /^• Groceries:/ }))
+    fireEvent.click(screen.getByRole('button', { name: /^Groceries:/ }))
     rerender(<MoneyMapChart {...expenseOnly} expenseData={[category('Travel', 100)]} totalExpenses={100} />)
     expect(screen.queryByRole('status')).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '• Travel: 100 HUF' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Travel: 100 HUF' })).toBeInTheDocument()
   })
 
   it('keeps the empty state when no flows exist', () => {

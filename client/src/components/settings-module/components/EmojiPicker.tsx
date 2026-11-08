@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { EMOJI_OPTIONS } from '../constants'
+import { CategoryIcon, categoryIconLabel, distinctIconOptions } from '../../common/CategoryIcon'
 
 export function EmojiPicker({
   onChange,
@@ -28,7 +29,7 @@ export function EmojiPicker({
       style={{ maxHeight: '300px', overflowY: 'auto' }}
     >
       <div className="grid grid-cols-8 gap-1">
-        {EMOJI_OPTIONS.map((emoji, index) => (
+        {distinctIconOptions(EMOJI_OPTIONS).map((emoji, index) => (
           <button
             key={index}
             type="button"
@@ -36,10 +37,11 @@ export function EmojiPicker({
               onChange(emoji)
               onClose()
             }}
-            className="w-8 h-8 flex items-center justify-center text-xl hover:bg-accent rounded transition-colors"
-            title={emoji}
+            className="w-8 h-8 flex items-center justify-center hover:bg-accent rounded transition-colors"
+            title={categoryIconLabel(emoji)}
+            aria-label={`Use ${categoryIconLabel(emoji)} icon`}
           >
-            {emoji}
+            <CategoryIcon icon={emoji} className="h-[18px] w-[18px]" />
           </button>
         ))}
       </div>

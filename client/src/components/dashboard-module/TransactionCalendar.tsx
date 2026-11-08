@@ -1,3 +1,4 @@
+import type React from 'react'
 import type { HoldingFields } from '../../../../shared/holding'
 import { sumAvailable } from '../../../../shared/currency'
 import { useEffect, useMemo, useState } from 'react'
@@ -47,7 +48,7 @@ export function TransactionCalendar({
   currentMonth: Date
   privacyMode: 'visible' | 'hidden'
   getCategoryName: (id?: string | null) => string
-  getCategoryIcon: (id?: string | null) => string
+  getCategoryIcon: (id?: string | null) => React.ReactNode
   getAccountName: (id: string) => string
   getAccountCurrency: (id: string) => string
   convertToMasterCurrency?: (amount: number, accountId: string) => number | null
@@ -339,7 +340,7 @@ function CalendarTransactionRow({
 }: {
   transaction: CalendarTransaction
   nativeAmount: (value: number, accountId: string, compact?: boolean) => string
-  getCategoryIcon: (id?: string | null) => string
+  getCategoryIcon: (id?: string | null) => React.ReactNode
 }) {
   const isTransfer = !!transaction.linked_transaction_id
   const isIncome = transaction.amount >= 0 && !isTransfer
@@ -348,7 +349,7 @@ function CalendarTransactionRow({
 
   return (
     <div className={`flex min-w-0 items-center gap-1 rounded px-1 py-0.5 text-xs font-semibold sm:text-xs ${tone}`}>
-      <span className="flex h-3.5 w-3.5 flex-shrink-0 items-center justify-center rounded-sm bg-background/40 text-[8px]">{isTransfer ? <ArrowRightLeft className="h-2.5 w-2.5" /> : getCategoryIcon(transaction.category_id)}</span>
+      <span className="flex h-3.5 w-3.5 flex-shrink-0 items-center justify-center rounded-sm bg-background/40 [&>svg]:h-2.5 [&>svg]:w-2.5">{isTransfer ? <ArrowRightLeft className="h-2.5 w-2.5" /> : getCategoryIcon(transaction.category_id)}</span>
       <span className="truncate">{sign}{nativeAmount(transaction.amount, transaction.account_id, true)}</span>
     </div>
   )

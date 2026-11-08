@@ -75,7 +75,7 @@ export function SplitLinesEditor({ lines, resolution, currency, categories, disa
                 className={cn('h-9 text-[13px]', !line.category_id && 'text-muted-foreground')}
               >
                 <option value="">Category</option>
-                {categories.map(category => <option key={category.id} value={category.id}>{category.icon} {category.name}</option>)}
+                {categories.map(category => <option key={category.id} value={category.id}>{category.name}</option>)}
               </Select>
               <Button
                 type="button" variant="ghost" size="icon" className="h-9 w-9 sm:order-last text-muted-foreground"
