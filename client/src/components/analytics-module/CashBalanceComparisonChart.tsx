@@ -29,7 +29,7 @@ function ComparisonReadout({ point, currency, unit }: { point: CashBalanceCompar
       )}
       {delta && <p className="border-t border-border/60 pt-1.5">
         <span className="text-muted-foreground">Difference: </span>
-        <span className="font-semibold">{amount(delta.amount, true)}{!hidden && delta.percentage !== null ? ` (${delta.percentage > 0 ? '+' : ''}${delta.percentage.toFixed(1)}%)` : ''}</span>
+        <span className="font-semibold">{amount(delta.amount, true)}{!hidden && delta.percentage !== null ? ` (${delta.percentage > 0 ? '+' : ''}${formatNumber(delta.percentage, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%)` : ''}</span>
       </p>}
       {point.selected === null && point.previous !== null && <p className="text-muted-foreground">Only the previous {unit} has an actual balance on this day.</p>}
       {point.previous === null && point.selected !== null && <p className="text-muted-foreground">The previous {unit} has no matching calendar day.</p>}
@@ -82,7 +82,7 @@ export function CashBalanceComparisonChart({ comparison, currency, title, contro
           </p>
           {/* One line, like the balance readout, so the card height never changes. */}
           <p className="mt-1 truncate text-xs tabular-nums sm:text-[13px]">
-            {delta && !hidden && delta.percentage !== null && <span className={delta.percentage >= 0 ? 'easyui-chart-positive' : 'easyui-chart-negative'}>{delta.percentage > 0 ? '+' : ''}{delta.percentage.toFixed(1)}% </span>}
+            {delta && !hidden && delta.percentage !== null && <span className={delta.percentage >= 0 ? 'easyui-chart-positive' : 'easyui-chart-negative'}>{delta.percentage > 0 ? '+' : ''}{formatNumber(delta.percentage, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}% </span>}
             <span className="text-muted-foreground">{delta && latestCommon
               ? `${format(parseISO(latestCommon.selectedDate!), 'MMM d')} vs ${format(parseISO(latestCommon.previousDate!), 'MMM d')} · latest shared day`
               : 'No shared day to compare yet'}</span>

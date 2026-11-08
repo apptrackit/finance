@@ -77,8 +77,8 @@ export function AccountShortcuts({ accounts, values, reportingCurrency, status, 
               const balanceLabel = balance.currency ? `${balance.amount} ${balance.currency}` : balance.amount
               const share = shares[account.id]
               const negative = (values[account.id] ?? 0) < 0
-              const shareLabel = hidden ? '•••' : share === null ? (valuationLoading ? '…' : '—') : negative ? 'Negative' : `${share.toFixed(1)}%`
-              const shareDescription = hidden ? 'Share hidden' : share === null ? (valuationLoading ? 'Loading share' : 'Share unavailable: a value in this group is missing') : negative ? 'Negative balance; excluded from positive balance shares' : `${share.toFixed(1)}% of active ${type === 'cash' ? 'cash balances' : 'investment values'}`
+              const shareLabel = hidden ? '•••' : share === null ? (valuationLoading ? '…' : '—') : negative ? 'Negative' : `${formatNumber(share, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`
+              const shareDescription = hidden ? 'Share hidden' : share === null ? (valuationLoading ? 'Loading share' : 'Share unavailable: a value in this group is missing') : negative ? 'Negative balance; excluded from positive balance shares' : `${formatNumber(share, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}% of active ${type === 'cash' ? 'cash balances' : 'investment values'}`
               const shareId = `${id}-share-${account.id}`
               return <NavLink key={account.id} to="/accounts" state={{ editAccountId: account.id }} aria-label={`${account.name}, ${balanceLabel}`} aria-describedby={shareId} title={hidden ? account.name : `${description(account)}\n${shareDescription}`}
                 className="block rounded-lg px-2.5 py-2 hover:bg-secondary">

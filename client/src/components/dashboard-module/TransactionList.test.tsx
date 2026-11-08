@@ -177,7 +177,7 @@ describe('TransactionList redesigned transfers', () => {
     renderTransfers()
     await user.click(screen.getAllByRole('button', { name: 'Edit transfer' })[0])
     const dialog = screen.getByRole('dialog')
-    await waitFor(() => expect(dialog).toHaveTextContent('50.0% below market'))
+    await waitFor(() => expect(dialog).toHaveTextContent('50,0% below market'))
     const rate = within(dialog).getByLabelText('Exchange Rate')
     await user.clear(rate)
     expect(within(dialog).getByRole('button', { name: 'Save changes' })).toBeDisabled()

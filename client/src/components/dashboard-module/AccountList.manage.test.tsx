@@ -41,13 +41,13 @@ describe('dedicated account management', () => {
       accounts[1],
     ]
     const { rerender } = render(<AccountList manage accounts={sample} sortValues={{ a: 60, b: 40, i: 100 }} onAccountAdded={refresh} />)
-    expect(screen.getByText('60.0%')).toBeInTheDocument()
-    expect(screen.getByText('40.0%')).toBeInTheDocument()
-    expect(screen.getByText('100.0%')).toBeInTheDocument()
+    expect(screen.getByText('60,0%')).toBeInTheDocument()
+    expect(screen.getByText('40,0%')).toBeInTheDocument()
+    expect(screen.getByText('100,0%')).toBeInTheDocument()
     expect(within(screen.getByRole('region', { name: 'Archived accounts' })).queryByText(/\d+\.\d+%/)).not.toBeInTheDocument()
     rerender(<AccountList manage accounts={sample} sortValues={{ a: 60, b: null, i: 100 }} onAccountAdded={refresh} />)
     expect(screen.getAllByText('Share unavailable')).toHaveLength(2)
-    expect(screen.getByText('100.0%')).toBeInTheDocument()
+    expect(screen.getByText('100,0%')).toBeInTheDocument()
     privacy.hidden = true
     rerender(<AccountList manage accounts={sample} sortValues={{ a: 60, b: 40, i: 100 }} onAccountAdded={refresh} />)
     expect(screen.queryByText(/\d+\.\d+%/)).not.toBeInTheDocument()

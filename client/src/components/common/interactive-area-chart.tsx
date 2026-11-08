@@ -3,7 +3,7 @@ import type { PointerEvent, ReactNode } from 'react'
 import { motion, useReducedMotion } from 'framer-motion'
 import { cn } from '../../lib/utils'
 import { calendarTicks } from './calendar-ticks'
-import { formatCompactNumber, formatDate } from '../../lib/format'
+import { formatCompactNumber, formatDate, formatNumber } from '../../lib/format'
 
 // Adapted from EasyUI's Interactive Area Chart (MIT; see licenses/easyui.txt).
 // Retains the reference's smooth SVG curve, reveal and scrubbing treatment.
@@ -139,7 +139,7 @@ export function InteractiveAreaChart({ data, label, formatValue, color = 'hsl(va
         {title && <h3 className="text-[13px] font-normal text-muted-foreground">{title}</h3>}
         <p className="mt-0.5 text-2xl font-semibold tracking-tight tabular-nums sm:text-3xl">{formatValue(shown.value)}</p>
         <p className="mt-1 text-xs tabular-nums sm:text-[13px]">
-          {showChange && change !== null && <span className={change >= 0 ? 'easyui-chart-positive' : 'easyui-chart-negative'}>{change > 0 ? '+' : ''}{change.toFixed(1)}% </span>}
+          {showChange && change !== null && <span className={change >= 0 ? 'easyui-chart-positive' : 'easyui-chart-negative'}>{change > 0 ? '+' : ''}{formatNumber(change, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}% </span>}
           <span className="text-muted-foreground">{inspected !== null ? fullDate(shown.date) : showChange ? `${periodLabel} · balance change` : `${fullDate(shown.date)} · latest in period`}</span>
         </p>
       </div>

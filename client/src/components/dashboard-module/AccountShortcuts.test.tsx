@@ -106,9 +106,9 @@ describe('sidebar account shares', () => {
     open({ accounts, values: converted })
     for (const [name, percentage, basis] of [['Local bank', 60, 'cash balances'], ['Euro bank', 40, 'cash balances'], ['Stock', 75, 'investment values'], ['Manual asset', 25, 'investment values']] as const) {
       const row = screen.getByRole('link', { name: new RegExp(`^${name},`) })
-      expect(row).toHaveAccessibleDescription(`${percentage.toFixed(1)}% of active ${basis}`)
+      expect(row).toHaveAccessibleDescription(`${percentage},0% of active ${basis}`)
       expect(row.querySelector('[style]')).toHaveStyle({ width: `${percentage}%` })
-      expect(row).toHaveAttribute('title', expect.stringContaining(`${percentage.toFixed(1)}%`))
+      expect(row).toHaveAttribute('title', expect.stringContaining(`${percentage},0%`))
     }
     expect(screen.queryByRole('link', { name: /Archived bank/ })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Cash accounts (2)' })).toHaveAttribute('title', expect.stringContaining('including accounts excluded from totals'))
@@ -124,7 +124,7 @@ describe('sidebar account shares', () => {
     }
     expect(within(group).getByText('Shares unavailable · missing values.')).toBeInTheDocument()
     const investment = screen.getByRole('link', { name: 'Asset 1, 200 HUF' })
-    expect(investment).toHaveAccessibleDescription('100.0% of active investment values')
+    expect(investment).toHaveAccessibleDescription('100,0% of active investment values')
     expect(investment.querySelector('[style]')).toHaveStyle({ width: '100%' })
   })
 
@@ -134,7 +134,7 @@ describe('sidebar account shares', () => {
     expect(screen.getByRole('link', { name: /^Cash 1,/ })).toHaveAccessibleDescription('Loading share')
     view.rerender(<MemoryRouter><AccountShortcuts {...props} accounts={cash.slice(0, 2)} values={{ 'cash-0': 100, 'cash-1': 100 }} /></MemoryRouter>)
     expect(screen.queryByText('Loading shares…')).not.toBeInTheDocument()
-    expect(screen.getByRole('link', { name: /^Cash 1,/ })).toHaveAccessibleDescription('50.0% of active cash balances')
+    expect(screen.getByRole('link', { name: /^Cash 1,/ })).toHaveAccessibleDescription('50,0% of active cash balances')
   })
 
   it('keeps debts separate and renders zero totals as zero shares', () => {
@@ -142,15 +142,15 @@ describe('sidebar account shares', () => {
     const positive = screen.getByRole('link', { name: /^Cash 1,/ })
     const negative = screen.getByRole('link', { name: /^Cash 2,/ })
     const zero = screen.getByRole('link', { name: /^Cash 3,/ })
-    expect(positive).toHaveAccessibleDescription('100.0% of active cash balances')
+    expect(positive).toHaveAccessibleDescription('100,0% of active cash balances')
     expect(negative).toHaveAccessibleDescription('Negative balance; excluded from positive balance shares')
     expect(negative).toHaveTextContent('Negative')
     expect(negative.querySelector('[style]')).toHaveStyle({ width: '0%' })
-    expect(zero).toHaveAccessibleDescription('0.0% of active cash balances')
+    expect(zero).toHaveAccessibleDescription('0,0% of active cash balances')
     view.unmount()
     open({ accounts: cash.slice(0, 2), values: { 'cash-0': 0, 'cash-1': 0 } })
     for (const row of within(screen.getByRole('region', { name: 'Cash account shortcuts' })).getAllByRole('link')) {
-      expect(row).toHaveAccessibleDescription('0.0% of active cash balances')
+      expect(row).toHaveAccessibleDescription('0,0% of active cash balances')
       expect(row.querySelector('[style]')).toHaveStyle({ width: '0%' })
     }
   })

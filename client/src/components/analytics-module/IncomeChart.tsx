@@ -5,7 +5,7 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import { usePrivacy } from '../../context/PrivacyContext'
 import { CustomSelect } from './CustomSelect'
 import type { ChartDataPoint, Category } from './types'
-import { formatNumber } from '../../lib/format'
+import { formatCompactNumber, formatNumber } from '../../lib/format'
 
 type IncomeChartProps = {
   data: ChartDataPoint[]
@@ -69,9 +69,7 @@ export const IncomeChart = memo(function IncomeChart({ data, selectedCategory, o
                   axisLine={false}
                   tickFormatter={(value) => {
                     if (privacyMode === 'hidden') return '••••'
-                    if (value >= 1000000) return `${(value / 1000000).toFixed(1)}M`
-                    if (value >= 1000) return `${(value / 1000).toFixed(0)}K`
-                    return value.toFixed(0)
+                    return formatCompactNumber(value, value >= 1000000 ? 1 : 0)
                   }}
                   width={50}
                 />
@@ -95,7 +93,7 @@ export const IncomeChart = memo(function IncomeChart({ data, selectedCategory, o
                           </p>
                           {change !== null && changePercent !== null && (
                             <p className={`text-xs ${change >= 0 ? 'text-success' : 'text-destructive'} ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
-                              {privacyMode === 'hidden' ? '••••' : `${change >= 0 ? '+' : ''}${formatNumber(change, {minimumFractionDigits: 0, maximumFractionDigits: 0})} (${changePercent >= 0 ? '+' : ''}${changePercent.toFixed(1)}%)`}
+                              {privacyMode === 'hidden' ? '••••' : `${change >= 0 ? '+' : ''}${formatNumber(change, {minimumFractionDigits: 0, maximumFractionDigits: 0})} (${changePercent >= 0 ? '+' : ''}${formatNumber(changePercent, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%)`}
                             </p>
                           )}
                         </div>

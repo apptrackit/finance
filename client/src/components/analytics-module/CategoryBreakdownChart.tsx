@@ -82,7 +82,7 @@ export const CategoryBreakdownChart = memo(function CategoryBreakdownChart({ dat
                       {privacyMode === 'hidden' ? '••••••' : formatNumber(cat.value, {minimumFractionDigits: 0, maximumFractionDigits: 0})}
                     </span>
                     <span className={`text-xs sm:text-xs text-muted-foreground ${privacyMode === 'hidden' ? 'select-none' : ''}`}>
-                      ({privacyMode === 'hidden' ? '••' : cat.percentage.toFixed(1)}%)
+                      ({privacyMode === 'hidden' ? '••' : formatNumber(cat.percentage, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%)
                     </span>
                   </div>
                 </div>

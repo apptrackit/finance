@@ -1,3 +1,4 @@
+import { createElement } from 'react'
 import type { LucideIcon, LucideProps } from 'lucide-react'
 import {
   Baby, Banknote, Beer, Bike, BookOpen, Bookmark, Briefcase, Building2, Bus, Cake, Car, CarFront, CarTaxiFront, Cat, ChartColumn, ChartLine, Cherry, CircleDot, Clapperboard, Cloud, Coffee, Coins, CreditCard, CupSoda, Dna, Dog, DollarSign, Drama, Dribbble, Droplet, Droplets, Dumbbell, FileText, Flame, FlaskConical, Flower, Flower2, Footprints, Fuel, Gamepad2, Gift, GlassWater, Glasses, Globe, GraduationCap, Guitar, Hammer, HandCoins, Heart, HeartCrack, HeartPulse, Hospital, Hotel, House, Landmark, Laptop, Library, Lightbulb, Mail, Mailbox, MapPin, Microscope, Music, Navigation, NotebookPen, Package, Palette, PartyPopper, PawPrint, Pencil, PiggyBank, Pill, Pin, Pizza, Plane, PlugZap, Rabbit, Rainbow, Rat, Receipt, RefreshCw, Salad, Sandwich, School, Scissors, Shirt, ShoppingBag, ShoppingCart, ShowerHead, Smartphone, Smile, Soup, Sparkle, Sparkles, Sprout, Star, Stethoscope, Store, Sun, Swords, Syringe, Tag, Target, TestTube, Ticket, ToyBrick, TrainFront, TreePalm, TrendingDown, TrendingUp, Trophy, Tv, UtensilsCrossed, Volleyball, Wrench, Zap,
@@ -187,6 +188,6 @@ export function distinctIconOptions(options: readonly string[]): string[] {
 }
 
 export function CategoryIcon({ icon, className = 'h-4 w-4', ...props }: { icon?: string | null } & LucideProps) {
-  const Icon = categoryIconFor(icon)
-  return <Icon aria-hidden="true" className={className} strokeWidth={1.75} {...props} />
+  // Icons are module-level components looked up from a static map, so nothing is created during render.
+  return createElement(categoryIconFor(icon), { 'aria-hidden': true, className, strokeWidth: 1.75, ...props })
 }

@@ -695,7 +695,7 @@ export function AccountList({ accounts, onAccountAdded, loading, manage = false,
               <h4 className="text-[11px] sm:text-xs font-semibold text-muted-foreground uppercase tracking-wider">Cash Accounts</h4>
               <div className="flex items-center gap-1.5">
                 {privacyMode === 'hidden' ? <span className="text-xs font-medium text-muted-foreground sm:text-xs">••••••</span> : formatHufTotal(totalCashUSD) && <span className="whitespace-nowrap text-xs font-medium tabular-nums text-muted-foreground sm:text-xs">{formatHufTotal(totalCashUSD)}</span>}
-                <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-xs font-semibold normal-case tracking-normal text-primary sm:text-xs">{privacyMode === 'hidden' ? '••••' : cashAllocation === null ? 'Allocation unavailable' : `${cashAllocation.toFixed(0)}% total`}</span>
+                <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-xs font-semibold normal-case tracking-normal text-primary sm:text-xs">{privacyMode === 'hidden' ? '••••' : cashAllocation === null ? 'Allocation unavailable' : `${formatNumber(cashAllocation, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}% total`}</span>
               </div>
             </div>
             <div className="space-y-1.5 sm:space-y-2">
@@ -740,7 +740,7 @@ export function AccountList({ accounts, onAccountAdded, loading, manage = false,
                             <p className="font-semibold text-sm sm:text-base truncate">{account.name}</p>
                             {!isExcluded && (
                               <span className="inline-flex items-center justify-center h-4 sm:h-5 px-1.5 sm:px-2 rounded-full bg-primary/20 text-primary text-xs sm:text-xs font-medium">
-                                {privacyMode === 'hidden' ? '••••' : percentage === null ? 'Unavailable' : `${percentage.toFixed(1)}%`}
+                                {privacyMode === 'hidden' ? '••••' : percentage === null ? 'Unavailable' : `${formatNumber(percentage, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`}
                               </span>
                             )}
                           </div>
@@ -856,7 +856,7 @@ export function AccountList({ accounts, onAccountAdded, loading, manage = false,
               <h4 className="text-[11px] sm:text-xs font-semibold text-muted-foreground uppercase tracking-wider">Investment Accounts</h4>
               <div className="flex items-center gap-1.5">
                 {privacyMode === 'hidden' ? <span className="text-xs font-medium text-muted-foreground sm:text-xs">••••••</span> : formatHufTotal(totalInvestmentUSD) && <span className="whitespace-nowrap text-xs font-medium tabular-nums text-muted-foreground sm:text-xs">{formatHufTotal(totalInvestmentUSD)}</span>}
-                <span className="rounded-full bg-violet-500/10 px-1.5 py-0.5 text-xs font-semibold normal-case tracking-normal text-violet-400 sm:text-xs">{privacyMode === 'hidden' ? '••••' : investmentAllocation === null ? 'Allocation unavailable' : `${investmentAllocation.toFixed(0)}% total`}</span>
+                <span className="rounded-full bg-violet-500/10 px-1.5 py-0.5 text-xs font-semibold normal-case tracking-normal text-violet-400 sm:text-xs">{privacyMode === 'hidden' ? '••••' : investmentAllocation === null ? 'Allocation unavailable' : `${formatNumber(investmentAllocation, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}% total`}</span>
               </div>
             </div>
             <div className="space-y-1.5 sm:space-y-2">
@@ -899,7 +899,7 @@ export function AccountList({ accounts, onAccountAdded, loading, manage = false,
                               {account.symbol || account.name}
                             </p>
                             <span className="inline-flex items-center justify-center h-4 sm:h-5 px-1.5 sm:px-2 rounded-full bg-blue-500/20 text-blue-600 dark:text-blue-400 text-xs sm:text-xs font-medium">
-                              {privacyMode === 'hidden' ? '••••' : percentage === null ? 'Unavailable' : `${percentage.toFixed(1)}%`}
+                              {privacyMode === 'hidden' ? '••••' : percentage === null ? 'Unavailable' : `${formatNumber(percentage, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`}
                             </span>
                             {usesMarketPricing(account) && priceChange !== null && (
                               <span className={`inline-flex items-center justify-center h-4 sm:h-5 px-1.5 sm:px-2 rounded-full text-xs sm:text-xs font-medium ${
@@ -907,7 +907,7 @@ export function AccountList({ accounts, onAccountAdded, loading, manage = false,
                                   ? 'bg-green-500/20 text-green-600 dark:text-green-400' 
                                   : 'bg-red-500/20 text-red-600 dark:text-red-400'
                               }`}>
-                                {priceChange >= 0 ? '+' : ''}{priceChange.toFixed(2)}%
+                                {priceChange >= 0 ? '+' : ''}{formatNumber(priceChange, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%
                               </span>
                             )}
                           </div>
@@ -1127,7 +1127,7 @@ export function AccountList({ accounts, onAccountAdded, loading, manage = false,
                         {market && <span className="block text-xs font-normal text-muted-foreground">{hidden ? '••••••' : archived ? 'No position' : formatHufTotal(accountValues[account.id])}</span>}
                         {!archived && <span className="mt-2 flex items-center justify-end gap-2 text-xs font-normal text-muted-foreground">
                           <span aria-hidden="true" className="h-1 w-16 overflow-hidden rounded-full bg-secondary sm:w-24"><span className={`block h-full rounded-full ${account.type === 'investment' ? 'bg-violet-400' : 'bg-primary-fill'}`} style={{ width: `${hidden ? 0 : share ?? 0}%` }} /></span>
-                          <span>{hidden ? 'Share hidden' : share === null ? 'Share unavailable' : negative ? 'Negative balance' : `${share.toFixed(1)}%`}</span>
+                          <span>{hidden ? 'Share hidden' : share === null ? 'Share unavailable' : negative ? 'Negative balance' : `${formatNumber(share, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`}</span>
                         </span>}
                       </span>
                     </button>

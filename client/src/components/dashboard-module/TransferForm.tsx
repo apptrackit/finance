@@ -6,6 +6,7 @@ import { Input } from '../common/input'
 import { Label } from '../common/label'
 import { formatCalculatedAmount, parseAmount } from '../../lib/amount'
 import { cn } from '../../lib/utils'
+import { formatNumber } from '../../lib/format'
 
 export type TransferAccount = {
   id: string
@@ -137,7 +138,7 @@ export function TransferForm(props: TransferFormProps) {
                   </div>
                   <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground" role="status">
                     {props.loadingRate ? <><Loader2 className="h-3 w-3 animate-spin" />Loading rate…</> : deviation !== null ? <>
-                      <span className={cn(Math.abs(deviation) > 5 && 'text-amber-600 dark:text-amber-300')}>{Math.abs(deviation) < 0.05 ? 'Market rate' : `${Math.abs(deviation).toFixed(1)}% ${deviation < 0 ? 'below' : 'above'} market`}</span>
+                      <span className={cn(Math.abs(deviation) > 5 && 'text-amber-600 dark:text-amber-300')}>{Math.abs(deviation) < 0.05 ? 'Market rate' : `${formatNumber(Math.abs(deviation), { minimumFractionDigits: 1, maximumFractionDigits: 1 })}% ${deviation < 0 ? 'below' : 'above'} market`}</span>
                       {Math.abs(deviation) >= 0.05 && <button type="button" onClick={props.onUseMarket} className="font-medium text-primary hover:underline">Use {formatCalculatedAmount(props.suggestedRate!, { maximumFractionDigits: 8 })}</button>}
                     </> : props.suggestedRate ? <button type="button" onClick={props.onUseMarket} className="font-medium text-primary hover:underline">Use market rate</button> : 'Market rate unavailable; enter amounts or a rate.'}
                   </div>
