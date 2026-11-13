@@ -22,7 +22,7 @@ import { useAlert } from '../../context/AlertContext'
 import { SplitLinesEditor } from './SplitLinesEditor'
 import { resolveSplit, startSplit, newSplitLine, toSplitPayloadLines, type SplitLineDraft } from '../../lib/transaction-split'
 import { AmountInput } from '../common/amount-input'
-import { formatAmount, formatCalculatedAmount, formatStoredCashAmount, parseAmount } from '../../lib/amount'
+import { formatAmount, formatCalculatedAmount, formatStoredCashAmount, parseAmount, sumAmounts } from '../../lib/amount'
 import type { PendingKind } from '../../lib/transaction-review'
 import { getMcpReviewItems, hasPossibleDuplicateFlag, isMcpReviewTransaction } from '../../lib/transaction-review'
 import { TransactionCalendar } from './TransactionCalendar'
@@ -786,7 +786,7 @@ export function TransactionList({
   const handleEditSplit = (splitId: string) => {
     const lines = inEntryOrder(allKnownTransactions.filter(tx => tx.split_id === splitId))
     if (lines.length === 0 || isLocked(lines[0].account_id)) return
-    const total = lines.reduce((sum, line) => sum + line.amount, 0)
+    const total = sumAmounts(lines.map(line => line.amount))
     resetTransferRateState()
     setFormData({
       account_id: lines[0].account_id,
@@ -1281,7 +1281,7 @@ export function TransactionList({
       seen.add(tx.split_id)
       const lines = inEntryOrder(visibleUpcomingTransactions.filter(line => line.split_id === tx.split_id))
       const group = lines.length > 0 ? lines : [tx]
-      return [{ ...group[0], id: `split:${tx.split_id}`, description: tx.split_description, amount: group.reduce((sum, line) => sum + line.amount, 0), splitGroup: group }]
+      return [{ ...group[0], id: `split:${tx.split_id}`, description: tx.split_description, amount: sumAmounts(group.map(line => line.amount)), splitGroup: group }]
     })
   }
   const standardPendingCount = visibleUpcomingTransactions.filter(tx => !isMcpReviewTransaction(tx) && matchesAccount(tx)).length
@@ -1318,7 +1318,7 @@ export function TransactionList({
         seenSplits.add(tx.split_id)
         const group = inEntryOrder(transactions.filter(line => line.split_id === tx.split_id))
         const lines = group.length > 0 ? group : [tx]
-        processed.push({ ...lines[0], id: `split:${tx.split_id}`, description: tx.split_description, amount: lines.reduce((sum, line) => sum + line.amount, 0), splitGroup: lines })
+        processed.push({ ...lines[0], id: `split:${tx.split_id}`, description: tx.split_description, amount: sumAmounts(lines.map(line => line.amount)), splitGroup: lines })
         return
       }
 
@@ -1406,13 +1406,13 @@ export function TransactionList({
     }
     confirmationLegs.set(tx.id, tx)
   }
-  const confirmationDeltas = new Map<string, number>()
+  const confirmationDeltas = new Map<string, number[]>()
   for (const tx of confirmationLegs.values()) {
-    confirmationDeltas.set(tx.account_id, (confirmationDeltas.get(tx.account_id) ?? 0) + tx.amount)
+    confirmationDeltas.set(tx.account_id, [...(confirmationDeltas.get(tx.account_id) ?? []), tx.amount])
   }
   const confirmationBalancePreviews = accounts.flatMap(account => {
-    const delta = confirmationDeltas.get(account.id)
-    return delta === undefined ? [] : [{ account, acceptedBalance: account.balance + delta }]
+    const deltas = confirmationDeltas.get(account.id)
+    return deltas === undefined ? [] : [{ account, acceptedBalance: sumAmounts([account.balance, ...deltas]) }]
   })
   const previewBalance = (value: number, accountId: string) => {
     const formatted = nativeAmount(value, accountId, false)

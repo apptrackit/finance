@@ -1,3 +1,5 @@
+import { addDecimal } from '../../../shared/decimal-balance'
+
 const EDITABLE_GROUP_SEPARATOR_PATTERN = /[\s\u00a0\u202f]/g
 const SCIENTIFIC_NUMBER_PATTERN = /^([+-]?)(\d+)(?:\.(\d*))?[eE]([+-]?\d+)$/
 
@@ -121,6 +123,17 @@ export function formatStoredCashAmount(value: number): string {
 
   const localized = formatted.replace('.', ',')
   return formatted.length - decimalIndex === 2 ? localized + '0' : localized
+}
+
+/** Sum recorded amounts exactly (e.g. 8968.53 - 6.4 = 8962.13), falling back to
+ * ordinary addition only when the exact result is not representable. */
+export function sumAmounts(values: readonly number[]): number {
+  if (values.length === 0) return 0
+  try {
+    return addDecimal(...values)
+  } catch {
+    return values.reduce((sum, value) => sum + value, 0)
+  }
 }
 
 /** Strictly parse an editable amount, returning null for incomplete/invalid drafts. */
