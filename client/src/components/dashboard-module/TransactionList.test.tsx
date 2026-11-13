@@ -409,6 +409,16 @@ describe('confirmation balance preview', () => {
     expect(apiFetch).not.toHaveBeenCalled()
   })
 
+  it('previews fractional balances exactly instead of showing floating-point residue', () => {
+    const accounts = [{ id: 'eur', name: 'Revolut', balance: 8968.53, currency: 'EUR', type: 'cash' as const }]
+    renderTransfers({ accounts, transactions: [], upcomingTransactions: [
+      { id: 'draft', account_id: 'eur', amount: -6.4, date: '2020-01-01', pending_kind: 'mcp_review', review_source: 'chatgpt_mcp' },
+    ] })
+    const preview = screen.getByRole('region', { name: 'Confirmation balance preview' })
+    expect(preview).toHaveTextContent('Revolut: 8 968,53 EUR → 8 962,13 EUR')
+    expect(preview).not.toHaveTextContent('000000')
+  })
+
   it('previews the filtered queue and includes both transfer legs when only the credit matches', async () => {
     const user = userEvent.setup()
     renderTransfers({ transactions: [], upcomingTransactions: [
