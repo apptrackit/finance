@@ -419,6 +419,21 @@ describe('confirmation balance preview', () => {
     expect(preview).not.toHaveTextContent('000000')
   })
 
+  it.each([
+    { currency: 'MXN', balance: 264.6, amounts: [-330.37], expected: '264,60 MXN → −65,77 MXN' },
+    { currency: 'HUF', balance: 260002, amounts: [-200000, -195938.84], expected: '260 002 HUF → −135 936,84 HUF' },
+    { currency: 'MXN', balance: 264.6, amounts: [1000, -1274.81], expected: '264,60 MXN → −10,21 MXN' },
+  ])('preserves exact negative $currency previews across multiple draft deltas', ({ currency, balance, amounts, expected }) => {
+    vi.mocked(apiFetch).mockClear()
+    const accounts = [{ id: 'cash', name: 'Cash', balance, currency, type: 'cash' as const }]
+    renderTransfers({ accounts, transactions: [], upcomingTransactions: amounts.map((amount, index) => ({
+      id: `draft-${index}`, account_id: 'cash', amount, date: '2020-01-01', pending_kind: 'mcp_review', review_source: 'chatgpt_mcp',
+    })) })
+    expect(screen.getByRole('region', { name: 'Confirmation balance preview' })).toHaveTextContent(`Cash: ${expected}`)
+    expect(accounts[0].balance).toBe(balance)
+    expect(apiFetch).not.toHaveBeenCalled()
+  })
+
   it('previews the filtered queue and includes both transfer legs when only the credit matches', async () => {
     const user = userEvent.setup()
     renderTransfers({ transactions: [], upcomingTransactions: [
