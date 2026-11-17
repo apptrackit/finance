@@ -4,6 +4,7 @@ import {
   formatAmount,
   formatCalculatedAmount,
   parseAmount,
+  sumAmounts,
 } from './amount'
 
 describe('amount formatting', () => {
@@ -41,5 +42,15 @@ describe('amount formatting', () => {
       maximumFractionDigits: 2,
       minimumFractionDigits: 2,
     })).toBe('12.00')
+  })
+})
+
+describe('sumAmounts', () => {
+  it('adds recorded amounts without floating-point residue', () => {
+    expect(sumAmounts([8968.53, -6.4])).toBe(8962.13)
+    expect(sumAmounts([0.1, 0.2])).toBe(0.3)
+    expect(sumAmounts([4555592.17, -7890, -11990])).toBe(4535712.17)
+    expect(sumAmounts([1, -1])).toBe(0)
+    expect(sumAmounts([])).toBe(0)
   })
 })
